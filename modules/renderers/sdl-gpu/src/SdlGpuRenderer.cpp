@@ -5218,7 +5218,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         // plans/plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
         // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
         // same translation FNA3D's own SDL_GPU driver makes.
-        const float minLod = static_cast<float>(std::max(maxMipLevel, 0));
+        // XNA writes MaxMipLevel into Direct3D 9's UNSIGNED sampler field, so a negative value is a
+        // huge level index that names the LAST stored level, exactly as 99 does; folding it to 0
+        // selected the most detailed level instead (texture_filter_mip_contract_test L3/L9). 32 is
+        // the deepest level the sampler's default max_lod below expresses.
+        constexpr float kDeepestExpressibleLod = 32.0f;
+        const float minLod = maxMipLevel < 0 ? kDeepestExpressibleLod
+                                             : static_cast<float>(maxMipLevel);
         const SamplerCacheKeyEXT key = SamplerCacheKeyEXT::Make(
             textureFilter, addressU, addressV, addressW, clampedAniso, maxMipLevel, lodBias);
         auto it = samplerCache_.find(key);
