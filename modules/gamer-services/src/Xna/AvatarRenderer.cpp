@@ -141,13 +141,19 @@ namespace Microsoft::Xna::Framework::GamerServices
             {
                 return;
             }
-            effect = std::make_unique<Graphics::SkinnedEffect>(*device);
-            white = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, 1, 1, {255, 255, 255, 255}));
+            // Built into locals and committed only once every resource exists. `effect` is the
+            // "uploaded" marker, and it used to be assigned first: when a later allocation threw
+            // (a 2D-only renderer refuses vertex buffers), the marker claimed a complete upload
+            // over an empty `parts`, and the next Draw indexed past its end.
+            auto newEffect = std::make_unique<Graphics::SkinnedEffect>(*device);
+            auto newWhite = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, 1, 1, {255, 255, 255, 255}));
+            std::vector<std::unique_ptr<Graphics::Texture2D>> newImages;
             for (const auto& image : model->images)
             {
-                images.push_back(std::make_unique<Graphics::Texture2D>(
+                newImages.push_back(std::make_unique<Graphics::Texture2D>(
                     Graphics::Texture2D::CreateFromPixels(*device, image.width, image.height, image.rgba)));
             }
+            std::vector<GpuPart> newParts;
             for (const auto& part : model->parts)
             {
                 std::vector<Graphics::VertexPositionNormalTextureSkinned> vertices;
@@ -163,8 +169,12 @@ namespace Microsoft::Xna::Framework::GamerServices
                 gpu.vertices->SetData(vertices.data(), gpu.vertexCount);
                 gpu.indices = std::make_unique<Graphics::IndexBuffer>(*device, static_cast<int>(part.indices.size()));
                 gpu.indices->SetData(part.indices.data(), static_cast<int>(part.indices.size()));
-                parts.push_back(std::move(gpu));
+                newParts.push_back(std::move(gpu));
             }
+            white = std::move(newWhite);
+            images = std::move(newImages);
+            parts = std::move(newParts);
+            effect = std::move(newEffect);
         }
     };
 

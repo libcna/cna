@@ -16,9 +16,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #include <chrono>
 #include <random>
+#include <stdexcept>
 #include <thread>
 
 using namespace Microsoft::Xna::Framework::GamerServices;
@@ -185,6 +187,8 @@ TEST(AvatarRendererTest, DrawingNeedsInitializedGamerServices) {
 
 TEST(AvatarRendererTest, DrawsEveryPresetAndExpressionOnTheDispatcherDevice) {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     TestingDevice testing(&device);
     auto description = Describe(AvatarBodyType::Male, 1820);
     AvatarRenderer renderer(&description);
@@ -206,6 +210,24 @@ TEST(AvatarRendererTest, DrawsEveryPresetAndExpressionOnTheDispatcherDevice) {
         expression.setLeftEyebrowProperty(static_cast<AvatarEyebrow>(state % 5));
         expression.setRightEyebrowProperty(static_cast<AvatarEyebrow>((state + 2) % 5));
         EXPECT_NO_THROW(renderer.Draw(bones, expression));
+    }
+}
+
+// plans/plan_apple_m4.md AM4-008: the GPU upload used to set its "uploaded" marker before the
+// buffers existed, so a renderer that refuses vertex buffers left a half-built upload behind a
+// complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
+// must now fail the same clean way, which only a 2D-only renderer can provoke.
+TEST(AvatarRendererTest, AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding) {
+    GraphicsDevice device;
+    if (device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "needs a renderer without a 3D pipeline to make the upload fail";
+    TestingDevice testing(&device);
+    auto description = Describe(AvatarBodyType::Female, 1650);
+    AvatarRenderer renderer(&description);
+    ASSERT_EQ(WaitUntilLoaded(renderer), AvatarRendererState::Ready);
+    AvatarAnimation stand(AvatarAnimationPreset::Stand0);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        EXPECT_THROW(renderer.Draw(&stand), std::runtime_error) << attempt;
     }
 }
 
