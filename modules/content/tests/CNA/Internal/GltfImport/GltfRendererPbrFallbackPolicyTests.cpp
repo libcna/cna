@@ -226,7 +226,8 @@ namespace
               texture2d<float> emissiveMap [[texture(3)]], sampler emissiveSmp [[sampler(3)]],
               texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]])"}}},
         {"sdl-gpu", "fragment sampler bindings 0 through 6",
-         {{R"(samplerBindings[0].texture = command.texture.texture)",
+         {{R"(samplerBindings[0].texture = command.texture ? command.texture.texture
+                                                    : defaultWhiteTexture_->Texture())",
            R"(samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture())",
            R"(samplerBindings[2].texture = command.metallicRoughnessMap ? command.metallicRoughnessMap.texture : defaultWhiteTexture_->Texture())",
            R"(samplerBindings[3].texture = command.emissiveMap ? command.emissiveMap.texture : defaultWhiteTexture_->Texture())",
@@ -257,16 +258,15 @@ namespace
               layout(set = 0, binding = 3) uniform sampler2D uEmissiveMap;
               layout(set = 0, binding = 4) uniform sampler2D uOcclusionMap;)"}}},
         {"webgpu", "bind group 1: sampler 0, textures 1,2,3,4,5",
-         {{R"(texEntries[1].binding = 1;
-              texEntries[1].textureView = command.baseColorTexture.View();
-              texEntries[2].binding = 2;
-              texEntries[2].textureView = command.normalMap.View();
-              texEntries[3].binding = 3;
-              texEntries[3].textureView = command.metallicRoughnessMap.View();
-              texEntries[4].binding = 4;
-              texEntries[4].textureView = command.emissiveMap.View();
-              texEntries[5].binding = 5;
-              texEntries[5].textureView = command.occlusionMap.View();)",
+         {{R"(AcquirePbrTextureBindingEXT(
+            sampler, command.baseColorTexture, command.normalMap, command.metallicRoughnessMap,
+            command.emissiveMap, command.occlusionMap, command.specularMap,
+            command.specularColorMap,)",
+           R"(const std::array<const WebGPUSampledTextureEXT*, 7> maps{
+            &baseColor, &normal, &metallicRoughness, &emissive, &occlusion, &specular,
+            &specularColor};)",
+           R"(entries[i + 1].binding = static_cast<std::uint32_t>(i + 1);
+            entries[i + 1].textureView = maps[i]->View();)",
            R"(@group(1) @binding(1) var baseColorTex: texture_2d<f32>;
               @group(1) @binding(2) var normalTex: texture_2d<f32>;
               @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
