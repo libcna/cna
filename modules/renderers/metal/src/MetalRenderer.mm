@@ -46,7 +46,10 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <bit>
+#include <map>
 #include <memory>
+#include <tuple>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
@@ -1528,8 +1531,13 @@ struct MetalRenderer::Impl
     std::unordered_map<PipelineCacheKey, id<MTLRenderPipelineState>, PipelineCacheKeyHash> pipelineCache;
     id<MTLDepthStencilState> depthState=nil;
     id<MTLSamplerState> sampler=nil;
-    std::unordered_map<uint32_t, id<MTLSamplerState>> samplerCache;
+    // (filter, addressU, addressV, anisotropy, maxMipLevel, lodBias bits)
+    std::map<std::tuple<int,int,int,int,int,std::uint32_t>, id<MTLSamplerState>> samplerCache;
     id<MTLSamplerState> samplerSlots[16]={};
+    // plans/plan_apple_m4.md AM4-034: what each slot was last asked for, so ApplySamplerState and
+    // ApplySamplerMipState -- two calls for one XNA SamplerState -- each rebuild the whole sampler.
+    struct SamplerSlotRequest { int filter=0, addressU=0, addressV=0, maxAnisotropy=4, maxMipLevel=0; float lodBias=0.0f; };
+    SamplerSlotRequest samplerSlotRequests[16]={};
     id<MTLCommandBuffer> command=nil;
     id<MTLRenderCommandEncoder> encoder=nil;
     MetalRetainedResource<id<CAMetalDrawable>> drawable{retainMetalDrawable, releaseMetalDrawable};
@@ -2075,17 +2083,33 @@ struct MetalRenderer::Impl
     // Builds (or reuses) a cached MTLSamplerState for the given raw XNA TextureFilter/
     // TextureAddressMode/maxAnisotropy combination. Cache is owned by this Impl and released
     // once, in its destructor -- samplerSlots[] below only holds non-owning references into it.
-    id<MTLSamplerState> samplerFor(int filter,int addressU,int addressV,int maxAnisotropy)
+    id<MTLSamplerState> samplerFor(int filter,int addressU,int addressV,int maxAnisotropy,
+                                   int maxMipLevel=0,float lodBias=0.0f)
     {
         const uint32_t aniso=(uint32_t)std::clamp(maxAnisotropy,1,16);
-        const uint32_t key=(uint32_t)(filter&0xFF) | ((uint32_t)(addressU&0xFF)<<8) | ((uint32_t)(addressV&0xFF)<<16) | (aniso<<24);
+        const auto key=std::make_tuple(filter,addressU,addressV,(int)aniso,maxMipLevel,std::bit_cast<std::uint32_t>(lodBias));
         auto it=samplerCache.find(key);
         if(it!=samplerCache.end()) return it->second;
+        // plans/plan_apple_m4.md AM4-034: MipMapLevelOfDetailBias is a sampler property only from
+        // macOS/iOS 26 (MTLSamplerDescriptor.lodBias). Below that it is refused, never dropped.
+        bool lodBiasAvailable=false;
+        if (@available(macOS 26.0, iOS 26.0, *)) lodBiasAvailable=true;
+        if(lodBias!=0.0f && !lodBiasAvailable)
+            throw System::NotSupportedException(
+                "Metal SamplerState.MipMapLevelOfDetailBias needs macOS/iOS 26 (MTLSamplerDescriptor.lodBias).");
         MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc] init];
         if(!sd) throw std::runtime_error("Metal: failed to allocate sampler descriptor");
         sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
         sd.sAddressMode=metalAddressMode(addressU); sd.tAddressMode=metalAddressMode(addressV);
         if(filter==2) sd.maxAnisotropy=aniso;
+        // XNA's MaxMipLevel is the index of the most detailed level the sampler may use -- FNA3D
+        // sets it as GL_TEXTURE_BASE_LEVEL -- so it clamps the level of detail from below. XNA
+        // stores it unsigned, so a negative value is a huge index and selects the last level
+        // (Metal clamps the level of detail to the texture's own chain).
+        sd.lodMinClamp=static_cast<float>(static_cast<std::uint32_t>(maxMipLevel));
+        if(lodBias!=0.0f){
+            if (@available(macOS 26.0, iOS 26.0, *)) sd.lodBias=lodBias;
+        }
         MetalObjectOwner samplerOwner(retainMetalObject,releaseMetalObject);
         samplerOwner.Adopt([device newSamplerStateWithDescriptor:sd]); [sd release];
         if(!samplerOwner.HasValue()) throw std::runtime_error("Metal: failed to create sampler state");
@@ -2386,6 +2410,10 @@ public:
     void End() override { begun_=false; }
     void SetSamplerFilter(int f) override { filter_=f; }
     void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
+    // plans/plan_apple_m4.md AM4-034: the rest of Begin's SamplerState, which the sprite sampler
+    // used to replace with anisotropy 1, MaxMipLevel 0 and no LOD bias.
+    void SetSamplerMaxAnisotropy(int maxAnisotropy) override { maxAnisotropy_=maxAnisotropy; }
+    void SetSamplerMipState(int maxMipLevel,float lodBias) override { maxMipLevel_=maxMipLevel; lodBias_=lodBias; }
     // plans/plan_metal.md METAL-182/183: previously entirely unimplemented (base no-op) -- `cna_v2d` had
     // no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` had zero effect on Metal.
     // Applied as a 2D point transform (z=0) on the already-screen-space quad corners, matching the
@@ -2480,10 +2508,11 @@ public:
             [p.encoder setVertexBytes:m length:16*sizeof(float) atIndex:2]; [p.encoder setVertexBytes:col length:4*sizeof(float) atIndex:3]; [p.encoder setVertexBytes:&f0 length:sizeof(float) atIndex:4];
             [p.encoder setFragmentBytes:m length:16*sizeof(float) atIndex:2]; [p.encoder setFragmentBytes:col length:4*sizeof(float) atIndex:3]; [p.encoder setFragmentBytes:&f0 length:sizeof(float) atIndex:4];
         }
-        [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+        [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
 private: MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
     int projectionWidth_=0; int projectionHeight_=0;
+    int maxAnisotropy_=1; int maxMipLevel_=0; float lodBias_=0.0f;
 };
 
 // plans/plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot
@@ -3697,14 +3726,18 @@ void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
 void MetalRenderer::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy)
 {
     if (slot<0 || slot>=16) throw std::out_of_range("Metal: sampler slot must be in [0, 15]");
-    impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy);
+    auto& request=impl_->samplerSlotRequests[slot];
+    request.filter=filter; request.addressU=addressU; request.addressV=addressV; request.maxAnisotropy=maxAnisotropy;
+    impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy,
+                                                request.maxMipLevel,request.lodBias);
 }
 void MetalRenderer::ApplySamplerMipState(int slot,int maxMipLevel,float lodBias)
 {
     if (slot<0 || slot>=16) throw std::out_of_range("Metal: sampler slot must be in [0, 15]");
-    if (maxMipLevel!=0 || lodBias!=0.0f)
-        throw System::NotSupportedException(
-            "Metal sampler MaxMipLevel and MipMapLevelOfDetailBias are not implemented.");
+    auto& request=impl_->samplerSlotRequests[slot];
+    impl_->samplerSlots[slot]=impl_->samplerFor(request.filter,request.addressU,request.addressV,
+                                                request.maxAnisotropy,maxMipLevel,lodBias);
+    request.maxMipLevel=maxMipLevel; request.lodBias=lodBias;
 }
 void MetalRenderer::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
 void MetalRenderer::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}

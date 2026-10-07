@@ -111,8 +111,10 @@ The following boundaries are deterministic rather than silent degradation:
   `System::NotSupportedException`;
 - TextureCube, Texture3D, and `CreateRenderTarget2DEXT` accept only
   `SurfaceFormat::Color`; unsupported formats throw;
-- non-default per-target color-write masks, multisample coverage masks, sampler maximum mip level,
-  and sampler LOD bias throw instead of being ignored.
+- non-default per-target color-write masks and multisample coverage masks throw instead of being
+  ignored. Sampler `MaxMipLevel` is the sampler's `lodMinClamp` and `MipMapLevelOfDetailBias` its
+  `lodBias` (`AM4-034`), for 3D draws and SpriteBatch alike; `lodBias` exists from macOS/iOS 26,
+  and below that a non-zero bias still throws.
 
 ## Adapted architecture
 
