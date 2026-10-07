@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include <cstdio>
@@ -45,7 +46,9 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
         check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery unsupported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects unsupported");
-        check(dev.SupportsCapability(GraphicsCapability::Texture3D), "Texture3D supported");
+        // The renderer's contract, asked of the renderer: the device's answer also folds in the
+        // graphics profile (BINDFIX-037), and Reach -- the default here -- has no volume textures.
+        check(dev.GetRenderer().SupportsCapability(GraphicsCapability::Texture3D), "Texture3D supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultiStreamVertexInput), "MultiStreamVertexInput unsupported");
         check(!dev.SupportsCapability(GraphicsCapability::Instancing), "Instancing unsupported");
         check(dev.SupportsCapability(GraphicsCapability::StencilBuffer), "StencilBuffer supported");

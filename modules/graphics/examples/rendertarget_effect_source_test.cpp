@@ -94,6 +94,7 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL or CRASH.
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -189,6 +190,8 @@ namespace
     constexpr const char* kRendererName = "DIRECTX9";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif
@@ -1202,6 +1205,15 @@ class RenderTargetEffectSourceTest : public Game
         // cancels, leaving only a difference in WHICH RESOURCE was bound. Judging the custom route
         // against the raw pattern instead would fold an unrelated colour-convention question into
         // this ticket.
+        // plans/plan_apple_m4.md AM4-026: a renderer that reports no CustomEffects capability may
+        // refuse the effect at construction (Metal does) instead of returning an invalid one --
+        // the same declared boundary, reached one call earlier.
+        if (!dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+        {
+            boundary("C1 " + std::string(kRendererName) + " reports no CustomEffects capability"
+                     " -- custom-effect sub-leg not measured here");
+            return;
+        }
         ShaderEffect custom(dev, kCustomVertSrc, kCustomFragSrc);
         if (!custom.IsEffectValid())
         {

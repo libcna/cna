@@ -315,6 +315,10 @@ namespace
     constexpr Contract kContract{"DIRECTX11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
+#elif defined(CNA_RENDERER_METAL)
+    constexpr Contract kContract{"METAL", Support::Exact, true, Support::Exact,
+                                 true, true, true, true, true,
+                                 true, true, true, true, false, true, true, false};
 #else
 #error "REMED-GFX-142: this renderer has no declared render-target depth/stencil contract."
 #endif

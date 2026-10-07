@@ -193,6 +193,12 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
+#elif defined(CNA_RENDERER_METAL)
+    // plans/plan_apple_m4.md AM4-026: `emptyScissorDrawsNothing` true, measured -- METAL-279 keeps
+    // an empty logical scissor as a legal native placeholder and suppresses the draw, which is
+    // XNA's outcome (unlike Vulkan's whole-framebuffer fallback above).
+    constexpr Contract kContract{"METAL", Support::Exact, Support::Exact, true,
+                                 true, true, true, true, true, false};
 #else
 #error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
 #endif

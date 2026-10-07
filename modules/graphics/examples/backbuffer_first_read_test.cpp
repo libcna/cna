@@ -93,6 +93,9 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-161: this renderer has no declared first-read contract."
 #endif

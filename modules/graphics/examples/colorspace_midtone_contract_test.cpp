@@ -197,6 +197,12 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_METAL)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr bool kCubeSupported = true;
+    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
+    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
+    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-131: this renderer has no declared mid-tone colour contract."
 #endif

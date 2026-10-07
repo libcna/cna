@@ -148,6 +148,9 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_METAL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-147: this renderer has no declared render-target orientation contract."
 #endif

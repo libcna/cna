@@ -158,6 +158,9 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
+#elif defined(CNA_RENDERER_METAL)
+    constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact, true};
 #else
 #error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."
 #endif

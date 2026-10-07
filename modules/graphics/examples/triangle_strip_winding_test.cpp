@@ -115,6 +115,10 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
+    constexpr bool kRasterizes = true;
+    constexpr bool kKnownStripBoundary = false;
 #else
 #error "REMED-GFX-183: this renderer has no declared triangle-strip control boundary."
 #endif

@@ -160,6 +160,8 @@ namespace
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
+#elif defined(CNA_RENDERER_METAL)
+    constexpr Contract kContract{"METAL", Support::Exact, Support::Exact, true, true, true, false};
 #else
 #error "REMED-GFX-116: this renderer has no declared deferred-viewport contract."
 #endif

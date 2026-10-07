@@ -19,8 +19,24 @@ class SpriteBatchPresentationTest final : public CNA::Examples::PixelTestGame {
   void ExpectPhysicalPixel(const char *label, const Rectangle &rect,
                            const Color &expected) {
     std::uint8_t pixel[4]{};
+#if defined(CNA_RENDERER_METAL)
+    // Metal's ReadBackbuffer samples logical coordinates, as EasyGL's does (KF-6), and its drawable
+    // can have more pixels than the window has points (Retina). Observe the physical surface in
+    // identity presentation geometry -- as presentation_mode_contract_test does for EasyGL -- at
+    // the drawable pixel under the window point, then restore this fixture's default Letterbox.
+    auto &renderer = getGraphicsDeviceProperty().GetRenderer();
+    renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+    int drawableWidth = 0, drawableHeight = 0;
+    renderer.GetViewportSize(drawableWidth, drawableHeight);
+    const int windowWidth = getWindowProperty().getClientBoundsProperty().Width;
+    const float scale = windowWidth > 0 ? static_cast<float>(drawableWidth) / windowWidth : 1.0f;
+    renderer.ReadBackbuffer(static_cast<int>((rect.X + 0.5f) * scale),
+                            static_cast<int>((rect.Y + 0.5f) * scale), 1, 1, pixel);
+    renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+#else
     getGraphicsDeviceProperty().GetRenderer().ReadBackbuffer(rect.X, rect.Y, 1,
                                                              1, pixel);
+#endif
     std::printf("pixel=(%u,%u,%u) ", pixel[0], pixel[1], pixel[2]);
     Check(pixel[0] == expected.getRProperty() &&
               pixel[1] == expected.getGProperty() &&

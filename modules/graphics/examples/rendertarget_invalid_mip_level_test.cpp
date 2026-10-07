@@ -139,6 +139,8 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-189: this renderer has no declared invalid-mip-level contract."
 #endif
@@ -184,6 +186,10 @@ namespace
      */
     constexpr bool kMrtSupported =
 #if defined(CNA_RENDERER_HEADLESS)
+        false;
+#elif defined(CNA_RENDERER_METAL)
+        // plans/plan_apple_m4.md AM4-026: Metal reports MultipleRenderTargets false and refuses
+        // more than one descriptor (docs/metal-renderer.md).
         false;
 #else
         true;

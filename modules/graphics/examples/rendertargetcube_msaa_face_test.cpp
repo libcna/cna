@@ -180,6 +180,11 @@ namespace
     // Already correct: a six-slice DXGI_SAMPLE_DESC array with one Texture2DMSArray RTV per slice.
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true,
                                  Support::Exact, false, false};
+#elif defined(CNA_RENDERER_METAL)
+    // plans/plan_apple_m4.md AM4-026: Metal reports MultiSampleAntiAliasing false (METAL-259) and
+    // clamps every requested sample count to zero, so a "multisampled" target is single-sample.
+    constexpr Contract kContract{"METAL", true, Support::Exact, false,
+                                 Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
 #endif

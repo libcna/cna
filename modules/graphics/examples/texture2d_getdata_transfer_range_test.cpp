@@ -173,6 +173,10 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
+#elif defined(CNA_RENDERER_METAL)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr const char* kRendererName = "METAL";
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

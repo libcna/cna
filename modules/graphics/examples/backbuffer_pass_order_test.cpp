@@ -243,6 +243,9 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
+#elif defined(CNA_RENDERER_METAL)
+    constexpr Contract kContract{"METAL", Support::Exact, true, Support::Exact,
+                                 true, true, true, true, true, true, true, true, true, true};
 #else
 #error "REMED-GFX-143: this renderer has no declared backbuffer command-order contract."
 #endif

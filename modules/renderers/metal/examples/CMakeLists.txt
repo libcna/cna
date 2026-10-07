@@ -67,6 +67,113 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     endif()
     cna_register_renderer_test(NAME Metal_Capabilities COMMAND cna_test_metal_capabilities
         TIMEOUT 30 LABELS "Metal")
+
+    # plans/plan_apple_m4.md AM4-026: the shared, renderer-neutral pixel and contract tests from
+    # modules/graphics/examples now run against Metal too; until backbuffer readback worked
+    # (AM4-025) none of them could observe a pixel. Each declares Metal's contract in its own
+    # renderer table, so a feature Metal reports unsupported (MSAA, MRT, RenderTargetCube upload,
+    # custom effects) is asserted as a refusal, not assumed. Not registered: the two
+    # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL) and the instancing and
+    # occlusion-query fixtures, whose features Metal reports false (docs/metal-renderer.md).
+    macro(cna_metal_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3)
+        else()
+            target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+    set(CNA_METAL_SHARED_GRAPHICS_TESTS
+        additive_blend_contract_test
+        alpha_test_effect_test
+        alpha_test_integration_test
+        backbuffer_first_read_test
+        backbuffer_headless_reject_test
+        backbuffer_pass_order_test
+        backbuffer_readback_dimension_test
+        basic_effect_test
+        bound_target_lifetime_test
+        colorspace_midtone_contract_test
+        deferred_scissor_capture_test
+        deferred_source_lifetime_test
+        deferred_viewport_capture_test
+        descriptor_capacity_contract_test
+        dualtexture_slot_sampler_contract_test
+        dualtextureeffect_vertexcolor_test
+        dxt1_texture_test
+        dxt_texturecube_test
+        environmentmapeffect_alphascaledlerp_test
+        envmap_cube_sampler_contract_test
+        envmap_cube_sampler_state_test
+        frontface_winding_test
+        fullscreen_spritebatch_then_3d_test
+        graphicsdevice_clear_depth_test
+        graphicsdevice_default_state_occlusion_test
+        graphicsdevice_depth_contract_test
+        graphicsdevice_ordered_clear_test
+        point_sampling_contract_test
+        present_lifecycle_contract_test
+        rasterizerstate_cullmode_camera_test
+        rasterizerstate_cullmode_indexed_basiceffect_test
+        rendertarget2d_depth_test
+        rendertarget2d_golden_test
+        rendertarget_backbuffer_consumer_test
+        rendertarget_depthstencil_usage_test
+        rendertarget_effect_source_test
+        rendertarget_first_use_test
+        rendertarget_invalid_mip_level_test
+        rendertarget_msaa_depth_contract_test
+        rendertarget_msaa_first_readback_test
+        rendertarget_msaa_mip_readback_test
+        rendertarget_pass_boundary_test
+        rendertarget_preserve_across_resize_test
+        rendertarget_producer_consumer_test
+        rendertarget_sampling_orientation_test
+        rendertarget_viewport_scissor_reset_test
+        rendertargetcube_getdata_contract_test
+        rendertargetcube_msaa_face_test
+        rendertargetcube_plural_binding_test
+        rendertargetcube_usage_test
+        sampler_component_isolation_contract_test
+        skinned_effect_integration_test
+        skinned_effect_test
+        skinnedeffect_lighting_conformance_test
+        source_rectangle_orientation_test
+        sprite_font_test
+        spritebatch_3d_order_test
+        spritebatch_begin_rasterizerstate_scissor_test
+        spritebatch_custom_viewport_rt_test
+        spritebatch_custom_viewport_test
+        spritebatch_depthstencil_state_test
+        spritebatch_presentation_test
+        spritebatch_sampler0_publication_test
+        spritebatch_sort_mode_semantics_test
+        spritebatch_viewport_switch_test
+        stock_effect_sampler_contract_test
+        texture2d_getdata_contract_test
+        texture2d_getdata_transfer_range_test
+        texture2d_saveas_rendertarget_test
+        texture_filter_mip_contract_test
+        texture_filter_ordinal_contract_test
+        texturecube_texture3d_getdata_contract_test
+        texturecube_texture3d_setdata_contract_test
+        triangle_strip_winding_test
+        viewport_reset_after_resize_test
+        xna_pixel_center_contract_test
+        zero_length_buffer_test
+    )
+    foreach(_cna_metal_shared IN LISTS CNA_METAL_SHARED_GRAPHICS_TESTS)
+        cna_metal_test(cna_test_metal_${_cna_metal_shared}
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/${_cna_metal_shared}.cpp)
+        cna_register_renderer_test(NAME Metal_Shared_${_cna_metal_shared}
+            COMMAND cna_test_metal_${_cna_metal_shared}
+            TIMEOUT 120 LABELS "Metal;MetalShared")
+    endforeach()
+    unset(_cna_metal_shared)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

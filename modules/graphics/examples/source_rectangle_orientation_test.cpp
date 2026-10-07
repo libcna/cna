@@ -84,6 +84,10 @@ namespace
     constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadbackRequired = false;
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
+    constexpr bool kRasterizes = true;
+    constexpr bool kBackbufferReadbackRequired = true;
 #else
 #error "REMED-GFX-153 fixture requires a declared renderer contract."
 #endif

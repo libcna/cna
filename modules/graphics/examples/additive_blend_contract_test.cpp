@@ -83,6 +83,10 @@ namespace
     constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadback = false;
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "METAL";
+    constexpr bool kRasterizes = true;
+    constexpr bool kBackbufferReadback = true;
 #else
 #error "REMED-GFX-148: this renderer has no declared Additive control contract."
 #endif

@@ -45,6 +45,17 @@ fresh macOS workflow result is required before claiming the adaptation itself co
 Metal; under the repository's authoritative source-continuity policy it is an external validation
 and support-confidence boundary, not an integration blocker.
 
+### Apple M4 run (2026-10-07)
+
+`plans/plan_apple_m4.md` built the adapted source natively on a Mac mini M4 (macOS 27, Xcode 27,
+Apple clang 21) and ran it on a real window with `MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1`. The
+historical clear-only readback had two causes, both fixed: readback itself was disabled
+(`AM4-025`) and every 3D vertex was clipped by a transposed WVP (`AM4-028`). With the Metal
+renderer's 81 shared renderer-neutral pixel/contract tests registered (`AM4-026`, label
+`MetalShared`), `ctest -L Metal` passes 80 of 80 (one skip: the DXT TextureCube fixture, since
+cube textures accept only `SurfaceFormat::Color`), with no validation-layer assertion. The fixes
+it took are `AM4-025`, `AM4-027`..`AM4-029` and `AM4-031`..`AM4-035`.
+
 ### Post-audit findings
 
 These IDs continue the existing `plans/plan_metal.md` sequence without changing any historical finding:

@@ -189,6 +189,11 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
+#elif defined(CNA_RENDERER_METAL)
+    // plans/plan_apple_m4.md AM4-026: Metal reports MultiSampleAntiAliasing false (METAL-259) and
+    // clamps every requested sample count to zero, so a "multisampled" target is single-sample.
+    constexpr Contract kContract{"METAL", true, Support::Exact, true, true,
+                                 false, Support::Exact, true, true, false};
 #else
 #error "REMED-GFX-136: this renderer has no declared RenderTargetCube usage contract."
 #endif
