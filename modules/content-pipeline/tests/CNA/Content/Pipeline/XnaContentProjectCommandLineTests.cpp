@@ -10,6 +10,7 @@
 // runs the same coordinator every other build here runs.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
