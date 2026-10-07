@@ -899,12 +899,10 @@
         "CPP-0CB833CB92B6",
         "CPP-0E641BCD3389",
         "CPP-0F7DE0835A8D",
-        "CPP-131F71455868",
         "CPP-14AF878DE188",
         "CPP-1932E079C959",
         "CPP-1A27CDA55834",
         "CPP-1E2080AD1B16",
-        "CPP-1EE4793E2012",
         "CPP-1F104311A1EA",
         "CPP-207DE4D1407F",
         "CPP-20DE04A75DAA",
@@ -937,6 +935,7 @@
         "CPP-3E8481EE1233",
         "CPP-40AB1FB09EBD",
         "CPP-432E82D0FE92",
+        "CPP-4494EFB561DB",
         "CPP-47654FC9AE9B",
         "CPP-47E05B46C9AF",
         "CPP-484602007032",
@@ -994,6 +993,7 @@
         "CPP-A2AFB00423A3",
         "CPP-A31C9631CB74",
         "CPP-A34D5D9DA4CD",
+        "CPP-A3E4EC33EF33",
         "CPP-A68D6D119462",
         "CPP-ADBA3231B2F8",
         "CPP-AE81DB182A20",
@@ -14545,8 +14545,8 @@
       "status": "not-applicable",
       "task": "CBIND-080",
       "approved_symbols": [
-        "CPP-06F1EB9C1F4F",
-        "CPP-B58568C470FA"
+        "CPP-A4B7A65E614F",
+        "CPP-DA996CB31141"
       ]
     },
     {
@@ -16717,12 +16717,12 @@
     },
     {
       "id": "buffer-internal-set-data-helpers",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::ThrowIfDisposedForCloneInternal|IndexBuffer::SetDataBytesAtInternal|VertexBuffer::SetData(?:At|ElementsAt)Internal)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::(?:ThrowIfDisposedForCloneInternal|BindStockTextureInternal|SampledStockTextureInternal)|IndexBuffer::SetDataBytesAtInternal|VertexBuffer::SetData(?:At|ElementsAt)Internal)$",
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: a private implementation helper that only exists because the public operation above it is a template. `VertexBuffer::SetData<T>` and `IndexBuffer::SetData<T>` must live in the header, so they dispatch to a non-template `*Internal` body carrying the element size and a `useOptions` discriminator; `ThrowIfDisposedForCloneInternal` is the `CNAEXT`-marked guard `Effect::Clone` runs. The behaviour a caller can observe is the public operation's, and that operation is bound -- `cna_vertex_buffer_set_data`, `cna_index_buffer_set_data` and `cna_effect_clone` each carry it. Binding the helper would publish a dispatch artifact and a second, weaker spelling of an operation the ABI already has.",
-      "tests": "`cna_vertex_buffer_set_data`/`cna_index_buffer_set_data` element-size, offset and options coverage and `cna_effect_clone` disposed-source rejection in strict-C `GraphicsSmoke.c`",
+      "mapping": "No C mapping: a private implementation helper that only exists because the public operation above it is a template. `VertexBuffer::SetData<T>` and `IndexBuffer::SetData<T>` must live in the header, so they dispatch to a non-template `*Internal` body carrying the element size and a `useOptions` discriminator; `ThrowIfDisposedForCloneInternal` is the `CNAEXT`-marked guard `Effect::Clone` runs. `BindStockTextureInternal` and `SampledStockTextureInternal` are what a stock effect's Apply binds its textures to the device sampler slots with, and what its draw then samples those slots through (CBIND-156). The behaviour a caller can observe is the public operation's, and that operation is bound -- `cna_vertex_buffer_set_data`, `cna_index_buffer_set_data` and `cna_effect_clone` each carry it, and the stock-effect sampling is what `cna_effect_apply` followed by `cna_graphics_device_set_texture` produces. Binding the helper would publish a dispatch artifact and a second, weaker spelling of an operation the ABI already has.",
+      "tests": "`cna_vertex_buffer_set_data`/`cna_index_buffer_set_data` element-size, offset and options coverage and `cna_effect_clone` disposed-source rejection in strict-C `GraphicsSmoke.c`; the stock effects' device-slot sampling in `BasicEffectDefaultsTest` (CBIND-156), with `cna_graphics_device_set_texture` itself in strict-C `GraphicsDeviceSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-126",
       "approved_symbols": [
@@ -16732,7 +16732,9 @@
         "CPP-395C1E7C7EF7",
         "CPP-D9E74FF2FA94",
         "CPP-05D6929569A5",
-        "CPP-8035F52B939E"
+        "CPP-8035F52B939E",
+        "CPP-7BC2C9C2999A",
+        "CPP-097D4AD48160"
       ]
     },
     {

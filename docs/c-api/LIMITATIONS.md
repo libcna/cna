@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 7,030 | A C route exists and is tested. |
+| Fully mapped | 7,026 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 441 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 443 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -94,7 +94,7 @@ Not a design choice: the canonical declaration has no definition anywhere in CNA
 
 Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes.
 
-### C++ language mechanics with no runtime behavior — 52 symbols
+### C++ language mechanics with no runtime behavior — 54 symbols
 
 Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface.
 

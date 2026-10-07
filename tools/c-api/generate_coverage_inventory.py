@@ -1159,6 +1159,7 @@ def map_symbols(
         # a carve-out that cannot take ownership, and approval is sticky to whoever approved first,
         # so the transfer has to be made in the JSON rather than by re-running approval.
         blocked: dict[str, set[str]] = {}
+        unapproved: dict[str, list[str]] = {}
         for rule in rules:
             if usage[rule.rule_id]:
                 continue
@@ -1168,9 +1169,24 @@ def map_symbols(
                 owner = result[symbol.identity].rule_id
                 if owner is not None and owner != rule.rule_id:
                     blocked.setdefault(rule.rule_id, set()).add(owner)
+                elif owner is None and not symbol.signature.endswith("=delete"):
+                    unapproved.setdefault(rule.rule_id, []).append(symbol.stable_id)
+        # A third way, and the one to report first: an ID is derived from the declaration's text, so
+        # re-declaring the same operation -- `= default` moved out of line, a parameter named -- leaves
+        # the rule's pins naming declarations that no longer exist while its pattern still reaches the
+        # operation itself, now owned by nobody. Re-pin it once the new declaration has been read.
+        present = {symbol.stable_id for symbol in symbols}
+        rules_by_id = {rule.rule_id: rule for rule in rules}
         lines = []
         for rule_id in unused:
-            if rule_id in blocked:
+            stale = sorted(rules_by_id[rule_id].approved_symbols - present)
+            if rule_id in unapproved and stale:
+                lines.append(
+                    f"  {rule_id}: no declaration it approved exists any more ({', '.join(stale)}), "
+                    f"and its pattern reaches unapproved {', '.join(sorted(unapproved[rule_id]))} -- "
+                    "if those re-declare the same operations, re-pin them in its approved_symbols"
+                )
+            elif rule_id in blocked:
                 lines.append(
                     f"  {rule_id}: its pattern matches only declarations already approved by "
                     + ", ".join(sorted(blocked[rule_id]))

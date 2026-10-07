@@ -347,6 +347,22 @@ class RuleOwnershipIsPerSymbol(unittest.TestCase):
         resolved = gci.resolve_rules(self.target, list(reversed(forward)), ignore_approval=True)
         self.assertEqual([entry.rule_id for entry in resolved], ["carve-out"])
 
+    def test_a_redeclared_operation_names_its_stale_pin_and_the_new_declaration(self) -> None:
+        # MSR-027's shape: `Thing(const Thing&) = default` moved out of line. Same operation, new
+        # content-derived ID, so the carve-out's pin is stale and the declaration it covered is
+        # owned by nobody -- which must be reported as such, not as a transfer to another rule.
+        old = symbol("modules/math/include/CNA/Thing.hpp", "CNA::Thing::Method",
+                     signature="(const Thing &)=default")
+        new = symbol("modules/math/include/CNA/Thing.hpp", "CNA::Thing::Method",
+                     signature="(const Thing &other)")
+        rules = [rule("carve-out", r"^CNA::Thing::Method$", [old.stable_id])]
+        gci.map_symbols([old], rules)
+        with self.assertRaises(RuntimeError) as raised:
+            gci.map_symbols([new], rules)
+        message = str(raised.exception)
+        self.assertIn(f"no declaration it approved exists any more ({old.stable_id})", message)
+        self.assertIn(f"reaches unapproved {new.stable_id}", message)
+
 
 class AlreadyBoundApisCarryTheirMapping(unittest.TestCase):
     """Rows that an exported route already answers must not be reported as missing bindings."""
