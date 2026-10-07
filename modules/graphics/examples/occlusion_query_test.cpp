@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 
@@ -175,10 +176,17 @@ protected:
             // IsComplete and then unconditionally checking true (the former test) cannot detect a
             // poisoned query target: a failed native Begin leaves this particular object forever
             // incomplete, while End happens to close the deleted query that poisoned the target.
+            // GL promises a result only eventually, and macOS's GL delivers it asynchronously
+            // after the read: under a parallel ctest run 30 reads were occasionally not enough
+            // (plans/plan_apple_m4.md AM4-058). The poll is therefore bounded by time as well;
+            // a poisoned query still never completes.
             Color flushPixel;
             const Rectangle flushRegion(0, 0, 1, 1);
             bool freshComplete = false;
-            for (int attempt = 0; attempt < 30 && !freshComplete; ++attempt)
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            for (int attempt = 0;
+                 !freshComplete && (attempt < 30 || std::chrono::steady_clock::now() < deadline);
+                 ++attempt)
             {
                 device.GetBackBufferData(&flushRegion, &flushPixel, 0, 1);
                 freshComplete = q5.getIsCompleteProperty();
