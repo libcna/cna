@@ -3,6 +3,16 @@ if(APPLE)
 endif()
 cna_add_renderer(${CNA_WEBGPU_OBJCXX_SOURCES})
 target_link_libraries(${RENDERER_TARGET} PRIVATE WebGPU::WebGPU)
+# Under Emscripten this renderer makes WebGPU's asynchronous adapter, device, validation and map
+# requests blocking by suspending the Wasm stack with Asyncify (WaitForCompletion()). The deepest of
+# those suspensions, the adapter/device request inside GraphicsDevice construction, does not fit
+# Emscripten's default 4 KiB unwind buffer: measured at 4,324-4,704 bytes in Debug bundles (the
+# renderer benchmark, cna_house3d_demo), where the default aborted with `unreachable`. Every
+# Asyncify executable of a build that compiles this renderer in -- alone or beside WEBGL2 -- gets
+# an order of magnitude of headroom for game code above a suspension; other builds keep the default.
+if(EMSCRIPTEN)
+    target_link_options(cna_emscripten_asyncify INTERFACE -sASYNCIFY_STACK_SIZE=65536)
+endif()
 if(APPLE)
     target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework QuartzCore")
 endif()

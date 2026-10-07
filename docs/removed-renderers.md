@@ -116,8 +116,9 @@ at run time, has the same failure set before and after. A MinGW-w64 build (`DIRE
 `DIRECTX11`, `SOFTWARE`, `HEADLESS`) passes the 58 DirectX11 tests whose shared sources this change
 edited under Wine+DXVK, and its benchmark runs under `DIRECTX11`, `DIRECTX9` and `SOFTWARE`
 selected at run time. The `WEBGL2`+`WEBGPU` wasm bundle builds and runs the benchmark in headless
-Chrome under each (`WEBGPU` needs `-sASYNCIFY_STACK_SIZE=1048576`). **Not run:** native Windows or
-MSVC, macOS (`METAL`), the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
+Chrome under each (`WEBGPU` then needed `-sASYNCIFY_STACK_SIZE=1048576`; since `RRC-025` a build
+containing `WEBGPU` sizes it automatically). **Not run:** native Windows or MSVC, macOS (`METAL`),
+the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
 
 ## The 2026-09-28 retirement
 

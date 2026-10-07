@@ -46,6 +46,9 @@ CNA::EmscriptenAsyncify:
 `CNA::BuildConfig` propagates only the exception ABI. CNA-owned application executables opt into
 Asyncify automatically; an external final executable that uses blocking `Game::Run()` links
 `CNA::EmscriptenAsyncify` (the compatibility `CNA::EmscriptenAbi` composition contains both).
+In a build that compiles the `WEBGPU` renderer in, `CNA::EmscriptenAsyncify` also carries
+`-sASYNCIFY_STACK_SIZE=65536`, because that renderer suspends deeper than Emscripten's default
+4 KiB unwind buffer holds (see `webgpu-renderer.md`); nothing has to be added by hand.
 
 The generated `cna_c_api_wasm` library is intentionally different. JavaScript owns its event loop
 and calls `cna_game_run_one_frame` from `requestAnimationFrame`, so its final link explicitly uses

@@ -67,7 +67,11 @@ of `WebGPURenderer.cpp` and every WGSL shader; five seams differ, each behind
   synchronous adapter/device/readback path and, under Emscripten, requests
   `WGPUCallbackMode_AllowSpontaneous` and yields with `emscripten_sleep()` (Asyncify, enabled
   project-wide) so the browser event loop can settle the promise — instead of the native
-  `wgpuInstanceProcessEvents()` pump.
+  `wgpuInstanceProcessEvents()` pump. The deepest of those yields, the adapter/device request inside
+  `GraphicsDevice` construction, unwinds 4,324–4,704 bytes in a Debug bundle, more than
+  Emscripten's default 4 KiB Asyncify stack, so a build that compiles `WEBGPU` in links its Asyncify
+  executables with `-sASYNCIFY_STACK_SIZE=65536` automatically; a `WEBGL2`-only build keeps the
+  default (its frame-boundary wait unwinds under 1 KiB).
 - **Toolchain.** `cmake/ThirdPartyWebGPU.cmake` has an `if(EMSCRIPTEN)` branch that links
   Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`) with no wgpu-native download and no
   runtime library to copy. The port's `webgpu/webgpu.h` is the same unified header wgpu-native v29
