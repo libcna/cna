@@ -668,7 +668,7 @@ namespace
          "gl_Position=uWVP*cnaPos",
          "gl_Position=uWVP*cnaPos"},
         {"metal",
-         "Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)))",
+         "Mat4 wvp=multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr))",
          "fillPbrUniforms(t, pu, wvp, *params)",
          "std::memcpy(t.world, params.worldColMajor, sizeof(t.world))",
          "o.position = t.wvp * float4(in.position, 1.0)",
