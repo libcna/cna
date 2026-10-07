@@ -107,6 +107,18 @@ def strong_symbols(archive: Path) -> set[str]:
         if len(fields) != 3 or fields[1] not in ("T", "D", "B", "R"):
             continue
         symbols.add(fields[2])
+    if sys.platform == "darwin":
+        # Mach-O has no letter for a weak definition: nm prints an inline function's or a template
+        # instantiation's copy as an ordinary "T", where ELF's prints "W". Its -m form names them.
+        verbose = subprocess.run(
+            ["nm", "-m", "--defined-only", "-g", str(archive)],
+            capture_output=True, text=True, check=False)
+        if verbose.returncode != 0:
+            return set()
+        for line in verbose.stdout.splitlines():
+            fields = line.split()
+            if "weak" in fields[:-1]:
+                symbols.discard(fields[-1])
     return symbols
 
 

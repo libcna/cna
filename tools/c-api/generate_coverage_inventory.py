@@ -523,8 +523,12 @@ def symbol_from_member(
     elif member_kind == "variable":
         if "EventHandler" in type_text:
             kind = "event"
+        # Newer Doxygen (1.18) reports constexpr as an attribute and leaves it out of <type>,
+        # where 1.9.8 spelled it there.
         elif member.get("static") == "yes" and (
-            "const" in type_text.split() or "constexpr" in type_text.split()
+            member.get("constexpr") == "yes"
+            or "const" in type_text.split()
+            or "constexpr" in type_text.split()
         ):
             kind = "constant"
         else:
