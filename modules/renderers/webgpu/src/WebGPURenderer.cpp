@@ -1359,6 +1359,17 @@ namespace CNA::Internal::Renderers::WebGPU
                 out[4 + i] = p.boneTransforms[i];
         }
 
+        // plans/plan_apple_m4.md AM4-052: wgpu-native's own status (wgpu.h,
+        // WGPUSurfaceGetCurrentTextureStatus_Occluded), outside the standard enum's range. Its
+        // Metal backend reports it for a window macOS considers not visible instead of blocking up
+        // to a second for a drawable; the frame is simply skipped and the next one tries again.
+        constexpr int kWgpuNativeSurfaceStatusOccluded = 0x00030001;
+
+        [[nodiscard]] bool IsSurfaceOccluded(WGPUSurfaceGetCurrentTextureStatus status)
+        {
+            return static_cast<int>(status) == kWgpuNativeSurfaceStatusOccluded;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -12259,9 +12270,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             {
                 if (surfaceTexture.texture != nullptr)
                     wgpuTextureRelease(surfaceTexture.texture);
+                // An occluded surface is intact, merely not on screen: nothing to reconfigure.
                 if (IsSurfaceRecoverable(surfaceTexture.status))
                     ConfigureSurface(true);
-                else
+                else if (!IsSurfaceOccluded(surfaceTexture.status))
                     throw std::runtime_error(
                         "CNA WebGPU: unrecoverable surface acquisition failure (status " +
                         std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
