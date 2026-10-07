@@ -98,6 +98,37 @@ namespace CNA::Internal::Renderers::EasyGL
         private:
             GLint previous_ = 0;
         };
+
+        // Restores the active texture unit and the texture it had bound to one target. Uploading a
+        // texture binds it to whatever unit is active, and the stock fallback textures are made on
+        // first use in the middle of BindDrawParams -- after unit 0 already holds the effect's
+        // texture. The first draw that needed a fallback therefore sampled the fallback in place
+        // of its own texture (SkinnedEffect per-pixel lighting drew a red texture white).
+        class TextureBindingPreserved
+        {
+        public:
+            TextureBindingPreserved(::metagl::TextureTarget target, ::metagl::GetParameter binding)
+                : target_(target)
+            {
+                ::metagl::glGetIntegerv(::metagl::GetParameter::ActiveTexture, &activeUnit_);
+                ::metagl::glGetIntegerv(binding, &previous_);
+            }
+
+            ~TextureBindingPreserved()
+            {
+                ::metagl::glActiveTexture(static_cast<::metagl::TextureUnit>(activeUnit_));
+                ::metagl::glBindTexture(target_,
+                                        ::metagl::TextureId{static_cast<unsigned int>(previous_)});
+            }
+
+            TextureBindingPreserved(const TextureBindingPreserved&) = delete;
+            TextureBindingPreserved& operator=(const TextureBindingPreserved&) = delete;
+
+        private:
+            ::metagl::TextureTarget target_;
+            GLint activeUnit_ = 0;
+            GLint previous_ = 0;
+        };
     }
 }
 
@@ -9731,6 +9762,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::EnsureDefaultWhiteTexture()
     {
         if (default_white_texture_ready_) return;
+        const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
+                                                ::metagl::GetParameter::TextureBinding2D);
         static const uint8_t white[4] = {255, 255, 255, 255};
         default_white_texture_.create();
         default_white_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, white);
@@ -9740,6 +9773,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::EnsureDefaultBlackTexture()
     {
         if (default_black_texture_ready_) return;
+        const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
+                                                ::metagl::GetParameter::TextureBinding2D);
         static const uint8_t black[4] = {0, 0, 0, 255};
         default_black_texture_.create();
         default_black_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, black);
@@ -9749,6 +9784,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::EnsureDefaultBlackCubeTexture()
     {
         if (default_black_cube_texture_ready_) return;
+        const TextureBindingPreserved preserved(::metagl::TextureTarget::TextureCubeMap,
+                                                ::metagl::GetParameter::TextureBindingCubeMap);
         static const uint8_t black[4] = {0, 0, 0, 255};
         default_black_cube_texture_.create();
         default_black_cube_texture_.bind(::easygl::TextureTarget::TextureCubeMap);
@@ -9778,6 +9815,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::EnsureDefaultFlatNormalTexture()
     {
         if (default_flat_normal_texture_ready_) return;
+        const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
+                                                ::metagl::GetParameter::TextureBinding2D);
         static const uint8_t flatNormal[4] = {128, 128, 255, 255};
         default_flat_normal_texture_.create();
         default_flat_normal_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, flatNormal);
