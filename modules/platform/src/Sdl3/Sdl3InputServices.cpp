@@ -1121,6 +1121,15 @@ namespace CNA::Platform::Sdl3 {
             return devices;
         }
 
+        /// Darwin's haptic backend counts -1 devices until SDL_INIT_HAPTIC has run, and
+        /// SDL_GetHaptics then hands that count back and writes its terminator past the one-byte
+        /// array it allocated for it. Before the subsystem is up no backend has a haptic device to
+        /// report -- Linux's simply counts zero -- so the call is not made at all.
+        bool HapticsAreEnumerable()
+        {
+            return (SDL_WasInit(SDL_INIT_HAPTIC) & SDL_INIT_HAPTIC) != 0;
+        }
+
         template <typename TId, typename TEnumerate>
         bool AnyDevice(TEnumerate enumerate)
         {
@@ -1155,6 +1164,10 @@ namespace CNA::Platform::Sdl3 {
                 return EnumerateDevices<SDL_TouchID>(kind, SDL_GetTouchDevices,
                                                      SDL_GetTouchDeviceName);
             case InputDeviceKind::Haptic:
+                if (!HapticsAreEnumerable())
+                {
+                    return {};
+                }
                 return EnumerateDevices<SDL_HapticID>(kind, SDL_GetHaptics,
                                                       SDL_GetHapticNameForID);
             case InputDeviceKind::Sensor:
@@ -1172,7 +1185,8 @@ namespace CNA::Platform::Sdl3 {
             case InputDeviceKind::Gamepad:  return AnyDevice<SDL_JoystickID>(SDL_GetGamepads);
             case InputDeviceKind::Joystick: return AnyDevice<SDL_JoystickID>(SDL_GetJoysticks);
             case InputDeviceKind::Touch:    return AnyDevice<SDL_TouchID>(SDL_GetTouchDevices);
-            case InputDeviceKind::Haptic:   return AnyDevice<SDL_HapticID>(SDL_GetHaptics);
+            case InputDeviceKind::Haptic:
+                return HapticsAreEnumerable() && AnyDevice<SDL_HapticID>(SDL_GetHaptics);
             case InputDeviceKind::Sensor:   return AnyDevice<SDL_SensorID>(SDL_GetSensors);
         }
         return false;
