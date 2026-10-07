@@ -10687,6 +10687,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         info.num_samplers = module.samplers;
         info.num_uniform_buffers = module.uniformBuffers;
+        shader = CreateRoutedSpirvShaderEXT(
+            info, "CNA SDL_GPU: failed to create an instanced stock vertex shader: ");
+        NotifyResourceEvent(SdlGpuResourceKindEXT::Shader, SdlGpuResourceEventEXT::Acquired);
+        return shader;
+    }
+
+    SDL_GPUShader* SdlGpuRenderer::CreateRoutedSpirvShaderEXT(
+        const SDL_GPUShaderCreateInfo& createInfo, const char* diagnostic)
+    {
 #if defined(CNA_SDL_GPU_SHADERCROSS)
         const SDL_GPUShaderFormat shaderCrossFormats =
             shaderCrossAcquired_ ? SDL_ShaderCross_GetSPIRVShaderFormats()
@@ -10694,11 +10703,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 #else
         const SDL_GPUShaderFormat shaderCrossFormats = static_cast<SDL_GPUShaderFormat>(0);
 #endif
-        shader = CreateSdlGpuShaderEXT(
-            device_, shaderCrossFormats, testHooks_.forceShaderCrossCompilation, info,
-            "CNA SDL_GPU: failed to create an instanced stock vertex shader: ");
-        NotifyResourceEvent(SdlGpuResourceKindEXT::Shader, SdlGpuResourceEventEXT::Acquired);
-        return shader;
+        return CreateSdlGpuShaderEXT(
+            device_, shaderCrossFormats, testHooks_.forceShaderCrossCompilation, createInfo,
+            diagnostic);
     }
 
     void SdlGpuRenderer::QueueCustomEffect3DDrawEXT(
@@ -13035,12 +13042,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     namespace
     {
-        /// SMG-0007. Creates one stage's `SDL_GPUShader` from an already-remapped module, filling
-        /// the resource counts from what the module actually declares rather than from the fixed
+        /// SMG-0007. Describes one stage's shader from an already-remapped module, filling the
+        /// resource counts from what the module actually declares rather than from the fixed
         /// one-sampler/one-uniform assumption the GLSL route could afford to make.
-        [[nodiscard]] SDL_GPUShader* CreateShaderFromRemappedSpirvEXT(
-            SDL_GPUDevice* device, const SpirvRemapResultEXT& remapped,
-            const SDL_GPUShaderStage stage, std::string& error)
+        [[nodiscard]] SDL_GPUShaderCreateInfo RemappedSpirvCreateInfoEXT(
+            const SpirvRemapResultEXT& remapped, const SDL_GPUShaderStage stage)
         {
             SDL_GPUShaderCreateInfo info{};
             info.code = reinterpret_cast<const Uint8*>(remapped.words.data());
@@ -13052,10 +13058,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             info.num_storage_textures = remapped.readOnlyStorageTextureCount;
             info.num_storage_buffers = remapped.readOnlyStorageBufferCount;
             info.num_uniform_buffers = remapped.uniformBufferCount;
-            SDL_GPUShader* shader = SDL_CreateGPUShader(device, &info);
-            if (shader == nullptr)
-                error = std::string("SDL_CreateGPUShader failed: ") + SDL_GetError();
-            return shader;
+            return info;
         }
     }
 
@@ -13085,18 +13088,30 @@ namespace CNA::Internal::Renderers::SdlGpu
             return false;
         }
 
-        vertexShader_ = CreateShaderFromRemappedSpirvEXT(
-            owner_->Device(), vertex, SDL_GPU_SHADERSTAGE_VERTEX, compileError_);
-        if (vertexShader_ == nullptr)
+        // Each module goes through the renderer's own shader route rather than straight to the
+        // driver: a driver that does not consume SPIR-V (Metal, D3D12) is reached through the
+        // cross-compiler exactly as the stock modules are, and refused with a diagnostic when no
+        // route exists. Handing it SPIR-V directly tripped the library's debug assertion
+        // "Incompatible shader format for GPU backend" on Metal, whose interactive handler then
+        // blocked the process (SdlGpu_ShaderEffect_PerUnitSampler hung to its timeout).
+        try
         {
-            compileError_ = "ShaderEffect vertex: " + compileError_;
+            vertexShader_ = owner_->CreateRoutedSpirvShaderEXT(
+                RemappedSpirvCreateInfoEXT(vertex, SDL_GPU_SHADERSTAGE_VERTEX), "");
+        }
+        catch (const std::exception& exception)
+        {
+            compileError_ = std::string("ShaderEffect vertex: ") + exception.what();
             return false;
         }
-        fragmentShader_ = CreateShaderFromRemappedSpirvEXT(
-            owner_->Device(), fragment, SDL_GPU_SHADERSTAGE_FRAGMENT, compileError_);
-        if (fragmentShader_ == nullptr)
+        try
         {
-            compileError_ = "ShaderEffect fragment: " + compileError_;
+            fragmentShader_ = owner_->CreateRoutedSpirvShaderEXT(
+                RemappedSpirvCreateInfoEXT(fragment, SDL_GPU_SHADERSTAGE_FRAGMENT), "");
+        }
+        catch (const std::exception& exception)
+        {
+            compileError_ = std::string("ShaderEffect fragment: ") + exception.what();
             SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
             vertexShader_ = nullptr;
             return false;
@@ -13347,10 +13362,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 1;
-        vertexShader_ = SDL_CreateGPUShader(owner_->Device(), &vsInfo);
-        if (vertexShader_ == nullptr)
+        // Through the renderer's shader route, for the reason CompileSpirvProgramEXT
+        // gives: a driver that does not consume SPIR-V must never be handed it directly.
+        try
         {
-            compileError_ = std::string("SDL_CreateGPUShader (vertex) failed: ") + SDL_GetError();
+            vertexShader_ = owner_->CreateRoutedSpirvShaderEXT(vsInfo, "(vertex) ");
+        }
+        catch (const std::exception& exception)
+        {
+            compileError_ = std::string("ShaderEffect shader creation failed ") + exception.what();
             return false;
         }
 
@@ -13362,10 +13382,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
         fsInfo.num_uniform_buffers = 1;
-        fragmentShader_ = SDL_CreateGPUShader(owner_->Device(), &fsInfo);
-        if (fragmentShader_ == nullptr)
+        try
         {
-            compileError_ = std::string("SDL_CreateGPUShader (fragment) failed: ") + SDL_GetError();
+            fragmentShader_ = owner_->CreateRoutedSpirvShaderEXT(fsInfo, "(fragment) ");
+        }
+        catch (const std::exception& exception)
+        {
+            compileError_ = std::string("ShaderEffect shader creation failed ") + exception.what();
             SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
             vertexShader_ = nullptr;
             return false;

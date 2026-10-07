@@ -4091,6 +4091,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] SDL_GPUShader* StockVertexShaderEXT(
             bool instanced, SDL_GPUShader* ordinary, InstancedStockVertexShaderEXT kind);
         /**
+         * @brief Creates a shader from a SPIR-V module through this device's shader route.
+         *
+         * Directly where the active driver takes SPIR-V, through the shader cross-compiler where
+         * it does not, and an explicit refusal where neither can serve the driver -- the one
+         * route construction already uses, so no SPIR-V module reaches a driver that cannot
+         * consume it.
+         *
+         * @param createInfo SPIR-V module and its resource counts.
+         * @param diagnostic Prefix for the exception text.
+         * @return The created shader; never null.
+         * @throws std::runtime_error If no route serves the driver or creation fails.
+         */
+        [[nodiscard]] SDL_GPUShader* CreateRoutedSpirvShaderEXT(
+            const SDL_GPUShaderCreateInfo& createInfo, const char* diagnostic);
+        /**
          * @brief Queues one 3D draw shaded by a custom `ShaderEffect`. CNAEXT. SMG-0019.
          *
          * @param vb Vertex buffer.
