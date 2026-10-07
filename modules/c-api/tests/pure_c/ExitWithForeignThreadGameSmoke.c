@@ -52,6 +52,9 @@ static CNA_Result on_update(
     return CNA_RESULT_SUCCESS;
 }
 
+/* Set when Apple refused to create the game on the owner thread (AM4-074). */
+static int g_refused_off_main_thread = 0;
+
 static int owner(void* const argument)
 {
     int* const created = (int*)argument;
@@ -65,7 +68,26 @@ static int owner(void* const argument)
         {Title, sizeof(Title) - 1U}, &callbacks
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
-    return CNA_TEST_STAGE(cna_game_create(&create_info, &game) == CNA_RESULT_SUCCESS) &&
+    const CNA_Result created_game = cna_game_create(&create_info, &game);
+#if defined(__APPLE__)
+    /*
+     * plans/plan_apple_m4.md AM4-074: Apple's Cocoa and UIKit video drivers initialize only on the
+     * main thread. Where the renderer can live with another SDL video driver SDL falls back to one
+     * and the scenario runs as everywhere else; where it cannot, the game is refused, and then
+     * what Apple promises is checked instead: a clean refusal that says why.
+     */
+    if (created_game != CNA_RESULT_SUCCESS) {
+        char message[1024] = {0};
+        uint64_t message_bytes = 0U;
+        g_refused_off_main_thread = 1;
+        return CNA_TEST_STAGE(game == CNA_INVALID_HANDLE) &&
+            CNA_TEST_STAGE(cna_error_copy_last_message(
+                               message, sizeof message - 1U, &message_bytes) ==
+                           CNA_RESULT_SUCCESS) &&
+            CNA_TEST_STAGE(strstr(message, "main thread") != NULL);
+    }
+#endif
+    return CNA_TEST_STAGE(created_game == CNA_RESULT_SUCCESS) &&
         CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS);
 }
 
@@ -77,7 +99,8 @@ int main(void)
     if (thrd_create(&thread, owner, &created) != thrd_success ||
         thrd_join(thread, &succeeded) != thrd_success ||
         !CNA_TEST_STAGE(succeeded == 1) ||
-        !CNA_TEST_STAGE(created == 1)) {
+        /* a refused game never ran an update */
+        !CNA_TEST_STAGE(created == (g_refused_off_main_thread ? 0 : 1))) {
         return CNA_TEST_FAIL(1);
     }
     /* The owning thread has ended; the game and its buffer are still alive. */

@@ -19,6 +19,9 @@
 #if defined(__linux__) || defined(__unix__)
 #include <dlfcn.h>
 #endif
+#if defined(__APPLE__)
+#include <pthread.h>
+#endif
 
 namespace CNA::Platform::Sdl3 {
 
@@ -357,6 +360,16 @@ namespace CNA::Platform::Sdl3 {
                 detail += drivers.empty()
                     ? "; this SDL build contains no video driver at all"
                     : "; this SDL build contains these video drivers: " + drivers;
+#if defined(__APPLE__)
+                // plans/plan_apple_m4.md AM4-074: SDL reports a Cocoa/UIKit refusal off the main
+                // thread as "No available video device", which names the wrong cause. Darwin's own
+                // answer, because SDL counts whichever thread first initialized it as "main".
+                if (pthread_main_np() == 0)
+                {
+                    detail += "; on Apple platforms the video subsystem can only be initialized on "
+                              "the main thread, and this call was made on another thread";
+                }
+#endif
             }
             throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", detail);
         }
