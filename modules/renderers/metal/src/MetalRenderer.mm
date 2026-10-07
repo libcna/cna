@@ -1696,6 +1696,10 @@ struct MetalRenderer::Impl
             (NSUInteger)requestedScissor.width,(NSUInteger)requestedScissor.height};
         [encoder setViewport:nativeViewport]; [encoder setScissorRect:nativeScissor];
         [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
+        bool targetHasDepth=true, targetHasStencil=true;
+        activeTargetDepthPlanes(targetHasDepth,targetHasStencil);
+        if(targetHasDepth!=depthStateTargetHasDepth||targetHasStencil!=depthStateTargetHasStencil)
+            rebuildDepthState();
         [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
         [encoder setStencilReferenceValue:(uint32_t)refStencil];
         [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
@@ -1730,6 +1734,12 @@ struct MetalRenderer::Impl
     // RenderTargetCube deliberately stays out of MSAA scope for this pass (matches METAL-112's own
     // MRT+MSAA scope decision below) -- its own branch below never sets resolveOut.
     bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& resolveOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut);
+    // plans/plan_apple_m4.md AM4-032: which planes the bound target's DepthFormat has (the
+    // backbuffer: both). Defined after the render-target classes, like resolveActiveAttachments.
+    void activeTargetDepthPlanes(bool& hasDepth, bool& hasStencil) const;
+    // The planes depthState was built for; a target switch to different planes rebuilds it.
+    bool depthStateTargetHasDepth=true;
+    bool depthStateTargetHasStencil=true;
 
     // plans/plan_metal.md METAL-112: the MRT-aware sibling of resolveActiveAttachments() above, used only
     // by ensureFrame()/clear() (every other caller -- computeSpriteTransform(), etc. -- only ever
@@ -1952,8 +1962,15 @@ struct MetalRenderer::Impl
         if(!descriptorOwner.HasValue())
             throw std::runtime_error("Metal: failed to allocate depth/stencil descriptor");
         MTLDepthStencilDescriptor* d=(MTLDepthStencilDescriptor*)descriptorOwner.Get();
-        d.depthCompareFunction = depthEnabled ? metalCompareFunction(depthFunc) : MTLCompareFunctionAlways;
-        d.depthWriteEnabled=MetalEffectiveDepthWriteEnabled(depthEnabled,depthWrite);
+        // plans/plan_apple_m4.md AM4-032: a plane the bound target's DepthFormat does not have is
+        // inert, as it is on XNA -- the shared attachment behind it is never tested or written.
+        bool targetHasDepth=true, targetHasStencil=true;
+        activeTargetDepthPlanes(targetHasDepth,targetHasStencil);
+        depthStateTargetHasDepth=targetHasDepth; depthStateTargetHasStencil=targetHasStencil;
+        const bool effectiveDepth=depthEnabled&&targetHasDepth;
+        const bool effectiveStencil=stencilEnabled&&targetHasStencil;
+        d.depthCompareFunction = effectiveDepth ? metalCompareFunction(depthFunc) : MTLCompareFunctionAlways;
+        d.depthWriteEnabled=MetalEffectiveDepthWriteEnabled(effectiveDepth,depthWrite);
         // plans/plan_metal.md METAL-9/10: real front/back stencil test, replacing the previous
         // reference-value-only plumbing. Front face carries XNA's "normal" stencil fields; back
         // face carries the CounterClockwise fields when TwoSidedStencilMode is set, else mirrors
@@ -1966,7 +1983,7 @@ struct MetalRenderer::Impl
         // Vulkan specifically, not a general rule) -- but this has NOT been empirically verified
         // on real Metal hardware and must be treated as unproven until it is (plans/plan_metal.md
         // Testing strategy tier 2/3).
-        if (stencilEnabled) {
+        if (effectiveStencil) {
             MetalObjectOwner frontOwner(retainMetalObject,releaseMetalObject);
             frontOwner.Adopt([[MTLStencilDescriptor alloc] init]);
             if(!frontOwner.HasValue())
@@ -2573,9 +2590,10 @@ public:
     // MSAA stays allocated out of the supported contract: the historical Mac run engaged sample
     // count 4 but its rendered edge was binary. The target therefore reports the applied value 0.
     MetalRenderTargetRenderer(std::shared_ptr<MetalRenderer::Impl> owner, int w, int h,
-                             bool mipMap, int /*requestedMultiSampleCount*/=0)
+                             int depthFormat, bool mipMap, int /*requestedMultiSampleCount*/=0)
         : owner_(owner), resourceHealth_(owner ? owner->resourceHealth : nullptr),
           w_(w), h_(h), mipMap_(mipMap),
+          appliedDepthFormat_(MetalAppliedRenderTargetDepthFormat(depthFormat)),
           levelCount_(MetalMipLevelCount(w,h,mipMap)), appliedSampleCount_(0),
           definedMipLevels_(levelCount_)
     {
@@ -2668,12 +2686,16 @@ public:
 
     // Public count zero is the deterministic unsupported/no-MSAA value.
     int GetMultiSampleCount() const override { return appliedSampleCount_; }
+    // plans/plan_apple_m4.md AM4-032: the planes the requested DepthFormat has, not the storage
+    // behind them -- see MetalAppliedRenderTargetDepthFormat. Impl::rebuildDepthState makes a
+    // missing plane inert while this target is bound.
     int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
     {
-        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        return appliedDepthFormat_;
     }
-    bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return true; }
-    bool HasRealStencilBuffer(bool /*stencilFormatWasRequested*/) const override { return true; }
+    bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return MetalDepthFormatHasDepth(appliedDepthFormat_); }
+    bool HasRealStencilBuffer(bool /*stencilFormatWasRequested*/) const override { return MetalDepthFormatHasStencil(appliedDepthFormat_); }
+    int appliedDepthFormat() const noexcept { return appliedDepthFormat_; }
     void BindAsRenderTarget() override
     {
         auto owner=lockOwner();
@@ -2849,6 +2871,7 @@ private:
     std::shared_ptr<MetalResourceHealth> resourceHealth_;
     int w_, h_;
     bool mipMap_;
+    int appliedDepthFormat_;
     int levelCount_=1;
     int appliedSampleCount_=0;
     MetalMipDefinitionState definedMipLevels_;
@@ -2871,9 +2894,10 @@ class MetalRenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
 {
 public:
     MetalRenderTargetCubeRenderer(std::shared_ptr<MetalRenderer::Impl> owner, int size,
-                                 bool mipMap)
+                                 int depthFormat, bool mipMap)
         : owner_(owner), resourceHealth_(owner ? owner->resourceHealth : nullptr),
           size_(size), mipMap_(mipMap),
+          appliedDepthFormat_(MetalAppliedRenderTargetDepthFormat(depthFormat)),
           levelCount_(MetalMipLevelCount(size,size,mipMap))
     {
         if(!owner||!resourceHealth_)
@@ -2908,8 +2932,14 @@ public:
     }
     int GetSize() const override { return size_; }
     int GetSizeEXT() const noexcept override { return size_; }
-    bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return true; }
-    bool HasRealStencilBuffer(bool /*stencilFormatWasRequested*/) const override { return true; }
+    // plans/plan_apple_m4.md AM4-032: as MetalRenderTargetRenderer's.
+    int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
+    {
+        return appliedDepthFormat_;
+    }
+    bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return MetalDepthFormatHasDepth(appliedDepthFormat_); }
+    bool HasRealStencilBuffer(bool /*stencilFormatWasRequested*/) const override { return MetalDepthFormatHasStencil(appliedDepthFormat_); }
+    int appliedDepthFormat() const noexcept { return appliedDepthFormat_; }
     void BindAsRenderTargetFace(int face) override
     {
         if (face<0 || face>=6) throw std::out_of_range("Metal: RenderTargetCube face must be in [0, 5]");
@@ -2995,10 +3025,20 @@ private:
     std::shared_ptr<MetalResourceHealth> resourceHealth_;
     int size_;
     bool mipMap_;
+    int appliedDepthFormat_;
     int levelCount_=1;
     id<MTLTexture> colorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
 };
+
+void MetalRenderer::Impl::activeTargetDepthPlanes(bool& hasDepth, bool& hasStencil) const
+{
+    int applied=static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    if(currentRenderTarget) applied=currentRenderTarget->appliedDepthFormat();
+    else if(currentRenderTargetCube) applied=currentRenderTargetCube->appliedDepthFormat();
+    hasDepth=MetalDepthFormatHasDepth(applied);
+    hasStencil=MetalDepthFormatHasStencil(applied);
+}
 
 bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& resolveOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut)
 {
@@ -3477,12 +3517,12 @@ std::unique_ptr<ITexture3DRenderer> MetalRenderer::CreateTexture3D(int w,int h,i
 }
 // Preserve/discard behavior remains owned by the shared GraphicsDevice binding path. Requested
 // multisampling is deliberately clamped to zero at this boundary.
-std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
+std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2D(int w,int h,int depthFormat,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
 {
     impl_->throwPendingCommandFailure();
     (void)multiSampleCount;
     if(w<=0||h<=0) throw std::invalid_argument("Metal RenderTarget2D dimensions must be positive.");
-    return std::make_unique<MetalRenderTargetRenderer>(impl_, w, h, mipMap, 0);
+    return std::make_unique<MetalRenderTargetRenderer>(impl_, w, h, depthFormat, mipMap, 0);
 }
 std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
     int w,int h,int depthFormat,bool preserveContents,bool mipMap,int multiSampleCount,int surfaceFormat)
@@ -3492,11 +3532,11 @@ std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
     return CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount);
 }
 std::unique_ptr<IRenderTargetCubeRenderer> MetalRenderer::CreateRenderTargetCube(
-    int size,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
+    int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
 {
     impl_->throwPendingCommandFailure();
     if(size<=0) throw std::invalid_argument("Metal RenderTargetCube size must be positive.");
-    return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, mipMap);
+    return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, depthFormat, mipMap);
 }
 // plans/plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
 // SetRenderTarget2D() and the new SetRenderTargetCubeFace() below must cross-unbind whichever OTHER
