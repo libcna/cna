@@ -1370,6 +1370,15 @@ namespace CNA::Internal::Renderers::WebGPU
             return static_cast<int>(status) == kWgpuNativeSurfaceStatusOccluded;
         }
 
+        /// plans/plan_apple_m4.md AM4-078: test hook. With CNA_WEBGPU_TEST_SURFACE_OCCLUDED set, every
+        /// surface acquisition reports wgpu-native's Occluded status without acquiring, so the
+        /// dropped-frame path can be exercised on any host -- not only behind a hidden macOS window.
+        [[nodiscard]] bool SurfaceOccludedForTesting()
+        {
+            static const bool forced = std::getenv("CNA_WEBGPU_TEST_SURFACE_OCCLUDED") != nullptr;
+            return forced;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -8630,25 +8639,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         framePending_ = true;
     }
 
-    void WebGPURenderer::DiscardQueuedSprites()
-    {
-        spriteCommands_.clear();
-        // The 3D families are deliberately NOT cleared here (they never were), so their entries
-        // keep addressing live commands and only the sprite references are dropped.
-        // REMED-GFX-156: `kind` first -- a Clear entry stores its clearCommands_ slot in `index`
-        // and leaves `family` at its default, which happens to be Sprite, so testing the family
-        // alone would drop every ordered clear of the cycle along with the sprites.
-        drawOrder_.erase(std::remove_if(drawOrder_.begin(), drawOrder_.end(),
-                                        [](const DrawOrderEntry& e)
-                                        {
-                                            // WMG-0020: a Marker entry leaves `family` at its
-                                            // default too, so the `kind` test guards it as well.
-                                            return e.kind == OrderedKind::Draw &&
-                                                   e.family == DrawFamily::Sprite;
-                                        }),
-                         drawOrder_.end());
-    }
-
     std::vector<WebGPURenderer::PassSegmentPlan>
     WebGPURenderer::BuildPassSegments() const
     {
@@ -12257,14 +12247,19 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             ConfigureSurface(false);
             if (!surfaceConfigured_)
             {
-                // REMED-GFX-159: and their ordered-stream entries with them, so the surviving
-                // 3D entries cannot address a sprite slot that no longer exists.
-                DiscardQueuedSprites();
+                // plans/plan_apple_m4.md AM4-078: the frame is dropped whole -- every family, not
+                // only the sprites. A surviving 3D draw was replayed by the next bind cycle into
+                // whatever target it opened, which could be the very texture the draw samples.
+                DiscardQueuedCommands();
                 return false;
             }
 
             WGPUSurfaceTexture surfaceTexture{};
-            wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
+            if (SurfaceOccludedForTesting())
+                surfaceTexture.status =
+                    static_cast<WGPUSurfaceGetCurrentTextureStatus>(kWgpuNativeSurfaceStatusOccluded);
+            else
+                wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
             if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
                 surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
             {
@@ -12277,9 +12272,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     throw std::runtime_error(
                         "CNA WebGPU: unrecoverable surface acquisition failure (status " +
                         std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
-                // REMED-GFX-159: and their ordered-stream entries with them, so the surviving
-                // 3D entries cannot address a sprite slot that no longer exists.
-                DiscardQueuedSprites();
+                // AM4-078: dropped whole, as above.
+                DiscardQueuedCommands();
                 return false;
             }
 

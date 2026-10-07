@@ -3014,9 +3014,6 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void RecordOrderedClear(bool color, bool depth, bool stencil);
 
-        /** @brief Drops queued sprites, and their ordered-stream entries, without replaying them. */
-        void DiscardQueuedSprites();
-
         /**
          * @brief Uploads every queued sprite's vertices: into the vertex arena
          *        (WEBGPUPERF-0006), or, when they do not fit a chunk, into the shared sprite vertex

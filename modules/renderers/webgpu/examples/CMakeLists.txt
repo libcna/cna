@@ -794,6 +794,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # draw's position. The pixel oracle in modules/graphics/examples/spritebatch_3d_order_test.cpp cannot see any of
     # those -- each renders the correct picture -- so the cost contract is measured separately, on
     # both the backbuffer and a render target, against this renderer's own native counters.
+    # plans/plan_apple_m4.md AM4-078: a dropped backbuffer frame (occluded or unconfigured surface)
+    # must not leave its queued draws for the next bind cycle to replay.
+    cna_webgpu_test(cna_test_webgpu_dropped_frame webgpu_dropped_frame_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DroppedFrame COMMAND cna_test_webgpu_dropped_frame
+        TIMEOUT 60 LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_WEBGPU_TEST_SURFACE_OCCLUDED=1")
+
     cna_webgpu_test(cna_test_webgpu_draw_order_cardinality
                     webgpu_draw_order_cardinality_test.cpp)
     target_link_libraries(cna_test_webgpu_draw_order_cardinality PRIVATE WebGPU::WebGPU)
