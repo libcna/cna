@@ -41,6 +41,7 @@ renderer count is not a goal.
 | RRC-023 | DirectX 11 executables carry the cross lane's Wine+DXVK launcher | ✅ `f5b120dd5` |
 | RRC-024 | C API coverage generator: re-pin the approvals a re-declaration left stale | ✅ `bf410474b` |
 | RRC-025 | `WEBGPU` sizes its own Asyncify stack under Emscripten | ✅ `bfd4b9e73` |
+| RRC-026 | Vulkan/WebGPU blocks in the indexed-draw suites run only where their renderer is active | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1287,3 +1288,33 @@ multi-renderer build holding either as a non-default family should not link (rea
 built); with `SDL_GPU` selected, its two `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail as
 `plan_street_perf.md` already records; the benchmark banner still names the compile-time default
 (`RRC-017`).
+
+## RRC-026 — Vulkan and WebGPU device checks run only where their renderer is active
+
+Second stabilization pass, opened from the debt `RRC-020`–`RRC-025` left (owner, 2026-10-07).
+
+- **Symptom.** In `cmake-build-multi` (`OPENGLES3` default) ten tests failed at every run since
+  `RRC-018`: `IndexedDrawDeferredTest` and `IndexBufferEmptyDataTest` cases asserting
+  `nullptr != vulkanRenderer` or `nullptr != renderer` after a `dynamic_cast` of the device's
+  renderer to `VulkanRenderer` or `WebGPURenderer`.
+- **Root cause.** The class `RRC-021` closed for FNA3D. These blocks are compiled under
+  `CNA_TEST_VULKAN_AVAILABLE`/`CNA_TEST_WEBGPU_AVAILABLE`, i.e. whenever the renderer is compiled
+  in, but assumed it was also the active one. Two shapes: seven WebGPU-only tests lacked the
+  `CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU)` gate their sibling `WebGpuNativeErrorScopesStayClean`
+  already has (`RTR-P9-9`); and five renderer-neutral tests added Vulkan validation or WebGPU
+  error-scope diagnostics that asserted the cast unconditionally. A context-aware scan of every test
+  source (a renderer-family cast under a compiled-in guard, asserted non-null, with no runtime gate
+  naming only that family) finds exactly these 12 tests, 13 sites; two of them
+  (`IndexedTopologiesRenderExactDistinctGeometry`,
+  `PublicThirtyTwoBitTopologiesRenderExactDistinctGeometry`) only escaped the OPENGLES3 run because
+  they skip there, and failed under `SOFTWARE`.
+- **Fix.** The WebGPU-only tests skip unless WebGPU is active. The neutral tests keep every
+  assertion they make for all renderers and apply the renderer-specific diagnostics where that
+  renderer is active; where it is, the cast must still succeed
+  (`if (CNA_RENDERER_IS(Vulkan)) ASSERT_NE(nullptr, vulkanRenderer)`). The scan now reports no site.
+- **Verified.** Both suites (40 tests) with each of the ten renderers of `cmake-build-multi`
+  selected at runtime, on the private display: no failure under `OPENGLES3`, `OPENGL33`, `VULKAN`,
+  `SDL_GPU`, `FNA3D`, `SDL_RENDERER`, `SOFTWARE`, `HEADLESS` or `STUB`. Under `WEBGPU`, where the
+  WebGPU tests now actually run, two fail with "The index buffer resource is in use" and "The vertex
+  buffer resource is in use": they rewrite a still-bound buffer, which the device refuses as XNA
+  does -- the buffer-rewrite class `plan_street_perf.md` records for SDL_GPU, left with it.

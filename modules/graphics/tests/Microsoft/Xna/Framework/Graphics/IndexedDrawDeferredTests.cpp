@@ -896,12 +896,14 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     device.setDepthStencilStateProperty(DepthStencilState::None);
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
+    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, vulkanRenderer);
+    if (CNA_RENDERER_IS(Vulkan))
+        ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanRenderer->GetValidationMessagesEXT().size();
+        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -938,7 +940,8 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
         ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
     }
 #ifdef CNA_TEST_VULKAN_AVAILABLE
-    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
+    if (vulkanRenderer != nullptr)
+        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -1307,12 +1310,14 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
+    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, vulkanRenderer);
+    if (CNA_RENDERER_IS(Vulkan))
+        ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanRenderer->GetValidationMessagesEXT().size();
+        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     auto left = StripTriangleAt(-0.5f, Color::Red);
@@ -1368,7 +1373,8 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "DrawUser strip padding/background");
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
-    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
+    if (vulkanRenderer != nullptr)
+        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -1380,22 +1386,30 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
+    // RTR-P9-9: compiled wherever WebGPU is; its native checks apply where it is active.
     auto* renderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPURenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, renderer);
-    EXPECT_EQ(0u, renderer->GetColoredPipelineCacheSizeEXT());
-    const std::size_t uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
-    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
-    wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
+    if (CNA_RENDERER_IS(WebGPU))
+        ASSERT_NE(nullptr, renderer);
+    std::size_t uncapturedBefore = 0;
+    if (renderer != nullptr)
+    {
+        EXPECT_EQ(0u, renderer->GetColoredPipelineCacheSizeEXT());
+        uncapturedBefore = renderer->GetUncapturedErrorCountEXT();
+        wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
+        wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
+    }
 #endif
 #ifdef CNA_TEST_VULKAN_AVAILABLE
+    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, vulkanRenderer);
+    if (CNA_RENDERER_IS(Vulkan))
+        ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanRenderer->GetValidationMessagesEXT().size();
+        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -1460,15 +1474,19 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "strip padding/background");
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
-    // Two format-compatible Uint16 buffer objects reuse one pipeline; the intervening Uint32
-    // command creates the sole required additional variant.
-    EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
-    PopAndExpectClean(*renderer);
-    PopAndExpectClean(*renderer);
-    EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
+    if (renderer != nullptr)
+    {
+        // Two format-compatible Uint16 buffer objects reuse one pipeline; the intervening Uint32
+        // command creates the sole required additional variant.
+        EXPECT_EQ(2u, renderer->GetColoredPipelineCacheSizeEXT());
+        PopAndExpectClean(*renderer);
+        PopAndExpectClean(*renderer);
+        EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
+    }
 #endif
 #ifdef CNA_TEST_VULKAN_AVAILABLE
-    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
+    if (vulkanRenderer != nullptr)
+        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -1480,12 +1498,14 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
+    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, vulkanRenderer);
+    if (CNA_RENDERER_IS(Vulkan))
+        ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanRenderer->GetValidationMessagesEXT().size();
+        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -1547,7 +1567,8 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
         pixels, 0.85f, 0.0f, Color::Yellow, "indexed line strip second segment");
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
-    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
+    if (vulkanRenderer != nullptr)
+        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -1559,12 +1580,14 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
+    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
     auto* vulkanRenderer =
         dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
             &device.GetRenderer());
-    ASSERT_NE(nullptr, vulkanRenderer);
+    if (CNA_RENDERER_IS(Vulkan))
+        ASSERT_NE(nullptr, vulkanRenderer);
     const std::size_t validationMessageStart =
-        vulkanRenderer->GetValidationMessagesEXT().size();
+        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -1629,7 +1652,8 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
         pixels, 0.85f, 0.0f, Color::Yellow, "Uint32 line strip second segment");
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
-    AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
+    if (vulkanRenderer != nullptr)
+        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
 #endif
 }
 
@@ -1980,8 +2004,11 @@ TEST(EasyGlIndexedDeviceLifecycleTest, ThirtyTwoBitDrawDoesNotPoisonNextDesktopC
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
+// plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it is
+// the active renderer.
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =
@@ -2024,6 +2051,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexForma
 
 TEST_F(IndexedDrawDeferredTest, WebGpuUserAndNonIndexedStripsUseExactPipelineVariants)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =
@@ -2114,6 +2142,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuUserAndNonIndexedStripsUseExactPipelineVar
 
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedListPipelinesIgnoreIndexWidth)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =
@@ -2180,6 +2209,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedListPipelinesIgnoreIndexWidth)
 
 TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCulling)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =
@@ -2239,6 +2269,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCullin
 
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =
@@ -2302,6 +2333,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
 
 TEST_F(IndexedDrawDeferredTest, WebGpuNativeScopesCoverLogicalCountsAndInternalPadding)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(WebGPU);
     RequireIndexedRendering();
 
     auto* renderer =

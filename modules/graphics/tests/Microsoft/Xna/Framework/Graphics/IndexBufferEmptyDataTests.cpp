@@ -464,6 +464,7 @@ TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
 
 TEST_F(IndexBufferEmptyDataTest, WebGpuDeferredThreeIndexDrawKeepsNativeScopeClean)
 {
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     RequireIndexBuffers();
 
     auto* renderer =
