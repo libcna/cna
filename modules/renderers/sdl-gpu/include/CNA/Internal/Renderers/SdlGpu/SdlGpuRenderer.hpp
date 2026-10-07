@@ -1029,6 +1029,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y,
                                                 int w, int h, const void* data,
                                                 int dataLength) override;
+        /**
+         * @brief Reads the exact DXT blocks last stored in a cube face region.
+         *
+         * The blocks come from the retained exact copy, so native BC storage and the decoded
+         * RGBA8 fallback return the same bytes the caller uploaded.
+         *
+         * @param face Cube face index, 0 through 5.
+         * @param level Mip level to read.
+         * @param x Left edge in texels, block aligned.
+         * @param y Top edge in texels, block aligned.
+         * @param w Width in texels, block aligned or reaching the mip edge.
+         * @param h Height in texels, block aligned or reaching the mip edge.
+         * @param data Destination for tightly packed block rows.
+         * @param dataLength Destination size in bytes.
+         * @return true when the complete requested block payload was copied; otherwise false.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y,
+                                                int w, int h, void* data,
+                                                int dataLength) const override;
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,

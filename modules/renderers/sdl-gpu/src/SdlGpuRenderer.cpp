@@ -12100,6 +12100,51 @@ namespace CNA::Internal::Renderers::SdlGpu
         return true;
     }
 
+    bool SdlGpuTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        if (!compressed_ || data == nullptr || w <= 0 || h <= 0)
+            return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+        {
+            return false;
+        }
+
+        const int levelBlockCols = (levelSize + 3) / 4;
+        const int rectBlockCols = (w + 3) / 4;
+        const int rectBlockRows = (h + 3) / 4;
+        const std::size_t rectRowBytes =
+            static_cast<std::size_t>(rectBlockCols) * blockBytes_;
+        const std::size_t requiredBytes = rectRowBytes * static_cast<std::size_t>(rectBlockRows);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+
+        // The decoded RGBA8 fallback no longer holds the blocks at all, so the retained exact copy
+        // is the one source both storage modes share.
+        const auto& blocks =
+            compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)];
+        const std::size_t levelRowBytes =
+            static_cast<std::size_t>(levelBlockCols) * blockBytes_;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < rectBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                static_cast<std::size_t>(x / 4) * blockBytes_;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rectRowBytes,
+                        blocks.data() + sourceOffset, rectRowBytes);
+        }
+        return true;
+    }
+
     bool SdlGpuTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
