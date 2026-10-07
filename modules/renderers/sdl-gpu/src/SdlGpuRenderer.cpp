@@ -1239,7 +1239,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // Fills a pipeline's real front/back stencil-op state (SDLGPU-19) from a
         // RenderStateSnapshot, on top of the depthTest/depthWrite/depthFunc every pipeline already
-        // threads through separately. XNA's TwoSidedStencilMode=false uses the SAME (front,
+        // threads through separately. XNA's TwoSidedStencilMode=false uses the SAME (ordinary,
         // clockwise) ops/func for both faces (matches this project's own EasyGL/Vulkan renderers'
         // identical fallback-to-front convention -- FNA's own real behavior: the CCW fields are
         // simply ignored when this is false, not reset to any default).
@@ -1253,20 +1253,27 @@ namespace CNA::Internal::Renderers::SdlGpu
             // DepthStencilState.StencilMask/StencilWriteMask -- real values, not hardcoded 0xFF.
             out.compare_mask = static_cast<Uint8>(rs.stencil.readMask);
             out.write_mask = static_cast<Uint8>(rs.stencil.writeMask);
-            out.front_stencil_state.fail_op = ToStencilOp(rs.stencil.fail);
-            out.front_stencil_state.pass_op = ToStencilOp(rs.stencil.pass);
-            out.front_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.depthFail);
-            out.front_stencil_state.compare_op = ToCompareOp(rs.stencil.func);
+            // XNA's ordinary stencil fields govern clockwise-as-displayed faces and the
+            // CounterClockwise* fields the other winding (GSC-0002, VKPAR-0005). Under this
+            // renderer's COUNTER_CLOCKWISE front_face a clockwise triangle is the native BACK face
+            // -- exactly what ToCullMode relies on when it maps CullClockwiseFace to BACK -- so
+            // the ordinary operations belong in the back state and the CCW ones in the front.
+            // Assigning them the other way round applied each face's operations to the opposite
+            // winding (SdlGpu_EasyGLOracle_depthstencilstate_stencil_twosided).
+            out.back_stencil_state.fail_op = ToStencilOp(rs.stencil.fail);
+            out.back_stencil_state.pass_op = ToStencilOp(rs.stencil.pass);
+            out.back_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.depthFail);
+            out.back_stencil_state.compare_op = ToCompareOp(rs.stencil.func);
             if (rs.stencil.twoSided)
             {
-                out.back_stencil_state.fail_op = ToStencilOp(rs.stencil.ccwFail);
-                out.back_stencil_state.pass_op = ToStencilOp(rs.stencil.ccwPass);
-                out.back_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.ccwDepthFail);
-                out.back_stencil_state.compare_op = ToCompareOp(rs.stencil.ccwFunc);
+                out.front_stencil_state.fail_op = ToStencilOp(rs.stencil.ccwFail);
+                out.front_stencil_state.pass_op = ToStencilOp(rs.stencil.ccwPass);
+                out.front_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.ccwDepthFail);
+                out.front_stencil_state.compare_op = ToCompareOp(rs.stencil.ccwFunc);
             }
             else
             {
-                out.back_stencil_state = out.front_stencil_state;
+                out.front_stencil_state = out.back_stencil_state;
             }
         }
 
