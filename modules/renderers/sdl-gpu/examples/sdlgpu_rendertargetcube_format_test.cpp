@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -273,6 +274,11 @@ public:
     SdlGpuRenderTargetCubeFormatTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // Reach maps every render-target format outside its Color set to Color before the
+        // renderer is asked (XNA's QueryRenderTargetFormat), so the HalfSingle/Rgba64/Vector4
+        // and HDR legs silently measured Color storage under the default profile: the
+        // PSG-0008 dead-on-profile defect. Every leg here is a HiDef subject.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
     }

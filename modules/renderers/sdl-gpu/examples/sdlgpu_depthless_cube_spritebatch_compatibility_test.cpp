@@ -262,8 +262,12 @@ protected:
         sprites_->Draw(*marker_, Rectangle(0, 0, kCubeSize / 2, kCubeSize / 2),
                        Rectangle(0, 0, 1, 1), Color::White);
         sprites_->End();
-        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        // Undo the renderer-level skew before returning to the backbuffer: unbinding restores
+        // the full PresentationParameters viewport, which the device validates against the live
+        // logical surface, and the skewed one is half its size. The sprite draw was already
+        // recorded against the bound face by End(), so the subject above is unaffected.
         renderer.SetVirtualResolution(originalLogicalWidth, originalLogicalHeight);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         Check(Matches(ReadCube(logicalIsolation, CubeMapFace::PositiveX, 3, 3), kMarker)
                   && Matches(ReadCube(logicalIsolation, CubeMapFace::PositiveX, 12, 12),
                              logicalIsolationBackground),

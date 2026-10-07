@@ -60,7 +60,14 @@ namespace
         device.setBlendStateProperty(BlendState::Opaque);
         device.setDepthStencilStateProperty(DepthStencilState::Default);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+        // XNA rejects an explicit clear of a plane the active surface does not have
+        // (SOFTWARE-333), so the depth plane is cleared exactly when this backbuffer has one --
+        // the same legal-mask derivation SOFTWARE-359 gave the shared MSAA/depth fixture.
+        const bool hasDepthPlane =
+            device.getPresentationParametersProperty().getDepthStencilFormatProperty() !=
+            DepthFormat::None;
+        device.Clear(hasDepthPlane ? ClearOptions::Target | ClearOptions::DepthBuffer
+                                   : ClearOptions::Target,
                      Color(3, 5, 7, 255), 1.0f, 0);
         effect.Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 4);

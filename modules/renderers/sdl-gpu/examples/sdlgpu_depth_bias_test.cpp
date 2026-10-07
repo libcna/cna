@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
@@ -44,6 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "common/PixelTestGame.hpp"
@@ -250,7 +252,12 @@ class SdlGpuDepthBiasTest final : public Game
         device.setViewportProperty(viewport);
         device.setBlendStateProperty(BlendState::Opaque);
         device.setDepthStencilStateProperty(depthState);
-        device.Clear(Color::Black, 1.0f);
+        // XNA rejects an explicit clear of a depth plane the target does not have
+        // (SOFTWARE-333); the depthless pass clears colour only.
+        if (target.getDepthStencilFormatProperty() != DepthFormat::None)
+            device.Clear(Color::Black, 1.0f);
+        else
+            device.Clear(ClearOptions::Target, Color::Black, 1.0f, 0);
     }
 
     static Color ReadCenter(RenderTarget2D& target)
@@ -527,17 +534,32 @@ class SdlGpuDepthBiasTest final : public Game
         auto source = std::make_unique<RasterizerState>(negativeConstant);
         device.setRasterizerStateProperty(*source);
         DrawTriangle(device, false, kGreen);
-        source->setDepthBiasProperty(kConstantBias);
-        device.setRasterizerStateProperty(*source);
+        // XNA freezes a state object once it has been bound (SOFTWARE-232), so the source can no
+        // longer be mutated under the queued draw; it is refused, and the state that mutation
+        // would have produced is bound from a second object instead. Both sources are destroyed
+        // before the queued draws are flushed, which is the lifetime this check exists for.
+        bool boundMutationRefused = false;
+        try
+        {
+            source->setDepthBiasProperty(kConstantBias);
+        }
+        catch (const System::InvalidOperationException&)
+        {
+            boundMutationRefused = true;
+        }
+        Check(boundMutationRefused, "a bound RasterizerState refuses DepthBias mutation");
+        auto replacement = std::make_unique<RasterizerState>(positiveConstant);
+        device.setRasterizerStateProperty(*replacement);
         source.reset();
+        replacement.reset();
         DrawTriangle(device, false, kBlue);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         Check(
             IsGreen(ReadCenter(target)),
-            "queued draw keeps its complete bias snapshot after source mutation/destruction");
+            "queued draw keeps its complete bias snapshot after source destruction");
         Check(
             renderer.GetColoredPipelineCacheSizeEXT() == 6,
-            "deferred source mutation reuses captured negative/positive variants");
+            "deferred source replacement reuses captured negative/positive variants");
 
         Check(
             IsRed(RenderTrianglePair(

@@ -20,6 +20,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
+#include "System/ArgumentException.hpp"
+
 #include "common/PixelTestGame.hpp"
 
 #include <algorithm>
@@ -161,37 +163,72 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
 
     void CheckCompressedNpotPartialAndMips(GraphicsDevice& device)
     {
-        Texture2D texture(device, 7, 5, true, SurfaceFormat::Dxt1);
+        // XNA 4.0 requires a classic DXT Texture2D's dimensions to be multiples of four under
+        // both profiles (SOFTWARE-214, from the recovered XNA validation). This fixture used to
+        // build a 7x5 chain, which the shared layer now refuses before any renderer storage
+        // exists; the NPOT, edge-block and sub-4x4 subjects it covered are reached legally
+        // below through a 12x8 chain whose lower levels are not block multiples.
+        bool unalignedRefused = false;
+        try
+        {
+            Texture2D invalid(device, 7, 5, true, SurfaceFormat::Dxt1);
+        }
+        catch (const System::ArgumentException&)
+        {
+            unalignedRefused = true;
+        }
+        Check(unalignedRefused, "XNA refuses a 7x5 DXT1 Texture2D before allocating storage");
+
+        // 12x8 -> 6x4 -> 3x2 -> 1x1: level 0 is NPOT, level 1 ends in a 2-texel padded edge
+        // block, and levels 2 and 3 are each a single padded block.
+        Texture2D texture(device, 12, 8, true, SurfaceFormat::Dxt1);
 
         std::vector<std::uint8_t> level0;
-        AppendDxt1SolidBlock(level0, 0xF800u); // red, top-left
-        AppendDxt1SolidBlock(level0, 0x07E0u); // green, top-right partial block
-        AppendDxt1SolidBlock(level0, 0x001Fu); // blue, bottom-left partial block
-        AppendDxt1SolidBlock(level0, 0xFFFFu); // white, bottom-right partial block
+        AppendDxt1SolidBlock(level0, 0xF800u); // red
+        AppendDxt1SolidBlock(level0, 0x07E0u); // green
+        AppendDxt1SolidBlock(level0, 0x001Fu); // blue, top-right
+        AppendDxt1SolidBlock(level0, 0xFFFFu); // white
+        AppendDxt1SolidBlock(level0, 0xFFE0u); // yellow
+        AppendDxt1SolidBlock(level0, 0xF81Fu); // magenta, bottom-right
         texture.SetData(level0.data(), static_cast<int>(level0.size()));
 
         std::vector<std::uint8_t> roundTrip(level0.size());
         texture.GetData(roundTrip.data(), static_cast<int>(roundTrip.size()));
         Check(roundTrip == level0,
-              "NPOT DXT1 level 0 preserves all four padded blocks byte-for-byte");
+              "NPOT DXT1 level 0 preserves all six blocks byte-for-byte");
 
         std::vector<std::uint8_t> replacement;
-        AppendDxt1SolidBlock(replacement, 0x001Fu);
-        const Rectangle topRight(4, 0, 3, 4);
+        AppendDxt1SolidBlock(replacement, 0x07FFu);
+        const Rectangle topRight(8, 0, 4, 4);
         texture.SetData(0, &topRight, replacement.data(), 0,
                         static_cast<int>(replacement.size()));
-        std::copy(replacement.begin(), replacement.end(), level0.begin() + 8);
+        std::copy(replacement.begin(), replacement.end(), level0.begin() + 16);
         std::fill(roundTrip.begin(), roundTrip.end(), 0);
         texture.GetData(roundTrip.data(), static_cast<int>(roundTrip.size()));
         Check(roundTrip == level0,
-              "block-aligned partial DXT1 update changes one NPOT edge block and preserves three");
+              "block-aligned partial DXT1 update changes one NPOT block and preserves five");
 
         std::vector<std::uint8_t> mip1;
-        AppendDxt1SolidBlock(mip1, 0xF800u); // level 1 is 3x2: one padded block
+        AppendDxt1SolidBlock(mip1, 0xF800u); // level 1 is 6x4: one full block ...
+        AppendDxt1SolidBlock(mip1, 0x07E0u); // ... and one 2-texel padded edge block
         texture.SetData(1, nullptr, mip1.data(), 0, static_cast<int>(mip1.size()));
+        std::vector<std::uint8_t> edgeReplacement;
+        AppendDxt1SolidBlock(edgeReplacement, 0x001Fu);
+        const Rectangle edgeBlock(4, 0, 2, 4);
+        texture.SetData(1, &edgeBlock, edgeReplacement.data(), 0,
+                        static_cast<int>(edgeReplacement.size()));
+        std::copy(edgeReplacement.begin(), edgeReplacement.end(), mip1.begin() + 8);
         std::vector<std::uint8_t> mip1Read(mip1.size());
         texture.GetData(1, nullptr, mip1Read.data(), 0, static_cast<int>(mip1Read.size()));
         Check(mip1Read == mip1,
+              "edge-reaching partial DXT1 update changes the padded edge block and preserves one");
+
+        std::vector<std::uint8_t> mip2;
+        AppendDxt1SolidBlock(mip2, 0xF800u); // level 2 is 3x2: one padded block
+        texture.SetData(2, nullptr, mip2.data(), 0, static_cast<int>(mip2.size()));
+        std::vector<std::uint8_t> mip2Read(mip2.size());
+        texture.GetData(2, nullptr, mip2Read.data(), 0, static_cast<int>(mip2Read.size()));
+        Check(mip2Read == mip2,
               "authored sub-4x4 DXT mip preserves its single padded block byte-for-byte");
 
         const auto& native = dynamic_cast<const SdlGpuTextureRenderer&>(texture.GetRenderer());

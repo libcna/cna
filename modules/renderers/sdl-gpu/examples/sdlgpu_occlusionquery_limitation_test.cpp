@@ -7,8 +7,11 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -26,8 +29,11 @@ namespace
     using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer;
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::OcclusionQuery;
+    using Microsoft::Xna::Framework::Graphics::PresentationParameters;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 
     int passed = 0;
@@ -45,7 +51,10 @@ int main()
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 
-    GraphicsDevice device;
+    // HiDef, because Reach refuses OcclusionQuery for every renderer before capability is even
+    // consulted; the subject here is the SDL_GPU capability answer, which only HiDef reaches.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     auto& renderer = dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
 
     Check(!device.SupportsCapability(GraphicsCapability::OcclusionQuery),
@@ -59,11 +68,30 @@ int main()
         "CNA SDL_GPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
         "no occlusion-query or query-pool commands; GPU fences report only command-buffer "
         "completion and cannot count samples that pass depth/stencil.";
-    bool refusedExactly = false;
+    // Since SOFTWARE-199 the public constructor follows recovered XNA: it checks the profile and
+    // the renderer capability itself and refuses before asking the renderer for a resource, so
+    // the public refusal carries the shared layer's message. The renderer's own, exact
+    // limitation is what its query factory raises, and is asserted at that seam.
+    bool publicRefused = false;
     try
     {
         OcclusionQuery query(device);
         (void)query;
+    }
+    catch (const System::NotSupportedException&)
+    {
+        publicRefused = true;
+    }
+    catch (const std::exception&)
+    {
+    }
+    Check(publicRefused,
+          "public HiDef OcclusionQuery construction is refused with NotSupportedException");
+
+    bool refusedExactly = false;
+    try
+    {
+        (void)renderer.CreateOcclusionQuery();
     }
     catch (const System::NotSupportedException& error)
     {
@@ -73,7 +101,7 @@ int main()
     {
     }
     Check(refusedExactly,
-          "public OcclusionQuery construction throws the exact SDL_gpu limitation");
+          "the renderer's query factory throws the exact SDL_gpu limitation");
 
     const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
     Check(limitations.find("no occlusion-query or query-pool commands") !=

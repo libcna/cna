@@ -382,6 +382,12 @@ class SdlGpuTexture2DMipStorageTest : public Game
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.setBlendStateProperty(BlendState::Opaque);
+        // A stock effect's Apply leaves its texture in GraphicsDevice.Textures (CBIND-156, as XNA
+        // does), and XNA refuses SetData on a texture that is still bound to a sampler slot
+        // ("The texture resource is in use", SOFTWARE-246). Every leg uploads to a texture it has
+        // just sampled, so the slots are released here exactly as an XNA game would release them.
+        dev.getTexturesProperty()(0, nullptr);
+        dev.getTexturesProperty()(1, nullptr);
     }
 
     std::vector<Color> Render(GraphicsDevice& dev, int rtW, int rtH,

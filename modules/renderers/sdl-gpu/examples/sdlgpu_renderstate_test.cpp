@@ -425,9 +425,11 @@ class SdlGpuRenderStateTest : public Game
     // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Since
     // REMED-GFX-068 the scissor is captured PER DRAW at enqueue time (into each QueuedDrawRef) and
     // applied via SDL_SetGPUScissor at replay (see SdlGpuRenderer::ApplyScissorForRef), so
-    // this readback would clip correctly even after SetRenderTarget(nullptr) resets ScissorRectangle
-    // -- but it is deliberately kept BEFORE the unbind (the pre-GFX-068 requirement) as a stricter,
-    // still-valid exercise of the live-then-flush path.
+    // this readback clips correctly even after SetRenderTarget(nullptr) resets ScissorRectangle.
+    // It used to read BEFORE the unbind (the pre-GFX-068 requirement), but XNA refuses any data
+    // transfer on a render target that is still bound (InvalidOperationException, "must be
+    // resolved"), so the read now follows the unbind -- which is exactly the per-draw capture the
+    // replay has to honour once the live scissor has been reset.
     void RunScissorCheck(GraphicsDevice& dev)
     {
         // Force everything queued by the EARLIER checks (still pending -- nothing has called
@@ -447,12 +449,11 @@ class SdlGpuRenderStateTest : public Game
         dev.setScissorRectangleProperty(Rectangle(0, 0, kRTSize / 2, kRTSize));
         DrawFullQuad(dev, *fullQuadGreenVb_);
 
-        // Force this target's own pass to flush and read back NOW, while scissor is still live
-        // and before unbinding resets ScissorRectangle back to the backbuffer's full size.
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        // The unbind has just reset ScissorRectangle to the backbuffer's full size; the queued
+        // draw must still replay with the half-width rectangle it captured.
         scissorLeft_ = ReadPixel(*rtScissor_, kRTSize / 4, kRTSize / 2);
         scissorRight_ = ReadPixel(*rtScissor_, (kRTSize * 3) / 4, kRTSize / 2);
-
-        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         dev.setRasterizerStateProperty(RasterizerState());
     }
 

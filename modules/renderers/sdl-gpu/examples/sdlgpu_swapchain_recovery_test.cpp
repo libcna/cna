@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
@@ -131,6 +132,10 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
+        // Every frame clears colour, depth AND stencil. XNA rejects an explicit clear of a plane
+        // the backbuffer does not have (SOFTWARE-333), and the manager's default is Depth24, so
+        // the backbuffer must actually carry the stencil plane the clear names.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         // GraphicsDeviceManager.SynchronizeWithVerticalRetrace defaults to true (the XNA
         // default); this test's virtual/headless display has no real vblank signal, so leaving
         // VSync on makes every frame wait roughly a second, blowing past this test's frame

@@ -303,17 +303,21 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
         std::vector<Color> destination(
             static_cast<std::size_t>(kGuard + capacity + kSuffix), kSentinel);
 
+        // XNA's ValidateTotalSize requires elementCount to be exactly the region's element
+        // count (SOFTWARE-277); a surplus window is an ArgumentException, not spare room. The
+        // destination keeps its spare capacity and suffix, so a write past the window is still
+        // caught below.
         Step(label + ": GetData(face=" + kFaceNames[static_cast<std::size_t>(face)] +
              ",level=" + std::to_string(level) +
              (rectangle == nullptr ? ",full" : ",rectangle") +
              ",startIndex=" + std::to_string(kGuard) +
-             ",elementCount=" + std::to_string(capacity) + ")");
+             ",elementCount=" + std::to_string(requested) + ")");
         bool returned = false;
         std::string exception;
         try
         {
             cube.GetData(kFaces[static_cast<std::size_t>(face)], level, rectangle,
-                         destination.data(), kGuard, capacity);
+                         destination.data(), kGuard, requested);
             returned = true;
         }
         catch (const std::exception& e)
