@@ -75,6 +75,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE SDL3::SDL3main)
     endif()
+    # plans/plan_apple_m4.md AM4-080: declarations carrying only what the BasicEffect permutation reads.
+    add_executable(cna_test_metal_untextured_declaration metal_untextured_declaration_test.cpp)
+    target_link_libraries(cna_test_metal_untextured_declaration PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_untextured_declaration PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_renderer_test(NAME Metal_UntexturedDeclaration
+        COMMAND cna_test_metal_untextured_declaration
+        TIMEOUT 60 LABELS "Metal"
+        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+
     cna_register_renderer_test(NAME Metal_SpriteBatch_CustomEffect
         COMMAND cna_test_metal_spritebatch_customeffect
         TIMEOUT 60 LABELS "Metal"

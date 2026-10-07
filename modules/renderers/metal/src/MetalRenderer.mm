@@ -893,9 +893,16 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         for (const auto& attr : input.attributes) {
             vd.attributes[attr.location].format = metalVertexFormat(attr.kind);
             vd.attributes[attr.location].offset = (NSUInteger)attr.offset;
-            vd.attributes[attr.location].bufferIndex = 0;
+            vd.attributes[attr.location].bufferIndex =
+                attr.constant ? (NSUInteger)kMetalConstantAttributeBufferIndex : 0;
         }
         vd.layouts[0].stride = (NSUInteger)input.stride;
+        // plans/plan_apple_m4.md AM4-080: inputs the effect permutation does not use, from a constant.
+        if (input.UsesConstantAttributes()) {
+            vd.layouts[kMetalConstantAttributeBufferIndex].stepFunction = MTLVertexStepFunctionConstant;
+            vd.layouts[kMetalConstantAttributeBufferIndex].stepRate = 0;
+            vd.layouts[kMetalConstantAttributeBufferIndex].stride = sizeof(kMetalConstantAttributeBlock);
+        }
         return vd;
     }
 
@@ -3939,7 +3946,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     const PipelineKind kind = selectPipelineKind(selectionStride, params);
     const MetalDeclaredVertexInput vertexInput = BuildMetalDeclaredVertexInput(
         kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind) : declared.GetElements(),
-        static_cast<int>(drawStride));
+        static_cast<int>(drawStride), params);
     if(!vertexInput.IsComplete())
         throw System::NotSupportedException("Metal: this VertexDeclaration cannot feed the selected stock effect: " +
                                             vertexInput.refusal + ".");
@@ -4007,6 +4014,9 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     wvp=multiply(wvp,fromXna(xnaPixelCenterCorrection(p,pt)));
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind, &vertexInput);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
+    if (vertexInput.UsesConstantAttributes())
+        [p.encoder setVertexBytes:kMetalConstantAttributeBlock length:sizeof(kMetalConstantAttributeBlock)
+                          atIndex:kMetalConstantAttributeBufferIndex];
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
     if (kind == PipelineKind::LitTex32 || kind == PipelineKind::LitTex32VertexLit) {

@@ -90,8 +90,15 @@ namespace CNA::Internal::Renderers::Metal
         int location = 0;
         /** @brief Native attribute format. */
         MetalVertexAttribKind kind = MetalVertexAttribKind::Float3;
-        /** @brief Byte offset inside one record. */
+        /** @brief Byte offset inside one record; inside the constant block when `constant`. */
         int offset = 0;
+        /**
+         * @brief Read from the constant block instead of the vertex record.
+         *
+         * plans/plan_apple_m4.md AM4-080: an input the vertex function declares but the active
+         * effect permutation does not use (see StockEffectUsesVertexSemantic).
+         */
+        bool constant = false;
 
         /**
          * @brief Compares every field.
@@ -101,9 +108,22 @@ namespace CNA::Internal::Renderers::Metal
          */
         [[nodiscard]] bool operator==(const MetalDeclaredAttribute& other) const noexcept
         {
-            return location == other.location && kind == other.kind && offset == other.offset;
+            return location == other.location && kind == other.kind && offset == other.offset &&
+                   constant == other.constant;
         }
     };
+
+    /** @brief Vertex buffer index the constant block is bound at; above every built-in MSL slot. */
+    inline constexpr int kMetalConstantAttributeBufferIndex = 30;
+
+    /** @brief Byte offset of the all-zero vector inside the constant block. */
+    inline constexpr int kMetalConstantAttributeZeroOffset = 0;
+
+    /** @brief Byte offset of the all-one vector (opaque white) inside the constant block. */
+    inline constexpr int kMetalConstantAttributeOneOffset = 16;
+
+    /** @brief The constant block: a float4 of zeros, then a float4 of ones. */
+    inline constexpr float kMetalConstantAttributeBlock[8] = {0, 0, 0, 0, 1, 1, 1, 1};
 
     /** @brief A complete vertex input for one pipeline kind, or the reason there is none. */
     struct MetalDeclaredVertexInput
@@ -114,6 +134,18 @@ namespace CNA::Internal::Renderers::Metal
         int stride = 0;
         /** @brief Why the declaration cannot feed the pipeline; empty when it can. */
         std::string refusal;
+
+        /**
+         * @brief Whether any attribute reads the constant block.
+         *
+         * @return True when the draw must bind kMetalConstantAttributeBlock.
+         */
+        [[nodiscard]] bool UsesConstantAttributes() const noexcept
+        {
+            for (const auto& a : attributes)
+                if (a.constant) return true;
+            return false;
+        }
 
         /**
          * @brief Whether every attribute the pipeline reads was found.
@@ -144,6 +176,7 @@ namespace CNA::Internal::Renderers::Metal
                 mix(static_cast<std::uint64_t>(a.location));
                 mix(static_cast<std::uint64_t>(a.kind));
                 mix(static_cast<std::uint64_t>(a.offset));
+                mix(a.constant ? 1u : 0u);
             }
             return h == 0 ? 1 : h;
         }
@@ -273,15 +306,25 @@ namespace CNA::Internal::Renderers::Metal
      * declares only TEXCOORD0 -- every VertexPositionTexture and VertexPositionColorTexture -- feeds
      * TEXCOORD0 to both, which is the only set it has. Nothing else is invented.
      *
+     * plans/plan_apple_m4.md AM4-080: Metal's vertex functions are coarser than XNA's stock-effect
+     * permutations -- one lit function serves the textured and untextured BasicEffect alike -- so
+     * a function may read a semantic the active permutation does not. XNA accepts a declaration
+     * without that semantic (an untextured BasicEffect over VertexPositionNormal); such an input
+     * is read from a constant instead: zero for texture coordinates, normals and tangents, opaque
+     * white for colour. A semantic the permutation does use still refuses, as XNA does
+     * ("TextureCoordinate0 is missing").
+     *
      * @param kind Pipeline kind the draw selected.
      * @param elements The declaration's elements.
      * @param recordStride Bytes per record in the bound buffer.
+     * @param params The draw's effect parameters; null keeps every semantic required.
      * @return The complete input, or one carrying the refusal reason.
      */
     [[nodiscard]] inline MetalDeclaredVertexInput BuildMetalDeclaredVertexInput(
         MetalPipelineKind kind,
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
-        int recordStride)
+        int recordStride,
+        const CNA::Internal::Renderers::GpuDrawParams* params = nullptr)
     {
         using namespace MetalDeclaredVertexInputDetail;
         MetalDeclaredVertexInput input;
@@ -293,6 +336,25 @@ namespace CNA::Internal::Renderers::Metal
             const auto* element = Find(elements, semantic);
             if (!element && semantic == MetalVertexSemantic::TexCoord1)
                 element = Find(elements, MetalVertexSemantic::TexCoord0);
+            if (!element && params != nullptr)
+            {
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage usage{};
+                int usageIndex = 0;
+                MetalSemanticUsage(semantic, usage, usageIndex);
+                if (!CNA::Internal::Renderers::StockEffectUsesVertexSemantic(*params, usage, usageIndex))
+                {
+                    const bool colour = semantic == MetalVertexSemantic::Color;
+                    const MetalVertexAttribKind constantKind =
+                        colour || semantic == MetalVertexSemantic::Tangent ? MetalVertexAttribKind::Float4
+                        : semantic == MetalVertexSemantic::Normal          ? MetalVertexAttribKind::Float3
+                                                                           : MetalVertexAttribKind::Float2;
+                    input.attributes.push_back(MetalDeclaredAttribute{
+                        static_cast<int>(location), constantKind,
+                        colour ? kMetalConstantAttributeOneOffset : kMetalConstantAttributeZeroOffset,
+                        true});
+                    continue;
+                }
+            }
             if (!element)
             {
                 input.refusal = std::string("the declaration has no ") + SemanticName(semantic) +
