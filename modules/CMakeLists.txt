@@ -107,6 +107,12 @@ else()
     # supply a target-native prefix.
     if(PkgConfig_FOUND AND NOT CMAKE_CROSSCOMPILING)
         pkg_check_modules(CNA_ZSTD QUIET libzstd)
+        if(CNA_ZSTD_FOUND)
+            # pkg-config's _LIBRARIES are bare names ("zstd"), which link only where the library's
+            # directory is already on the linker's default search path -- /usr/lib on Linux, but
+            # not Homebrew's /opt/homebrew/lib on Apple silicon. _LINK_LIBRARIES are absolute paths.
+            set(CNA_ZSTD_LIBRARIES "${CNA_ZSTD_LINK_LIBRARIES}")
+        endif()
     endif()
     if(NOT CNA_ZSTD_FOUND)
         find_path(CNA_ZSTD_INCLUDE_DIR zstd.h)
