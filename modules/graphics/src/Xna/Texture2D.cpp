@@ -102,7 +102,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    static void ValidateTexture2DFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
+    static void ValidateTexture2DProfileFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
     {
         // plans/plan_runtimerenderer.md design decision 9: a renderer that stores each format in its own
         // native layout (SKIA) answers this itself; every other renderer defers to the framework's
@@ -129,6 +129,15 @@ namespace Microsoft::Xna::Framework::Graphics
                      : std::string("Reach")) +
                 " -- this is the profile's own restriction, not the renderer's capability");
         }
+    }
+
+    // plans/plan_apple_m4.md AM4-087: the renderer's own verdict, asked only after every XNA rule --
+    // the profile's formats and ValidateTexture2DCreationShapeEXT's shapes -- so a renderer that
+    // cannot store a format never pre-empts the refusal XNA itself gives for that request.
+    static void ValidateTexture2DRendererFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
+    {
+        if (device == nullptr)
+            return;
 
         switch (device->GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
         {
@@ -411,8 +420,9 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto contextLease = LeaseRendererContext();
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
-        ValidateTexture2DFormatEXT(&graphicsDevice, format);
+        ValidateTexture2DProfileFormatEXT(&graphicsDevice, format);
         ValidateTexture2DCreationShapeEXT(graphicsDevice, w, h, mipMap, format);
+        ValidateTexture2DRendererFormatEXT(&graphicsDevice, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
