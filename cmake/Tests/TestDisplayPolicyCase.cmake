@@ -60,6 +60,24 @@ cna_apply_test_display_policy_to("DISPLAY=" "" FALSE FALSE _env _mod)
 _expect("a forced display keeps its entry" "${_env}" "DISPLAY=")
 _expect("no guard where it does not apply (Windows)" "${_mod}" "")
 
+# AM4-007: a host without X11/Wayland (macOS) drops display-server driver pins and nothing else.
+cna_adapt_test_video_driver_to_host("SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy" FALSE _env)
+_expect("an x11 pin is dropped on a host without one" "${_env}" "SDL_AUDIODRIVER=dummy")
+cna_adapt_test_video_driver_to_host("SDL_VIDEODRIVER=wayland" FALSE _env)
+_expect("a wayland pin is dropped on a host without one" "${_env}" "")
+cna_adapt_test_video_driver_to_host("SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy" FALSE _env)
+_expect("a dummy pin is kept" "${_env}" "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+cna_adapt_test_video_driver_to_host("SDL_VIDEODRIVER=offscreen" FALSE _env)
+_expect("an offscreen pin is kept" "${_env}" "SDL_VIDEODRIVER=offscreen")
+cna_adapt_test_video_driver_to_host(
+    "SDL_VIDEODRIVER=x11;CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM=X11" FALSE _env)
+_expect("a test asserting the X11 window system keeps its pin" "${_env}"
+        "SDL_VIDEODRIVER=x11;CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM=X11")
+cna_adapt_test_video_driver_to_host("SDL_VIDEODRIVER=x11;DISPLAY=:99" TRUE _env)
+_expect("a display-server host keeps every pin" "${_env}" "SDL_VIDEODRIVER=x11;DISPLAY=:99")
+cna_adapt_test_video_driver_to_host("NOTFOUND" FALSE _env)
+_expect("no environment stays none" "${_env}" "")
+
 # The guard is the one ctest operation with the property the policy needs: "unset" becomes "empty",
 # an exported value is appended nothing. Pinned so an edit to a different operation cannot pass.
 _expect("the guard's exact spelling" "${CNA_TEST_WAYLAND_GUARD}" "WAYLAND_DISPLAY=string_append:")

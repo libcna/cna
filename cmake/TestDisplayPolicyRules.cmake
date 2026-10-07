@@ -59,3 +59,29 @@ function(cna_apply_test_display_policy_to environment modification display_empty
     set(${out_environment} "${environment}" PARENT_SCOPE)
     set(${out_modification} "${modification}" PARENT_SCOPE)
 endfunction()
+
+# plans/plan_apple_m4.md AM4-007: a registration that pins SDL_VIDEODRIVER=x11 or =wayland means
+# "open a real window on a real display server". On a host whose SDL drives neither -- macOS, where
+# the window system is SDL's cocoa driver -- that pin names a driver the build does not contain:
+# SDL refuses to start video and the test fails before it tests anything. Where
+# `display_server_host` is false those two pins are dropped, so SDL picks its native driver. Pins
+# that are not about a display server (dummy, offscreen) stay, and so does the pin of a test that
+# asserts a particular native window system (CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM), whose X11 or
+# Wayland expectation the native driver could never satisfy.
+function(cna_adapt_test_video_driver_to_host environment display_server_host out_environment)
+    if(NOT environment)
+        set(environment "")
+    endif()
+    if(NOT display_server_host)
+        set(_asserts_window_system FALSE)
+        foreach(_entry IN LISTS environment)
+            if(_entry MATCHES "^CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM=")
+                set(_asserts_window_system TRUE)
+            endif()
+        endforeach()
+        if(NOT _asserts_window_system)
+            list(REMOVE_ITEM environment "SDL_VIDEODRIVER=x11" "SDL_VIDEODRIVER=wayland")
+        endif()
+    endif()
+    set(${out_environment} "${environment}" PARENT_SCOPE)
+endfunction()
