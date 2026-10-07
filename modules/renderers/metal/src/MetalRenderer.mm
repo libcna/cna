@@ -994,7 +994,6 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     using Mat4 = MetalMat4;
     static Mat4 multiply(const Mat4& a, const Mat4& b) { return MetalMat4Multiply(a, b); }
     static Mat4 fromXna(const Matrix& x) { return MetalMat4FromXna(x); }
-    static Mat4 transpose(const Mat4& x) { return MetalMat4Transpose(x); }
 
     // plans/plan_metal.md METAL-34-style extraction: these struct mirrors and their fill functions now
     // live in the plain-C++ MetalUniformFill.hpp (no Objective-C, buildable and unit-tested on any
@@ -3721,7 +3720,13 @@ static void fillSkinnedPbrUniforms(SkinnedPbrTransform& t, PbrUniforms& pu, cons
 
 static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
-    Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
+    // plans/plan_apple_m4.md AM4-028: uploaded in XNA's own M11..M44 order, like `world`
+    // (GpuDrawParams::worldColMajor). MSL reads a float4x4 column by column, so the shader's
+    // `wvp * position` then multiplies by the transpose -- which IS XNA's row-vector product
+    // `position * W * V * P`. The transpose this used to apply on top put XNA's translation row
+    // into w (w = 1 - x for an orthographic BasicEffect), clipping every 3D vertex: the
+    // "clear colour only" readback of METAL-258 was 3D geometry that never rasterised.
+    Mat4 wvp=multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr));
     const std::size_t drawStride=params ? CombinedVertexStrideOr(*params,vb.stride()) : vb.stride();
     const PipelineKind kind = selectPipelineKind(drawStride, params);
 

@@ -4,9 +4,9 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
 // plans/plan_metal.md METAL-34-style extraction: this is the small row-major 4x4 matrix helper set used
-// to build every 3D draw's WVP matrix (transpose(multiply(multiply(fromXna(world),fromXna(view)),
-// fromXna(projection)))) -- plain float arithmetic plus Microsoft::Xna::Framework::Matrix (itself
-// plain C++, zero Objective-C/Metal-framework dependency), so it compiles and runs on any platform
+// to build every 3D draw's WVP matrix (multiply(multiply(fromXna(world),fromXna(view)),
+// fromXna(projection)), uploaded untransposed -- see drawMetal3D) -- plain float arithmetic plus
+// Microsoft::Xna::Framework::Matrix (itself plain C++, zero Objective-C/Metal-framework dependency), so it compiles and runs on any platform
 // CnaTests already builds for. MetalRenderer.mm includes this header instead of defining
 // these inline; logic is unchanged from the original inline definitions.
 namespace CNA::Internal::Renderers::Metal
