@@ -85,15 +85,19 @@ TEST(MetalPolicy, Texture2DImageRequiresColorExactBaseBytesAndCompleteMipShape)
               MetalTexture2DImagePolicy::InvalidBaseByteCount);
 }
 
-TEST(MetalPolicy, BlendWriteStateAcceptsOnlyTheImplementedDefault)
+TEST(MetalPolicy, BlendWriteStateAcceptsTargetZeroMasksWithTheDefaultCoverage)
 {
+    // plans/plan_apple_m4.md AM4-079: target 0's mask is a pipeline property; targets 1..3 cannot
+    // be bound on Metal, so their masks govern nothing; only the coverage mask still refuses.
     BlendWriteState state{};
     EXPECT_TRUE(MetalSupportsBlendWriteState(state));
     state.colorWriteChannels[0]=7;
-    EXPECT_FALSE(MetalSupportsBlendWriteState(state));
+    EXPECT_TRUE(MetalSupportsBlendWriteState(state));
+    state.colorWriteChannels[0]=0;
+    EXPECT_TRUE(MetalSupportsBlendWriteState(state));
     state=BlendWriteState{};
     state.colorWriteChannels[3]=0;
-    EXPECT_FALSE(MetalSupportsBlendWriteState(state));
+    EXPECT_TRUE(MetalSupportsBlendWriteState(state));
     state=BlendWriteState{};
     state.multiSampleMask=0x7FFFFFFFu;
     EXPECT_FALSE(MetalSupportsBlendWriteState(state));

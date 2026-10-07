@@ -74,6 +74,13 @@ namespace CNA::Internal::Renderers::Metal
         uint8_t colorSrc=0, colorDst=1, alphaSrc=0, alphaDst=1, colorFunc=0, alphaFunc=0;
         bool enabled=false;
         /**
+         * @brief XNA ColorWriteChannels of render target 0 (bit0=R, 1=G, 2=B, 3=A; 15 = All).
+         *
+         * plans/plan_apple_m4.md AM4-079: a pipeline property in Metal
+         * (`MTLRenderPipelineColorAttachmentDescriptor.writeMask`), so it is part of the key.
+         */
+        uint8_t writeMask=15;
+        /**
          * @brief Compares every baked blend-state field.
          *
          * @param other Blend key to compare.
@@ -84,9 +91,24 @@ namespace CNA::Internal::Renderers::Metal
             return colorSrc==other.colorSrc && colorDst==other.colorDst &&
                    alphaSrc==other.alphaSrc && alphaDst==other.alphaDst &&
                    colorFunc==other.colorFunc && alphaFunc==other.alphaFunc &&
-                   enabled==other.enabled;
+                   enabled==other.enabled && writeMask==other.writeMask;
         }
     };
+
+    /**
+     * @brief Maps XNA ColorWriteChannels bits to `MTLColorWriteMask` bits.
+     *
+     * XNA numbers red, green, blue, alpha from the least significant bit; Metal numbers them from
+     * the most significant of its four (`MTLColorWriteMaskRed` = 8 ... `MTLColorWriteMaskAlpha` = 1).
+     *
+     * @param xnaChannels XNA ColorWriteChannels value (0..15).
+     * @return The equivalent `MTLColorWriteMask` value.
+     */
+    [[nodiscard]] constexpr unsigned MetalColorWriteMaskBits(uint8_t xnaChannels) noexcept
+    {
+        return ((xnaChannels & 1u) ? 8u : 0u) | ((xnaChannels & 2u) ? 4u : 0u) |
+               ((xnaChannels & 4u) ? 2u : 0u) | ((xnaChannels & 8u) ? 1u : 0u);
+    }
 
     /**
      * @brief Returns the complete last-writer state installed by SetBlendEnabled.
@@ -188,6 +210,7 @@ namespace CNA::Internal::Renderers::Metal
             std::size_t hh = std::hash<uint64_t>()(h);
             hh ^= std::hash<uint8_t>()(key.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint64_t>()(key.vertexLayout) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            hh ^= std::hash<uint8_t>()(key.blend.writeMask) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

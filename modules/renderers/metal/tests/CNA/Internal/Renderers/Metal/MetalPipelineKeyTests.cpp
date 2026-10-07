@@ -43,6 +43,31 @@ TEST(MetalBlendKey, UnequalWhenAnySingleFieldDiffers)
     EXPECT_FALSE(base == (MetalBlendKey{5, 6, 7, 8, 9, 3, true}));   // colorFunc
     EXPECT_FALSE(base == (MetalBlendKey{5, 6, 7, 8, 2, 9, true}));   // alphaFunc
     EXPECT_FALSE(base == (MetalBlendKey{5, 6, 7, 8, 2, 3, false}));  // enabled
+    EXPECT_FALSE(base == (MetalBlendKey{5, 6, 7, 8, 2, 3, true, 0})); // writeMask (AM4-079)
+}
+
+TEST(MetalBlendKey, WriteMaskDefaultsToAllChannelsAndKeysThePipeline)
+{
+    // plans/plan_apple_m4.md AM4-079: ColorWriteChannels.All by default, and two keys that differ
+    // only in the mask are different pipelines.
+    EXPECT_EQ(MetalBlendKey{}.writeMask, 15);
+    MetalPipelineCacheKey all{MetalPipelineKind::Colored16, MetalBlendKey{}};
+    MetalPipelineCacheKey none = all;
+    none.blend.writeMask = 0;
+    EXPECT_FALSE(all == none);
+    EXPECT_NE(MetalPipelineCacheKeyHash{}(all), MetalPipelineCacheKeyHash{}(none));
+}
+
+TEST(MetalBlendKey, WriteMaskBitsFollowMetalsChannelOrder)
+{
+    // XNA: R=1 G=2 B=4 A=8. Metal: Red=8 Green=4 Blue=2 Alpha=1.
+    EXPECT_EQ(MetalColorWriteMaskBits(0), 0u);
+    EXPECT_EQ(MetalColorWriteMaskBits(1), 8u);
+    EXPECT_EQ(MetalColorWriteMaskBits(2), 4u);
+    EXPECT_EQ(MetalColorWriteMaskBits(4), 2u);
+    EXPECT_EQ(MetalColorWriteMaskBits(8), 1u);
+    EXPECT_EQ(MetalColorWriteMaskBits(15), 15u);
+    EXPECT_EQ(MetalColorWriteMaskBits(1 | 4), 8u | 2u);
 }
 
 TEST(MetalBlendKey, SetBlendEnabledUsesLastWriterStraightAlphaOrOpaqueState)

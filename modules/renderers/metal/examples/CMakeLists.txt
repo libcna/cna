@@ -123,6 +123,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         envmap_cube_sampler_state_test
         frontface_winding_test
         fullscreen_spritebatch_then_3d_test
+        gfx077_colorwritechannels_3d_test
         graphicsdevice_clear_depth_test
         graphicsdevice_default_state_occlusion_test
         graphicsdevice_depth_contract_test

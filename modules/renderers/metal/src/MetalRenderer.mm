@@ -948,6 +948,8 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         d.rasterSampleCount=(NSUInteger)sampleCount; // sampleCount: deprecated since macOS 13 / iOS 16
         for (int i=0;i<colorCount;++i) {
             d.colorAttachments[i].pixelFormat=MTLPixelFormatBGRA8Unorm;
+            // plans/plan_apple_m4.md AM4-079: render target 0's ColorWriteChannels.
+            d.colorAttachments[i].writeMask=(MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask);
             d.colorAttachments[i].blendingEnabled = blend.enabled ? YES : NO;
             if (blend.enabled) {
                 d.colorAttachments[i].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
@@ -2331,6 +2333,7 @@ public:
         d.vertexFunction = vertFn_;
         d.fragmentFunction = fragFn_;
         d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        d.colorAttachments[0].writeMask = (MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask);
         d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.rasterSampleCount = (NSUInteger)owner_.activeSampleCount;
@@ -3736,7 +3739,7 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
 {
     if (!MetalSupportsBlendWriteState(writeState))
         throw System::NotSupportedException(
-            "Metal currently supports only all-channel color writes and the default multisample mask.");
+            "Metal supports colour-write masks on render target 0 only with the default multisample mask.");
     // plans/plan_metal.md METAL-6/24: real per-BlendState pipeline selection, replacing the previous
     // complete no-op (every pipeline was hardcoded to a fixed straight-alpha blend regardless of
     // the actual requested BlendState). `enabled` derivation mirrors
@@ -3747,6 +3750,7 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
     p.currentBlend.alphaSrc=(uint8_t)alphaSrcBlend; p.currentBlend.alphaDst=(uint8_t)alphaDstBlend;
     p.currentBlend.colorFunc=(uint8_t)colorBlendFunc; p.currentBlend.alphaFunc=(uint8_t)alphaBlendFunc;
     p.currentBlend.enabled = !(colorSrcBlend==0 && colorDstBlend==1 && alphaSrcBlend==0 && alphaDstBlend==1);
+    p.currentBlend.writeMask=(uint8_t)writeState.colorWriteChannels[0];   // AM4-079
 }
 void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnable,int depthFunc,
                                                    bool stencilEnable,int stencilFunc,int stencilPass,int stencilFail,int stencilDepthFail,
