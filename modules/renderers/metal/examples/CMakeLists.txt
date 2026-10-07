@@ -68,6 +68,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_Capabilities COMMAND cna_test_metal_capabilities
         TIMEOUT 30 LABELS "Metal")
 
+    # plans/plan_apple_m4.md AM4-077: SpriteBatch-scoped MSL custom effects, with Metal's API and
+    # shader validation layers on so a binding or shader diagnostic fails the run too.
+    add_executable(cna_test_metal_spritebatch_customeffect metal_spritebatch_customeffect_test.cpp)
+    target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_renderer_test(NAME Metal_SpriteBatch_CustomEffect
+        COMMAND cna_test_metal_spritebatch_customeffect
+        TIMEOUT 60 LABELS "Metal"
+        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+
     # plans/plan_apple_m4.md AM4-026: the shared, renderer-neutral pixel and contract tests from
     # modules/graphics/examples now run against Metal too; until backbuffer readback worked
     # (AM4-025) none of them could observe a pixel. Each declares Metal's contract in its own

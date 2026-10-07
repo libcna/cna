@@ -15,7 +15,7 @@ TEST(MetalPolicy, CapabilitiesAreExhaustiveAndConservative)
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::WireFrame));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::OcclusionQuery));
-    EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::CustomEffects));
+    EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::CustomEffects));  // AM4-077
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::Texture3D));
     EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
     EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::Instancing));

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
@@ -2436,14 +2437,9 @@ public:
     // `customEffect_ = effect;` (just stores the raw Effect* -- the actual IEffectRenderer is
     // resolved fresh in Draw() via GetEffectRendererPtr(), never cached here, so a mid-batch
     // Effect::Clone()/reassignment can't leave this pointing at a stale renderer).
-    void SetCustomEffect(Effect* effect) override
-    {
-        if (effect)
-            throw System::NotSupportedException(
-                "Metal SpriteBatch custom effects are disabled until the adapted renderer has "
-                "passing macOS shader and pixel evidence.");
-        customEffect_=nullptr;
-    }
+    // plans/plan_apple_m4.md AM4-077: enabled again on the evidence docs/metal-shader-effect-contract.md
+    // asked for (Metal_SpriteBatch_CustomEffect, under Metal API and shader validation).
+    void SetCustomEffect(Effect* effect) override { customEffect_=effect; }
     void Draw(const ITextureRenderer& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
@@ -2499,13 +2495,15 @@ public:
             ceb=dynamic_cast<MetalEffectRenderer*>(customEffect_->GetEffectRendererPtr());
             if (ceb && !ceb->IsValid()) ceb=nullptr;
         }
-        id<MTLRenderPipelineState> pipe = ceb ? ceb->pipelineFor(p.currentBlend) : nil;
-        // pipelineFor() can return nil on a genuine (rare, hardware/driver-level) pipeline-compile
-        // failure even though CompileProgram() itself already succeeded -- falls back to the stock
-        // Sprite2D pipeline rather than passing nil to setRenderPipelineState: (a hard Metal API
-        // misuse, not a recoverable-looking failure) so a real GPU-side error still degrades to
-        // "sprite drew with the stock shader" instead of a crash.
-        if (!pipe) { pipe=p.getOrCreatePipeline(PipelineKind::Sprite2D); ceb=nullptr; }
+        id<MTLRenderPipelineState> pipe = nil;
+        if (ceb) {
+            // plans/plan_apple_m4.md AM4-077: a valid effect whose pipeline cannot be built for the
+            // active blend state is reported rather than drawn with the stock shader in its place.
+            pipe=ceb->pipelineFor(p.currentBlend);
+            if (!pipe) throw std::runtime_error(ceb->GetCompileError());
+        } else {
+            pipe=p.getOrCreatePipeline(PipelineKind::Sprite2D);
+        }
         [p.encoder setRenderPipelineState:pipe]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
         if (ceb) {
             const float* m=ceb->GetMatrix(); const float* col=ceb->GetColor(); float f0=ceb->GetFloat0();
@@ -3599,12 +3597,25 @@ std::unique_ptr<ITextureCubeRenderer> MetalRenderer::CreateTextureCube(int size,
     return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap,
         impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_));
 }
+// plans/plan_apple_m4.md AM4-077: the SpriteBatch-scoped MSL facility, compiled from the two sources
+// the way D3D11 and Vulkan compile theirs. A source that does not compile yields an invalid effect
+// (ShaderEffect::IsEffectValid) rather than a throw; 3D draws with one stay refused in drawMetal3D.
 std::unique_ptr<IEffectRenderer> MetalRenderer::CreateEffectRenderer(const std::string& vertSrc,const std::string& fragSrc)
 {
-    (void)vertSrc; (void)fragSrc;
-    throw System::NotSupportedException(
-        "Metal custom effects are disabled until the adapted renderer has passing macOS shader "
-        "and pixel evidence.");
+    impl_->throwPendingCommandFailure();
+    auto renderer=std::make_unique<MetalEffectRenderer>(*impl_);
+    if(!vertSrc.empty() && !fragSrc.empty()) renderer->CompileProgram(vertSrc,fragSrc);
+    return renderer;
+}
+ShaderDialectEXT MetalRenderer::GetShaderDialectEXT() const
+{
+    return ShaderDialectEXT::Msl;
+}
+bool MetalRenderer::SupportsShaderLanguageEXT(int language,int stage) const
+{
+    return language==static_cast<int>(CNA::ShaderLanguageEXT::Msl) &&
+           (stage==static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+            stage==static_cast<int>(CNA::ShaderStageEXT::Fragment));
 }
 std::unique_ptr<IOcclusionQueryRenderer> MetalRenderer::CreateOcclusionQuery()
 {
@@ -4176,7 +4187,8 @@ static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuf
             "Metal: GpuDrawParams stream 0 must name the draw vertex buffer and match its uploaded stride");
     if (gp.customEffectRenderer)
         throw System::NotSupportedException(
-            "Metal custom-effect 3D draws are disabled until they have adapted macOS proof.");
+            "Metal custom effects are a SpriteBatch facility (docs/metal-shader-effect-contract.md); "
+            "3D draws with one are not supported.");
 }
 void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix& w,
                                              const Matrix& vi,const Matrix& p,

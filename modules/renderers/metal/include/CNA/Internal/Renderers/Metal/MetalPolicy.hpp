@@ -179,7 +179,7 @@ namespace CNA::Internal::Renderers::Metal
             case CNA::GraphicsCapability::AnisotropicFiltering:     return true;
             case CNA::GraphicsCapability::WireFrame:                return true;
             case CNA::GraphicsCapability::OcclusionQuery:           return true;  // AM4-038
-            case CNA::GraphicsCapability::CustomEffects:            return false;
+            case CNA::GraphicsCapability::CustomEffects:            return true;   // AM4-077, SpriteBatch-scoped MSL
             case CNA::GraphicsCapability::Texture3D:                return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:   return false;
             case CNA::GraphicsCapability::Instancing:               return false;

@@ -102,7 +102,7 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `AnisotropicFiltering` | true | Native sampler-state mapping. |
 | `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
 | `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
-| `CustomEffects` | false | Effect creation and non-null SpriteBatch custom effects throw. |
+| `CustomEffects` | true | `AM4-077`: SpriteBatch-scoped MSL (`docs/metal-shader-effect-contract.md`); a 3D draw with a custom effect throws. |
 | `Texture3D` | true | Color-format native 3D textures. |
 | `MultiStreamVertexInput` | false | More than one per-vertex stream is rejected. |
 | `Instancing` | false | Instance streams and instance counts other than one are rejected. |
@@ -118,8 +118,8 @@ The following boundaries are deterministic rather than silent degradation:
 - backbuffer and render-target MSAA report zero and allocate single-sample attachments;
 - `SetRenderTargets` accepts zero descriptors (restore backbuffer) or one normalized 2D/cube-face
   descriptor and throws for MRT;
-- custom effect construction, non-null `SpriteBatch::SetCustomEffect`, and a non-null
-  `GpuDrawParams::customEffectRenderer` throw;
+- a non-null `GpuDrawParams::customEffectRenderer` (a 3D draw with a custom effect) throws; custom
+  effects are a SpriteBatch facility;
 - malformed stream metadata throws `std::invalid_argument`; multistream and instancing throw
   `System::NotSupportedException`;
 - TextureCube, Texture3D, and `CreateRenderTarget2DEXT` accept only
@@ -200,8 +200,9 @@ cross-renderer fix.
 MSL is embedded in `MetalRenderer.mm` and compiled at runtime with
 `newLibraryWithSource:`. The CPU-side matrix, uniform, enum, vertex-layout, capability, format,
 sample, and stream-policy helpers remain plain C++ so they can be compiled and tested off Apple
-platforms. Historical MRT, MSAA, and custom-effect implementation scaffolding is not reachable
-through the supported contract and must not be re-enabled merely by changing a capability bit.
+platforms. Historical MRT and MSAA implementation scaffolding is not reachable through the
+supported contract and must not be re-enabled merely by changing a capability bit; the custom-effect
+scaffolding was re-enabled by `AM4-077` only with the evidence its contract document lists.
 
 ## Validation
 

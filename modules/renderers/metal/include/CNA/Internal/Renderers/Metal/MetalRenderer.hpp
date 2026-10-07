@@ -264,6 +264,20 @@ namespace CNA::Internal::Renderers::Metal
          * @return No value; the method always throws a not-supported exception.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc, const std::string& fragSrc) override;
+        /**
+         * @brief The dialect a custom `ShaderEffect`'s sources are written in on Metal. CNAEXT.
+         *
+         * @return `ShaderDialectEXT::Msl`: each source is one Metal Shading Language stage function.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+        /**
+         * @brief Whether Metal consumes one shader language and stage. CNAEXT.
+         *
+         * @param language `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage `CNA::ShaderStageEXT` ordinal.
+         * @return True only for MSL vertex and fragment stages.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
         /**
          * @brief Clears color and depth on the active target.

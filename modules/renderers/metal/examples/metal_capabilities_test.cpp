@@ -45,7 +45,8 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
         check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery supported");
-        check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects unsupported");
+        // plans/plan_apple_m4.md AM4-077: SpriteBatch-scoped MSL, see Metal_SpriteBatch_CustomEffect.
+        check(dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects supported");
         // The renderer's contract, asked of the renderer: the device's answer also folds in the
         // graphics profile (BINDFIX-037), and Reach -- the default here -- has no volume textures.
         check(dev.GetRenderer().SupportsCapability(GraphicsCapability::Texture3D), "Texture3D supported");
