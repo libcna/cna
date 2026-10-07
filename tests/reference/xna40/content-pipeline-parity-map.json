@@ -2983,7 +2983,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
-   "note": "Defaults and the character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). What Process produces cannot be compared beyond its boundary, because SpriteFontContent publishes nothing: the two measured outcomes -- a delimited strip is accepted, a texture with no glyphs is refused with XNA's message -- are reproduced, and the glyph packing is CNA's own.",
+   "note": "Defaults and character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). The XNA-shaped processor fa\u00e7ade still exposes no SpriteFontContent fields for direct comparison, but the registered `.contentproj` route (`XNAPP-139`) writes an XNB that can be compared: three ordinary sheets match genuine XNA byte-for-byte, while no-glyph and non-magenta-border sheets reproduce XNA's refusals. A valid 32-bit BMP of the same pixel sheet also produced the same reference XNB in the SAMPLE-090 current-head analysis.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -3013,7 +3013,7 @@
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "Process(const std::shared_ptr<Texture2DContent>&, ContentProcessorContext&)",
-     "note": "content travels as an owned shared_ptr; the glyph runs are found against the texture's own border colour and packed CNA's way, which XNA's output does not expose for comparison."
+     "note": "content travels as an owned shared_ptr; the fa\u00e7ade's direct output fields are not public, but the registered `.contentproj` route uses fixed magenta separators and has byte-identical XNB evidence for three ordinary sheets (`XNAPP-139`)."
     }
    }
   },
