@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <memory>
@@ -144,6 +145,50 @@ protected:
         catch (const std::exception& e)
         {
             check(false, std::string("B: drawing a position-only declaration threw: ") + e.what());
+        }
+
+        // D (AM4-081): lit with VertexColorEnabled over Position + Normal + Color, in both lighting
+        // variants. No light and black ambient leave the emissive colour, which XNA's BasicEffect
+        // multiplies by the vertex colour: white emissive x blue vertices = blue.
+        const VertexDeclaration positionNormalColor(std::vector<VertexElement>{
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Color, VertexElementUsage::Color, 0)});
+        struct PositionNormalColor { Vector3 position; Vector3 normal; std::uint32_t packedColor; };
+        PositionNormalColor colouredVertices[6];
+        const std::uint32_t blue = Color(0, 0, 255, 255).getPackedValueProperty();
+        for (int i = 0; i < 6; ++i) colouredVertices[i] = {kCorners[i], Vector3(0, 0, 1), blue};
+        VertexBuffer colouredBuffer(dev, positionNormalColor, 6, BufferUsage::WriteOnly);
+        colouredBuffer.SetData(colouredVertices, 0, 6);
+        for (const bool perPixel : {false, true})
+        {
+            BasicEffect coloured(dev);
+            coloured.setLightingEnabledProperty(true);
+            coloured.setPreferPerPixelLightingProperty(perPixel);
+            coloured.setVertexColorEnabledProperty(true);
+            coloured.getDirectionalLight0Property().setEnabledProperty(false);
+            coloured.getDirectionalLight1Property().setEnabledProperty(false);
+            coloured.getDirectionalLight2Property().setEnabledProperty(false);
+            coloured.setAmbientLightColorProperty(Vector3(0, 0, 0));
+            coloured.setEmissiveColorProperty(Vector3(1, 1, 1));
+            coloured.setSpecularColorProperty(Vector3(0, 0, 0));
+            const std::string variant = perPixel ? "per-pixel" : "per-vertex";
+            try
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                dev.SetVertexBuffer(&colouredBuffer);
+                coloured.Apply();
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+                dev.SetVertexBuffer(nullptr);
+                const Color d = centre(dev);
+                check(d.getRProperty() == 0 && d.getGProperty() == 0 && d.getBProperty() == 255,
+                      "D: a lit " + variant + " BasicEffect with VertexColorEnabled multiplies by the "
+                      "declared colour (got " + describe(d) + ", want (0,0,255))");
+            }
+            catch (const std::exception& e)
+            {
+                check(false, "D: lit " + variant + " with vertex colour threw: " + e.what());
+            }
         }
 
         // C: textured over Position + Normal is refused, as XNA refuses it.

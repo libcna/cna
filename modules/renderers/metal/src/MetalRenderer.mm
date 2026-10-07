@@ -182,6 +182,9 @@ struct V3ColorIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)
 struct V3TexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; };
 struct V3ColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; };
 struct V3NormalTexIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; };
+// plans/plan_apple_m4.md AM4-081: the lit BasicEffect functions also read COLOR0. A draw whose effect
+// permutation does not use vertex colour gets opaque white from the constant block (AM4-080).
+struct V3NormalTexColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 color [[attribute(3)]]; };
 vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
     V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=float2(0.0); return o;
 }
@@ -267,10 +270,11 @@ struct LitUniforms {
     float4 fogColorEnabled;    // xyz = FogColor, w = FogEnabled (0/1)
     float4 fogVector;          // FNA fog vector dotted with the object-space position
 };
-struct VLitOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; };
-vertex VLitOut cna_v3d_lit(V3NormalTexIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
+struct VLitOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
+vertex VLitOut cna_v3d_lit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitOut o;
     o.position = t.wvp * float4(in.position, 1.0);
+    o.color = in.color;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
     o.normal = normalMat * in.normal;
     o.uv = in.uv;
@@ -290,7 +294,8 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
     float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
     float3 specularRGB = (spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz;
-    float4 c = tex.sample(smp, in.uv) * float4(litRGB, lu.diffuseColor.w);
+    // XNA's PSBasicPixelLightingVc: the interpolated vertex colour scales the texel, then the light.
+    float4 c = tex.sample(smp, in.uv) * float4(litRGB * in.color.rgb, lu.diffuseColor.w * in.color.a);
     c.rgb += specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
     c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
@@ -305,8 +310,8 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
 // EnsureLit3DProgram() -- only the STAGE it runs in changes). Reuses the SAME LitTransform/
 // LitUniforms structs as the per-pixel variant (just consumed differently), so fillLitUniforms()
 // needs no changes at all.
-struct VLitVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; };
-vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
+struct VLitVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float alpha; };
+vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitVertexLitOut o;
     o.position = t.wvp * float4(in.position, 1.0);
     o.uv = in.uv;
@@ -318,7 +323,9 @@ vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexIn in [[stage_in]], con
     float dotL1 = dot(N, -lu.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
     float dotL2 = dot(N, -lu.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
     float3 lightSum = lu.ambientColor.xyz + lu.light0Diffuse.xyz*NdotL0 + lu.light1Diffuse.xyz*NdotL1 + lu.light2Diffuse.xyz*NdotL2;
-    o.litRGB = lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz;
+    // XNA's VSBasicVertexLightingVc: `vout.Diffuse *= vin.Color` -- the lit colour and the alpha.
+    o.litRGB = (lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz) * in.color.rgb;
+    o.alpha = lu.diffuseColor.w * in.color.a;
     float3 h0 = normalize(E - lu.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, lu.specularColorPower.w);
     float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
     float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
@@ -327,7 +334,7 @@ vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexIn in [[stage_in]], con
     return o;
 }
 fragment float4 cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]]) {
-    float4 c = tex.sample(smp, in.uv) * float4(in.litRGB, lu.diffuseColor.w);
+    float4 c = tex.sample(smp, in.uv) * float4(in.litRGB, in.alpha);
     c.rgb += in.specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
     c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
@@ -3944,9 +3951,17 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     const std::size_t selectionStride=declared.IsEmpty() ? drawStride
         : MetalSelectionStrideForDeclaration(declared.GetElements(), params);
     const PipelineKind kind = selectPipelineKind(selectionStride, params);
+    // plans/plan_apple_m4.md AM4-081: a buffer with no declaration is the canonical XNA type its stride
+    // names, none of which a lit draw takes colour from, so its colour is the constant white, as the
+    // lit functions read none before.
+    std::optional<GpuDrawParams> canonicalParams;
+    if (declared.IsEmpty() && params) {
+        canonicalParams.emplace(*params);
+        canonicalParams->vertexColorEnabled=false;
+    }
     const MetalDeclaredVertexInput vertexInput = BuildMetalDeclaredVertexInput(
         kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind) : declared.GetElements(),
-        static_cast<int>(drawStride), params);
+        static_cast<int>(drawStride), canonicalParams ? &*canonicalParams : params);
     if(!vertexInput.IsComplete())
         throw System::NotSupportedException("Metal: this VertexDeclaration cannot feed the selected stock effect: " +
                                             vertexInput.refusal + ".");

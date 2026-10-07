@@ -67,8 +67,9 @@ namespace CNA::Internal::Renderers::Metal
             case K::Colored16:          return {{S::Position, S::Color}, 2};
             case K::Textured20:         return {{S::Position, S::TexCoord0}, 2};
             case K::ColorTex24:         return {{S::Position, S::Color, S::TexCoord0}, 3};
+            // plans/plan_apple_m4.md AM4-081: the lit BasicEffect functions read COLOR0 as well.
             case K::LitTex32:
-            case K::LitTex32VertexLit:
+            case K::LitTex32VertexLit:  return {{S::Position, S::Normal, S::TexCoord0, S::Color}, 4};
             case K::EnvMap32:           return {{S::Position, S::Normal, S::TexCoord0}, 3};
             case K::DualTex20:          return {{S::Position, S::TexCoord0, S::TexCoord1}, 3};
             case K::DualTex24Colored:   return {{S::Position, S::Color, S::TexCoord0, S::TexCoord1}, 4};

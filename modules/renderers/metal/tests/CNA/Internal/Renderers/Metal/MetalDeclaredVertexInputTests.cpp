@@ -21,9 +21,13 @@ namespace
         return std::vector<MetalDeclaredAttribute>(list);
     }
 
+    // drawMetal3D builds an undeclared buffer's input this way: its canonical type carries no
+    // colour a lit draw would take (AM4-081), so colour is not a permutation input there.
     MetalDeclaredVertexInput Canonical(K kind, int stride)
     {
-        return BuildMetalDeclaredVertexInput(kind, MetalCanonicalElementsFor(kind), stride);
+        GpuDrawParams params{};
+        params.vertexColorEnabled = false;
+        return BuildMetalDeclaredVertexInput(kind, MetalCanonicalElementsFor(kind), stride, &params);
     }
 }
 
@@ -35,8 +39,10 @@ TEST(MetalDeclaredVertexInput, CanonicalLayoutsMatchTheFixedStrideTable)
     EXPECT_EQ(Canonical(K::Textured20, 20).attributes, Attrs({{0, A::Float3, 0}, {1, A::Float2, 12}}));
     EXPECT_EQ(Canonical(K::ColorTex24, 24).attributes,
               Attrs({{0, A::Float3, 0}, {1, A::UChar4Normalized, 12}, {2, A::Float2, 16}}));
+    // AM4-081: the lit functions also read COLOR0, which VertexPositionNormalTexture lacks.
     EXPECT_EQ(Canonical(K::LitTex32, 32).attributes,
-              Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24}}));
+              Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24},
+                     {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
     EXPECT_EQ(Canonical(K::Pbr48, 48).attributes,
               Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float4, 24}, {3, A::Float2, 40}}));
     EXPECT_EQ(Canonical(K::Skinned52, 52).attributes,
@@ -80,9 +86,14 @@ TEST(MetalDeclaredVertexInput, ExtraChannelsTheShaderDoesNotReadAreIgnored)
         VertexElement(12, F::Vector3, U::Normal, 0),
         VertexElement(24, F::Vector2, U::TextureCoordinate, 0),
         VertexElement(32, F::Vector2, U::TextureCoordinate, 1)};
-    const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, mesh, 40);
+    GpuDrawParams lit{};
+    lit.lightingEnabled = true;
+    lit.textureEnabled = true;
+    lit.vertexColorEnabled = false;
+    const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, mesh, 40, &lit);
     ASSERT_TRUE(input.IsComplete()) << input.refusal;
-    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24}}));
+    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24},
+                                       {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
     EXPECT_EQ(input.stride, 40);
 }
 
@@ -92,9 +103,14 @@ TEST(MetalDeclaredVertexInput, AttributesFollowTheDeclaredOrderNotTheCanonicalOn
         VertexElement(0, F::Vector3, U::Position, 0),
         VertexElement(12, F::Vector2, U::TextureCoordinate, 0),
         VertexElement(20, F::Vector3, U::Normal, 0)};
-    const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, reordered, 32);
+    GpuDrawParams lit{};
+    lit.lightingEnabled = true;
+    lit.textureEnabled = true;
+    lit.vertexColorEnabled = false;
+    const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, reordered, 32, &lit);
     ASSERT_TRUE(input.IsComplete()) << input.refusal;
-    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 20}, {2, A::Float2, 12}}));
+    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 20}, {2, A::Float2, 12},
+                                       {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
 }
 
 TEST(MetalDeclaredVertexInput, AMissingInputIsRefusedByName)
@@ -168,7 +184,9 @@ TEST(MetalDeclaredVertexInput, SelectionStrideFollowsTheEffectFamilyThenTheChann
     EXPECT_EQ(MetalSelectionStrideForDeclaration(pnt, &pbr), 68u);
 }
 
-TEST(MetalDeclaredVertexInput, ALitBasicEffectRefusesToDropAnActiveVertexColour)
+// plans/plan_apple_m4.md AM4-081: the lit functions read COLOR0, so a lit BasicEffect with
+// VertexColorEnabled takes the declared colour instead of being refused for dropping it.
+TEST(MetalDeclaredVertexInput, ALitBasicEffectReadsAnActiveVertexColour)
 {
     const std::vector<VertexElement> pnct{
         VertexElement(0, F::Vector3, U::Position, 0),
@@ -176,8 +194,13 @@ TEST(MetalDeclaredVertexInput, ALitBasicEffectRefusesToDropAnActiveVertexColour)
         VertexElement(24, F::Color, U::Color, 0),
         VertexElement(28, F::Vector2, U::TextureCoordinate, 0)};
     GpuDrawParams basic;
+    basic.lightingEnabled = true;
     basic.vertexColorEnabled = true;
-    EXPECT_FALSE(MetalDroppedVertexColorRefusal(K::LitTex32, pnct, &basic).empty());
+    EXPECT_TRUE(MetalDroppedVertexColorRefusal(K::LitTex32, pnct, &basic).empty());
+    const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, pnct, 36, &basic);
+    ASSERT_TRUE(input.IsComplete()) << input.refusal;
+    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 28},
+                                       {3, A::UChar4Normalized, 24}}));
     basic.vertexColorEnabled = false;
     EXPECT_TRUE(MetalDroppedVertexColorRefusal(K::LitTex32, pnct, &basic).empty());
     basic.vertexColorEnabled = true;
@@ -197,11 +220,13 @@ TEST(MetalDeclaredVertexInput, AnInputTheEffectDoesNotUseComesFromAConstant)
     GpuDrawParams untextured{};
     untextured.lightingEnabled = true;
     untextured.textureEnabled = false;
+    untextured.vertexColorEnabled = false;   // BasicEffect's default
     const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, positionNormal, 24, &untextured);
     ASSERT_TRUE(input.IsComplete()) << input.refusal;
     EXPECT_TRUE(input.UsesConstantAttributes());
     EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 12},
-                                       {2, A::Float2, kMetalConstantAttributeZeroOffset, true}}));
+                                       {2, A::Float2, kMetalConstantAttributeZeroOffset, true},
+                                       {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
     EXPECT_NE(input.LayoutKey(), BuildMetalDeclaredVertexInput(K::LitTex32, MetalCanonicalElementsFor(K::LitTex32),
                                                                24).LayoutKey());
 }
@@ -213,6 +238,7 @@ TEST(MetalDeclaredVertexInput, AnInputTheEffectUsesStillRefusesWhenMissing)
     GpuDrawParams textured{};
     textured.lightingEnabled = true;
     textured.textureEnabled = true;
+    textured.vertexColorEnabled = false;
     const auto input = BuildMetalDeclaredVertexInput(K::LitTex32, positionNormal, 24, &textured);
     EXPECT_FALSE(input.IsComplete());
     EXPECT_NE(input.refusal.find("TextureCoordinate0"), std::string::npos);
