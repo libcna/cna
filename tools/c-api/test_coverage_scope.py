@@ -363,6 +363,23 @@ class RuleOwnershipIsPerSymbol(unittest.TestCase):
         self.assertIn(f"no declaration it approved exists any more ({old.stable_id})", message)
         self.assertIn(f"reaches unapproved {new.stable_id}", message)
 
+    def test_a_stale_pin_fails_even_while_its_rule_still_speaks_for_other_symbols(self) -> None:
+        # The dead-rule check above cannot see this: the rule keeps owning `kept`, so its stale pin
+        # for the re-declared `ToVector4` survived unseen and the new declaration went `planned`.
+        kept = symbol("modules/math/include/CNA/Thing.hpp", "CNA::Thing::Kept")
+        old = symbol("modules/math/include/CNA/Thing.hpp", "CNA::Thing::ToVector4",
+                     signature="() const")
+        new = symbol("modules/math/include/CNA/Thing.hpp", "CNA::Thing::ToVector4",
+                     signature="() const override")
+        rules = [rule("whole-thing", "^CNA::Thing::.*$", [kept.stable_id, old.stable_id])]
+        gci.validate_approval_pins([kept, old], rules, gci.map_symbols([kept, old], rules))
+        mappings = gci.map_symbols([kept, new], rules)
+        with self.assertRaises(RuntimeError) as raised:
+            gci.validate_approval_pins([kept, new], rules, mappings)
+        message = str(raised.exception)
+        self.assertIn(f"whole-thing: {old.stable_id}", message)
+        self.assertIn(f"reaches unapproved {new.stable_id}", message)
+
 
 class AlreadyBoundApisCarryTheirMapping(unittest.TestCase):
     """Rows that an exported route already answers must not be reported as missing bindings."""

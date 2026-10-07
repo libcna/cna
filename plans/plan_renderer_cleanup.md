@@ -42,7 +42,8 @@ renderer count is not a goal.
 | RRC-024 | C API coverage generator: re-pin the approvals a re-declaration left stale | ✅ `bf410474b` |
 | RRC-025 | `WEBGPU` sizes its own Asyncify stack under Emscripten | ✅ `bfd4b9e73` |
 | RRC-026 | Vulkan/WebGPU blocks in the indexed-draw suites run only where their renderer is active | ✅ `a18a5d374` |
-| RRC-027 | `common/d3d` and the Metal renderer follow renderer membership, not the default | ✅ |
+| RRC-027 | `common/d3d` and the Metal renderer follow renderer membership, not the default | ✅ `71a0e7313` |
+| RRC-028 | C API coverage: a gate for approval pins naming declarations that no longer exist | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1345,3 +1346,35 @@ Second stabilization pass, opened from the debt `RRC-020`–`RRC-025` left (owne
   identical before and after (the portable Metal tests included), and the renderer discipline,
   identity, descriptor and combination gates pass. **Not run:** anything with `METAL` -- it cannot
   be configured off macOS -- so the Metal half is read from the code, not built.
+
+## RRC-028 — C API coverage: a gate for approval pins naming declarations that no longer exist
+
+- **Symptom.** After `RRC-024`, 32 coverage rules still pinned 126 approval IDs that name no
+  declaration in the tree. Nothing failed: the dead-rule check only fires for a rule that speaks for
+  nothing at all.
+- **Root cause.** Each stale ID was resolved to the declaration it originally pinned by parsing the
+  public headers, with the generator of the time, at the commit that introduced the pin (seven of
+  them, from `27fa6060c`, CBIND-050's pinning, onward); all 126 resolved. 74 named declarations
+  since removed -- 36 retired renderer identities, `DrawMeshEXT`, friend declarations, CNAEXT enums
+  -- and 24 named operations re-declared and since approved by another rule (move members by
+  `graphics-resource-move-semantics`, media `ToString`/`GetHashCode` by
+  `media-identity-object-overrides`). **27 named operations re-declared and approved by nobody**,
+  which had therefore fallen silently to `planned`: the 17 packed vectors' and `Color`'s `ToVector4`
+  once they gained `override`, `GraphicsAdapter`'s two device getters once they became static as in
+  XNA, `VertexPositionColor()` once `= default`, the gamer-collection enumerator's
+  `MoveNext`/`Reset`/`Dispose`, the reflective readers' `FieldReader` alias once it went through
+  `ReflectiveFieldReaderEXT`, and `NetworkSessionProperties()`. `RRC-024`'s mechanism, 27 more
+  times.
+- **Fix.** The 27 are re-pinned to the rules that reviewed them, each checked against its rule's
+  mapping (`cna_packed_vector_unpack`, the `display.h` device flags, the enumerator routes,
+  `CNA_ReflectiveFieldCallback`, ...); the 99 others are dropped. Not adopted: the enumerator's new
+  public default constructor -- its `(collection, position)` predecessor became private -- and the
+  newly declared copy and move constructors of `NetworkSessionProperties`, which nobody reviewed.
+  `validate_approval_pins()` now fails `--check`, `--write` and the limitations generator on any pin
+  naming a missing declaration, and lists the unapproved declarations the rule's pattern reaches, so
+  a re-declaration and its review land together. Fixture test included.
+- **Verified.** The gate passes on the cleaned mappings and, run against the parent's, fails naming
+  all 32 rules. Coverage now 7,053 implemented and 631 planned (from 7,026 and 658; 469 headers and
+  8,142 symbols unchanged); `COVERAGE.md`, `LIMITATIONS.md` and `RELEASE_GATE.md` regenerated with
+  their own tools, and the coverage, limitations, release-gate and export-count checks pass;
+  `test_coverage_scope.py` 33 of 33.

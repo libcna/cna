@@ -1198,6 +1198,46 @@ def map_symbols(
     return result
 
 
+def validate_approval_pins(
+    symbols: list[Symbol],
+    rules: list[Rule],
+    mappings: dict[str, Mapping],
+) -> None:
+    """Every approved pin names a declaration that exists.
+
+    A pin is the content-derived ID of a declaration somebody reviewed, so a declaration that
+    changes its text -- `override` added, `= default` moved out of line, a parameter named --
+    leaves the pin behind and turns its successor into an unreviewed, `planned` row. A rule that
+    still speaks for other symbols never trips the dead-rule check above, which is how 126 such
+    pins built up unseen (RRC-028). Failing on the first stale pin keeps the re-declaration and its
+    review in the same change.
+    """
+    present = {symbol.stable_id for symbol in symbols}
+    lines = []
+    for rule in rules:
+        stale = sorted(rule.approved_symbols - present)
+        if not stale:
+            continue
+        unapproved = sorted(
+            symbol.stable_id
+            for symbol in symbols
+            if rule.matches_pattern(symbol)
+            and mappings[symbol.identity].rule_id is None
+            and not symbol.signature.endswith("=delete")
+        )
+        line = f"  {rule.rule_id}: {', '.join(stale)}"
+        if unapproved:
+            shown = ", ".join(unapproved[:6]) + (", ..." if len(unapproved) > 6 else "")
+            line += f" (its pattern reaches unapproved {shown})"
+        lines.append(line)
+    if lines:
+        raise RuntimeError(
+            "Coverage rules pin declarations that no longer exist. Re-pin a re-declared operation to "
+            "its new ID once the new declaration has been read, or drop the pin of one that is "
+            "gone:\n" + "\n".join(lines)
+        )
+
+
 def markdown_escape(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
@@ -1602,6 +1642,7 @@ def build_inventory(
     usage: dict[str, list[str]] = {}
     mappings = map_symbols(symbols, rules, ignore_approval=ignore_approval, usage_out=usage)
     if not ignore_approval:
+        validate_approval_pins(symbols, rules, mappings)
         validate_inventory(headers, excluded, symbols, mappings)
         validate_reopened_slices(symbols, mappings)
         validate_planned_row_owners(root, mappings)
