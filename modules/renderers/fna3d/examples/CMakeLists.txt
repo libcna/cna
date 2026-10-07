@@ -17,7 +17,16 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     enable_testing()
 
-    set(CNA_FNA3D_TEST_DRIVER "OpenGL" CACHE STRING
+    # plans/plan_apple_m4.md AM4-051: on Apple the OpenGL pin is the deprecated legacy GL 2.1
+    # context (macOS's compatibility profile), not a validation target anybody ships on; FNA3D's
+    # SDL_GPU driver on Metal is. It passes the whole registered suite, the XNA-oracle corpus
+    # included, where GL 2.1 leaks a draw into an unbound cube face.
+    if(APPLE)
+        set(_cna_fna3d_default_test_driver "Metal")
+    else()
+        set(_cna_fna3d_default_test_driver "OpenGL")
+    endif()
+    set(CNA_FNA3D_TEST_DRIVER "${_cna_fna3d_default_test_driver}" CACHE STRING
         "FNA3D runtime driver used by the registered FNA3D renderer tests")
     set_property(CACHE CNA_FNA3D_TEST_DRIVER PROPERTY STRINGS
         OpenGL Vulkan D3D12 Metal D3D11 SDLGPU)
