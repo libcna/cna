@@ -25,7 +25,6 @@
 #if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_PRESENT_FNA3D)
 #include <limits>
 
-#if defined(CNA_RENDERER_FNA3D)
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
@@ -118,7 +117,6 @@ TEST(Fna3dSurfaceFormatTests, NonPositiveExtentsCountZeroRatherThanNegative)
     EXPECT_EQ(FormatRowByteCount(Ordinal(SurfaceFormat::Dxt5), 0), 0);
 }
 
-#endif // CNA_RENDERER_FNA3D / CNA_RENDERER_PRESENT_FNA3D
 TEST(Fna3dSurfaceFormatTests, ByteArithmeticRejectsSignedIntOverflow)
 {
     // FNA3D's transfer-length parameter is signed int32. A wrapped positive count would make a
@@ -162,4 +160,4 @@ TEST(Fna3dSurfaceFormatTests, CompressedTransferRegionsRespectBlockBoundaries)
     EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 4, 6));
 }
 
-#endif // CNA_RENDERER_FNA3D
+#endif // CNA_RENDERER_FNA3D / CNA_RENDERER_PRESENT_FNA3D

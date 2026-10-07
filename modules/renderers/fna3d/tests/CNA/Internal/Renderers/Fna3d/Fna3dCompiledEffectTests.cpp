@@ -813,6 +813,8 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     using System::InvalidOperationException;
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, BuildSyntheticConformanceEffect({}));
 
     ASSERT_EQ(effect.getParametersProperty().getCountProperty(), 5);
@@ -951,6 +953,8 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureAcceptsEveryFnaRenderStateToken)
     // render-state value. The sampler fixtures below exercise that separate encoding.
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, BuildSyntheticConformanceEffect(states));
     ASSERT_EQ(effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty(), 2);
     EXPECT_NO_THROW(effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply());
@@ -978,6 +982,8 @@ TEST(Fna3dCompiledEffectTest, PartialFilterAssignmentStartsFromTheSelectedSample
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
 
     // Only the magnification axis is assigned, so the other two keep the game's own selection.
@@ -994,6 +1000,8 @@ TEST(Fna3dCompiledEffectTest, ClonedSamplerEffectKeepsItsOwnTextureBinding)
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     SyntheticEffectOptions options;
     options.includeSampler = true;
     options.samplerStates = {{MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_CLAMP}};
@@ -1022,6 +1030,8 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect shader(device, LoadStockEffect("BasicEffect.fxb"));
     shader.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     shader.getParametersProperty()["DiffuseColor"]->SetValue(
@@ -1239,6 +1249,8 @@ TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
     effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     effect.Dispose();
@@ -1262,6 +1274,8 @@ TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
 TEST(Fna3dCompiledEffectTest, DeviceDisposalReleasesCompiledEffectBeforeRenderer)
 {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     auto effect = std::make_unique<Effect>(device, LoadStockEffect("BasicEffect.fxb"));
     effect->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
@@ -1277,6 +1291,8 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
     effect.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     effect.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(0.0f, 1.0f, 0.0f, 1.0f));
@@ -1322,6 +1338,8 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
 TEST(Fna3dCompiledEffectTest, CloneChainsStayIndependentInAnyDisposalOrder)
 {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     auto root = std::make_unique<Effect>(device, LoadStockEffect("BasicEffect.fxb"));
     root->getParametersProperty()["ShaderIndex"]->SetValue(1);
 
@@ -1357,6 +1375,8 @@ TEST(Fna3dCompiledEffectTest, CloneChainsStayIndependentInAnyDisposalOrder)
 TEST(Fna3dCompiledEffectTest, DisposedCompiledEffectRejectsEveryLaterApply)
 {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
     effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     effect.Dispose();
@@ -1373,6 +1393,8 @@ TEST(Fna3dCompiledEffectTest, DisposedCompiledEffectRejectsEveryLaterApply)
 TEST(Fna3dCompiledEffectTest, RepeatedNativeConstructionFailureLeavesTheDeviceUsable)
 {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     SyntheticEffectOptions broken;
     broken.includeSampler = true;
     broken.breakShaderSymbolBinding = true;
@@ -1403,6 +1425,8 @@ TEST(Fna3dCompiledEffectTest, RepeatedNativeConstructionFailureLeavesTheDeviceUs
 TEST(Fna3dCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
 {
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     const auto bytes = LoadStockEffect("SpriteEffect.fxb");
     for (int cycle = 0; cycle < 24; ++cycle)
     {
@@ -1427,6 +1451,8 @@ TEST(Fna3dCompiledEffectTest, SelectedCompiledEffectUnlocksInstancedDrawing)
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     const VertexPositionColor vertices[3] = {
         { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
         { Vector3(-1.0f, -1.0f, 0.5f), Color::White },
@@ -1473,6 +1499,8 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     BuiltInReaderScope readers;
     ScratchContentRoot contentRoot;
     const auto xnb = BuildEffectXnb(LoadStockEffect("BasicEffect.fxb"));
