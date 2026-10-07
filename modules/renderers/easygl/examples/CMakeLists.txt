@@ -344,6 +344,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # context destroy/recreate cycle, then draw the same imported buffers and texture again.
         cna_easygl_test(cna_test_easygl_gltf_context_loss
                         easygl_gltf_context_loss_test.cpp)
+        # plans/plan_apple_m4.md AM4-040: macOS's offscreen driver has no GL at all (it is
+        # EGL-only), so there the native cocoa driver provides the context.
+        if(APPLE)
+            set(_cna_easygl_context_loss_video_driver "SDL_VIDEODRIVER=cocoa")
+        else()
+            set(_cna_easygl_context_loss_video_driver "SDL_VIDEODRIVER=offscreen")
+        endif()
         cna_register_renderer_test(NAME EasyGL_Gltf_ContextLoss
             COMMAND cna_test_easygl_gltf_context_loss
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -352,7 +359,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             # keeping the regression runnable on Linux builders that do not expose an X server.
             # Do not force a software device: EGL rejects that override when SDL explicitly
             # selected another device, which crashes before the test reaches context recovery.
-            ENVIRONMENT "SDL_VIDEODRIVER=offscreen")
+            ENVIRONMENT "${_cna_easygl_context_loss_video_driver}")
 
         # plans/plan_gltf.md GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
         # applied through ModelMeshPart's public per-slot sampler contract before Model::Draw.

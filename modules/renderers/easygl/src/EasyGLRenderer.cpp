@@ -1886,12 +1886,30 @@ namespace CNA::Internal::Renderers::EasyGL
 
     // --- EasyGLEffectRenderer ---
 
+    namespace
+    {
+        // plans/plan_apple_m4.md AM4-040: a custom ShaderEffect is written to GLSL ES 3.00 like
+        // every stock shader here. Mesa compiles that source unchanged in a desktop core context
+        // because it exposes GL_ARB_ES3_compatibility; macOS's OpenGL 4.1 core does not, and refuses
+        // "#version 300 es" outright. Where the extension is missing, the source gets the same
+        // header rewrite the stock shaders get (AdaptGlslEs300ForActiveProfile); where it is
+        // present the source is compiled exactly as before.
+        std::string AdaptCustomGlslForContext(const std::string& source)
+        {
+            if (!ProfileIsDesktopCore() || source.find("#version 300 es\n") == std::string::npos)
+                return source;
+            if (::metagl::HasExtension("GL_ARB_ES3_compatibility"))
+                return source;
+            return AdaptGlslEs300ForActiveProfile(source.c_str());
+        }
+    }
+
     bool EasyGLEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
         compileError_.clear();
         ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();
-        vs.compile_from_source(vertSrc.c_str());
+        vs.compile_from_source(AdaptCustomGlslForContext(vertSrc).c_str());
         if (!vs.is_compiled())
         {
             compileError_ = "VS: " + vs.info_log();
@@ -1899,7 +1917,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         ::easygl::Shader fs(::easygl::ShaderType::Fragment);
         fs.create();
-        fs.compile_from_source(fragSrc.c_str());
+        fs.compile_from_source(AdaptCustomGlslForContext(fragSrc).c_str());
         if (!fs.is_compiled())
         {
             compileError_ = "FS: " + fs.info_log();

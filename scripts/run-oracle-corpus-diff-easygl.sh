@@ -41,8 +41,12 @@ if [ ! -x "$CNA_ORACLE_RENDER_EXE" ]; then
     exit 2
 fi
 
-export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
-export DISPLAY="${DISPLAY:-:0}"
+# plans/plan_apple_m4.md AM4-040: macOS's SDL has no x11 driver; its native cocoa driver needs no
+# DISPLAY, so the X11 defaults apply everywhere else only.
+if [ "$(uname -s)" != "Darwin" ]; then
+    export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
+    export DISPLAY="${DISPLAY:-:0}"
+fi
 
 SCENES_DIR="$REPO_ROOT/tools/xna-oracle/scenes"
 REFERENCE_DIR="$REPO_ROOT/tools/xna-oracle/reference"
