@@ -424,7 +424,6 @@ namespace CNA::Internal::Renderers::SdlRenderer
         else if (SDL_strcmp(name, "opengl") == 0)
         {
             SDL_Log("SDL_Renderer uses OpenGL");
-            std::cout << "SDL_Renderer uses OpenGL" << std::endl;
         }
         else if (SDL_strcmp(name, "gpu") == 0)
         {
@@ -434,34 +433,33 @@ namespace CNA::Internal::Renderers::SdlRenderer
                 const char* gpuDriver = SDL_GetGPUDeviceDriver(device);
                 SDL_Log("SDL_Renderer = gpu, current renderer = %s",
                         gpuDriver ? gpuDriver : "unknown");
-                std::cout << "SDL_Renderer = gpu, current renderer = " << (gpuDriver ? gpuDriver : "unknown") <<
-                    std::endl;
             }
             else
             {
                 SDL_Log("Renderer is gpu, but GPU device could not be find out: %s", SDL_GetError());
-                std::cout << "Renderer is gpu, but GPU device could not be find out: " << SDL_GetError() << std::endl;
             }
         }
         else if (SDL_strcmp(name, "vulkan") == 0)
         {
             SDL_Log("SDL_Renderer uses Vulkan");
-            std::cout << "SDL_Renderer uses Vulkan" << std::endl;
         }
         else
         {
             SDL_Log("SDL_Renderer renderer: %s", name);
-            std::cout << "SDL_Renderer renderer: " << name << std::endl;
         }
 
         // Task 456: one-time startup capability dump. This renderer is 2D-only by design (Tasks
         // 720-729's own exhaustive audit) -- no MSAA/MRT/anisotropic-filtering/3D capability.
-        std::cout << "CNA: SDL_Renderer capabilities -- 2D-only renderer; no MSAA, no MRT "
+        // plans/plan_apple_m4.md AM4-036: logged, not written to stdout -- the renderer-name lines
+        // above go to SDL_Log (stderr) and duplicated themselves onto std::cout, which
+        // GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout forbids, as EasyGL's
+        // capability line was moved for.
+        CNA::Logger::Info("CNA: SDL_Renderer capabilities -- 2D-only renderer; no MSAA, no MRT "
                      "(more than 1 simultaneous render target throws), no anisotropic filtering; "
                      "unsupported 3D calls preserve their established throw/null behavior by "
                      "default and can be changed to warn-once safe stubs with "
                      "Unsupported3DGraphicsCallBehavior::WarnAndStub; "
-                     "SurfaceFormat: Color only (Task 176)" << std::endl;
+                     "SurfaceFormat: Color only (Task 176)", CNA::LogCategory::RENDER);
 
         registeredWindowId_ = SDL_GetWindowID(window);
         IGraphicsRenderer::RegisterForWindow(registeredWindowId_, this);
