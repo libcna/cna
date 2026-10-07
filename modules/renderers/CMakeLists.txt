@@ -106,6 +106,24 @@ function(cna_add_renderer)
     set(RENDERER_TARGET "${_cna_this_target}" PARENT_SCOPE)
 endfunction()
 
+# The static-archive cycle every renderer joins: cna_graphics_core links cna_input and each selected
+# renderer (modules/graphics/CMakeLists.txt), and each of those -- plus the shared helper archives
+# entered below -- links back into it. A $<LINK_GROUP> naming only part of that cycle forms a
+# cycle with the members it leaves out, which CMake refuses at generate time; in a multi-renderer
+# build that is every renderer but one. A target that needs the cycle rescanned names all of it.
+#
+# @param out_var Variable to receive the member targets, in the caller's scope.
+function(cna_graphics_archive_cycle out_var)
+    set(_cna_cycle cna_input cna_graphics_core ${CNA_RENDERER_TARGETS})
+    foreach(_cna_helper IN ITEMS cna_renderer_d3dcommon cna_renderer_mojoshader_effect)
+        if(TARGET ${_cna_helper})
+            list(APPEND _cna_cycle ${_cna_helper})
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _cna_cycle)
+    set(${out_var} "${_cna_cycle}" PARENT_SCOPE)
+endfunction()
+
 get_filename_component(CNA_SELECTED_RENDERER "${RENDERER_DIR}" NAME)
 
 # plans/plan_runtimerenderer.md phase P6: every selected family, not only the default one. In
