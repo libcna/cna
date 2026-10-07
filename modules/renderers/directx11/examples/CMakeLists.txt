@@ -42,6 +42,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             cna_copy_mingw_runtime(${target})
             cna_copy_sdl_runtime(${target})
         endif()
+        # A test that names one of these executables by target -- every shared parity fixture does,
+        # through cna_register_parity_fixtures() -- runs the Windows binary through the cross lane's
+        # Wine+DXVK launcher, the way cna_sdlgpu_test() attaches its own. Native builds get none.
+        if(CMAKE_CROSSCOMPILING)
+            set_target_properties(${target} PROPERTIES CROSSCOMPILING_EMULATOR
+                "${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
+        endif()
     endmacro()
 
     macro(cna_directx11_ctest_command out_var target_name)
@@ -72,7 +79,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
         cna_directx11_test(cna_test_directx11_win32_hardware_smoke
             directx11_win32_hardware_smoke.cpp)
         cna_register_renderer_test(NAME DirectX11_Win32HardwareSmoke
-            COMMAND $<TARGET_FILE:cna_test_directx11_win32_hardware_smoke>
+            COMMAND cna_test_directx11_win32_hardware_smoke
             TIMEOUT 60 LABELS "DIRECTX11;Win32")
     endif()
 
@@ -105,13 +112,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_directx11_test(cna_test_directx11_instanced_textured
         ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
     cna_register_renderer_test(NAME DirectX11_InstancedTexturedDraw
-        COMMAND $<TARGET_FILE:cna_test_directx11_instanced_textured>
+        COMMAND cna_test_directx11_instanced_textured
         TIMEOUT 180 LABELS "Parity;DIRECTX11")
 
     cna_directx11_test(cna_test_directx11_draw_line_topology
         ${CNA_GRAPHICS_EXAMPLES_DIR}/draw_line_topology_test.cpp)
     cna_register_renderer_test(NAME DirectX11_DrawLineTopology
-        COMMAND $<TARGET_FILE:cna_test_directx11_draw_line_topology>
+        COMMAND cna_test_directx11_draw_line_topology
         TIMEOUT 180 LABELS "Parity;DIRECTX11")
 endif()
 
