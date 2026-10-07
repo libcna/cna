@@ -364,7 +364,21 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         // which is what avcodec_open2 refuses, and the refusal is indistinguishable from "no
         // encoder" unless it is dealt with here.
         encoder->sample_fmt = AV_SAMPLE_FMT_FLTP;
-        for (const AVSampleFormat* supported = codec->sample_fmts;
+        // libavcodec 61.13 (FFmpeg 7.1) replaced AVCodec::sample_fmts with
+        // avcodec_get_supported_config(), and FFmpeg 8 removed the field. Both lists end at
+        // AV_SAMPLE_FMT_NONE, and both are null when the codec accepts every format.
+        const AVSampleFormat* supportedFormats = nullptr;
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(61, 13, 100)
+        const void* supportedConfigs = nullptr;
+        if (avcodec_get_supported_config(encoder.get(), codec, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0,
+                                         &supportedConfigs, nullptr) >= 0)
+        {
+            supportedFormats = static_cast<const AVSampleFormat*>(supportedConfigs);
+        }
+#else
+        supportedFormats = codec->sample_fmts;
+#endif
+        for (const AVSampleFormat* supported = supportedFormats;
              supported != nullptr && *supported != AV_SAMPLE_FMT_NONE; ++supported)
         {
             if (*supported == AV_SAMPLE_FMT_S16)
