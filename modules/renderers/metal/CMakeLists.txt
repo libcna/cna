@@ -5,7 +5,7 @@ add_library(cna_renderer_metal_headers INTERFACE)
 target_include_directories(cna_renderer_metal_headers INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-if(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
+if("METAL" IN_LIST CNA_RENDERER_IDENTITIES)
     # Metal owns the renderer directly and attaches its CAMetalLayer to the platform-provided
     # Cocoa window. The Objective-C++ units join the renderer archive alongside the C++ ones.
     file(GLOB CNA_METAL_OBJCXX_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.mm")

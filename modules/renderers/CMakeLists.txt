@@ -137,12 +137,20 @@ endforeach()
 # metal keeps an unconditional header-interface target: its policy suites in
 # modules/renderers/metal/tests are deliberately host-portable and compile into the CnaTests corpus
 # on every renderer (see the suites' own header comments), so its CNA/Internal/Renderers/Metal
-# policy headers must stay reachable in every configuration.
+# policy headers must stay reachable in every configuration. Because it is entered here rather
+# than by the per-family loop below, it is handed METAL's identity macros the way that loop hands
+# every other family its own -- whenever METAL is selected, not only as the default.
+set(CNA_RENDERER_TARGET_DEFINE "")
+list(FIND CNA_RENDERER_IDENTITIES METAL _cna_metal_index)
+if(NOT _cna_metal_index EQUAL -1)
+    list(GET CNA_RENDERER_TARGET_DEFINES ${_cna_metal_index} CNA_RENDERER_TARGET_DEFINE)
+endif()
 add_subdirectory(metal)
 
 # plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 family
-# only -- DIRECTX9 is confirmed independent (design decision 12).
-if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
+# only -- DIRECTX9 is confirmed independent (design decision 12). Entered whenever DIRECTX11 is
+# selected, default or not: the directx11 family links it PUBLIC.
+if("DIRECTX11" IN_LIST CNA_RENDERER_IDENTITIES)
     add_subdirectory(common/d3d)
 endif()
 

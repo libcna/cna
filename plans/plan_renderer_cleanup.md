@@ -41,7 +41,8 @@ renderer count is not a goal.
 | RRC-023 | DirectX 11 executables carry the cross lane's Wine+DXVK launcher | ✅ `f5b120dd5` |
 | RRC-024 | C API coverage generator: re-pin the approvals a re-declaration left stale | ✅ `bf410474b` |
 | RRC-025 | `WEBGPU` sizes its own Asyncify stack under Emscripten | ✅ `bfd4b9e73` |
-| RRC-026 | Vulkan/WebGPU blocks in the indexed-draw suites run only where their renderer is active | ✅ |
+| RRC-026 | Vulkan/WebGPU blocks in the indexed-draw suites run only where their renderer is active | ✅ `a18a5d374` |
+| RRC-027 | `common/d3d` and the Metal renderer follow renderer membership, not the default | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1318,3 +1319,29 @@ Second stabilization pass, opened from the debt `RRC-020`–`RRC-025` left (owne
   WebGPU tests now actually run, two fail with "The index buffer resource is in use" and "The vertex
   buffer resource is in use": they rewrite a still-bound buffer, which the device refuses as XNA
   does -- the buffer-rewrite class `plan_street_perf.md` records for SDL_GPU, left with it.
+
+## RRC-027 — `common/d3d` and the Metal renderer follow renderer membership, not the default
+
+- **Symptom.** A MinGW-w64 multi-renderer build with `DIRECTX9` as the default and `DIRECTX11`
+  beside it (`DIRECTX9;DIRECTX11;SOFTWARE;HEADLESS`) configured, then failed to compile the DirectX
+  11 renderer -- "fatal error: CNA/Internal/Renderers/D3DCommon/ID3DDevice.hpp: No such file or
+  directory", 13 units -- and every executable's link line carried a bare `-lcna_renderer_d3dcommon`
+  that names no target.
+- **Root cause.** Two directories are entered outside the per-family loop and still asked whether
+  their renderer was the *default*. `common/d3d`, which the `directx11` family links PUBLIC, was
+  added only `if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")`. `metal` is entered before the loop on
+  purpose -- its policy headers and its portable test executable exist on every host -- and its
+  renderer was likewise defined only for a `METAL` default; even then it would have lacked
+  `CNA_RENDERER_METAL`, which only the loop hands a family and which guards
+  `Metal::CreateGraphicsRenderer`. The same default-versus-membership confusion as `RRC-022`.
+- **Fix.** `common/d3d` is entered when `DIRECTX11` is in `CNA_RENDERER_IDENTITIES`. Before entering
+  `metal`, `modules/renderers/CMakeLists.txt` gives it METAL's entry of
+  `CNA_RENDERER_TARGET_DEFINES` when METAL is selected, and `metal/CMakeLists.txt` defines the
+  renderer on membership.
+- **Verified.** The same `DIRECTX9`-default tree then builds the renderer-selection demo and the
+  renderer benchmark, and under Wine 10 with DXVK 2.6.0 on the private display the benchmark runs
+  with each of `DIRECTX9`, `DIRECTX11`, `SOFTWARE` and `HEADLESS` selected at runtime ("selected at
+  runtime from 4 compiled in"), DXVK engaged. In `cmake-build-multi` the registered test set is
+  identical before and after (the portable Metal tests included), and the renderer discipline,
+  identity, descriptor and combination gates pass. **Not run:** anything with `METAL` -- it cannot
+  be configured off macOS -- so the Metal half is read from the code, not built.
