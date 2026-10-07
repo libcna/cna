@@ -10,9 +10,12 @@
 // (examples/easygl_model_draw_test.cpp: 2-bone hierarchy, 1 mesh, 1 part, BasicEffect) but passes
 // nullptr for the part's VertexBuffer*/IndexBuffer* (ModelMeshPart accepts raw pointers, no
 // construction involved) -- ModelMesh::Draw's own `SetVertexBuffer(nullptr)` is safe (guarded),
-// so the call chain reaches GraphicsDevice::DrawIndexedPrimitives with no vertex buffer bound,
-// throwing the SAME shared (not SDL_Renderer-specific) "no vertex buffer is bound" message
-// established by Task 720. Confirmed zero existing SDL_Renderer test coverage of Model::Draw
+// so the call chain reaches GraphicsDevice::DrawIndexedPrimitives with neither buffer bound,
+// throwing the SAME shared (not SDL_Renderer-specific) missing-buffer refusal established by
+// Task 720. SOFTWARE-253 restored Microsoft XNA's order there -- a missing index buffer is
+// reported before a missing vertex buffer, as InvalidOperationException -- so the refusal this
+// part reaches is "no index buffer is bound" (it was "no vertex buffer is bound" when this test
+// was written). Confirmed zero existing SDL_Renderer test coverage of Model::Draw
 // (ModelMeshTests.cpp never calls Draw() at all, always passes a null GraphicsDevice), so this is
 // safe new coverage with no blast radius, unlike Task 725's situation.
 
@@ -23,15 +26,18 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <typeinfo>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -80,9 +86,14 @@ protected:
                        Matrix::getIdentityProperty(),
                        Matrix::getIdentityProperty());
         }
-        catch (const std::exception& e) { message = e.what(); }
-        check(message == "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.",
-              "Model::Draw throws the exact expected message when its mesh part has no bound vertex buffer");
+        catch (const System::InvalidOperationException& e)
+        {
+            if (typeid(e) == typeid(System::InvalidOperationException))
+                message = e.what();
+        }
+        catch (const std::exception&) {}
+        check(message == "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.",
+              "Model::Draw throws InvalidOperationException with the exact expected message when its mesh part has no bound index/vertex buffer");
 
         // --- The device must remain fully usable after the throw above. ---
         dev.Clear(Color(0, 255, 255, 255));
@@ -101,6 +112,10 @@ public:
     SdlModelDrawThrowsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

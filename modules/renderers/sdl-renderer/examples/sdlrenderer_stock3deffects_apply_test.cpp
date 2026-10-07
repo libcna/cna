@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
@@ -198,6 +199,10 @@ public:
     SdlStock3DEffectsApplyTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

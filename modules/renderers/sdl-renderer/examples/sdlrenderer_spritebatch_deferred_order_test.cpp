@@ -36,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
@@ -144,6 +145,10 @@ public:
     SdlSpriteBatchDeferredOrderTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(300);
         gdm_->setPreferredBackBufferHeightProperty(300);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

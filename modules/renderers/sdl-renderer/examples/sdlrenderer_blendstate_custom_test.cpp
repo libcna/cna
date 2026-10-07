@@ -46,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -109,6 +110,15 @@ class SdlBlendStateCustomTest : public Game
         return px;
     }
 
+    // SOFTWARE-351: as in Microsoft XNA, a SpriteBatch whose End() fails while applying its
+    // deferred state stays inside its Begin/End pair (a repeated End retries the same work), so the
+    // next Begin on it throws "Begin has been called before calling End". The batch that was handed
+    // a refused BlendState can never complete, so each expected refusal below abandons it.
+    void ReplaceSpriteBatchAfterRefusedEnd()
+    {
+        sb_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
+    }
+
 protected:
     void Initialize() override
     {
@@ -153,6 +163,7 @@ protected:
             catch (const std::runtime_error&)
             {
                 threw = true;
+                ReplaceSpriteBatchAfterRefusedEnd();
             }
             check(threw, "Blend::BlendFactor (no SDL equivalent) throws instead of silently misrendering",
                   Color(threw ? 0 : 255, 0, 0, 255));
@@ -170,6 +181,7 @@ protected:
             catch (const std::runtime_error&)
             {
                 threw = true;
+                ReplaceSpriteBatchAfterRefusedEnd();
             }
             check(threw, "Blend::SourceAlphaSaturation (no SDL equivalent) throws instead of silently misrendering",
                   Color(threw ? 0 : 255, 0, 0, 255));
@@ -197,6 +209,10 @@ public:
     SdlBlendStateCustomTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(16);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

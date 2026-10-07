@@ -3,15 +3,15 @@
 // Start of the GraphicsDevice-lifecycle section (716-719).
 //
 // ClearOptions is a 3-bit flags enum: Target=1, DepthBuffer=2, Stencil=4 (8 combinations,
-// including "none"). GraphicsDevice::Clear(ClearOptions, ...) only actually branches on
-// Target/DepthBuffer -- its `stencil` parameter is explicitly discarded (`(void)stencil;`), an
-// ALREADY-TRACKED, cross-renderer, not-yet-fixed gap (NEXT.md §5, Task 871) -- NOT something this
-// task fixes; it is verified/pixel-tested here in its concrete SDL_Renderer manifestation only.
-// On THIS 2D-only renderer, ANY combination including DepthBuffer routes to ClearDepth or
-// ClearColorAndDepth, both unconditional ThrowNo3D -- so the only non-throwing combinations here
-// are Target alone, Stencil alone (a genuine no-op per the Task 871 gap), Target|Stencil (Target
-// clears normally, Stencil silently ignored), and the empty/"none" case (also a no-op, correctly
-// so -- XNA itself defines no-op semantics for an empty ClearOptions).
+// including "none"). SOFTWARE-333 restored Microsoft XNA's validation: a Clear that names a depth
+// or stencil plane the active surface does not have throws InvalidOperationException before any
+// renderer dispatch, so the refusal is atomic -- not even the Target half of the request clears.
+// (This file originally pinned the pre-Task-871 behaviour, where a Stencil request was silently
+// ignored and Target|Stencil cleared the colour target; that expectation is superseded.)
+// THIS 2D-only renderer's back buffer has neither a depth nor a stencil plane, so every
+// combination naming DepthBuffer or Stencil is refused that way and leaves the colour target
+// untouched; the only non-throwing combinations are Target alone and the empty/"none" case (a
+// no-op, correctly so -- XNA itself defines no-op semantics for an empty ClearOptions).
 //
 // Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
 // in physical output coordinates, while this renderer's default presentation mode
@@ -25,11 +25,13 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
-#include <stdexcept>
+#include <typeinfo>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -47,6 +49,8 @@ class SdlClearOptionsAuditTest : public Game
         if (!ok) result_ = 1;
     }
 
+    // True iff Clear threw exactly System::InvalidOperationException (SOFTWARE-333's missing-plane
+    // refusal); any other exception escapes and fails the run.
     bool ClearThrows(GraphicsDevice& dev, ClearOptions options)
     {
         try
@@ -54,9 +58,9 @@ class SdlClearOptionsAuditTest : public Game
             dev.Clear(options, Color(255, 0, 255, 255), 1.0f, 0);
             return false;
         }
-        catch (const std::runtime_error&)
+        catch (const System::InvalidOperationException& e)
         {
-            return true;
+            return typeid(e) == typeid(System::InvalidOperationException);
         }
     }
 
@@ -95,19 +99,19 @@ protected:
         check(ClearThrows(dev, ClearOptions::DepthBuffer | ClearOptions::Stencil), "ClearOptions::DepthBuffer|Stencil throws");
         check(ClearThrows(dev, ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil), "ClearOptions::Target|DepthBuffer|Stencil throws");
 
-        // --- Stencil alone: a genuine no-op (Task 871's already-tracked gap) -- does not throw,
-        // does not clear the color target either. ---
+        // --- Stencil alone: refused (this renderer has no stencil buffer), and the refusal leaves
+        // the color target untouched. ---
         dev.Clear(Color(0, 255, 0, 255));
-        check(!ClearThrows(dev, ClearOptions::Stencil), "ClearOptions::Stencil alone does not throw");
+        check(ClearThrows(dev, ClearOptions::Stencil), "ClearOptions::Stencil alone throws (no stencil buffer on this renderer)");
         Color afterStencilOnly = SampleCenter(dev);
         check(afterStencilOnly.getRProperty() <= 15 && afterStencilOnly.getGProperty() >= 240 && afterStencilOnly.getBProperty() <= 15,
-              "ClearOptions::Stencil alone is a genuine no-op -- the prior Green fill survives untouched");
+              "ClearOptions::Stencil alone stores nothing -- the prior Green fill survives untouched");
 
-        // --- Target|Stencil: Target clears normally, Stencil silently ignored, no throw. ---
-        check(!ClearThrows(dev, ClearOptions::Target | ClearOptions::Stencil), "ClearOptions::Target|Stencil does not throw");
+        // --- Target|Stencil: refused atomically -- the Target half does not clear either. ---
+        check(ClearThrows(dev, ClearOptions::Target | ClearOptions::Stencil), "ClearOptions::Target|Stencil throws (no stencil buffer on this renderer)");
         Color afterTargetStencil = SampleCenter(dev);
-        check(afterTargetStencil.getRProperty() >= 240 && afterTargetStencil.getBProperty() >= 240,
-              "ClearOptions::Target|Stencil clears the color target (Stencil silently ignored)");
+        check(afterTargetStencil.getRProperty() <= 15 && afterTargetStencil.getGProperty() >= 240 && afterTargetStencil.getBProperty() <= 15,
+              "ClearOptions::Target|Stencil is refused atomically -- the color target keeps the prior Green fill");
 
         Exit();
     }
@@ -116,6 +120,10 @@ public:
     SdlClearOptionsAuditTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

@@ -5,9 +5,11 @@
 //
 // SdlRenderer::CreateVertexBuffer/CreateIndexBuffer16 throw
 // std::runtime_error("SDL_Renderer does not support 3D: ...") unconditionally; CreateIndexBuffer32
-// is not separately overridden, so it uses IGraphicsRenderer's own default delegation to
-// CreateIndexBuffer16 -- meaning a 32-bit IndexBuffer/DynamicIndexBuffer throws the SAME
-// "CreateIndexBuffer16" message as a 16-bit one, not a distinct "CreateIndexBuffer32" message.
+// is not separately overridden, so it inherits IGraphicsRenderer's own default. That default
+// delegated to CreateIndexBuffer16 when this test was written; GLTF-163 replaced the delegation
+// with an explicit width-specific refusal (a 16-bit handle for a uint32 upload would truncate at
+// draw time), and docs/graphics-renderer-feature-matrix.md records this renderer as inheriting it.
+// So a 32-bit IndexBuffer/DynamicIndexBuffer throws that shared CreateIndexBuffer32 message here.
 // DynamicVertexBuffer/DynamicIndexBuffer both delegate straight to VertexBuffer's/IndexBuffer's
 // own constructor with their `dynamic` parameter completely unused (an ignored bool) -- so they
 // throw identically to their non-dynamic base types, renderer-wise there is no distinction at all.
@@ -23,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -97,6 +100,8 @@ protected:
 
         const std::string kNoVb = "SDL_Renderer does not support 3D: CreateVertexBuffer";
         const std::string kNoIb = "SDL_Renderer does not support 3D: CreateIndexBuffer16";
+        const std::string kNoIb32 =
+            "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer";
 
         // --- VertexBuffer: both public constructor overloads. ---
         check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, 4); }, kNoVb),
@@ -109,23 +114,23 @@ protected:
               "DynamicVertexBuffer(...) throws the exact expected message, identical to VertexBuffer's");
 
         // --- IndexBuffer: both index widths. CreateIndexBuffer32 is not separately overridden on
-        //     this renderer, so it delegates to CreateIndexBuffer16 -- same message, both widths. ---
+        //     this renderer, so it inherits the shared 32-bit refusal (GLTF-163). ---
         check(ThrowsExactRuntimeError([&] { IndexBuffer ib(dev, 4); }, kNoIb),
               "IndexBuffer(device, count) [16-bit default] throws the exact expected message");
         check(ThrowsExactRuntimeError(
                   [&] { IndexBuffer ib(dev, IndexElementSize::SixteenBits, 4, BufferUsage::None); }, kNoIb),
               "IndexBuffer(device, SixteenBits, count, BufferUsage) throws the exact expected message");
         check(ThrowsExactRuntimeError(
-                  [&] { IndexBuffer ib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb),
-              "IndexBuffer(device, ThirtyTwoBits, count, BufferUsage) throws CreateIndexBuffer16's message (32-bit path delegates to it)");
+                  [&] { IndexBuffer ib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb32),
+              "IndexBuffer(device, ThirtyTwoBits, count, BufferUsage) throws the shared CreateIndexBuffer32 refusal (no 16-bit delegation)");
 
         // --- DynamicIndexBuffer: both widths, same delegation story as DynamicVertexBuffer. ---
         check(ThrowsExactRuntimeError(
                   [&] { DynamicIndexBuffer dib(dev, IndexElementSize::SixteenBits, 4, BufferUsage::None); }, kNoIb),
               "DynamicIndexBuffer(SixteenBits, ...) throws the exact expected message");
         check(ThrowsExactRuntimeError(
-                  [&] { DynamicIndexBuffer dib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb),
-              "DynamicIndexBuffer(ThirtyTwoBits, ...) throws CreateIndexBuffer16's message");
+                  [&] { DynamicIndexBuffer dib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb32),
+              "DynamicIndexBuffer(ThirtyTwoBits, ...) throws the shared CreateIndexBuffer32 refusal");
 
         // --- Microsoft XNA validates the public positive-capacity contract before allocation. ---
         check(ThrowsArgumentOutOfRange([&] { VertexBuffer vb(dev, 0); }),
@@ -152,6 +157,10 @@ public:
     SdlBufferConstructionThrowsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

@@ -232,8 +232,11 @@ namespace
     constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
+    // plans/plan_apple_m4.md AM4-030: wantHiDefProfile is now true for PSG-0008's reason -- this
+    // fixture reads the back buffer, which SOFTWARE-213 made HiDef-only, so under Reach it threw
+    // before its first check (profile_dead_tests.py: DEAD-ON-PROFILE).
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, false, false, true, false, false};
+                                 false, true, true, true, true, false, false, true, false, true};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};

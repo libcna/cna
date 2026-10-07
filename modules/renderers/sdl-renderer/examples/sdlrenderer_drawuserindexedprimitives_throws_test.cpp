@@ -6,7 +6,9 @@
 //
 // Same two-path shape as Task 721's DrawUserPrimitives: each overload checks "has an Effect been
 // applied" FIRST (shared, not SDL_Renderer-specific) -- with no effect applied, all 10 throw
-// std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.").
+// System::InvalidOperationException("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been
+// applied.") -- InvalidOperationException since SOFTWARE-253 restored Microsoft XNA's exception
+// type (it was std::runtime_error when this test was written).
 // With a real effect applied, every one of the 10 implementations calls
 // renderer_->CreateVertexBuffer(numVertices) BEFORE renderer_->CreateIndexBuffer16/32(indexCount) --
 // so CreateVertexBuffer's own std::runtime_error("SDL_Renderer does not support 3D:
@@ -21,18 +23,21 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <typeinfo>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -68,6 +73,27 @@ class SdlDrawUserIndexedPrimitivesThrowsTest : public Game
         }
     }
 
+    // Runs fn(); returns true iff it threw EXACTLY System::InvalidOperationException (not a
+    // subclass) whose what() is EXACTLY expectedMessage.
+    template <typename F>
+    static bool ThrowsExactInvalidOperation(F&& fn, const std::string& expectedMessage)
+    {
+        try
+        {
+            fn();
+            return false;
+        }
+        catch (const System::InvalidOperationException& e)
+        {
+            return typeid(e) == typeid(System::InvalidOperationException) &&
+                   std::strcmp(e.what(), expectedMessage.c_str()) == 0;
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -94,25 +120,25 @@ protected:
         const std::string kNo3D     = "SDL_Renderer does not support 3D: CreateVertexBuffer";
 
         // --- No effect applied: all 10 overloads throw the shared "no effect" message. ---
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx16, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx16, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionColor, 16-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpct, 0, 3, idx16, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpct, 0, 3, idx16, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionColorTexture, 16-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpt, 0, 3, idx16, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpt, 0, 3, idx16, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionTexture, 16-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpnt, 0, 3, idx16, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpnt, 0, 3, idx16, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionNormalTexture, 16-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx32, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx32, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionColor, 32-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpct, 0, 3, idx32, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpct, 0, 3, idx32, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionColorTexture, 32-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpt, 0, 3, idx32, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpt, 0, 3, idx32, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionTexture, 32-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpnt, 0, 3, idx32, 0, 1); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpnt, 0, 3, idx32, 0, 1); }, kNoEffect),
               "DrawUserIndexedPrimitives(VertexPositionNormalTexture, 32-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx16, 0, 1, vertexDecl); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx16, 0, 1, vertexDecl); }, kNoEffect),
               "DrawUserIndexedPrimitives(raw+VertexDeclaration, 16-bit) with no applied effect throws the exact expected message");
-        check(ThrowsExactRuntimeError([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx32, 0, 1, vertexDecl); }, kNoEffect),
+        check(ThrowsExactInvalidOperation([&] { dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vpc, 0, 3, idx32, 0, 1, vertexDecl); }, kNoEffect),
               "DrawUserIndexedPrimitives(raw+VertexDeclaration, 32-bit) with no applied effect throws the exact expected message");
 
         // --- Apply a real effect (does not throw on SDL_Renderer -- renderer-agnostic until draw). ---
@@ -162,6 +188,10 @@ public:
     SdlDrawUserIndexedPrimitivesThrowsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // SOFTWARE-213 made GetBackBufferData HiDef-only, as in XNA 4.0, and this fixture reads the
+        // back buffer -- so under GraphicsDeviceManager's default Reach profile it aborted before
+        // its first check (plans/plan_gpu_test_isolation.md GTI-0007 names the class).
+        gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
