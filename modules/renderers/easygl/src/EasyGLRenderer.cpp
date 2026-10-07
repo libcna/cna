@@ -4,6 +4,7 @@
 #endif
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
+#include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlStockShaderSources.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
@@ -11442,15 +11443,65 @@ namespace CNA::Internal::Renderers::EasyGL
 #endif
     }
 
+    namespace
+    {
+        // REMED-GFX-234 / WEBGPU-158: a declaration that names no Normal is not a lit vertex at any
+        // stride, so a lit BasicEffect draw of one takes the unlit family -- the rule WebGPU,
+        // Vulkan, SDL_GPU and Direct3D 11 select their stock programs by. SOFTWARE-130 rightly made
+        // the effect flags pick the program variant, and with it this question went unasked: the
+        // lit program then read the disabled aNormal's (0,0,0) and normalized it. That is undefined
+        // GLSL; macOS's GL lights such a vertex with no diffuse term at all, so the declared colour
+        // came out black (emissive only). Every bound per-vertex
+        // stream is asked, so normals kept in a second buffer still light; a buffer with no
+        // declaration keeps the stride-derived convenience layout and is left alone.
+        [[nodiscard]] const GpuDrawParams& StockLightingFollowsDeclarationEXT(
+            const IVertexBufferRenderer& primary, const GpuDrawParams& params,
+            std::optional<GpuDrawParams>& unlitStorage)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+            if (!params.lightingEnabled || params.pbr || params.skinned || params.envMapping ||
+                params.dualTexture || params.compiledEffectRuntime != nullptr ||
+                params.customEffectRenderer != nullptr || params.customEffectRequested)
+                return params;
+
+            bool declared = false;
+            const auto namesNormal = [&declared](const IVertexBufferRenderer& buffer)
+            {
+                const auto& elements =
+                    static_cast<const EasyGLVertexBufferRenderer&>(buffer).GetDeclarationElements();
+                if (elements.empty()) return false;
+                declared = true;
+                return CNA::Internal::Graphics::DeclarationNamesUsageEXT(
+                    elements, VertexElementUsage::Normal);
+            };
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const GpuVertexStreamBinding& stream =
+                    params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency != 0 || stream.buffer == nullptr) continue;
+                if (namesNormal(*stream.buffer)) return params;
+            }
+            if (namesNormal(primary) || !declared) return params;
+
+            unlitStorage.emplace(params);
+            unlitStorage->lightingEnabled = false;
+            return *unlitStorage;
+        }
+    }
+
     void EasyGLRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb_in,
                                                  const Matrix& world,
                                                  const Matrix& view,
                                                  const Matrix& projection,
                                                  PrimitiveType primitive,
                                                  int primitiveCount,
-                                                 const GpuDrawParams& params)
+                                                 const GpuDrawParams& requestedParams)
     {
         if (metagl::IsContextLost()) return;
+        std::optional<GpuDrawParams> unlitParams;
+        const GpuDrawParams& params =
+            StockLightingFollowsDeclarationEXT(vb_in, requestedParams, unlitParams);
         const auto& candidateVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
         std::vector<std::vector<std::array<std::uint8_t, 16>>> clippedPolygons;
         const bool stockLineLoop = CanDrawStockWireframeAsLineLoops(
@@ -11581,9 +11632,12 @@ namespace CNA::Internal::Renderers::EasyGL
                                                         const Matrix& projection,
                                                         PrimitiveType primitive,
                                                         int primitiveCount,
-                                                        const GpuDrawParams& params)
+                                                        const GpuDrawParams& requestedParams)
     {
         if (metagl::IsContextLost()) return;
+        std::optional<GpuDrawParams> unlitParams;
+        const GpuDrawParams& params =
+            StockLightingFollowsDeclarationEXT(vb_in, requestedParams, unlitParams);
         const auto& candidateVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
         const auto& candidateIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
         std::vector<int> visibleWireTriangles;
@@ -11743,9 +11797,12 @@ namespace CNA::Internal::Renderers::EasyGL
                                                           PrimitiveType primitive,
                                                           int primitiveCount,
                                                           int instanceCount,
-                                                          const GpuDrawParams& params)
+                                                          const GpuDrawParams& requestedParams)
     {
         if (metagl::IsContextLost()) return;
+        std::optional<GpuDrawParams> unlitParams;
+        const GpuDrawParams& params =
+            StockLightingFollowsDeclarationEXT(vb_in, requestedParams, unlitParams);
         ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
@@ -11937,9 +11994,12 @@ namespace CNA::Internal::Renderers::EasyGL
                                               PrimitiveType primitive,
                                               const IStorageBufferRenderer& argumentBuffer,
                                               int argumentByteOffset,
-                                              const GpuDrawParams& params)
+                                              const GpuDrawParams& requestedParams)
     {
         if (metagl::IsContextLost()) return;
+        std::optional<GpuDrawParams> unlitParams;
+        const GpuDrawParams& params =
+            StockLightingFollowsDeclarationEXT(vb_in, requestedParams, unlitParams);
         ApplyStencilPrimitiveTopology(primitive);
         if (!SupportsIndirectDrawEXT())
             throw System::NotSupportedException(
