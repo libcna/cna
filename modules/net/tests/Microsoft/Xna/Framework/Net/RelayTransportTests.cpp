@@ -52,6 +52,9 @@ TEST(RelayTransportTest, ConnectionFailureIsObservedWithoutCallbackOrDetachedWor
     while(bridge.status().state==RelayTransportState::Connecting&&std::chrono::steady_clock::now()<limit)
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     const auto status=bridge.status();EXPECT_EQ(RelayTransportState::Failed,status.state);
-    EXPECT_EQ("RELAY_TRANSPORT_UNAVAILABLE",status.error);EXPECT_EQ(0,status.sent);EXPECT_EQ(0,status.received);EXPECT_EQ(0,status.queued);
+    // A build that cannot attempt the connection at all -- its libcurl has no ws/wss, as Apple's
+    // system libcurl has not -- fails the same way, observed with that refusal instead.
+    const char* refusal=relayTransportRefusal();
+    EXPECT_EQ(refusal!=nullptr?refusal:"RELAY_TRANSPORT_UNAVAILABLE",status.error);EXPECT_EQ(0,status.sent);EXPECT_EQ(0,status.received);EXPECT_EQ(0,status.queued);
     bridge.stop();EXPECT_EQ(RelayTransportState::Stopped,bridge.status().state);
 }

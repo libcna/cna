@@ -10,6 +10,10 @@ namespace CNA::Internal::Net {
 /** @brief Derives the relay URL from the validated deployment authority, never a response URL.
  * @param configuration Credential-free deployment settings. @return Validated ws/wss URL. */
 std::string relayEndpoint(const CNA::GamerServices::Configuration& configuration);
+/** @brief The refusal every RelayWebSocket of this build meets before any I/O: no libcurl, or a
+ * libcurl without ws/wss (Apple's system libcurl is one).
+ * @return The relay error code, or nullptr where a connection can be attempted. */
+const char* relayTransportRefusal() noexcept;
 /** @brief One worker-owned verified WebSocket; never calls XNA objects or callbacks. */
 class RelayWebSocket {
 public:

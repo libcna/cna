@@ -51,10 +51,21 @@ std::string relayEndpoint(const CNA::GamerServices::Configuration& configuration
     char* raw=nullptr;
     if(curl_url_get(url.get(),CURLUPART_SCHEME,&raw,0)!=CURLUE_OK)throw CnaService::RelayError("RELAY_CONFIGURATION");
     const bool secure=std::string_view(raw)=="https";curl_free(raw);
-    if(curl_url_set(url.get(),CURLUPART_SCHEME,secure?"wss":"ws",0)!=CURLUE_OK||
+    // Spelling the address is not using it: without CURLU_NON_SUPPORT_SCHEME a libcurl built
+    // without WebSockets (Apple's system libcurl 8.7.1, any libcurl before 8.11 by default) refuses
+    // the scheme, and a valid configuration was reported as RELAY_CONFIGURATION instead of reaching
+    // RelayWebSocket's own RELAY_SECURE_WEBSOCKET_UNAVAILABLE.
+    if(curl_url_set(url.get(),CURLUPART_SCHEME,secure?"wss":"ws",CURLU_NON_SUPPORT_SCHEME)!=CURLUE_OK||
        curl_url_set(url.get(),CURLUPART_PATH,CnaService::RelayPath.data(),0)!=CURLUE_OK||
        curl_url_get(url.get(),CURLUPART_URL,&raw,0)!=CURLUE_OK)throw CnaService::RelayError("RELAY_CONFIGURATION");
     std::string result=raw;curl_free(raw);return result;
+}
+const char* relayTransportRefusal() noexcept {
+    const auto* version=curl_version_info(CURLVERSION_NOW);
+    if(!version||version->version_num<0x075600||!protocol(version->protocols,"ws")||
+       !protocol(version->protocols,"wss")||!(version->features&CURL_VERSION_SSL))
+        return "RELAY_SECURE_WEBSOCKET_UNAVAILABLE";
+    return nullptr;
 }
 struct RelayWebSocket::Impl {
     std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> handle{nullptr,curl_easy_cleanup};
@@ -106,10 +117,7 @@ RelayWebSocket::RelayWebSocket(const CNA::GamerServices::Configuration& configur
     const auto endpoint=relayEndpoint(configuration);
     static std::once_flag initialized;
     std::call_once(initialized,[]{check(curl_global_init(CURL_GLOBAL_DEFAULT));});
-    const auto* version=curl_version_info(CURLVERSION_NOW);
-    if(!version||version->version_num<0x075600||!protocol(version->protocols,"ws")||
-       !protocol(version->protocols,"wss")||!(version->features&CURL_VERSION_SSL))
-        throw CnaService::RelayError("RELAY_SECURE_WEBSOCKET_UNAVAILABLE");
+    if(const char* refusal=relayTransportRefusal())throw CnaService::RelayError(refusal);
     impl_->handle.reset(curl_easy_init());if(!impl_->handle)throw CnaService::RelayError("RELAY_TRANSPORT_UNAVAILABLE");
     impl_->stop=stop;auto* handle=impl_->handle.get();
     check(curl_easy_setopt(handle,CURLOPT_URL,endpoint.c_str()));
@@ -173,6 +181,7 @@ struct RelayWebSocket::Impl {};
 std::string relayEndpoint(const CNA::GamerServices::Configuration&) {
     throw CnaService::RelayError(NoRelayTransport);
 }
+const char* relayTransportRefusal() noexcept { return NoRelayTransport; }
 RelayWebSocket::RelayWebSocket(const CNA::GamerServices::Configuration&,
     GamerServices::ServiceRelayTicket, std::stop_token) {
     throw CnaService::RelayError(NoRelayTransport);
