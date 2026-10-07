@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "CnaTestThreads.h"
 
@@ -1572,16 +1573,31 @@ static int validate_object_dictionary(const CNA_Handle manager)
     }
 
     /* The C++ type name is a diagnostic: it is present and non-empty, and its spelling is not
-       asserted, because it is the toolchain's rather than this ABI's. */
+       asserted, because it is the toolchain's rather than this ABI's -- nor is its length, so the
+       copy goes into a buffer of the size reported (libc++ spells this vector in 70 bytes,
+       libstdc++ in 52; plans/plan_apple_m4.md AM4-075). */
     if (cna_object_dictionary_ext_get_type_name_size(dictionary, view("Vertices"), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        bytes == UINT64_C(0) ||
-        cna_object_dictionary_ext_copy_type_name(
-            dictionary, view("Vertices"), text, sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
-        cna_object_dictionary_ext_copy_type_name(
-            dictionary, view("Vertices"), text, 1U, &bytes) != CNA_RESULT_BUFFER_TOO_SMALL) {
+        bytes == UINT64_C(0)) {
         (void)cna_object_dictionary_ext_destroy(dictionary);
         return 0;
+    }
+    {
+        const uint64_t type_name_bytes = bytes;
+        char* const type_name = (char*)malloc((size_t)type_name_bytes);
+        const int copied = type_name != 0 &&
+            cna_object_dictionary_ext_copy_type_name(
+                dictionary, view("Vertices"), type_name, type_name_bytes, &bytes) ==
+                CNA_RESULT_SUCCESS &&
+            bytes == type_name_bytes &&
+            cna_object_dictionary_ext_copy_type_name(
+                dictionary, view("Vertices"), type_name, 1U, &bytes) ==
+                CNA_RESULT_BUFFER_TOO_SMALL;
+        free(type_name);
+        if (!copied) {
+            (void)cna_object_dictionary_ext_destroy(dictionary);
+            return 0;
+        }
     }
 
     /* A released handle is gone, and releasing it twice is refused rather than repeated. */
