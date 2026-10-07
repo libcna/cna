@@ -446,8 +446,17 @@ namespace CNA::Content::Pipeline
 
         std::string HashFileStreaming(const std::filesystem::path& path)
         {
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream)
+            // libc++ opens a directory as an ifstream and reports end-of-file on the first read,
+            // which would hash it as empty content; libstdc++ fails the stream. Refused up front
+            // so both libraries give the same answer.
+            std::error_code directoryError;
+            const bool isDirectory = std::filesystem::is_directory(path, directoryError);
+            std::ifstream stream;
+            if (!isDirectory)
+            {
+                stream.open(path, std::ios::binary);
+            }
+            if (isDirectory || !stream)
             {
                 throw std::runtime_error("cannot open '" +
                                          CNA::Internal::ContentPathToUtf8(path) +
