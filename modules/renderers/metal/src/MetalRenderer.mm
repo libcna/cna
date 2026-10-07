@@ -2435,7 +2435,16 @@ public:
         float u1=(float)(s.X+s.Width)/t.GetWidth(), v1=(float)(s.Y+s.Height)/t.GetHeight();
         if((int)effects & 1) std::swap(u0,u1); if((int)effects & 2) std::swap(v0,v1);
         const float cr=c.getRProperty()/255.f,cg=c.getGProperty()/255.f,cb=c.getBProperty()/255.f,ca=c.getAProperty()/255.f;
-        auto xf=[&](float x,float y){ float px=x-(x0+origin.X), py=y-(y0+origin.Y); float cs=std::cos(rotation),sn=std::sin(rotation); return std::array<float,2>{x0+origin.X+px*cs-py*sn,y0+origin.Y+px*sn+py*cs};};
+        // plans/plan_apple_m4.md AM4-033: `origin` is in SOURCE texels (ISpriteBatchRenderer), and
+        // XNA puts that point of the sprite at the destination position: the quad starts at
+        // -origin * (destination / source) and rotates about the destination's top-left. This used
+        // to pivot about x0 + origin unscaled without moving the quad, so any non-zero origin drew
+        // the sprite displaced (point_sampling_contract_test L2). Same arithmetic as WebGPU's.
+        const float originScaleX=s.Width!=0 ? static_cast<float>(d.Width)/static_cast<float>(s.Width) : 0.0f;
+        const float originScaleY=s.Height!=0 ? static_cast<float>(d.Height)/static_cast<float>(s.Height) : 0.0f;
+        const float originX=origin.X*originScaleX, originY=origin.Y*originScaleY;
+        const float cs=std::cos(rotation), sn=std::sin(rotation);
+        auto xf=[&](float x,float y){ const float px=x-x0-originX, py=y-y0-originY; return std::array<float,2>{x0+px*cs-py*sn,y0+px*sn+py*cs};};
         auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
         auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
