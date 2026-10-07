@@ -35,6 +35,12 @@ renderer count is not a goal.
 | RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ✅ |
 | RRC-018 | Retire `DIRECTX12`, `CANVAS`, `OPENGLES2` and `WEBGL1`: remove their families, EasyGL's ES 2.0 profiles and every integration that existed only for them | ✅ |
 | RRC-019 | Remove the four renderers' documents and plans; one retirement record; correct every current-state document | ✅ |
+| RRC-020 | `SDL_GPU` in a test-enabled multi-renderer build: the link group names the whole archive cycle | ✅ `c1959b961` |
+| RRC-021 | FNA3D's suites compile wherever FNA3D is compiled in and run where it is active | ✅ `8bbba7b4f` |
+| RRC-022 | A renderer family's example suite exists only where that family is the default | ✅ `f71f064b9` |
+| RRC-023 | DirectX 11 executables carry the cross lane's Wine+DXVK launcher | ✅ `f5b120dd5` |
+| RRC-024 | C API coverage generator: re-pin the approvals a re-declaration left stale | ✅ `bf410474b` |
+| RRC-025 | `WEBGPU` sizes its own Asyncify stack under Emscripten | ✅ `bfd4b9e73` |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1079,8 +1085,9 @@ at run time, has the same failure set before and after. A MinGW-w64 build (`DIRE
 `DIRECTX11`, `SOFTWARE`, `HEADLESS`) passes the 58 DirectX11 tests whose shared sources this change
 edited under Wine+DXVK, and its benchmark runs under `DIRECTX11`, `DIRECTX9` and `SOFTWARE`
 selected at run time. The `WEBGL2`+`WEBGPU` wasm bundle builds and runs the benchmark in headless
-Chrome under each (`WEBGPU` needs `-sASYNCIFY_STACK_SIZE=1048576`). **Not run:** native Windows or
-MSVC, macOS (`METAL`), the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
+Chrome under each (`WEBGPU` then needed `-sASYNCIFY_STACK_SIZE=1048576`; since `RRC-025` a build
+containing `WEBGPU` sizes it automatically). **Not run:** native Windows or MSVC, macOS (`METAL`),
+the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
 
 Found, not fixed (pre-existing, outside scope): in a multi-renderer tree the per-family example
 suites register for every compiled-in family but assert the default renderer's compile-time
@@ -1090,3 +1097,193 @@ consumer against an external `wgpu_native`; the C API coverage and limitations g
 the `texture-cube-value-copy` rule; `scripts/check_cnaext_matrix.py` misses a heading in
 `docs/cnaext-engine-layer.md`; the shared parity-fixture registration gives cross-compiled DirectX11
 executables no Wine emulator.
+
+**Status 2026-10-07:** fixed by `RRC-020`–`RRC-025` below -- the example-suite registration and
+its two `#error`s (`RRC-022`), `Fna3dSurfaceFormatTests` (`RRC-021`), the coverage and limitations
+generators (`RRC-024`) and the DirectX11 parity-fixture emulator (`RRC-023`); `RRC-020` and
+`RRC-025` close the SDL_GPU link-group cycle and the hand-set Asyncify stack. Still open:
+`CApi_InstalledConsumer` and `check_cnaext_matrix.py`.
+
+## RRC-020 — `SDL_GPU` in a test-enabled multi-renderer build: the link group names the whole cycle
+
+Found while repeating `RRC-018`'s multi-renderer verification with `SDL_GPU` added.
+
+- **Symptom.** Configuring
+  `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` (default
+  `OPENGLES3`) with `CNA_BUILD_TESTS=ON` stopped at generate time:
+  "modules/renderers/sdl-gpu/examples/CMakeLists.txt:67: The inter-target dependency graph, for the
+  target "cna_test_sdlgpu_constructor_exception_safety", contains the following strongly connected
+  component (cycle): group "RESCAN:{cna_input,cna_graphics_core,cna_renderer_sdl_gpu}" depends on
+  "cna_renderer_easygl" ... "cna_renderer_easygl" depends on group ...", once per other renderer.
+- **Root cause.** `SDLGPU-114`'s constructor-rollback fixture links
+  `$<LINK_GROUP:RESCAN,cna_input,cna_graphics_core,${RENDERER_TARGET}>` so a static link rescans the
+  graphics-core archive cycle. That cycle is `cna_graphics_core` ↔ `cna_input` ↔ every selected
+  renderer (each links back through `cna_renderer_common_setup`), plus the helper archives that link
+  back (`cna_renderer_d3dcommon`, `cna_renderer_mojoshader_effect`). In a single-renderer build the
+  group named all of it; in a multi-renderer build it named one renderer of several. CMake
+  substitutes the group for every use of its members, so the members left out depend on the group
+  and it on them, and a cycle through a link group is refused. Nothing new was cyclic; the group was
+  too small. The suite was reachable at all in an `OPENGLES3`-default tree only because of
+  `RRC-022`.
+- **Fix.** `cna_graphics_archive_cycle()` in `modules/renderers/CMakeLists.txt` names the cycle once
+  -- `cna_input`, `cna_graphics_core`, `CNA_RENDERER_TARGETS` and the helper archives that exist --
+  and the fixture groups all of it. A single-renderer build gets the same group as before.
+- **Verified.** `cmake-build-multi` with
+  `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_GPU;FNA3D;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` and tests on
+  configures, generates and builds (1,903 steps, no failure). A second multi-renderer tree with
+  `SDL_GPU` as the default (`SDL_GPU;OPENGLES3;VULKAN;FNA3D;SOFTWARE;HEADLESS`,
+  `CNA_SHARED_LIBRARY=OFF`, so the group is a real static `--start-group ... --end-group`) registers
+  SDL_GPU's 199 example tests; the fixture's group holds `cna_input`, `cna_graphics_core`, all six
+  renderer archives and `cna_renderer_mojoshader_effect`. On the private display the fixture links
+  and `SdlGpu_ConstructorExceptionSafety` passes, as do `SdlGpu_DrawLineTopology`, `SdlGpu_2D` and
+  `SdlGpu_Parity_blend_states`; `SdlGpu_Smoke` fails one capability check (`Texture3D`), as it does
+  in `plan_pre_sdlgpu_closeout.md`'s list of SDL_GPU's classic failures.
+
+## RRC-021 — FNA3D's suites compile wherever FNA3D is compiled in and run where it is active
+
+- **Symptom.** With `FNA3D` compiled in but not the default, `CnaTests` did not compile:
+  `'SurfaceFormat' has not been declared`, `'Ordinal' was not declared in this scope`,
+  `'FormatRowByteCount' was not declared in this scope` from line 127 (reproduced with the
+  `cmake-build-multi` compile command: `CNA_RENDERER_EASYGL` plus `CNA_RENDERER_PRESENT_FNA3D`).
+- **Root cause.** The file's own guards, not the build. `RTR-P9-9` widened its whole-file guard to
+  `CNA_RENDERER_FNA3D || CNA_RENDERER_PRESENT_FNA3D`; the transfer-boundary tests (`855fd8c21`,
+  `d5c3460db`) were written against the old one, and the merge left both: the new outer guard, a
+  stray inner `#if defined(CNA_RENDERER_FNA3D)` around the header and the first seven tests, and an
+  `#endif` after them. With only `PRESENT_` defined the last three tests compiled without the
+  header. The test registration, include roots and the `PRESENT_` macro were already right, and a
+  build with FNA3D as the default compiles both halves, which is why nothing saw it.
+- **Fix.** One guard around the whole file, as its four sibling suites have.
+- **Verified.** Compiles in `cmake-build-multi` (FNA3D present, `OPENGLES3` default), and running it
+  exposed the other half: 14 device tests in `Fna3dCompiledEffectTests` constructed an `Effect` on
+  whatever renderer was active and failed under `OPENGLES3` ("The active graphics renderer does not
+  support compiled XNA/FNA Effect Framework bytecode"). They now carry the capability gate the
+  file's other device tests already use -- compiled where FNA3D is, run where compiled effects
+  execute (`RTR-P9-9`). All 103 `Fna3d*` tests then pass both ways: under `OPENGLES3` 48 run and 55
+  skip; with `CNA_GRAPHICS_RENDERER=FNA3D` 102 run and 1 skips by its own check
+  (`SharedCubeAndVolumeSamplerContract`), the 52 compiled-effect tests among them.
+
+## RRC-022 — A renderer family's example suite exists only where that family is the default
+
+- **Symptom.** In `cmake-build-multi` (`OPENGLES3` default) `ninja` stopped on
+  `vulkan_cube_face_readback_dependency_test.cpp:45` and `vulkan_mrt_mip_finalization_test.cpp:50`:
+  `#error "... is Vulkan-only."`. Underneath, that tree registered 373 `Vulkan_*` tests and the
+  `SDL_Renderer_*`, `WebGPU_*`, `Software_*` and `Stub_*` suites, every one of which ran `OPENGLES3`
+  under another family's name; 169 of the tree's 212 failures at `9fbe34468` were those.
+- **Root cause.** The per-family loop in `modules/renderers/CMakeLists.txt` re-pointed
+  `CNA_GRAPHICS_RENDERER` to the identity of the family it entered (`RTR-P6`), and each family's
+  `examples/CMakeLists.txt` is entered from there. Those gates are equality with
+  `CNA_GRAPHICS_RENDERER`, meaning "this family is the default" (`RTR-P9-13`): the sources compile
+  against the default's project-wide `CNA_RENDERER_<X>` and run the default renderer. The re-point
+  turned every such gate into list membership. `VKPAR-0003`/`VKPAR-0016` had worked around it in two
+  families (EasyGL, Headless); the other nine still registered. The `#error` was right: it caught a
+  target that could not mean what its name said.
+- **Fix.** The loop no longer re-points `CNA_GRAPHICS_RENDERER`; inside a family it names the
+  default, which is what every example gate assumed. The two family libraries that read it as "am I
+  selected" (`software`, `sdl-renderer`) ask list membership instead, and the EasyGL/Headless
+  workarounds collapse into the ordinary gate. A single-renderer build is unchanged: the loop ran
+  once, with the default. `docs/runtime-renderer-selection.md` states the rule.
+- **Verified.** At `bfd4b9e73` the full suite of `cmake-build-multi` (ten renderers, see `RRC-020`)
+  on the private display runs 11,424 tests and fails 40, against 212 of 12,078 at `9fbe34468` in the
+  eight-renderer configuration: 39 are among the parent's own failures, and the 40th, a timing-based
+  scaling test, passes alone. Of the parent's other 173, 169 are the de-registered example tests,
+  `CApiReleaseGate` is `RRC-024`, and three networking and offline cases pass in both runs of the
+  fixed tree. Only the default's example suite registers (400 `EasyGL_*`), and the WebGPU browser
+  pages no longer join a `WEBGL2`-default wasm bundle. All ten renderers run the renderer benchmark
+  selected at runtime from that one binary, and the seven `CrossRendererContractTest` cases walk all
+  ten. A multi-renderer tree whose default is `VULKAN`
+  (`VULKAN;OPENGLES3;SDL_GPU;WEBGPU;SOFTWARE;HEADLESS;STUB`) registers exactly the Vulkan suite --
+  373 tests, the two former `#error` sources among them -- and no other family's; there both of
+  those, `Vulkan_SpriteBatchPresentation`, `Vulkan_Demo2D_SmokeTest` and
+  `Vulkan_BlendState_AlphaBlend` build and pass on the private display, on Vulkan (563 `[PASS]`
+  checks, no `[FAIL]`, in the two matrix fixtures). Reconfigured as a single-renderer `VULKAN`
+  build, the same tree registers the same 373 Vulkan tests and the same five pass (575 `[PASS]`, no
+  `[FAIL]`).
+
+## RRC-023 — DirectX 11 executables carry the cross lane's Wine+DXVK launcher
+
+- **Symptom.** In a MinGW cross build, `DirectX11_DrawLineTopology` was registered as the bare
+  Windows `.exe`; so were `DirectX11_InstancedTexturedDraw`, `DirectX11_Win32HardwareSmoke` and the
+  32 shared parity fixtures (`DirectX11_Parity_*`). CTest cannot run a PE on Linux.
+- **Root cause.** The family has two registration routes. `cna_directx11_ctest_command()` wraps a
+  command in `scripts/run-wine-dxvk.sh` when cross-compiling, and the 264 DirectX parity fixtures go
+  through it. The three tests added for native Windows in `WIN11-0011-0019` registered
+  `$<TARGET_FILE:...>` directly, and `cna_register_parity_fixtures()` registers every renderer's
+  fixtures by bare target name, which CTest launches through the target's `CROSSCOMPILING_EMULATOR`
+  -- a property `cna_directx11_test()` never set (`cna_sdlgpu_test()` does).
+- **Fix.** `cna_directx11_test()` sets `CROSSCOMPILING_EMULATOR` to `scripts/run-wine-dxvk.sh` when
+  cross-compiling, so any registration by target name runs through Wine+DXVK, and the three direct
+  registrations name their targets. Native builds set no emulator and run the same executables.
+- **Verified** in the MinGW-w64 tree `cmake-build-d3d11` (`DIRECTX11` default with `DIRECTX9`,
+  `SOFTWARE`, `HEADLESS`), tests on. At `9fbe34468` its generated `CTestTestfile` registered
+  `DirectX11_DrawLineTopology` as `.../cna_test_directx11_draw_line_topology.exe`, likewise the
+  others above; now each is `scripts/run-wine-dxvk.sh <exe>`. Under Wine 10 and DXVK 2.6.0 on the
+  private display, `DrawLineTopology` (DXVK engaged, every `[PASS]` held), `InstancedTexturedDraw`,
+  `Win32HardwareSmoke`, `DirectX11_Smoke`, `DirectX11_DxvkGate`, `BlendState_SeparateFunctions` and
+  all 32 `DirectX11_Parity_*` pass. A shell that exports `SDL_VIDEODRIVER=x11` fails every Wine run,
+  since the Windows SDL has no such driver; unset it. **Not run:** native Windows or MSVC, where
+  `CMAKE_CROSSCOMPILING` is false, no emulator is set and the executables run as before.
+
+## RRC-024 — C API coverage generator: re-pin the approvals a re-declaration left stale
+
+- **Symptom.** `generate_coverage_inventory.py --check` (the `CApiCoverageMatrix` gate) and
+  `generate_limitations.py --check` stopped: "texture-cube-value-copy: its pattern matches only
+  declarations already approved by graphics-resource-move-semantics,
+  texture3d-and-texturecube-complete-contract -- move them there rather than re-running approval".
+- **Root cause.** Approval pins are content-derived IDs of the reviewed declarations. `MSR-027`
+  (`af3c5037c`) moved `TextureCube`'s and `Texture2D`'s copy constructor and copy assignment from
+  `= default` to out-of-line definitions with a named parameter: the same operations with the same
+  sharing semantics, but new IDs. `texture-cube-value-copy` then approved nothing that exists and
+  the dead-rule gate stopped; `texture-and-texture2d-complete-contract` still approved other
+  symbols, so its two copy members fell silently to `planned`. The rule was not stale and the parser
+  was right; the diagnostic was misleading, because it listed only declarations owned by other rules
+  and never the unowned re-declarations. Behind that gate, `CBIND-156`'s two `Effect::*Internal`
+  hooks were `planned` under the finished `CBIND-080`.
+- **Fix.** The four copy members are re-pinned to the rules that reviewed them; the two `Effect`
+  hooks join `buffer-internal-set-data-helpers`, the rule for the same kind of helper
+  (`ThrowIfDisposedForCloneInternal`). The dead-rule diagnostic now reports a rule whose pins no
+  longer exist while its pattern reaches unapproved declarations, with a fixture test.
+  `COVERAGE.md`, `LIMITATIONS.md` and `RELEASE_GATE.md` regenerated with their own tools.
+- **Verified.** `generate_coverage_inventory.py --check` (469 headers, 8,142 symbols: 7,026
+  implemented, 15 partial, 658 planned, 443 not applicable), `generate_limitations.py --check`,
+  `check_release_gate.py --check` (verdict unchanged: not ready, the same one criterion) and
+  `test_coverage_scope.py` (32 of 32) pass; run against the parent's mappings, the new diagnostic
+  names the two stale pins and the two re-declarations. In `cmake-build-multi` the coverage, scope,
+  limitations, release, ABI header, ABI export, declared-export, export-count and compatibility
+  gates pass: ABI baseline current (197 structs, 3,210 exports), declared and exported agree on
+  3,210 routes, C ABI `0.45.0` unchanged.
+
+## RRC-025 — `WEBGPU` sizes its own Asyncify stack under Emscripten
+
+- **Symptom.** In the `WEBGL2`+`WEBGPU` bundle `WEBGL2` ran, and `WEBGPU` aborted with
+  `RuntimeError: unreachable` on its first Asyncify unwind unless linked with
+  `-sASYNCIFY_STACK_SIZE=1048576` by hand (`RRC-018`).
+- **Root cause.** Measured rather than assumed: the bundle's `Asyncify.StackSize` was raised from
+  the page and every unwind's size recorded. Under `WEBGPU` the deepest unwinds are the adapter and
+  device requests inside `GraphicsDevice` construction, 4,324 and 4,484 bytes (renderer benchmark;
+  `cna_house3d_demo`: 4,544 and 4,704), against Emscripten's default 4,096. Every later wait, frame
+  waits and the depth probe's readback inside `Draw` included, stays under 2.2 KB. `WEBGL2` suspends
+  only at the frame boundary, 896 bytes. So the requirement is real but small -- 1 MiB was never
+  measured -- and there is no Asyncify misuse to remove: blocking device construction over an
+  asynchronous API is what Asyncify exists for.
+- **Fix.** `modules/renderers/webgpu/CMakeLists.txt` adds `-sASYNCIFY_STACK_SIZE=65536` to
+  `CNA::EmscriptenAsyncify` under Emscripten, so every Asyncify executable of a build that compiles
+  `WEBGPU` in -- alone or beside `WEBGL2` -- gets it, an order of magnitude above the measured depth
+  for game code above a suspension. A `WEBGL2`-only build keeps the default; the C API, which links
+  `ASYNCIFY=0`, is untouched. The documents describe the automatic behaviour.
+- **Verified** with `cmake-build-wasm-multi` (`WEBGL2` default with `WEBGPU`, Debug, emsdk 6.0.9) in
+  headless Chrome 152 on the real GPU through the private display runner, each renderer selected
+  through `Module.cnaPreferredRenderer` with no extra flag: the benchmark exits 0 under `WEBGL2`
+  (deepest unwind 896 bytes) and under `WEBGPU` (4,484, clean device teardown), and
+  `cna_house3d_demo --depth-probe` reports "the nearer plane occludes" under both. Configure-only: a
+  `WEBGL2`-only tree links its 23 Asyncify executables without the option, a `WEBGPU`-only tree all
+  26 with it, the bundle all 66. **Not run:** a `WEBGPU`-only bundle in a browser.
+
+Found, not fixed (pre-existing, outside these six): `IndexedDrawDeferredTests` (9 cases) and
+`IndexBufferEmptyDataTest` (1) compile their Vulkan and WebGPU device blocks under
+`CNA_RENDERER_PRESENT_*` but run them on whatever renderer is active, so they fail in a
+multi-renderer tree whose default is neither -- the shape `RRC-021` closed for FNA3D; `common/d3d`
+is entered only when `DIRECTX11` is the default and `metal` only for a `METAL` default, so a
+multi-renderer build holding either as a non-default family should not link (read from the code, not
+built); with `SDL_GPU` selected, its two `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail as
+`plan_street_perf.md` already records; the benchmark banner still names the compile-time default
+(`RRC-017`).

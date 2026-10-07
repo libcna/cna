@@ -237,6 +237,7 @@ configure time, not merely to exist.
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
 | `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ builds (`RRC-018`, 2026-10-06). Its full CTest corpus (12,077 tests) and every family's own suite run with that family selected at runtime fail exactly the tests the parent commit fails in the same configuration, apart from load-sensitive cases that pass alone |
+| `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_GPU;FNA3D;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-020`–`RRC-022`, 2026-10-07): only the default's example suite registers. Its full CTest corpus (11,424 tests) fails 39 tests, each also failing in the eight-renderer set above at its parent commit; every one of the ten renderers runs the renderer benchmark selected at runtime from the one binary |
 | `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome on the real GPU (2026-10-07, emsdk 6.0.9) the renderer benchmark and `cna_house3d_demo --depth-probe` ran under each, selected at runtime through `Module.cnaPreferredRenderer`, with no extra link flags: a build that compiles `WEBGPU` in sizes the Asyncify stack for it automatically (`RRC-025`). With Emscripten's default 4 KiB stack `WEBGPU` aborted with `unreachable` (`RRC-018`) |
 
 Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28 or
@@ -307,7 +308,10 @@ scripts/run-all-renderer-smoke-tests.sh --multi "HEADLESS;SOFTWARE;STUB"
 It configures one build, then selects each renderer in turn through the `CNA_GRAPHICS_RENDERER`
 environment variable. A renderer with no smoke test registered in that build is reported as
 **skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
-would otherwise look like success.
+would otherwise look like success. Only the default's family registers its example suite
+(`RRC-022`), so another renderer is smoke-tested through the default family's `GraphicsSmoke`
+tests where it has some (the GL, Vulkan, WebGPU and SDL_RENDERER families do) and is otherwise
+reported as skipped: in the set above, `SOFTWARE` and `STUB` are.
 
 ### Comparing renderers against the XNA oracle, from one binary
 
