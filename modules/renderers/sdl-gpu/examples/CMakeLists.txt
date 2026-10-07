@@ -58,6 +58,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT
                 "SDL_VIDEODRIVER=dummy;DISPLAY=;WAYLAND_DISPLAY=")
         endif()
+    elseif(APPLE)
+        # plans/plan_apple_m4.md AM4-069: SDL_gpu's only Apple driver is Metal, so pinning the
+        # Linux "vulkan" here made every headless registration fail before its first check
+        # ("SDL_HINT_GPU_DRIVER vulkan unsupported!"). SDL's Metal driver is also only available
+        # under a video driver that can create a Metal view (cocoa/uikit), so the headless runs
+        # keep the native environment.
+        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "metal")
+        set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     else()
         set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "vulkan")
         set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -364,13 +372,31 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # normal platform window and public lifecycle while replacing only SDL_gpu presentation with
     # the renderer-owned virtual backbuffer. This same invocation is portable to isolated D3D12
     # runners where a real swapchain is unavailable.
-    cna_register_renderer_test(NAME SdlGpu_2D_HeadlessDriver
-        COMMAND cna_test_sdlgpu_2d
-        TIMEOUT 60 LABELS "SdlGpu;Parity"
-        ENVIRONMENT
-            "${CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER};CNA_SDLGPU_TEST_FORCE_HEADLESS=1")
-    set_tests_properties(SdlGpu_2D_HeadlessDriver PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    #
+    # The renderer accepts that switch only on SDL's isolated dummy/offscreen video drivers, so this
+    # registration names one itself. Inheriting CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT made it the
+    # x11 integration environment on Linux and cocoa on Apple, where the renderer refused the
+    # switch before the first frame ("requires the SDL dummy or offscreen video driver"). Apple has
+    # no isolated pairing at all: SDL prepares its Metal driver only under a video driver that can
+    # create a Metal view (METAL_PrepareDriver tests Metal_CreateView, which only cocoa/uikit
+    # provide), so dummy/offscreen cannot create the device this test needs. The virtual
+    # backbuffer is covered there by the null-window SdlGpu_HeadlessGraphicsDevice and
+    # SdlGpu_BackbufferFormat registrations instead.
+    if(WIN32)
+        set(_cna_sdlgpu_isolated_headless_environment "${CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT}")
+    elseif(NOT APPLE)
+        set(_cna_sdlgpu_isolated_headless_environment
+            "SDL_VIDEODRIVER=offscreen;DISPLAY=;WAYLAND_DISPLAY=")
+    endif()
+    if(DEFINED _cna_sdlgpu_isolated_headless_environment)
+        cna_register_renderer_test(NAME SdlGpu_2D_HeadlessDriver
+            COMMAND cna_test_sdlgpu_2d
+            TIMEOUT 60 LABELS "SdlGpu;Parity"
+            ENVIRONMENT
+                "${_cna_sdlgpu_isolated_headless_environment};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER};CNA_SDLGPU_TEST_FORCE_HEADLESS=1")
+        set_tests_properties(SdlGpu_2D_HeadlessDriver PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
     cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite sdlgpu_diag_single_sprite.cpp)
