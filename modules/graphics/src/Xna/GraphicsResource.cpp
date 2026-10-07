@@ -16,10 +16,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // them while it builds its state collections. Devices created on several threads at once
         // raced on one aliases list and faulted (RUST-UPSTREAM-023). Recursive, because sharing
         // detaches and a dispose raises Disposing on aliases that may detach in turn.
+        //
+        // Deliberately never destroyed. It is first used after the static preset states are
+        // constructed, so as an ordinary function-local static it was destroyed BEFORE them at
+        // exit, and their destructors then locked a destroyed mutex: harmless on glibc, but
+        // Darwin's pthread_mutex_lock reports EINVAL, libc++ throws, and every process that had
+        // shared a preset state terminated on exit (plans/plan_apple_m4.md AM4-022).
         std::recursive_mutex& IdentityMutex()
         {
-            static std::recursive_mutex mutex;
-            return mutex;
+            static auto* const mutex = new std::recursive_mutex();
+            return *mutex;
         }
     }
 
