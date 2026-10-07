@@ -191,8 +191,10 @@ Leaving `CNA_GRAPHICS_RENDERERS` unset is single-renderer mode, unchanged in eve
 Only the default renderer's `CNA_RENDERER_<X>` macro is defined project-wide; each family's own
 macro is private to that family's target. This keeps the compile-time accessors
 (`getCurrentGraphicsRendererType()`) and the existing renderer-gated tests and examples meaningful —
-they all describe the **default**. Making the test corpus itself renderer-agnostic is a separate
-piece of work (`plans/plan_runtimerenderer.md` phase P9).
+they all describe the **default**. A renderer family's example suite is therefore registered only
+in a build whose default is that family; the other compiled-in families are covered there by their
+device-free suites (below) and by runtime selection. Making the test corpus itself
+renderer-agnostic is a separate piece of work (`plans/plan_runtimerenderer.md` phase P9).
 
 `CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in, and
 `CNA_RENDERER_PRESENT_<IDENTITY>` is defined on the test executable for **every** compiled-in

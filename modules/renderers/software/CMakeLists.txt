@@ -1,4 +1,4 @@
-if(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
+if("SOFTWARE" IN_LIST CNA_RENDERER_IDENTITIES)
     file(GLOB _cna_software_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
     # plans/plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the
     # global scalar, which names the build DEFAULT and is only correct here because the caller

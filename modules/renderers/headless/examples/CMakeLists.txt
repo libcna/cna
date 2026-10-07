@@ -16,12 +16,9 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # plans/plan_vulkan_parity.md VKPAR-0003, the same RTR-P9-13 rule as the EasyGL block: these
 # TUs include the renderer-private CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp and
 # assert the HEADLESS renderer's behaviour, but they run against whatever renderer the build
-# DEFAULTS to. CNA_GRAPHICS_RENDERER is re-pointed per family by modules/renderers/
-# CMakeLists.txt, so a multi-renderer build with HEADLESS merely in CNA_GRAPHICS_RENDERERS
-# entered this block and produced six targets that cannot even find that header -- the
-# include directory reaches them only when headless is the default renderer. Ask the default.
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS"
-   AND CNA_GRAPHICS_RENDERER STREQUAL _cna_default_renderer_identity)
+# DEFAULTS to -- so this block exists only when HEADLESS is the default. CNA_GRAPHICS_RENDERER
+# names that default here (modules/renderers/CMakeLists.txt does not re-point it per family).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     enable_testing()
 
     macro(cna_headless_test target src)

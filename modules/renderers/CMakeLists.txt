@@ -154,24 +154,28 @@ if(TARGET cna_mojoshader)
     add_subdirectory(common/mojoshader)
 endif()
 
-# plans/plan_runtimerenderer.md phase P6: each family's own CMakeLists.txt guards on
-# `CNA_GRAPHICS_RENDERER STREQUAL "<ITS IDENTITY>"` and defines `${RENDERER_TARGET}`. Both of those
-# are scalars naming the DEFAULT renderer, so entering a non-default family's directory without
-# re-establishing them would either skip its block entirely or make it redefine the default's
-# target. Re-point both per family instead; in single-renderer mode this loop runs once with the
-# values it already had.
+# plans/plan_runtimerenderer.md phase P6: enter every selected family, not only the default one.
+# A family derives its own target from its own directory (RTR-P6-6) and receives its own identity
+# macros through CNA_RENDERER_TARGET_DEFINE, re-pointed per family below; in single-renderer mode
+# this loop runs once with the values it already had.
+#
+# CNA_GRAPHICS_RENDERER is deliberately NOT re-pointed: inside every family directory it keeps
+# naming the build DEFAULT. Each family's examples/CMakeLists.txt gates its suite on equality with
+# it, because those executables are compiled against the default's project-wide CNA_RENDERER_<X>
+# macro and run the default renderer (plans/plan_runtimerenderer.md RTR-P9-13). Re-pointing it
+# turned every one of those gates into list membership, so a multi-renderer build registered each
+# compiled-in family's suite against the default: two Vulkan sources stopped on their own #error
+# and the rest ran the default renderer under another family's name. A family that needs to know
+# it is selected asks list membership instead.
 set(_cna_entered_families)
-set(_cna_saved_graphics_renderer "${CNA_GRAPHICS_RENDERER}")
 
 list(LENGTH CNA_SELECTED_RENDERER_FAMILIES _cna_family_count)
 math(EXPR _cna_family_last "${_cna_family_count} - 1")
 foreach(_cna_family_index RANGE ${_cna_family_last})
     list(GET CNA_SELECTED_RENDERER_FAMILIES ${_cna_family_index} _cna_renderer_family)
-    list(GET CNA_RENDERER_IDENTITIES ${_cna_family_index} _cna_renderer_identity)
     list(GET CNA_RENDERER_TARGETS ${_cna_family_index} _cna_renderer_target)
     list(GET CNA_RENDERER_TARGET_DEFINES ${_cna_family_index} _cna_renderer_target_define)
 
-    set(CNA_GRAPHICS_RENDERER "${_cna_renderer_identity}")
     set(CNA_RENDERER_TARGET_DEFINE "${_cna_renderer_target_define}")
 
     # plans/plan_runtimerenderer.md RTR-P6-3: RENDERER_TARGET is deliberately NOT re-pointed here any
@@ -182,10 +186,6 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     # (cna_add_renderer / cna_renderer_target_name) and publishes it into its own scope, so the
     # overwrite has no remaining reader: verified across every family that none reads
     # ${RENDERER_TARGET} before establishing its own target.
-    #
-    # CNA_GRAPHICS_RENDERER and CNA_RENDERER_TARGET_DEFINE still are re-pointed: family
-    # CMakeLists.txt files guard on `CNA_GRAPHICS_RENDERER STREQUAL "<IDENTITY>"`, and the define
-    # names the identity being entered.
 
     # plans/plan_runtimerenderer.md phase P11: several IDENTITIES may share one implementation family --
     # EasyGL serves up to five. The family directory defines one target and must be entered once;
@@ -200,8 +200,6 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
         add_subdirectory(${_cna_renderer_family})
     endif()
 endforeach()
-
-set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
 
 # Compile the descriptors of every family this configuration did NOT enter above, so that no
 # registered renderer's pre-construction contract can rot unseen between the rare builds that
