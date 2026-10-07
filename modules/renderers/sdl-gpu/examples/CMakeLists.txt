@@ -333,9 +333,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # TouchPanel/TextInput/Mouse references after the renderer/graphics cycle as well. The group
     # is the whole archive cycle: in a multi-renderer build it also holds every other renderer.
     cna_graphics_archive_cycle(_cna_sdlgpu_archive_cycle)
-    list(JOIN _cna_sdlgpu_archive_cycle "," _cna_sdlgpu_archive_group)
-    target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
-        "$<LINK_GROUP:RESCAN,${_cna_sdlgpu_archive_group}>")
+    if(APPLE)
+        # plans/plan_apple_m4.md AM4-039: CMake implements the RESCAN link group only for
+        # GNU-style linkers and refuses it at configure time for Apple's. ld64 needs no group: it
+        # keeps rescanning every static archive on the line until nothing new resolves.
+        target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
+            ${_cna_sdlgpu_archive_cycle})
+    else()
+        list(JOIN _cna_sdlgpu_archive_cycle "," _cna_sdlgpu_archive_group)
+        target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
+            "$<LINK_GROUP:RESCAN,${_cna_sdlgpu_archive_group}>")
+    endif()
     if(CNA_SDL_GPU_SHADERCROSS)
         target_compile_definitions(cna_test_sdlgpu_constructor_exception_safety PRIVATE
             CNA_SDL_GPU_SHADERCROSS)
