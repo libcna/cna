@@ -2427,11 +2427,6 @@ namespace CNA::Internal::Renderers::EasyGL
         if (auto reg = registry_.lock()) reg->add(this);
     }
 
-    EasyGLOcclusionQueryRenderer::~EasyGLOcclusionQueryRenderer()
-    {
-        if (auto reg = registry_.lock()) reg->remove(this);
-    }
-
     namespace {
         // GL_SAMPLES_PASSED. Not in metagl's QueryTarget, which is written to the ES 3.0 core set
         // where the only occlusion target is the BOOLEAN GL_ANY_SAMPLES_PASSED. Desktop GL has
@@ -2462,6 +2457,27 @@ namespace CNA::Internal::Renderers::EasyGL
                        ? kSamplesPassed
                        : ::easygl::QueryTarget::AnySamplesPassed;
         }
+
+        // The query GL holds active on the occlusion target, when CNA began it. GL refuses a second
+        // Begin while one is active, and any End ends whichever query is active, so this mirrors
+        // the target exactly rather than each object's own Begin/End calls.
+        const EasyGLOcclusionQueryRenderer* g_occlusionTargetOwner = nullptr;
+    }
+
+    EasyGLOcclusionQueryRenderer::~EasyGLOcclusionQueryRenderer()
+    {
+        if (auto reg = registry_.lock()) reg->remove(this);
+        // XNA lets a query be disposed between Begin and End without touching any other query.
+        // GL deletes such a query's name but keeps the object active on its target until it ends
+        // -- macOS does exactly that, where Mesa ends it implicitly -- so every later Begin on the
+        // target failed and no query ever completed again. End it here; ending it is this
+        // object's business, not the next query's.
+        if (g_occlusionTargetOwner == this)
+        {
+            if (!metagl::IsContextLost() && query_.is_created())
+                query_.end(OcclusionTarget());
+            g_occlusionTargetOwner = nullptr;
+        }
     }
 
     void EasyGLOcclusionQueryRenderer::Begin()
@@ -2470,12 +2486,15 @@ namespace CNA::Internal::Renderers::EasyGL
         if (g_preciseOcclusionTarget < 0)
             g_preciseOcclusionTarget = ResolvePreciseTarget(query_) ? 1 : 0;
         query_.begin(OcclusionTarget());
+        if (g_occlusionTargetOwner == nullptr)
+            g_occlusionTargetOwner = this;
     }
 
     void EasyGLOcclusionQueryRenderer::End()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
         query_.end(OcclusionTarget());
+        g_occlusionTargetOwner = nullptr;
     }
 
     bool EasyGLOcclusionQueryRenderer::IsComplete() const
@@ -2501,6 +2520,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLOcclusionQueryRenderer::release_gl_handle_only()
     {
         query_.reset_handle_no_gl();
+        if (g_occlusionTargetOwner == this)
+            g_occlusionTargetOwner = nullptr;
     }
 
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()
