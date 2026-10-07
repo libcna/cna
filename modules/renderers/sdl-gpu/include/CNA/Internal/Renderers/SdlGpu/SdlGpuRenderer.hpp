@@ -4251,6 +4251,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         void BindShadowReceptionEXT(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                     const ShadowReceptionEXT& shadow, Uint32 firstSampler);
         void EnsureDefaultShadowCubeEXT();
+        // GSC-0004/VKPAR-0004: the 1x1 opaque-black 2D and cube an unbound classic stock texture
+        // samples, created on the queueing side of every classic family's first draw.
+        void EnsureDefaultClassicNullTexturesEXT();
 
         /**
          * @brief The 1x1 opaque white texture, creating it if this is its first use. CNAEXT.
@@ -4764,6 +4767,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
         /// SMG-0032: the 1x1 white cube bound where a draw has no point-light shadow cube.
         std::unique_ptr<SdlGpuTextureCubeRenderer> defaultWhiteCubeTexture_;
+        /// The 1x1 opaque black an unbound classic stock 2D texture samples (XNA-measured).
+        std::unique_ptr<SdlGpuTextureRenderer> defaultBlackTexture_;
+        /// The 1x1 opaque-black cube an unbound EnvironmentMapEffect.EnvironmentMap samples.
+        std::unique_ptr<SdlGpuTextureCubeRenderer> defaultBlackCubeTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         struct CompiledProgramLifetimeStateEXT

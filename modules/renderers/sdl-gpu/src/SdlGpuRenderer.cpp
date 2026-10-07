@@ -6688,11 +6688,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    bool hasVertexColor,
                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
-        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
-        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
-        // replay keeps every allocation on the queueing side, where a failure still has a
-        // caller to report to.
+        // The replay binds XNA's opaque black when no texture is bound (GSC-0004), so the 1x1
+        // fillers have to exist by then. Creating them here rather than in the replay keeps every
+        // allocation on the queueing side, where a failure still has a caller to report to.
         EnsureDefaultPbrTextures();
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         TexturedDrawCommand command;
         command.hasVertexColor = hasVertexColor;
@@ -6755,11 +6755,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
-        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
-        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
-        // replay keeps every allocation on the queueing side, where a failure still has a
-        // caller to report to.
+        // The replay binds XNA's opaque black when no texture is bound (GSC-0004), so the 1x1
+        // fillers have to exist by then. Creating them here rather than in the replay keeps every
+        // allocation on the queueing side, where a failure still has a caller to report to.
         EnsureDefaultPbrTextures();
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         LitTexturedDrawCommand command;
         command.vertexLayout = vertexLayout;
@@ -7452,6 +7452,18 @@ namespace CNA::Internal::Renderers::SdlGpu
             NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
                                 SdlGpuResourceEventEXT::Released);
         }
+        if (defaultBlackTexture_ != nullptr)
+        {
+            defaultBlackTexture_.reset();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Released);
+        }
+        if (defaultBlackCubeTexture_ != nullptr)
+        {
+            defaultBlackCubeTexture_.reset();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Released);
+        }
     }
 
     // ---- plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception ---------------------
@@ -7474,6 +7486,37 @@ namespace CNA::Internal::Renderers::SdlGpu
         defaultWhiteCubeTexture_ = std::move(cube);
         NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
                             SdlGpuResourceEventEXT::Acquired);
+    }
+
+    void SdlGpuRenderer::EnsureDefaultClassicNullTexturesEXT()
+    {
+        // Created after EnsureDefaultPbrTextures() has succeeded, never inside its staged
+        // transaction, so an injected failure there still releases everything it acquired.
+        if (defaultBlackTexture_ == nullptr)
+        {
+            ImageData black{1, 1, {0, 0, 0, 255}, 1};
+            defaultBlackTexture_ = std::make_unique<SdlGpuTextureRenderer>(*this, black);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Acquired);
+        }
+        if (defaultBlackCubeTexture_ == nullptr)
+        {
+            auto cube = std::make_unique<SdlGpuTextureCubeRenderer>(
+                *this, 1, /*mipMap=*/false,
+                static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+            const std::array<std::uint8_t, 4> black{0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+            {
+                if (!cube->SetData(face, 0, 0, 0, 1, 1, black.data(),
+                                   static_cast<int>(black.size())))
+                    throw std::runtime_error(
+                        "CNA SDL_GPU: could not upload the opaque-black cube an unbound "
+                        "EnvironmentMapEffect.EnvironmentMap samples");
+            }
+            defaultBlackCubeTexture_ = std::move(cube);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Acquired);
+        }
     }
 
     SdlGpuRenderer::ShadowReceptionEXT SdlGpuRenderer::CaptureShadowReceptionEXT(
@@ -7658,11 +7701,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                     bool hasVertexColor,
                                                     const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
-        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
-        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
-        // replay keeps every allocation on the queueing side, where a failure still has a
-        // caller to report to.
+        // The replay binds XNA's opaque black when no texture is bound (GSC-0004), so the 1x1
+        // fillers have to exist by then. Creating them here rather than in the replay keeps every
+        // allocation on the queueing side, where a failure still has a caller to report to.
         EnsureDefaultPbrTextures();
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         AlphaTestDrawCommand command;
         command.hasVertexColor = hasVertexColor;
@@ -7726,10 +7769,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         // DualTextureEffect permits either texture property to be null. The shader still samples
-        // both slots, so an absent one is the multiplicative identity rather than a skipped draw.
-        // Create the same neutral-white texture the other stock families already use before the
-        // deferred command is queued.
+        // both slots, and an absent one reads XNA's opaque black (GSC-0004), so the draw zeroes
+        // rather than being skipped. Create the 1x1 fillers before the deferred command is queued.
         EnsureDefaultPbrTextures();
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         DualTextureDrawCommand command;
         command.hasVertexColor = hasVertexColor;
@@ -7801,6 +7844,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
                                                 const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         // params.envMap (ITextureCubeRenderer*) may be either a plain, uploaded TextureCube
         // (SdlGpuTextureCubeRenderer, SDLGPU-51) or a RenderTargetCube sampled after being rendered
@@ -8004,11 +8048,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
-        // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
-        // replay keeps every allocation on the queueing side, where a failure still has a
-        // caller to report to.
+        // The replay binds XNA's opaque black when no texture is bound (GSC-0004), so the 1x1
+        // fillers have to exist by then. Creating them here rather than in the replay keeps every
+        // allocation on the queueing side, where a failure still has a caller to report to.
         EnsureDefaultPbrTextures();
+        EnsureDefaultClassicNullTexturesEXT();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
@@ -8832,13 +8876,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
-        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
-        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
-        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
-        // renderer had to refuse the draw upstream instead.
+        // An unbound classic stock texture samples XNA's measured opaque black (GSC-0004,
+        // VKPAR-0004), not glTF's white: the PBR base colour keeps white, and an effect that does
+        // not sample (TextureEnabled=false) never reaches the binding because the shader branches
+        // on that flag itself.
         samplerBinding.texture = command.texture ? command.texture.texture
-                                                 : defaultWhiteTexture_->Texture();
+                                                 : defaultBlackTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "AlphaTest3D", command.maxMipLevel,
@@ -8885,8 +8928,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
         // slots in real XNA -- each gets its own sampler object, not a shared one.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
+        // Either unbound layer samples XNA's opaque black (GSC-0004), so a null layer zeroes the
+        // modulate-2x product instead of passing the other layer through.
         samplerBindings[0].texture = command.texture0 ? command.texture0.texture
-                                                      : defaultWhiteTexture_->Texture();
+                                                      : defaultBlackTexture_->Texture();
         samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU,
                                                       command.texture0AddressV,
                                                       command.texture0MaxAnisotropy,
@@ -8895,7 +8940,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       /*lodBias=*/0.0f,
                                                       command.texture0AddressW);
         samplerBindings[1].texture = command.texture1 ? command.texture1.texture
-                                                      : defaultWhiteTexture_->Texture();
+                                                      : defaultBlackTexture_->Texture();
         samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU,
                                                       command.texture1AddressV,
                                                       command.texture1MaxAnisotropy,
@@ -8949,13 +8994,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         // literal LinearClamp for the cube, described as "this project's other renderers' fixed
         // reflection-map sampling convention"; REMED-GFX-169 ended that convention by making
         // Vulkan honour GraphicsDevice.SamplerStates[1] for the same binding.
+        // Either unbound slot samples XNA's opaque black (GSC-0004's envmap_texture_null and
+        // envmap_cube_null references), in its own 2D or cube form.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-        samplerBindings[0].texture = command.texture.texture;
+        samplerBindings[0].texture = command.texture ? command.texture.texture
+                                                     : defaultBlackTexture_->Texture();
         samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                       command.addressV, command.maxAnisotropy,
                                                       "EnvironmentMap3D", command.maxMipLevel,
                                                       /*lodBias=*/0.0f, command.addressW);
-        samplerBindings[1].texture = command.envMapTexture.texture;
+        samplerBindings[1].texture = command.envMapTexture
+                                         ? command.envMapTexture.texture
+                                         : defaultBlackCubeTexture_->Texture();
         samplerBindings[1].sampler = GetOrCreateSampler(command.envMapFilter, command.envMapAddressU,
                                                        command.envMapAddressV,
                                                        command.envMapMaxAnisotropy,
@@ -9035,13 +9085,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexSamplers(pass, 0, &boneBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
-        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
-        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
-        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
-        // renderer had to refuse the draw upstream instead.
+        // An unbound classic stock texture samples XNA's measured opaque black (GSC-0004,
+        // VKPAR-0004), not glTF's white: the PBR base colour keeps white, and an effect that does
+        // not sample (TextureEnabled=false) never reaches the binding because the shader branches
+        // on that flag itself.
         samplerBinding.texture = command.texture ? command.texture.texture
-                                                 : defaultWhiteTexture_->Texture();
+                                                 : defaultBlackTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Skinned3D", command.maxMipLevel,
@@ -9727,13 +9776,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
-        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
-        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
-        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
-        // renderer had to refuse the draw upstream instead.
+        // An unbound classic stock texture samples XNA's measured opaque black (GSC-0004,
+        // VKPAR-0004), not glTF's white: the PBR base colour keeps white, and an effect that does
+        // not sample (TextureEnabled=false) never reaches the binding because the shader branches
+        // on that flag itself.
         samplerBinding.texture = command.texture ? command.texture.texture
-                                                 : defaultWhiteTexture_->Texture();
+                                                 : defaultBlackTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Textured3D", command.maxMipLevel,
@@ -9779,13 +9827,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
-        // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
-        // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
-        // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
-        // renderer had to refuse the draw upstream instead.
+        // An unbound classic stock texture samples XNA's measured opaque black (GSC-0004,
+        // VKPAR-0004), not glTF's white: the PBR base colour keeps white, and an effect that does
+        // not sample (TextureEnabled=false) never reaches the binding because the shader branches
+        // on that flag itself.
         samplerBinding.texture = command.texture ? command.texture.texture
-                                                 : defaultWhiteTexture_->Texture();
+                                                 : defaultBlackTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "LitTextured3D", command.maxMipLevel,
