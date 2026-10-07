@@ -2377,6 +2377,13 @@ public:
     // uses -- CPU-side, not threaded through the vertex shader, so identity (the default) costs
     // nothing extra and is provably a no-op.
     void SetTransformMatrix(const Matrix& m) override { transform_=m; }
+    // plans/plan_apple_m4.md AM4-027: SpriteBatch projects over the LOGICAL viewport it hands over
+    // here at its flush boundary, as Vulkan's sprite renderer does. GraphicsDevice has already
+    // mapped that viewport to its physical rectangle -- letterbox offset and Retina scale included
+    // -- and set it on the encoder, so the projection must not apply them again. Folding the
+    // window letterbox into the transform as well (computeSpriteTransform's backbuffer branch)
+    // applied it twice: a 64x64 batch in a 160x96 window landed at x 51..109 instead of 32..127.
+    void SetViewportSizeEXT(int width,int height) override { projectionWidth_=width; projectionHeight_=height; }
     // plans/plan_metal.md Phase 14 (METAL-145/148/149): mirrors D3D11SpriteBatchRenderer's own
     // `customEffect_ = effect;` (just stores the raw Effect* -- the actual IEffectRenderer is
     // resolved fresh in Draw() via GetEffectRendererPtr(), never cached here, so a mid-batch
@@ -2419,6 +2426,11 @@ public:
         // plans/plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
         // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
         auto st=p.computeSpriteTransform();
+        if(projectionWidth_>0&&projectionHeight_>0)
+        {
+            st.scaleX=2.0f/static_cast<float>(projectionWidth_); st.offsetX=-1.0f;
+            st.scaleY=-2.0f/static_cast<float>(projectionHeight_); st.offsetY=1.0f;
+        }
         struct U{float sx,sy,ox,oy;} u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
         // plans/plan_metal.md Phase 14 (METAL-145/148): resolved fresh every Draw() call, not cached
         // across the Begin/End block -- see MetalEffectRenderer::pipelineFor()'s own comment for why
@@ -2446,6 +2458,7 @@ public:
         [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
 private: MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
+    int projectionWidth_=0; int projectionHeight_=0;
 };
 
 // plans/plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot

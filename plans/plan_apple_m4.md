@@ -39,6 +39,7 @@ in [`docs/apple-platforms.md`](../docs/apple-platforms.md).
 | `AM4-023` | `ContentFileSha256` on a directory returned a digest on macOS (libc++ opens a directory as an `ifstream` and reports EOF) where libstdc++ fails; directories are now refused up front on every library. | Done |
 | `AM4-024` | `PathUtf8Test.DirectoryEnumeration...` assumed a byte-exact filesystem; APFS is normalization-insensitive, so the NFC and NFD spellings of `étude` are one file. The test expects only names that created their own entry. | Done |
 | `AM4-025` | Metal `ReadBackbuffer` re-enabled (it threw `NotSupportedException` since `METAL-258`). It reads the drawable through the logical viewport, so `GetBackBufferData` answers in backbuffer pixels at Retina scale and under letterbox, after completing the pending pass. Evidence: `metal_capabilities_test`, the shared pixel tests of `AM4-026`. | Done |
+| `AM4-027` | Metal SpriteBatch applied the window letterbox twice: `GraphicsDevice` already maps the logical viewport to its physical rectangle (offset and Retina scale) and sets it on the encoder, and the sprite projection folded the letterbox in again (a 64x64 batch in a 160x96 window landed at x 51..109 instead of 32..127). The sprite renderer now implements `SetViewportSizeEXT` and projects over the logical viewport it is handed, as Vulkan's does. Evidence: `spritebatch_presentation_test` 11/11 on Metal. | Done |
 
 ### sharp-runtime (branch `apple/m4-stabilization`)
 
