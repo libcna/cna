@@ -6,6 +6,15 @@ if("SOFTWARE" IN_LIST CNA_RENDERER_IDENTITIES)
     cna_renderer_target_name(_cna_software_target)
     add_library(${_cna_software_target} STATIC ${_cna_software_sources})
     cna_renderer_common_setup(${_cna_software_target})
+    # plans/plan_apple_m4.md AM4-053: this rasterizer is XNA's pixel oracle, and its coverage,
+    # texel selection and blending are exact float comparisons. Clang 14+ and GCC contract
+    # `a * b + c` into a fused multiply-add wherever the target has one (every arm64), which
+    # moves results across those exact boundaries; XNA itself never fused. An x86-64 build
+    # without -mfma has no FMA to contract into, so this changes nothing there (AM4-046's
+    # reasoning for cna_math).
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${_cna_software_target} PRIVATE -ffp-contract=off)
+    endif()
     if(CNA_SOFTWARE_COMPILED_EFFECTS)
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
         set(CNA_SOFTWARE_STOCK_EFFECT
