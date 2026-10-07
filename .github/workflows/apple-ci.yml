@@ -206,10 +206,21 @@ jobs:
         include:
           - name: device
             simulator: 'OFF'
+            renderer: SDL_RENDERER
             build_dir: cmake-build-ios
           - name: simulator
             simulator: 'ON'
+            renderer: SDL_RENDERER
             build_dir: cmake-build-ios-sim
+          # plans/plan_apple_m4.md AM4-037: the native Metal renderer's UIKit path.
+          - name: metal device
+            simulator: 'OFF'
+            renderer: METAL
+            build_dir: cmake-build-ios-metal
+          - name: metal simulator
+            simulator: 'ON'
+            renderer: METAL
+            build_dir: cmake-build-ios-sim-metal
 
     steps:
       - name: Checkout CNA
@@ -238,7 +249,7 @@ jobs:
           cmake -S . -B ${{ matrix.build_dir }}
           -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake
           -DCNA_IOS_SIMULATOR=${{ matrix.simulator }}
-          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }}
           -DCNA_BUILD_TESTS=OFF
           -DCNA_BUILD_EXAMPLES=OFF
           -DCNA_BUILD_APPLE_SMOKE_APP=ON
@@ -255,7 +266,7 @@ jobs:
       # unrelated host-shaped tools for an app-sandboxed platform.
       - name: Build CNA
         working-directory: cna
-        run: cmake --build ${{ matrix.build_dir }} --target cna_ios_smoke --parallel 3
+        run: cmake --build ${{ matrix.build_dir }} --target cna_ios_smoke cna_ios_pixel_probe --parallel 3
 
       # A wrong-platform object file can hide inside a static archive until the final link needs
       # that particular member. Read the platform directly from CNA's archive as an explicit
@@ -349,3 +360,30 @@ jobs:
           wait "$launch_pid" || true
           cat "$log_file"
           test "$smoke_ok" -eq 1
+
+          # plans/plan_apple_m4.md AM4-037: the pixel probe draws a clear colour, a SpriteBatch
+          # quad and a BasicEffect triangle, reads them back before presenting and prints
+          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. METAL only: SDL_RENDERER refuses an
+          # exact readback through the letterbox scaling a phone's surface always needs.
+          if [ "${{ matrix.renderer }}" != "METAL" ]; then exit 0; fi
+          probe="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_pixel_probe.app' -print -quit)"
+          codesign --force --deep --sign - "$probe"
+          xcrun simctl install "$udid" "$probe"
+          probe_log="$RUNNER_TEMP/cna-ios-pixel-probe.log"
+          xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-pixel-probe >"$probe_log" 2>&1 &
+          probe_pid=$!
+          probe_ok=0
+          for _attempt in {1..90}; do
+            if grep -q 'CNA_APPLE_PIXELS_OK' "$probe_log"; then
+              probe_ok=1
+              break
+            fi
+            if grep -q 'CNA_APPLE_PIXELS_FAILED' "$probe_log" || ! kill -0 "$probe_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          xcrun simctl terminate "$udid" com.openeggbert.cna.cna-ios-pixel-probe >/dev/null 2>&1 || true
+          wait "$probe_pid" || true
+          cat "$probe_log"
+          test "$probe_ok" -eq 1

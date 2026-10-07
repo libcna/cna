@@ -81,7 +81,7 @@ set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
 set(CNA_APPLE_IOS ON)
 set(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER ON)
-cna_apple_validate_renderer("METAL")
+cna_apple_validate_renderer("SOFTWARE")
 message(STATUS "PROBE-OK escape-hatch")
 EOF
 cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {

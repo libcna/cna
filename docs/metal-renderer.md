@@ -3,16 +3,18 @@
 ## Supported target
 
 `METAL` is CNA's direct native Metal renderer, selected with
-`-DCNA_GRAPHICS_RENDERER=METAL`. SDL3 owns the window and supplies
-`SDL_Metal_CreateView`/`SDL_Metal_GetLayer`; rendering goes directly through
-`MTLDevice`, `MTLCommandQueue`, `MTLRenderCommandEncoder`, and `CAMetalLayer`. It does not route
-draws through SDL_Renderer, SDL_GPU, or a third-party graphics abstraction.
+`-DCNA_GRAPHICS_RENDERER=METAL`. SDL3 owns the window; the renderer takes the platform's native
+window (`NSWindow*` on macOS, `UIWindow*` on iOS, through `IPlatformWindow::GetNativeHandle()`),
+adds its own `CAMetalLayer`-backed view to it, and renders directly through `MTLDevice`,
+`MTLCommandQueue`, `MTLRenderCommandEncoder` and that layer. It does not route draws through
+SDL_Renderer, SDL_GPU, or a third-party graphics abstraction.
 
-The supported platform contract is **macOS only**. CMake rejects `METAL` unless
-`CMAKE_SYSTEM_NAME` is `Darwin`, before enabling Objective-C++ or collecting `.mm` sources. iOS
-and tvOS are unvalidated and are not claimed. CNA does not set an explicit macOS deployment
-target; compatibility below the SDK and deployment defaults used by a successful build is not
-established.
+Supported targets are **macOS** and, since `plans/plan_apple_m4.md` `AM4-037`, **iOS/iPadOS**
+(UIKit view path; `NativeWindowSystem::UIKit`). CMake rejects `METAL` on every other system.
+iOS evidence is the Simulator only -- see `docs/apple-platforms.md`; no physical device has run
+it. On iOS there is no `displaySyncEnabled`: the layer always presents on the display's refresh,
+so `PresentInterval::Immediate` is recorded but not applied. CNA's macOS deployment floor is
+13.3 (`CNA_MACOS_DEPLOYMENT_TARGET`); sampler LOD bias needs macOS/iOS 26 (`AM4-034`).
 
 ## Evidence boundary
 

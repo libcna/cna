@@ -46,7 +46,15 @@ namespace CNA::Platform {
          * Every pointer is null. Kept distinct from `Headless` so renderer-selection diagnostics
          * can explain that CPU pixels may be presented through the terminal surface presenter.
          */
-        Terminal
+        Terminal,
+        /**
+         * @brief iOS/iPadOS. The window value is a `UIWindow*`.
+         *
+         * plans/plan_apple_m4.md AM4-037. Reported for SDL's `uikit` video driver, which used to
+         * fall through to Headless; a renderer that draws through UIKit (Metal on iOS) needs the
+         * window, the way it needs the `NSWindow*` on macOS. Appended, so no existing value moves.
+         */
+        UIKit
     };
 
     /**

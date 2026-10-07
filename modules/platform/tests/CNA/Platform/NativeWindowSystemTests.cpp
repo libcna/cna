@@ -28,6 +28,7 @@ const std::vector<NativeWindowSystem>& AllSystems()
         NativeWindowSystem::Web,
         NativeWindowSystem::Headless,
         NativeWindowSystem::Terminal,
+        NativeWindowSystem::UIKit,
     };
     return all;
 }
@@ -36,7 +37,7 @@ TEST(NativeWindowSystemTests, EnumHasExactlyTheExpectedMembers)
 {
     // Pins the size of the contract. Adding a windowing system is a deliberate act that must
     // also update ToString()'s exhaustive switch and this expectation together.
-    EXPECT_EQ(AllSystems().size(), 9u);
+    EXPECT_EQ(AllSystems().size(), 10u);
 }
 
 TEST(NativeWindowSystemTests, ToStringReturnsExpectedNameForEverySystem)
@@ -50,6 +51,7 @@ TEST(NativeWindowSystemTests, ToStringReturnsExpectedNameForEverySystem)
     EXPECT_EQ(ToString(NativeWindowSystem::Web), "Web");
     EXPECT_EQ(ToString(NativeWindowSystem::Headless), "Headless");
     EXPECT_EQ(ToString(NativeWindowSystem::Terminal), "Terminal");
+    EXPECT_EQ(ToString(NativeWindowSystem::UIKit), "UIKit");
 }
 
 TEST(NativeWindowSystemTests, ToStringNamesAreAllDistinct)

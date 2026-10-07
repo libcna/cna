@@ -2,7 +2,18 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.45.0** (`RRC-018`). It **retires four public renderer
+The current experimental ABI is **0.46.0** (`plans/plan_apple_m4.md` `AM4-037`). It appends one
+native windowing-system identity, `CNA_NATIVE_WINDOW_SYSTEM_UIKIT` (`9`): on iOS/iPadOS
+`cna_game_window_get_native_window_ext` reports SDL's `uikit` window with
+`CNA_NativeWindowHandle::window` set to its `UIWindow*`, where it used to report
+`CNA_NATIVE_WINDOW_SYSTEM_HEADLESS` with every pointer null. `CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM` moves
+from `8` to `9`; every existing value keeps its number and no route, structure or exported symbol
+changes. The minor increments because the closed enumerable range changed, so a binding can require
+the first ABI that can report a UIKit window.
+
+### Previous ABI 0.45.0
+
+The ABI was **0.45.0** (`RRC-018`). It **retires four public renderer
 identities** -- `OPENGLES2` (`2`), `WEBGL1` (`5`), `DIRECTX12` (`15`) and `CANVAS` (`17`) -- together
 with the four `CNA_GRAPHICS_RENDERER_*` constants that named them. CNA now has 14 public renderer
 identities (`docs/removed-renderers.md`). `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`); no

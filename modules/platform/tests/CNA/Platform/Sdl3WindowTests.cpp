@@ -302,6 +302,12 @@ TEST_F(Sdl3WindowTest, NativeHandleIsSelfConsistentForItsWindowSystem)
             EXPECT_TRUE(TryGetCocoa(handle, out));
             break;
         }
+        case NativeWindowSystem::UIKit:
+        {
+            UIKitNativeWindow out;
+            EXPECT_TRUE(TryGetUIKit(handle, out));
+            break;
+        }
         case NativeWindowSystem::Android:
         {
             AndroidNativeWindow out;

@@ -36,7 +36,15 @@
 #include "System/NotSupportedException.hpp"
 
 #ifdef __APPLE__
+#include <TargetConditionals.h>
+// plans/plan_apple_m4.md AM4-037: the renderer draws into a CAMetalLayer-backed view it adds to the
+// platform's native window -- an NSView in the NSWindow on macOS, a UIView in the UIWindow on iOS.
+// Everything below the view is the same Metal on both.
+#if TARGET_OS_OSX
 #import <Cocoa/Cocoa.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 #include <algorithm>
@@ -56,7 +64,11 @@
 #include <utility>
 #include <vector>
 
+#if TARGET_OS_OSX
 @interface CNAMetalView : NSView
+#else
+@interface CNAMetalView : UIView
+#endif
 - (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale;
 @end
 
@@ -66,6 +78,7 @@
     return [CAMetalLayer class];
 }
 
+#if TARGET_OS_OSX
 - (BOOL)wantsUpdateLayer
 {
     return YES;
@@ -87,6 +100,21 @@
     }
     return self;
 }
+#else
+// UIView builds its backing layer from +layerClass. Touches must keep reaching SDL's own view
+// underneath, which is what the NSView's nil hitTest: does on macOS.
+- (instancetype)initWithFrame:(CGRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self != nil)
+    {
+        self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self.userInteractionEnabled = NO;
+        self.layer.opaque = YES;
+    }
+    return self;
+}
+#endif
 
 - (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale
 {
@@ -95,11 +123,13 @@
     metalLayer.drawableSize = CGSizeMake(MAX(1, width), MAX(1, height));
 }
 
+#if TARGET_OS_OSX
 - (NSView*)hitTest:(NSPoint)point
 {
     (void)point;
     return nil;
 }
+#endif
 @end
 
 namespace CNA::Internal::Renderers::Metal
@@ -914,7 +944,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
         d.vertexDescriptor=vd;
         d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
-        d.sampleCount=(NSUInteger)sampleCount;
+        d.rasterSampleCount=(NSUInteger)sampleCount; // sampleCount: deprecated since macOS 13 / iOS 16
         for (int i=0;i<colorCount;++i) {
             d.colorAttachments[i].pixelFormat=MTLPixelFormatBGRA8Unorm;
             d.colorAttachments[i].blendingEnabled = blend.enabled ? YES : NO;
@@ -2282,7 +2312,7 @@ public:
         d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        d.sampleCount = (NSUInteger)owner_.activeSampleCount;
+        d.rasterSampleCount = (NSUInteger)owner_.activeSampleCount;
         d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
         if (blend.enabled) {
             d.colorAttachments[0].sourceRGBBlendFactor = metalBlendFactor(blend.colorSrc);
@@ -3266,12 +3296,23 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // phase since nothing consumed `presentationMode` yet; matters now that computeLogicalViewport()
     // does.
     p.presentationMode=(int)args.presentationMode;
+#if TARGET_OS_OSX
     CNA::Platform::CocoaNativeWindow nativeWindow;
     if(!CNA::Platform::TryGetCocoa(p.surface.GetNativeHandle(),nativeWindow))
         throw std::runtime_error("Metal renderer requires a Cocoa native window");
     NSWindow* cocoaWindow=(NSWindow*)nativeWindow.window;
     NSView* contentView=[cocoaWindow contentView];
     if(!contentView) throw std::runtime_error("Metal renderer requires a Cocoa content view");
+#else
+    // plans/plan_apple_m4.md AM4-037: SDL's UIWindow hosts its own view controller's view; the
+    // Metal view goes on top of it, as the platform layer's own Metal view helper does.
+    CNA::Platform::UIKitNativeWindow nativeWindow;
+    if(!CNA::Platform::TryGetUIKit(p.surface.GetNativeHandle(),nativeWindow))
+        throw std::runtime_error("Metal renderer requires a UIKit native window");
+    UIWindow* uikitWindow=(UIWindow*)nativeWindow.window;
+    UIView* contentView=uikitWindow.rootViewController ? uikitWindow.rootViewController.view : uikitWindow;
+    if(!contentView) throw std::runtime_error("Metal renderer requires a UIKit content view");
+#endif
     // MTLCreateSystemDefaultDevice follows the Create ownership convention and returns one owned
     // (+1) reference under MRR. Do not retain it again. Likewise, every `new*` result stored below
     // is already +1; only borrowed factory/getter results that survive their call scope
@@ -3281,13 +3322,13 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // Keep the supported contract deterministic until an adapted build has passing Mac evidence.
     p.deviceSampleCount=MetalAppliedMultiSampleCount(args.multiSampleCount)+1;
     p.view=[[CNAMetalView alloc] initWithFrame:[contentView bounds]];
-    if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed Cocoa view");
+    if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed view");
     [contentView addSubview:p.view];
     const auto drawableSize=p.surface.GetDrawableSize();
     [p.view updateDrawableWidth:drawableSize.width height:drawableSize.height
                    displayScale:p.surface.GetDisplayScale()];
     p.layer=(CAMetalLayer*)p.view.layer;
-    if(!p.layer) throw std::runtime_error("Metal: Cocoa view did not create a CAMetalLayer");
+    if(!p.layer) throw std::runtime_error("Metal: the view did not create a CAMetalLayer");
     [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
     // plans/plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
     // has no direct integer-interval knob (unlike OpenGL's 0/1/-1 swap interval or Vulkan's
@@ -3296,7 +3337,9 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // default)/Two(2) both -> YES (real, honest vsync) since Metal has no true half-rate present
     // mode to map Two to -- an approximation, not a silent gap, and documented as such rather than
     // pretending Two behaves differently from One.
+#if TARGET_OS_OSX
     p.layer.displaySyncEnabled = (p.swapInterval != 0);
+#endif
     p.queue=[p.device newCommandQueue];
     if(!p.queue) throw std::runtime_error("Metal: failed to create MTLCommandQueue");
     NSError* err=nil; NSString* src=[NSString stringWithUTF8String:kMetalShaderSource]; p.library=[p.device newLibraryWithSource:src options:nil error:&err];
@@ -3365,7 +3408,15 @@ void MetalRenderer::GetDefaultViewportRect(int&x,int&y,int&w,int&h)
     w=(int)std::lround(vp.width); h=(int)std::lround(vp.height);
 }
 void MetalRenderer::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalRenderer::SetPresentationMode(int m){impl_->presentationMode=m;}
-void MetalRenderer::SetSwapInterval(int i){impl_->swapInterval=i;impl_->layer.displaySyncEnabled=(i!=0);} // plans/plan_metal.md METAL-168, same mapping as the constructor.
+// plans/plan_metal.md METAL-168, same mapping as the constructor. iOS has no displaySyncEnabled: its
+// CAMetalLayer always presents on the display's refresh, so only the request is recorded there.
+void MetalRenderer::SetSwapInterval(int i)
+{
+    impl_->swapInterval=i;
+#if TARGET_OS_OSX
+    impl_->layer.displaySyncEnabled=(i!=0);
+#endif
+}
 // The historical MSAA implementation engaged real sample-count-four attachments but did not
 // produce correct coverage. Keep the public and internal values at their single-sample identity.
 int MetalRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)

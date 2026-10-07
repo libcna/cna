@@ -10,7 +10,14 @@ if("METAL" IN_LIST CNA_RENDERER_IDENTITIES)
     # Cocoa window. The Objective-C++ units join the renderer archive alongside the C++ ones.
     file(GLOB CNA_METAL_OBJCXX_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.mm")
     cna_add_renderer(${CNA_METAL_OBJCXX_SOURCES})
-    target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework Metal" "-framework QuartzCore" "-framework Foundation")
+    # plans/plan_apple_m4.md AM4-037: the view the layer lives in is AppKit's on macOS, UIKit's on iOS.
+    if(CNA_APPLE_IOS)
+        set(_cna_metal_view_framework "-framework UIKit")
+    else()
+        set(_cna_metal_view_framework "-framework AppKit")
+    endif()
+    target_link_libraries(${RENDERER_TARGET} PRIVATE ${_cna_metal_view_framework} "-framework Metal" "-framework QuartzCore" "-framework Foundation")
+    unset(_cna_metal_view_framework)
 endif()
 
 # Module-owned examples (module-examples campaign): the family's example/test

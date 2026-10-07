@@ -33,6 +33,7 @@ namespace CNA::Platform {
      * | `X11`      | `Display*`     | —                 | `Window` (XID)    | —              |
      * | `Wayland`  | `wl_display*`  | —                 | —                 | `wl_surface*`  |
      * | `Cocoa`    | —              | `NSWindow*`       | —                 | —              |
+     * | `UIKit`    | —              | `UIWindow*`       | —                 | —              |
      * | `Android`  | —              | `ANativeWindow*`  | —                 | —              |
      * | `Web`      | —              | —                 | —                 | —              |
      * | `Headless` | —              | —                 | —                 | —              |
@@ -56,7 +57,7 @@ namespace CNA::Platform {
         /** @brief X11 `Display*` or Wayland `wl_display*`; null on every other system. */
         void* display = nullptr;
 
-        /** @brief Win32 `HWND`, Cocoa `NSWindow*` or Android `ANativeWindow*`; null on every other system. */
+        /** @brief Win32 `HWND`, Cocoa `NSWindow*`, UIKit `UIWindow*` or Android `ANativeWindow*`; null on every other system. */
         void* window = nullptr;
 
         /** @brief Wayland `wl_surface*`; null on every other system. */
@@ -95,6 +96,13 @@ namespace CNA::Platform {
     struct CocoaNativeWindow
     {
         /** @brief The `NSWindow*`. Never null in a successfully retrieved value. */
+        void* window = nullptr;
+    };
+
+    /** @brief A validated UIKit (iOS/iPadOS) native window. */
+    struct UIKitNativeWindow
+    {
+        /** @brief The `UIWindow*`. Never null in a successfully retrieved value. */
         void* window = nullptr;
     };
 
@@ -145,6 +153,15 @@ namespace CNA::Platform {
      * @return True if @p handle is a Cocoa handle with a non-null window.
      */
     [[nodiscard]] bool TryGetCocoa(const NativeWindowHandle& handle, CocoaNativeWindow& out);
+
+    /**
+     * @brief Retrieves a handle as a UIKit window, if it is one.
+     *
+     * @param handle The handle to inspect.
+     * @param out Receives the validated window; untouched when this returns false.
+     * @return True if @p handle is a UIKit handle with a non-null window.
+     */
+    [[nodiscard]] bool TryGetUIKit(const NativeWindowHandle& handle, UIKitNativeWindow& out);
 
     /**
      * @brief Retrieves a handle as an Android window, if it is one.

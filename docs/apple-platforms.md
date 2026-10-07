@@ -36,7 +36,13 @@ renderer allow-list; and `cna_ios_smoke`, a real application that constructs `Ga
 frame. CI final-links that app for device and simulator, checks its Mach-O platform, entry-point
 symbols and dynamic dependencies, then installs and launches the simulator build.
 
-What does **not** exist is a run on a physical iPhone/iPad, pixel correctness, real touch,
+`plans/plan_apple_m4.md` `AM4-037` (Mac mini M4, macOS 27, Xcode 27, iOS 27 Simulator on an iPhone 17
+profile) added the native `METAL` renderer on iOS and `cna_ios_pixel_probe`, which reads back a
+clear colour, a SpriteBatch quad and a BasicEffect triangle: exact on 29 of 31 simulator launches
+(two all-zero runs right after first install did not reproduce). That is simulator pixel evidence
+for METAL only; SDL_RENDERER refuses exact readback through the letterbox scaling a phone needs.
+
+What does **not** exist is a run on a physical iPhone/iPad, device pixel correctness, real touch,
 audio, storage or performance evidence, an App Store package, or production signing. A green
 one-frame simulator smoke test proves initialization/event/update/draw/present returns without
 an exception; it does not prove those unobserved features.
@@ -153,7 +159,7 @@ time with a readable message instead of somewhere deep inside a dependency build
 | `SDL_GPU` | Refused by default. Its build currently requires a target-compatible shaderc dependency that the iOS workflow does not provide. |
 | `OPENGLES3` | Refused by default. It requires the sibling `easy-gl` and `meta-gl` repositories, which the iOS workflow does not provide or validate. |
 | `HEADLESS`, `SOFTWARE`, `STUB` | Refused by default. They may be useful for experiments, but they are not final-linked by Apple CI and therefore are not advertised as supported iOS configurations. |
-| `METAL` | Refused by default. The renderer's supported contract covers macOS only. |
+| `METAL` | Allowed (`plans/plan_apple_m4.md` `AM4-037`). CNA's native Metal renderer on a UIKit view in SDL's `UIWindow`. Built for device and simulator; the simulator runs `cna_ios_pixel_probe`, which checks a clear colour, a SpriteBatch quad and a BasicEffect triangle read back from the frame. |
 | Everything else | Refused. Desktop APIs cannot exist on iOS; other third-party-backed renderers have not been configured for an iOS sysroot. |
 
 "Allowed" means configure accepts it, CI final-links it for both iOS sysroots, and the simulator

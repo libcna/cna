@@ -65,6 +65,8 @@ constexpr uint32_t NativeWindowHandleVersion = UINT32_C(1);
             return CNA_NATIVE_WINDOW_SYSTEM_HEADLESS;
         case CNA::Platform::NativeWindowSystem::Terminal:
             return CNA_NATIVE_WINDOW_SYSTEM_TERMINAL;
+        case CNA::Platform::NativeWindowSystem::UIKit:
+            return CNA_NATIVE_WINDOW_SYSTEM_UIKIT;
         case CNA::Platform::NativeWindowSystem::Unknown:
             break;
     }

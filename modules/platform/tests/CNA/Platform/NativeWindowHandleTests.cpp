@@ -54,6 +54,14 @@ NativeWindowHandle MakeCocoa()
     return handle;
 }
 
+NativeWindowHandle MakeUIKit()
+{
+    NativeWindowHandle handle;
+    handle.system = NativeWindowSystem::UIKit;
+    handle.window = FakeWindow();
+    return handle;
+}
+
 NativeWindowHandle MakeAndroid()
 {
     NativeWindowHandle handle;
@@ -120,6 +128,13 @@ TEST(NativeWindowHandleTests, TryGetCocoaReturnsTheWindow)
     EXPECT_EQ(out.window, FakeWindow());
 }
 
+TEST(NativeWindowHandleTests, TryGetUIKitReturnsTheWindow)
+{
+    UIKitNativeWindow out;
+    ASSERT_TRUE(TryGetUIKit(MakeUIKit(), out));
+    EXPECT_EQ(out.window, FakeWindow());
+}
+
 TEST(NativeWindowHandleTests, TryGetAndroidReturnsTheWindow)
 {
     AndroidNativeWindow out;
@@ -133,7 +148,8 @@ TEST(NativeWindowHandleTests, EveryAccessorRejectsEveryOtherSystem)
 {
     // The point of the typed accessors: a renderer handed a window from a different system gets
     // a false it must handle, not a plausible-looking pointer that crashes on first use.
-    const NativeWindowHandle handles[] = {MakeWin32(), MakeX11(), MakeWayland(), MakeCocoa(), MakeAndroid()};
+    const NativeWindowHandle handles[] = {MakeWin32(), MakeX11(), MakeWayland(), MakeCocoa(), MakeUIKit(),
+                                          MakeAndroid()};
 
     for (const NativeWindowHandle& handle : handles)
     {
@@ -141,12 +157,14 @@ TEST(NativeWindowHandleTests, EveryAccessorRejectsEveryOtherSystem)
         X11NativeWindow x11;
         WaylandNativeWindow wayland;
         CocoaNativeWindow cocoa;
+        UIKitNativeWindow uikit;
         AndroidNativeWindow android;
 
         EXPECT_EQ(TryGetWin32(handle, win32), handle.system == NativeWindowSystem::Win32);
         EXPECT_EQ(TryGetX11(handle, x11), handle.system == NativeWindowSystem::X11);
         EXPECT_EQ(TryGetWayland(handle, wayland), handle.system == NativeWindowSystem::Wayland);
         EXPECT_EQ(TryGetCocoa(handle, cocoa), handle.system == NativeWindowSystem::Cocoa);
+        EXPECT_EQ(TryGetUIKit(handle, uikit), handle.system == NativeWindowSystem::UIKit);
         EXPECT_EQ(TryGetAndroid(handle, android), handle.system == NativeWindowSystem::Android);
     }
 }
@@ -194,6 +212,7 @@ TEST(NativeWindowHandleTests, HasNativeWindowIsTrueForEveryPopulatedRealSystem)
     EXPECT_TRUE(HasNativeWindow(MakeX11()));
     EXPECT_TRUE(HasNativeWindow(MakeWayland()));
     EXPECT_TRUE(HasNativeWindow(MakeCocoa()));
+    EXPECT_TRUE(HasNativeWindow(MakeUIKit()));
     EXPECT_TRUE(HasNativeWindow(MakeAndroid()));
 }
 

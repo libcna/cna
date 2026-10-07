@@ -541,7 +541,7 @@ static int validate_window(const CNA_Handle game)
             }
             break;
         default:
-            /* Win32, Cocoa and Android all answer through `window`; Web answers through none of
+            /* Win32, Cocoa, UIKit and Android all answer through `window`; Web answers through none of
                them, because its target is a canvas the host page selects. */
             if (native_window.window_id != UINT64_C(0)) {
                 return 0;

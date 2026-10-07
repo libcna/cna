@@ -99,6 +99,7 @@ namespace CNA::Platform::Sdl3 {
             if (std::strcmp(driver, "x11") == 0) { return NativeWindowSystem::X11; }
             if (std::strcmp(driver, "wayland") == 0) { return NativeWindowSystem::Wayland; }
             if (std::strcmp(driver, "cocoa") == 0) { return NativeWindowSystem::Cocoa; }
+            if (std::strcmp(driver, "uikit") == 0) { return NativeWindowSystem::UIKit; }
             if (std::strcmp(driver, "android") == 0) { return NativeWindowSystem::Android; }
             if (std::strcmp(driver, "emscripten") == 0) { return NativeWindowSystem::Web; }
             // "dummy", "offscreen" and anything unrecognised expose no consumable native window.
@@ -196,6 +197,9 @@ namespace CNA::Platform::Sdl3 {
                 break;
             case NativeWindowSystem::Cocoa:
                 handle.window = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+                break;
+            case NativeWindowSystem::UIKit:
+                handle.window = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
                 break;
             case NativeWindowSystem::Android:
                 handle.window = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);

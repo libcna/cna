@@ -15,6 +15,7 @@ namespace CNA::Platform {
         static const std::string web      = "Web";
         static const std::string headless = "Headless";
         static const std::string terminal = "Terminal";
+        static const std::string uikit    = "UIKit";
 
         // Exhaustive switch with no default arm: adding a NativeWindowSystem value without
         // naming it here is a compiler diagnostic rather than a silent "Unknown".
@@ -29,6 +30,7 @@ namespace CNA::Platform {
             case NativeWindowSystem::Web:      return web;
             case NativeWindowSystem::Headless: return headless;
             case NativeWindowSystem::Terminal: return terminal;
+            case NativeWindowSystem::UIKit:    return uikit;
         }
 
         return unknown;

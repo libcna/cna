@@ -133,20 +133,14 @@ endif()
 # No-op on macOS and on every non-Apple target.
 cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
 
-# Native Metal is currently available only when targeting macOS. SDL is used only for
-# window/CAMetalLayer integration; all rendering is performed directly through Metal.
-# iOS is Metal's other natural home and the Apple allow-list above already refuses it by default;
-# CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON is the single documented escape hatch for experimenting
-# with it there (plans/plan_apple.md APPLE-11), and changes nothing about what is supported.
-if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    if(CNA_APPLE_IOS AND CNA_APPLE_ALLOW_UNVALIDATED_RENDERER)
-        message(WARNING
-            "CNA: configuring METAL for iOS. The renderer's supported contract covers macOS only "
-            "(docs/metal-renderer.md); its iOS build has no compile, runtime or pixel evidence.")
-    else()
-        message(FATAL_ERROR
-            "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
-    endif()
+# Native Metal targets macOS and iOS/iPadOS. SDL is used only for the window; the renderer attaches
+# its CAMetalLayer-backed view to the platform's NSWindow or UIWindow and renders directly through
+# Metal. plans/plan_apple_m4.md AM4-037 added the UIKit path; whether iOS may select it is the Apple
+# allow-list's decision above. Every other system is refused here.
+if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin"
+   AND NOT CNA_APPLE_IOS)
+    message(FATAL_ERROR
+        "CNA: METAL renderer targets macOS and iOS only.")
 endif()
 
 # plans/plan_glbackends.md Phase A/GLB-7: the 3 GL-family public renderers (OPENGLES3/OPENGL33

@@ -48,6 +48,16 @@ namespace CNA::Platform {
         return true;
     }
 
+    bool TryGetUIKit(const NativeWindowHandle& handle, UIKitNativeWindow& out)
+    {
+        if (handle.system != NativeWindowSystem::UIKit || handle.window == nullptr)
+        {
+            return false;
+        }
+        out.window = handle.window;
+        return true;
+    }
+
     bool TryGetAndroid(const NativeWindowHandle& handle, AndroidNativeWindow& out)
     {
         if (handle.system != NativeWindowSystem::Android || handle.window == nullptr)
@@ -64,6 +74,7 @@ namespace CNA::Platform {
         {
             case NativeWindowSystem::Win32:
             case NativeWindowSystem::Cocoa:
+            case NativeWindowSystem::UIKit:
             case NativeWindowSystem::Android:
                 return handle.window != nullptr;
             case NativeWindowSystem::X11:

@@ -297,8 +297,10 @@ typedef uint32_t CNA_NativeWindowSystem;
 #define CNA_NATIVE_WINDOW_SYSTEM_HEADLESS UINT32_C(7)
 /** @brief A character-cell terminal with no native window; every pointer is null. */
 #define CNA_NATIVE_WINDOW_SYSTEM_TERMINAL UINT32_C(8)
+/** @brief iOS/iPadOS; @ref CNA_NativeWindowHandle::window is a `UIWindow*`. */
+#define CNA_NATIVE_WINDOW_SYSTEM_UIKIT UINT32_C(9)
 /** @brief Highest defined native windowing-system identity. */
-#define CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM CNA_NATIVE_WINDOW_SYSTEM_TERMINAL
+#define CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM CNA_NATIVE_WINDOW_SYSTEM_UIKIT
 
 /**
  * @brief Describes the game's native window well enough to hand it to another library.
