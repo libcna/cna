@@ -1377,6 +1377,8 @@ namespace CNA::Internal::Renderers::EasyGL
         GlProfile profile_ = kCompileTimeGlProfile;
         /// Clip-space multiplier for XNA's slightly-less-than-half-pixel center correction.
         float xnaPixelCenterScale_ = 63.0f / 64.0f;
+        /// Whether the current draw is an XNA LineList/LineStrip; see XnaPixelCenterScaleForDraw().
+        bool drawRasterizesLines_ = false;
 
         // The offscreen back buffer (EasyGLRenderer.cpp OffscreenBackBuffer): multisampled when
         // MSAA is on, single-sample otherwise, blitted to FBO 0 on Present(). The msaa* names
@@ -1395,9 +1397,14 @@ namespace CNA::Internal::Renderers::EasyGL
         void ResolveMsaa();
         /** @brief Enables only the depth/stencil planes selected for the active destination. */
         void ApplyCurrentDepthStencilAvailability();
-        /** @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple. */
+        /**
+         * @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple, and
+         *        records the draw's topology for the pixel-centre correction.
+         */
         void ApplyStencilPrimitiveTopology(PrimitiveType primitive,
                                            bool stockLineLoop = false);
+        /** @brief The clip-space pixel-centre multiplier for the current draw's topology. */
+        [[nodiscard]] float XnaPixelCenterScaleForDraw() const noexcept;
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();

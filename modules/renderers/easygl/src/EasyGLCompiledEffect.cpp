@@ -1313,10 +1313,10 @@ namespace CNA::Internal::Renderers::EasyGL
         const bool correctPixelCenter = !multisampledDestination &&
                                         spriteBatchSlotZeroTexture == nullptr;
         const float pixelCenterX = viewportW > 0 && correctPixelCenter
-            ? xnaPixelCenterScale_ / static_cast<float>(viewportW)
+            ? XnaPixelCenterScaleForDraw() / static_cast<float>(viewportW)
             : 0.0f;
         const float pixelCenterY = viewportH > 0 && correctPixelCenter
-            ? -xnaPixelCenterScale_ / static_cast<float>(viewportH)
+            ? -XnaPixelCenterScaleForDraw() / static_cast<float>(viewportH)
             : 0.0f;
         MOJOSHADER_glProgramPixelCenterInfo(pixelCenterX, pixelCenterY);
 

@@ -7375,6 +7375,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive,
                                                        bool stockLineLoop)
     {
+        drawRasterizesLines_ =
+            primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip;
         if (metagl::IsContextLost()) return;
         if (!stockLineLoop)
             RequireSupportedFillModeEXT(primitive);
@@ -10309,6 +10311,18 @@ namespace CNA::Internal::Renderers::EasyGL
         p.loc_ibl_intensity  = p.prog.uniform_location("uIblIntensity");
     }
 
+    // The 63/128 correction exists for FILL edges: just under half a pixel keeps a triangle's pixel
+    // centre on the covered side. Where few subpixel bits would round it back to exactly half, LoadGl
+    // lowers it further (WebGL, and macOS's GL, report four bits, giving 7/16). A line has no fill
+    // edge: moved by exactly half a pixel, GL's diamond-exit choice is D3D9's own, and the lowered
+    // value instead moved every line crossing that D3D9 puts just past a pixel boundary one pixel
+    // left -- a third of the rows of a 2:3 diagonal on macOS, against the real-XNA references. Lines
+    // keep the unrounded 63/128, which is what drivers with eight subpixel bits (Mesa) already give.
+    float EasyGLRenderer::XnaPixelCenterScaleForDraw() const noexcept
+    {
+        return drawRasterizesLines_ ? 63.0f / 64.0f : xnaPixelCenterScale_;
+    }
+
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                                                const Matrix& projection, const GpuDrawParams& params)
     {
@@ -10359,9 +10373,10 @@ namespace CNA::Internal::Renderers::EasyGL
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
         if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
         {
+            const float pixelCenterScale = XnaPixelCenterScaleForDraw();
             xnaPixelCenter = Matrix::CreateTranslation(
-                xnaPixelCenterScale_ / static_cast<float>(viewportWidth),
-                -xnaPixelCenterScale_ / static_cast<float>(viewportHeight),
+                pixelCenterScale / static_cast<float>(viewportWidth),
+                -pixelCenterScale / static_cast<float>(viewportHeight),
                 0.0f);
         }
 
