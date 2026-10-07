@@ -3,6 +3,15 @@ add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
 add_library(CNA::GamerServices ALIAS CNA_GamerServices)
 target_link_libraries(CNA_GamerServices PUBLIC cna_build_config)
 target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# A released avatar description must assemble the same model on every machine; the digests in
+# AvatarCatalogTest.V1DescriptionsAssembleExactlyAsReleased pin it. Clang 14+ and GCC contract
+# `a * b + c` into a fused multiply-add wherever the target has one, which every arm64 machine
+# does, and on Apple silicon that moved assembled vertices across the digest's quantization step.
+# An x86-64 build without -mfma has no FMA to contract into, so this changes nothing there.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Avatars/AvatarModel.cpp"
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
 # input, audio through it) plus Storage (device selector flows).
 target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage)
