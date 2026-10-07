@@ -29,7 +29,11 @@ namespace CNA::Internal::Renderers::Metal
         /** @brief PBR emissive texture slot. */
         PbrEmissive,
         /** @brief PBR occlusion texture slot. */
-        PbrOcclusion
+        PbrOcclusion,
+        /** @brief KHR_materials_specular strength texture slot (alpha). */
+        PbrSpecular,
+        /** @brief KHR_materials_specular colour texture slot. */
+        PbrSpecularColor
     };
 
     /** @brief Renderer-owned neutral resource required by a missing stock texture slot. */

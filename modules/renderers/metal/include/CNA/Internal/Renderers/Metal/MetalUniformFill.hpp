@@ -84,9 +84,11 @@ namespace CNA::Internal::Renderers::Metal
         float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
         float alphaTest[4];
         float fogColorEnabled[4], fogVector[4];
-        float srgbFlags[4];    // x=base decode, y=emissive decode, z=output encode
-        float dielectricFresnel[4]; // xyz=dielectric F0, w=dielectric F90
+        float srgbFlags[4];    // x=base decode, y=emissive decode, z=output encode, w=specular colour decode
+        float specularFresnelInputs[4]; // xyz=unclamped dielectric F0, w=KHR_materials_specular factor
         float textureTransformRows[10][4]; // two affine rows per PBR texture slot
+        float specularTransformRows[4][4]; // two affine rows each for the specular and specular-colour maps
+        float textureCoordinateSets[4]; // x=bit i selects TEXCOORD_1 for PBR texture slot i
     };
 
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
@@ -281,13 +283,20 @@ namespace CNA::Internal::Renderers::Metal
         pu.srgbFlags[0]=params.pbrBaseColorTextureIsSrgb?1.0f:0.0f;
         pu.srgbFlags[1]=params.pbrEmissiveTextureIsSrgb?1.0f:0.0f;
         pu.srgbFlags[2]=params.pbrEncodeOutputToSrgb?1.0f:0.0f;
-        pu.srgbFlags[3]=0.0f;
-        pu.dielectricFresnel[0]=params.pbrDielectricF0[0];
-        pu.dielectricFresnel[1]=params.pbrDielectricF0[1];
-        pu.dielectricFresnel[2]=params.pbrDielectricF0[2];
-        pu.dielectricFresnel[3]=params.pbrDielectricF90;
+        // plans/plan_apple_m4.md AM4-085: KHR_materials_specular's two maps scale these inputs per
+        // pixel, so the shader starts from the unclamped F0 and the authored strength rather than
+        // from the factor-only pbrDielectricF0/F90, which the white fallbacks reproduce exactly.
+        pu.srgbFlags[3]=params.pbrSpecularColorTextureIsSrgb?1.0f:0.0f;
+        pu.specularFresnelInputs[0]=params.pbrDielectricF0Unclamped[0];
+        pu.specularFresnelInputs[1]=params.pbrDielectricF0Unclamped[1];
+        pu.specularFresnelInputs[2]=params.pbrDielectricF0Unclamped[2];
+        pu.specularFresnelInputs[3]=params.pbrSpecularFactor;
         std::memcpy(pu.textureTransformRows, params.pbrTextureTransformRows,
                     sizeof(pu.textureTransformRows));
+        std::memcpy(pu.specularTransformRows, params.pbrSpecularTextureTransformRows,
+                    sizeof(pu.specularTransformRows));
+        pu.textureCoordinateSets[0]=static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+        pu.textureCoordinateSets[1]=pu.textureCoordinateSets[2]=pu.textureCoordinateSets[3]=0.0f;
     }
 
     // plans/plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform

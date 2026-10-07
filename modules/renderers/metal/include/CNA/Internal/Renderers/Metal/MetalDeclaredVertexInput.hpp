@@ -47,7 +47,7 @@ namespace CNA::Internal::Renderers::Metal
     struct MetalPipelineVertexInputs
     {
         /** @brief Semantic read by attribute `i`. */
-        std::array<MetalVertexSemantic, 7> semantics{};
+        std::array<MetalVertexSemantic, 8> semantics{};
         /** @brief Number of attributes in use. */
         std::size_t count = 0;
     };
@@ -77,9 +77,10 @@ namespace CNA::Internal::Renderers::Metal
             case K::Skinned52VertexLit: return {{S::Position, S::Normal, S::TexCoord0, S::BlendWeight, S::BlendIndices}, 5};
             case K::Skinned56:
             case K::Skinned56VertexLit: return {{S::Position, S::Normal, S::TexCoord0, S::BlendWeight, S::BlendIndices, S::Color}, 6};
-            // plans/plan_apple_m4.md AM4-084: the PBR functions read glTF's COLOR_0 as well.
-            case K::Pbr48:              return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::Color}, 5};
-            case K::SkinnedPbr68:       return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::BlendWeight, S::BlendIndices, S::Color}, 7};
+            // plans/plan_apple_m4.md AM4-084/085: the PBR functions read glTF's COLOR_0, and TEXCOORD_1
+            // for the maps the material puts on its second coordinate set.
+            case K::Pbr48:              return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::Color, S::TexCoord1}, 6};
+            case K::SkinnedPbr68:       return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::BlendWeight, S::BlendIndices, S::Color, S::TexCoord1}, 8};
             case K::Sprite2D:           return {};
         }
         return {};

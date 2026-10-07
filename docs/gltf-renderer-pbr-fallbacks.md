@@ -14,7 +14,7 @@ rigid and skinned fragment variants where a renderer stores them separately.
 | DirectX 9 | sampler registers `s0 / s1 / s2 / s3 / s4` |
 | DirectX 11 | SRV/sampler register pairs `t0/s0` through `t4/s4` |
 | EasyGL | GL texture units `0 / 1 / 2 / 3 / 4`, explicitly written into the five sampler uniforms |
-| Metal | fragment texture/sampler indices `0 / 1 / 2 / 3 / 4` |
+| Metal | fragment texture/sampler indices `0 / 1 / 2 / 3 / 4`, then `5 / 6` for `KHR_materials_specular` (`AM4-085`) |
 | OpenGL 4 | GL texture units `0 / 1 / 2 / 3 / 4`, explicitly written into the five sampler uniforms |
 | SDL GPU | fragment sampler bindings `0 / 1 / 2 / 3 / 4` (shader set 2) |
 | Vulkan | descriptor-set 0 bindings `0 / 1 / 2 / 3 / 4` |
@@ -66,7 +66,7 @@ renderer-specific carriers are:
 | DirectX 9 | existing pixel constants `c1.w / c2.w / c12.w` | Microsoft `ps_3_0` compile plus WineD3D diagnostic 12/12; no DXVK prefix was available |
 | DirectX 11 | `PbrMapScales.z / .w`, `FogColor.w`; constant-buffer sizes unchanged | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic 12/12 |
 | EasyGL | `uSrgb.x / .y / .z` | `EasyGL_Pbr_SrgbTransfer`, exact rigid/skinned cases on OPENGLES3 |
-| Metal | `PbrUniforms::srgbFlags.x / .y / .z` | MSL source/ABI tests on Linux; real-device execution remains platform-owned |
+| Metal | `PbrUniforms::srgbFlags.x / .y / .z`, `.w` for the specular colour map | MSL source/ABI unit tests; executed on Apple silicon by `Metal_PbrDualUvSpecular` (`AM4-085`) |
 | OpenGL 4 | `uSrgb.x / .y / .z` | its registered `Pbr_SrgbTransfer` executable |
 | SDL GPU | third `PbrParams` vec4, `.x / .y / .z` | `SdlGpu_Pbr_SrgbTransfer` |
 | Vulkan | `srgbFlags.x / .y / .z` in the PBR UBO | `Vulkan_Pbr_SrgbTransfer`, 12/12 on rigid/skinned SPIR-V |
@@ -192,7 +192,7 @@ normal-incidence image looked correct.
 | DirectX 9 | pixel constant `c13` | Microsoft `ps_3_0` compile/disassembly plus WineD3D diagnostic |
 | DirectX 11 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208; textured specular inputs at bytes 400–495 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
 | EasyGL | `uDielectricFresnel` | OPENGLES3 analytic rigid/skinned pixel test |
-| Metal | `PbrUniforms::dielectricFresnel` | MSL source/ABI unit tests on Linux; device execution remains platform-owned |
+| Metal | `PbrUniforms::specularFresnelInputs` (unclamped F0 and strength, `AM4-085`) | MSL source/ABI unit tests; `Metal_PbrDualUvSpecular` on Apple silicon checks the F0 = 1 and F0 = 0 endpoints exactly |
 | OpenGL 4 | `uDielectricFresnel` | its rigid/skinned pixel test |
 | SDL GPU | fourth `PbrParams` vec4 | regenerated SPIR-V and rigid/skinned pixel test |
 | Vulkan | `dielectricFresnel` at bytes 240–255 of its 256-byte dynamic PBR UBO | rigid/skinned SPIR-V pixel test |
@@ -205,8 +205,10 @@ yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` sepa
 every CPU upload, dielectric/metal endpoint mix and Schlick expression, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
 `specularColorTexture` are not part of this factor-only slice. EasyGL, DirectX9/11,
-SDL GPU and Vulkan now consume both; the remaining renderer bindings remain the named `GLTF-344`
-limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
+SDL GPU, Vulkan, WebGPU and Metal now consume both. Metal joined last (`plans/plan_apple_m4.md`
+`AM4-085`): textures/samplers 5 and 6 with white fallbacks, the unclamped F0 and strength, two
+transform rows per map, the sRGB flag, and the per-map TEXCOORD selector its five core maps lacked
+as well; `Metal_PbrDualUvSpecular` measures every one of those on a Mac. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
 SDL GPU's shared rigid/skinned GLSL binds the two white fallbacks at bindings 5/6 with independent
 imported sampler state, transforms and colour decode. Its regenerated 12,656-byte SPIR-V fragment,

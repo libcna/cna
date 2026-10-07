@@ -91,6 +91,18 @@ namespace
             for (int component = 0; component < 4; ++component)
                 p.pbrTextureTransformRows[row][component] =
                     static_cast<float>(69 + row * 4 + component);
+        // plans/plan_apple_m4.md AM4-085: KHR_materials_specular's texture inputs and the per-map
+        // coordinate set (bit 7 lies outside the seven PBR slots and must not be transported).
+        p.pbrDielectricF0Unclamped[0] = 109;
+        p.pbrDielectricF0Unclamped[1] = 110;
+        p.pbrDielectricF0Unclamped[2] = 111;
+        p.pbrSpecularFactor = 112;
+        for (int row = 0; row < 4; ++row)
+            for (int component = 0; component < 4; ++component)
+                p.pbrSpecularTextureTransformRows[row][component] =
+                    static_cast<float>(113 + row * 4 + component);
+        p.pbrSpecularColorTextureIsSrgb = true;
+        p.pbrTextureCoordinateSetMask = 0x80u | 0x55u;
         p.lightingEnabled = true;
         return p;
     }
@@ -283,12 +295,17 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);
-    ExpectVec4Eq(pu.srgbFlags, 0,1,0,0);
-    ExpectVec4Eq(pu.dielectricFresnel, 65,66,67,68);
+    ExpectVec4Eq(pu.srgbFlags, 0,1,0,1);
+    ExpectVec4Eq(pu.specularFresnelInputs, 109,110,111,112);
     for (int row = 0; row < 10; ++row)
         for (int component = 0; component < 4; ++component)
             EXPECT_NEAR(pu.textureTransformRows[row][component],
                         69 + row * 4 + component, kEps);
+    for (int row = 0; row < 4; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.specularTransformRows[row][component],
+                        113 + row * 4 + component, kEps);
+    ExpectVec4Eq(pu.textureCoordinateSets, 0x55,0,0,0);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)
@@ -313,8 +330,13 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.pbrFactors[i], referencePu.pbrFactors[i], kEps);
         EXPECT_NEAR(pu.fogColorEnabled[i], referencePu.fogColorEnabled[i], kEps);
         EXPECT_NEAR(pu.srgbFlags[i], referencePu.srgbFlags[i], kEps);
-        EXPECT_NEAR(pu.dielectricFresnel[i], referencePu.dielectricFresnel[i], kEps);
+        EXPECT_NEAR(pu.specularFresnelInputs[i], referencePu.specularFresnelInputs[i], kEps);
+        EXPECT_NEAR(pu.textureCoordinateSets[i], referencePu.textureCoordinateSets[i], kEps);
     }
+    for (int row = 0; row < 4; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.specularTransformRows[row][component],
+                        referencePu.specularTransformRows[row][component], kEps);
     for (int row = 0; row < 10; ++row)
         for (int component = 0; component < 4; ++component)
             EXPECT_NEAR(pu.textureTransformRows[row][component],

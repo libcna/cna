@@ -415,11 +415,11 @@ namespace
         {"metal",
          "std::memcpy(pu.textureTransformRows, params.pbrTextureTransformRows",
          "pu.textureTransformRows[slot * 2 + 1].xyz",
-         {{"tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu))",
-           "normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu))",
-           "mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu))",
-           "emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu))",
-           "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu))"}}, 1},
+         {{"tex.sample(smp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 0, pu), 0, pu))",
+           "normalMap.sample(normalSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 1, pu), 1, pu))",
+           "mrMap.sample(mrSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 2, pu), 2, pu))",
+           "emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 3, pu), 3, pu))",
+           "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 4, pu), 4, pu))"}}, 1},
         // plans/plan_street_sdlgpu.md STREETS-0006: the LOD biases moved into PbrParams (SMG-0032).
         {"sdl-gpu",
          "p.pbrTextureTransformRows[row][component]",
@@ -474,8 +474,8 @@ namespace
          "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)",
          "vec3 F=F0+(F90-F0)*", 2},
         {"metal",
-         "float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic)",
-         "float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic)",
+         "float3 F0 = mix(dielectricF0, albedo, metallic)",
+         "float3 F90 = mix(float3(specularWeight), float3(1.0), metallic)",
          "float3 F = F0 + (F90-F0) *", 1},
         {"sdl-gpu",
          "vec3 F0 = mix(dielectricF0, albedo, metallic)",
@@ -568,10 +568,10 @@ namespace
          "mr.b*uMetallicFactor",
          "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x)).r", 2},
         {"metal",
-         "normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0",
+         "normalMap.sample(normalSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 1, pu), 1, pu)).rgb*2.0 - 1.0",
          "mr.g * pu.pbrFactors.y",
          "mr.b * pu.pbrFactors.x",
-         "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r", 1},
+         "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 4, pu), 4, pu)).r", 1},
         {"sdl-gpu",
          "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1), pbrp.lodBias0To3.y).rgb * 2.0 - 1.0",
          "mr.g * pbrp.roughnessFactor",
@@ -1145,8 +1145,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
 // campaign's partition tests exist to make impossible.
 //
 // So this test asks the question the label assumed the answer to. Every parameter here is one that
-// EVERY PBR renderer must consume -- the specular-texture six are deliberately excluded, because
-// `metal` genuinely is factor-only and that is a stated boundary, not a defect.
+// EVERY PBR renderer must consume -- the specular-texture six are deliberately excluded: they are
+// audited by the specular-texture partition below (`metal` sampled neither map until
+// plans/plan_apple_m4.md AM4-085).
 //
 // A missing NAME here is not proof of a wrong picture on its own, and this test does not claim
 // otherwise: it is a cheap necessary condition. What makes it worth having is that the condition
@@ -1209,16 +1210,16 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
     // Both directions are asserted. A renderer moved into `sampling` without the bindings fails,
     // and so does one that grows them while still listed as factor-only, which is the direction a
     // half-finished backend would otherwise take unnoticed.
-    constexpr std::array<const char*, 6> sampling{{
-        "directx9", "directx11", "easygl", "sdl-gpu", "vulkan", "webgpu",
+    constexpr std::array<const char*, 7> sampling{{
+        "directx9", "directx11", "easygl", "sdl-gpu", "vulkan", "webgpu", "metal",
     }};
     // Factor-only is not a capability decision -- it is unfinished work. `webgpu` left this set on
     // 2026-08-18 (`GLTF-344`): its PBR uniform block grew KHR_materials_specular's own inputs -- the
     // UNCLAMPED dielectric F0, the specular factor and two affine transform rows per map -- and its
-    // two WGSL shaders sample both maps at bindings 6 and 7. `metal` cannot be compiled anywhere
-    // this repository runs, and it genuinely IS factor-only: it reads 14 of the 20 PBR draw
-    // parameters, missing exactly the six specular-texture inputs.
-    constexpr std::array<const char*, 1> factorOnly{{"metal"}};
+    // two WGSL shaders sample both maps at bindings 6 and 7. `metal`, the last one, left it in
+    // plans/plan_apple_m4.md AM4-085, built and verified on Apple silicon: textures and samplers 5 and
+    // 6, the unclamped F0, the strength, the two transform rows per map and the per-map UV selector.
+    constexpr std::array<const char*, 0> factorOnly{};
 
     std::set<std::string> expected;
     for (const char* name : sampling) { expected.insert(name); }
@@ -1453,6 +1454,51 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing Vulkan specular binding evidence: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, MetalSamplesBothKhrMaterialsSpecularTextures)
+{
+    // plans/plan_apple_m4.md AM4-085: the last renderer to leave the factor-only set, and with it the
+    // per-map coordinate set every one of its seven PBR maps now honours. Rigid and skinned PBR share
+    // one fragment function, so each shader line appears once.
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "metal");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "pu.specularFresnelInputs[0]=params.pbrDielectricF0Unclamped[0];",
+             "pu.specularFresnelInputs[3]=params.pbrSpecularFactor;",
+             "pu.srgbFlags[3]=params.pbrSpecularColorTextureIsSrgb?1.0f:0.0f;",
+             "std::memcpy(pu.specularTransformRows, params.pbrSpecularTextureTransformRows,",
+             "pu.textureCoordinateSets[0]=static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);",
+             "specularMap=resolveMetal2DTextureBinding(p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular);",
+             "specularColorMap=resolveMetal2DTextureBinding(p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor);",
+             "[p.encoder setFragmentTexture:specularMap atIndex:5];",
+             "[p.encoder setFragmentSamplerState:(p.samplerSlots[5]?p.samplerSlots[5]:p.sampler) atIndex:5];",
+             "[p.encoder setFragmentTexture:specularColorMap atIndex:6];",
+             "[p.encoder setFragmentSamplerState:(p.samplerSlots[6]?p.samplerSlots[6]:p.sampler) atIndex:6];",
+             "texture2d<float> specularMap [[texture(5)]], sampler specularSmp [[sampler(5)]]",
+             "texture2d<float> specularColorMap [[texture(6)]], sampler specularColorSmp [[sampler(6)]]",
+             "specularMap.sample(specularSmp, cna_pbr_specular_transform_uv(cna_pbr_uv(in.uv, in.uv1, 5, pu), 0, pu)).a",
+             "specularColorMap.sample(specularColorSmp, cna_pbr_specular_transform_uv(cna_pbr_uv(in.uv, in.uv1, 6, pu), 1, pu)).rgb",
+             "specularColorTex = mix(specularColorTex, cna_srgb_to_linear(specularColorTex), pu.srgbFlags.w);",
+             "float3 dielectricF0 = min(pu.specularFresnelInputs.xyz * specularColorTex, float3(1.0)) * specularWeight;",
+             // The dual-UV chain: the records that carry TEXCOORD_1, the attribute, the selector.
+             "elements.push_back(VertexElement(48, F::Vector2, U::TextureCoordinate, 1));",
+             "elements.push_back(VertexElement(68, F::Vector2, U::TextureCoordinate, 1));",
+             "float2 uv1 [[attribute(5)]];",
+             "float2 uv1 [[attribute(7)]];",
+             "return ((mask >> uint(slot)) & 1u) != 0u ? uv1 : uv0;"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing Metal specular/dual-UV evidence: " << evidence;
+    }
+    for (int slot = 0; slot < 7; ++slot)
+    {
+        const std::string sample = "cna_pbr_uv(in.uv, in.uv1, " + std::to_string(slot) + ", pu)";
+        EXPECT_EQ(1u, CountOccurrences(source, Normalize(sample)))
+            << "the Metal PBR fragment does not select the authored UV set for map slot " << slot;
     }
 }
 

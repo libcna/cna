@@ -95,6 +95,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         COMMAND cna_test_metal_pbr_vertex_colour
         TIMEOUT 60 LABELS "Metal"
         ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+    # plans/plan_apple_m4.md AM4-085: the per-map coordinate set and KHR_materials_specular's maps.
+    add_executable(cna_test_metal_pbr_dual_uv_specular metal_pbr_dual_uv_specular_test.cpp)
+    target_link_libraries(cna_test_metal_pbr_dual_uv_specular PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_pbr_dual_uv_specular PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_renderer_test(NAME Metal_PbrDualUvSpecular
+        COMMAND cna_test_metal_pbr_dual_uv_specular
+        TIMEOUT 60 LABELS "Metal"
+        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
 
     cna_register_renderer_test(NAME Metal_SpriteBatch_CustomEffect
         COMMAND cna_test_metal_spritebatch_customeffect

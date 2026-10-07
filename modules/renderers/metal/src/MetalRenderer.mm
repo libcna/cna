@@ -564,14 +564,16 @@ struct PbrUniforms {
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
-    float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode
-    float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
+    float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode, w=specular colour decode
+    float4 specularFresnelInputs; // xyz=unclamped dielectric F0, w=KHR_materials_specular factor
     float4 textureTransformRows[10];
+    float4 specularTransformRows[4];
+    float4 textureCoordinateSets; // x=bit i selects TEXCOORD_1 for PBR texture slot i
 };
 // plans/plan_apple_m4.md AM4-084: `color` is glTF's COLOR_0 when the effect enables it and the record
 // carries one, else constant opaque white (BuildMetalDeclaredVertexInput).
-struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; };
-struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; };
+struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; float2 uv1 [[attribute(5)]]; };
+struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; float2 uv1; };
 float cna_direction_handedness(float3x3 m) {
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
@@ -584,6 +586,7 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.tangent = world3 * in.tangent.xyz;
     o.bitangentSign = in.tangent.w * cna_direction_handedness(world3);
     o.uv = in.uv;
+    o.uv1 = in.uv1;
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
     o.color = in.color;
@@ -621,15 +624,29 @@ inline float2 cna_pbr_transform_uv(float2 uv, int slot, constant PbrUniforms& pu
     return float2(dot(value, pu.textureTransformRows[slot * 2].xyz),
                   dot(value, pu.textureTransformRows[slot * 2 + 1].xyz));
 }
+inline float2 cna_pbr_specular_transform_uv(float2 uv, int slot, constant PbrUniforms& pu) {
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, pu.specularTransformRows[slot * 2].xyz),
+                  dot(value, pu.specularTransformRows[slot * 2 + 1].xyz));
+}
+// plans/plan_apple_m4.md AM4-085: GLTF-182/183's per-map coordinate set. Bit `slot` of the transported
+// mask puts that map on TEXCOORD_1 (slots: base colour, normal, metallic-roughness, emissive,
+// occlusion, specular, specular colour).
+inline float2 cna_pbr_uv(float2 uv0, float2 uv1, int slot, constant PbrUniforms& pu) {
+    uint mask = uint(pu.textureCoordinateSets.x + 0.5);
+    return ((mask >> uint(slot)) & 1u) != 0u ? uv1 : uv0;
+}
 fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
     texture2d<float> normalMap [[texture(1)]], sampler normalSmp [[sampler(1)]],
     texture2d<float> mrMap [[texture(2)]], sampler mrSmp [[sampler(2)]],
     texture2d<float> emissiveMap [[texture(3)]], sampler emissiveSmp [[sampler(3)]],
     texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
+    texture2d<float> specularMap [[texture(5)]], sampler specularSmp [[sampler(5)]],
+    texture2d<float> specularColorMap [[texture(6)]], sampler specularColorSmp [[sampler(6)]],
     constant PbrUniforms& pu [[buffer(2)]])
 {
-    float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu));
+    float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 0, pu), 0, pu));
     float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
     // glTF 2.0 3.9.2: COLOR_0 multiplies the base colour, alpha included.
     float4 cnaVertexColor = in.color;
@@ -639,23 +656,29 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
     float3 B = cross(N, T) * in.bitangentSign;
     float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0;
+    float3 sampledNormal = normalMap.sample(normalSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 1, pu), 1, pu)).rgb*2.0 - 1.0;
     sampledNormal.xy *= pu.pbrFactors.z;
     float3 finalNormal = normalize(TBN * sampledNormal);
-    float4 mr = mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu));
+    float4 mr = mrMap.sample(mrSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 2, pu), 2, pu));
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
     float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
     float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
-    float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic);
-    float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic);
+    // KHR_materials_specular: the strength map's alpha weights the dielectric lobe and the colour
+    // map tints its F0, clamped per channel after the tint as the extension specifies.
+    float specularWeight = pu.specularFresnelInputs.w * specularMap.sample(specularSmp, cna_pbr_specular_transform_uv(cna_pbr_uv(in.uv, in.uv1, 5, pu), 0, pu)).a;
+    float3 specularColorTex = specularColorMap.sample(specularColorSmp, cna_pbr_specular_transform_uv(cna_pbr_uv(in.uv, in.uv1, 6, pu), 1, pu)).rgb;
+    specularColorTex = mix(specularColorTex, cna_srgb_to_linear(specularColorTex), pu.srgbFlags.w);
+    float3 dielectricF0 = min(pu.specularFresnelInputs.xyz * specularColorTex, float3(1.0)) * specularWeight;
+    float3 F0 = mix(dielectricF0, albedo, metallic);
+    float3 F90 = mix(float3(specularWeight), float3(1.0), metallic);
     float3 Lo = float3(0.0);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
-    float occlusionSample = occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r;
+    float occlusionSample = occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 4, pu), 4, pu)).r;
     float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
-    float3 emissiveSample = emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu)).rgb;
+    float3 emissiveSample = emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 3, pu), 3, pu)).rgb;
     emissiveSample = mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y);
     float3 emissive = pu.emissiveColor.xyz * emissiveSample;
     float4 c = float4(ambient + Lo + emissive, alpha);
@@ -671,7 +694,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
 // interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
 // tangents remain ordinary directions.
 struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
-struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; };
+struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; float2 uv1 [[attribute(7)]]; };
 float3 cna_skin_normal(float3x3 m, float3 n) {
     float3 c0=m[0], c1=m[1], c2=m[2];
     float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
@@ -701,6 +724,7 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     o.bitangentSign = in.tangent.w * cna_direction_handedness(world3)
                                    * cna_direction_handedness(skinMat3);
     o.uv = in.uv;
+    o.uv1 = in.uv1;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);
     o.color = in.color;
@@ -3983,6 +4007,8 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     id<MTLTexture> metallicRoughnessMap=nil;
     id<MTLTexture> emissiveMap=nil;
     id<MTLTexture> occlusionMap=nil;
+    id<MTLTexture> specularMap=nil;
+    id<MTLTexture> specularColorMap=nil;
     switch(kind)
     {
         case PipelineKind::Textured20:
@@ -4024,6 +4050,12 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
                 p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive);
             occlusionMap=resolveMetal2DTextureBinding(
                 p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion);
+            // plans/plan_apple_m4.md AM4-085: KHR_materials_specular's maps, white when absent -- the
+            // identity of both products, so a factor-only material shades exactly as before.
+            specularMap=resolveMetal2DTextureBinding(
+                p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular);
+            specularColorMap=resolveMetal2DTextureBinding(
+                p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor);
             break;
         case PipelineKind::Colored16:
         case PipelineKind::Sprite2D:
@@ -4114,6 +4146,10 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
         [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
+        [p.encoder setFragmentTexture:specularMap atIndex:5];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[5]?p.samplerSlots[5]:p.sampler) atIndex:5];
+        [p.encoder setFragmentTexture:specularColorMap atIndex:6];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[6]?p.samplerSlots[6]:p.sampler) atIndex:6];
     } else if (kind == PipelineKind::SkinnedPbr68) {
         // plans/plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
         // Skinned52/56, same 5-texture PBR-map binding as Pbr48.
@@ -4137,6 +4173,10 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
         [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
+        [p.encoder setFragmentTexture:specularMap atIndex:5];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[5]?p.samplerSlots[5]:p.sampler) atIndex:5];
+        [p.encoder setFragmentTexture:specularColorMap atIndex:6];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[6]?p.samplerSlots[6]:p.sampler) atIndex:6];
     } else {
         // plans/plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below

@@ -68,6 +68,8 @@ TEST(MetalTextureBindingPolicy, EveryStockNullSlotHasTheRequiredNeutralResource)
         {MetalStockTextureSlot::PbrMetallicRoughness, MetalNeutralTextureKind::White2D},
         {MetalStockTextureSlot::PbrEmissive, MetalNeutralTextureKind::White2D},
         {MetalStockTextureSlot::PbrOcclusion, MetalNeutralTextureKind::White2D},
+        {MetalStockTextureSlot::PbrSpecular, MetalNeutralTextureKind::White2D},
+        {MetalStockTextureSlot::PbrSpecularColor, MetalNeutralTextureKind::White2D},
     };
     for (const Expected& item : expected)
     {
