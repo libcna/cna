@@ -5,7 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 typedef struct HapticsState {
     int validated;

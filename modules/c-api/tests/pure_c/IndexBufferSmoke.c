@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_IndexBufferHandle) == 8U,
                "CNA_IndexBufferHandle size changed");

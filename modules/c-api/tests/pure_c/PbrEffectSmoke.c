@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_ColorMatrix4x4) == 64U,
                "CNA color-matrix layout changed");

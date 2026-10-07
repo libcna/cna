@@ -6,7 +6,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 typedef struct GraphicsSurfaceState {
     CNA_Handle texture;

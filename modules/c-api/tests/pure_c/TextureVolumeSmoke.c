@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 /*
  * A stage number cannot say which of a dozen claims in one condition broke. VOL names the

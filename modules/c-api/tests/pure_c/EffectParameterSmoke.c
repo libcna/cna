@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_EffectParameterHandle) == 8U &&
                    sizeof(CNA_EffectParameterCollectionHandle) == 8U,

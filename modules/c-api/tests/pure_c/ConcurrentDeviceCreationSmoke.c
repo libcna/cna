@@ -13,7 +13,7 @@
 
 #include "CnaTestReport.h"
 
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 enum { ThreadCount = 6, Rounds = 4 };
 

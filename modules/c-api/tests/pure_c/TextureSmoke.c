@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 static const char PngPath[] = "cna_c_api_texture_smoke.png";
 static const char JpegPath[] = "cna_c_api_texture_smoke.jpg";

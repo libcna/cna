@@ -7,7 +7,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_CurveKey) == 20U, "CNA_CurveKey size changed");
 _Static_assert(_Alignof(CNA_CurveKey) == 4U, "CNA_CurveKey alignment changed");

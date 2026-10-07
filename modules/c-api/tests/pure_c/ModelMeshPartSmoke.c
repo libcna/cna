@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_ModelMeshPartHandle) == 8U,
                "CNA model-mesh-part handle size changed");

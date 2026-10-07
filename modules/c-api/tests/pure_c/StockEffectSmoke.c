@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 #define REQUIRE(condition) do { \
     if (!(condition)) { \

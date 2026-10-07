@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(CNA_SKINNED_EFFECT_MAX_BONES == UINT32_C(72),
                "SkinnedEffect maximum bone count changed");

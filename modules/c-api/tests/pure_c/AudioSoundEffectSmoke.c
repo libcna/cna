@@ -5,7 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 static CNA_StringView view(const char* const text)
 {

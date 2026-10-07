@@ -10,7 +10,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 typedef struct Shared {
     CNA_Handle game;

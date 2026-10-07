@@ -5,7 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 #ifndef CNA_C_API_MEDIA_FIXTURE_MUSIC
 #error "CNA_C_API_MEDIA_FIXTURE_MUSIC must name the fixture music directory"

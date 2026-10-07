@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_GraphicsResourceTag) == 8U,
                "CNA_GraphicsResourceTag size changed");

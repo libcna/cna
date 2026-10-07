@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 /* Large enough that the registry must reuse slots many times over, small enough that the
    quadratic uniqueness comparison below stays instant even under a sanitizer. */

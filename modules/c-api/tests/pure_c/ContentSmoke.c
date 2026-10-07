@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 #define CONTENT_CHECK(condition) \
     ((condition) ? 1 : \

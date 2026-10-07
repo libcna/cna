@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "CNA/C/texture.h"
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 typedef struct VideoSmokeState {
     int validated;

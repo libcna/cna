@@ -13,7 +13,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 static CNA_Result on_update(
     const CNA_Handle game,

@@ -12,7 +12,7 @@
 
 #include "CnaTestReport.h"
 
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 static int queue_avatar(CNA_AvatarRendererHandle* const out_renderer)
 {

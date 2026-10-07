@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 _Static_assert(sizeof(CNA_ModelHandle) == 8U, "CNA model handle size changed");
 _Static_assert(sizeof(CNA_ModelTag) == 8U, "CNA model tag size changed");

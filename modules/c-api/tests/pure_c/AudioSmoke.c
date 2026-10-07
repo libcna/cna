@@ -6,7 +6,7 @@
 
 #include <math.h>
 #include <string.h>
-#include <threads.h>
+#include "CnaTestThreads.h"
 
 typedef struct WrongThreadState {
     CNA_Handle game;
