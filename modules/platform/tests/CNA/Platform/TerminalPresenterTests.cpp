@@ -14,6 +14,7 @@
 #include "../../../src/Terminal/TerminalAnsiWriter.hpp"
 #include "../../../src/Terminal/TerminalFrameGrid.hpp"
 #include "../../../src/Terminal/TerminalSurfacePresenter.hpp"
+#include "PseudoTerminalHarness.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -391,6 +393,7 @@ public:
 
     [[nodiscard]] bool IsOpen() const { return controller_ >= 0 && device_ >= 0; }
     [[nodiscard]] int Device() const { return device_; }
+    [[nodiscard]] int Controller() const { return controller_; }
 
 private:
     int controller_ = -1;
@@ -406,9 +409,14 @@ protected:
         {
             GTEST_SKIP() << "this environment cannot allocate a pseudo-terminal";
         }
+        // Nothing here reads what is presented, but a terminal does: Darwin's pseudo-terminal holds
+        // about 1 KiB unread, less than two of these full frames, and a write past that waits for
+        // a reader. Linux's holds several, which is how these tests passed without one.
+        drain_.emplace(pty_.Controller());
     }
 
     SizedPseudoTerminal pty_{40, 20};
+    std::optional<CNA::Platform::TestSupport::PseudoTerminalDrain> drain_;
 };
 
 TEST_F(TerminalPresenter, ReportsTheTerminalsRealSize)

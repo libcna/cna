@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
+#include "System/Environment.hpp"
 #include "System/IServiceProvider.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <chrono>
@@ -379,18 +380,21 @@ TEST_F(SystemGuideTest, IsVisibleIsThePublicViewOfTheGuidePanes) {
 
 // Reference Guide.IsVisible throws InvalidOperationException before gamer services are
 // initialized. Initialization cannot be undone in a process, so a fresh one observes it.
-#ifdef __linux__
+#if defined(__unix__) || defined(__APPLE__)
 TEST(GuideVisibilityTest, IsVisibleRequiresInitializedGamerServices) {
     if (std::getenv("CNA_TEST_GUIDE_VISIBLE_CHILD") != nullptr) {
         ASSERT_FALSE(GamerServicesDispatcher::getIsInitializedProperty());
         EXPECT_THROW((void)Guide::getIsVisibleProperty(), System::InvalidOperationException);
         return;
     }
+    // Resolved before the fork, so the child does no more than set its marker and exec.
+    const std::string self = System::Environment::getProcessPathProperty();
+    ASSERT_FALSE(self.empty());
     const pid_t pid = fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {
         setenv("CNA_TEST_GUIDE_VISIBLE_CHILD", "1", 1);
-        execl("/proc/self/exe", "cna-guide-visible",
+        execl(self.c_str(), "cna-guide-visible",
               "--gtest_filter=GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices", static_cast<char*>(nullptr));
         _exit(127);
     }

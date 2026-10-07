@@ -49,6 +49,13 @@ public:
     }
     ~LoopbackService() {
         stop_=true;shutdown(listener_,SHUT_RDWR);
+        // Darwin refuses shutdown() on a listening socket (ENOTCONN) and leaves accept() blocked,
+        // so a connection of our own is what reliably returns it; where shutdown() already woke
+        // it, this connect is simply refused.
+        if(const int wake=socket(AF_INET,SOCK_STREAM,0);wake>=0) {
+            sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);address.sin_port=htons(port_);
+            (void)connect(wake,reinterpret_cast<sockaddr*>(&address),sizeof(address));close(wake);
+        }
         if(const int open=connection_.load();open>=0)shutdown(open,SHUT_RDWR);
         thread_.join();close(listener_);
     }

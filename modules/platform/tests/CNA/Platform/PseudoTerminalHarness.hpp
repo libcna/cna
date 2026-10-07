@@ -31,6 +31,26 @@ extern char** environ;
 
 namespace CNA::Platform::TestSupport {
 
+    /**
+     * @brief The local modes a program chose, without the state bit Darwin's tty driver adds.
+     *
+     * Darwin sets PENDIN ("re-scan pending input") itself whenever canonical mode is turned back
+     * on, so a terminal restored exactly reads back with it set. It is the driver's own state,
+     * cleared when it next processes input, not a mode anybody chose. Linux never sets it, so
+     * there the comparison stays exact.
+     *
+     * @param attributes Attributes read back with `tcgetattr`.
+     * @return `c_lflag`, less PENDIN on Darwin.
+     */
+    [[nodiscard]] inline tcflag_t ChosenLocalModes(const termios& attributes)
+    {
+#if defined(__APPLE__)
+        return attributes.c_lflag & ~static_cast<tcflag_t>(PENDIN);
+#else
+        return attributes.c_lflag;
+#endif
+    }
+
     /** @brief A pseudo-terminal the test owns, plays and inspects. */
     class PseudoTerminal
     {

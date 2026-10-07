@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "System/Environment.hpp"
 #include "System/IServiceProvider.hpp"
 
 #include <atomic>
@@ -744,7 +745,8 @@ TEST(AvatarCatalogProcessTest, TwoProcessesInstallingOnePackActivateItOnce) {
     const auto root = std::filesystem::temp_directory_path() / ("cna-catalog-processes-" + std::to_string(getpid()));
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
-    const auto self = std::filesystem::read_symlink("/proc/self/exe").string();
+    const auto self = System::Environment::getProcessPathProperty();
+    ASSERT_FALSE(self.empty());
     const auto one = "CNA_TEST_CATALOG_CHILD='" + root.string() + "' '" + self + "' --gtest_filter=AvatarCatalogProcessTest.* >/dev/null 2>&1";
     EXPECT_EQ(0, std::system(("(" + one + ") & (" + one + ") & wait").c_str()));
     int finished = 0, installed = 0;

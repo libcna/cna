@@ -380,10 +380,12 @@ TEST(EffectSourceCommandLineTest, TheCompilerIsInvokedWithTheArgumentsTheBackend
     EXPECT_NE(argv.find("arg\t/D\narg\tCNA_REACH=1\n"), std::string::npos) << argv;
     EXPECT_NE(argv.find("arg\t/Qstrip_debug\n"), std::string::npos) << argv;
     // The source directory is on the include path, and the source itself is the last argument.
-    EXPECT_NE(argv.find("arg\t/I\narg\t" + scratch.Source().string() + "\n"), std::string::npos)
+    // Both are spelled as the build resolved them: on macOS the temporary directory is itself
+    // reached through a symlink (/var -> /private/var).
+    const std::filesystem::path source = std::filesystem::weakly_canonical(scratch.Source());
+    EXPECT_NE(argv.find("arg\t/I\narg\t" + source.string() + "\n"), std::string::npos)
         << argv;
-    EXPECT_NE(argv.find("arg\t" + (scratch.Source() / "shader.fx").string() + "\n"),
-              std::string::npos)
+    EXPECT_NE(argv.find("arg\t" + (source / "shader.fx").string() + "\n"), std::string::npos)
         << argv;
     // No launcher was asked for, so none was used.
     EXPECT_NE(argv.find("launcher\t\n"), std::string::npos) << argv;

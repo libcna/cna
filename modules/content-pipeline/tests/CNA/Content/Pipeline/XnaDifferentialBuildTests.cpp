@@ -177,6 +177,13 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     {
         if (notComparable.count(one.name) != 0u) { continue; }
         if (one.name.rfind("effect/", 0) == 0 && !haveFxc) { continue; }
+        // An `.fx` source XNA compiled outside `effect/` (`xbox/fx_minimal`) needs that compiler
+        // just the same. One XNA refused stays: the phone's "does not support custom shaders" is
+        // decided before any compiler would run.
+        if (!haveFxc && one.xna.built && std::filesystem::path(one.source).extension() == ".fx")
+        {
+            continue;
+        }
         // WINCLOSE-0041: likewise a font case in a build without the optional FreeType rasterizer,
         // which can only answer with its own "no font rasterizer" refusal.
         if (std::filesystem::path(one.source).extension() == ".spritefont" &&

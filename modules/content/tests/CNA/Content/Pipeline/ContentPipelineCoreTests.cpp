@@ -643,14 +643,16 @@ TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesAreContainedDeduplicatedAn
 
     const Pipeline::ContentBuildResult result =
         Pipeline::ContentPipeline(registry).Build(request);
+    // The pipeline records a deployment source by its resolved path, so the expectation is
+    // resolved too: the temporary directory is itself reached through a symlink on macOS.
+    const std::filesystem::path media = std::filesystem::weakly_canonical(scratch.Path() / "media.bin");
     ASSERT_EQ(result.deploymentFiles.size(), 1u);
-    EXPECT_EQ(result.deploymentFiles[0].source, scratch.Path() / "media.bin");
+    EXPECT_EQ(result.deploymentFiles[0].source, media);
     EXPECT_EQ(result.deploymentFiles[0].outputPath, "Support/media.bin");
     ASSERT_EQ(result.dependencies.size(), 2u);
     EXPECT_EQ(result.dependencies[1],
               (Pipeline::ContentDependency{Pipeline::ContentDependencyKind::SourceFile,
-                                           CNA::Internal::ContentPathToUtf8(
-                                               scratch.Path() / "media.bin")}));
+                                           CNA::Internal::ContentPathToUtf8(media)}));
 }
 
 TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesRejectConflictsAndPathEscapes)

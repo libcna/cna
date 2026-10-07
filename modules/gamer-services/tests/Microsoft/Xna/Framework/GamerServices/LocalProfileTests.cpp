@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/Environment.hpp"
 #include "System/IServiceProvider.hpp"
 #include <chrono>
 #include <cstdlib>
@@ -422,7 +423,7 @@ TEST_F(LocalSignInTest, ALocalProfileCarriesItsStoredGameDefaults) {
 
 // Dispatcher initialization happens once per process, so the test runs itself again, alone, in a
 // fresh process to observe startup.
-#ifdef __linux__
+#if defined(__unix__) || defined(__APPLE__)
 TEST(LocalAutoSignInTest, ConfiguredProfilesAppearAtTheFirstUpdate) {
     if (std::getenv("CNA_TEST_LOCAL_AUTO_SIGN_IN_CHILD") != nullptr) {
         ASSERT_FALSE(GamerServicesDispatcher::getIsInitializedProperty());
@@ -449,11 +450,14 @@ TEST(LocalAutoSignInTest, ConfiguredProfilesAppearAtTheFirstUpdate) {
     }
     ProfileEnvironment environment;
     environment.Set("CNA_GAMER_SERVICES_AUTO_SIGN_IN", "Ann,Ben");
+    // Resolved before the fork, so the child does no more than set its marker and exec.
+    const std::string self = System::Environment::getProcessPathProperty();
+    ASSERT_FALSE(self.empty());
     const pid_t pid = fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {
         setenv("CNA_TEST_LOCAL_AUTO_SIGN_IN_CHILD", "1", 1);
-        execl("/proc/self/exe", "cna-local-auto-sign-in",
+        execl(self.c_str(), "cna-local-auto-sign-in",
               "--gtest_filter=LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate", static_cast<char*>(nullptr));
         _exit(127);
     }

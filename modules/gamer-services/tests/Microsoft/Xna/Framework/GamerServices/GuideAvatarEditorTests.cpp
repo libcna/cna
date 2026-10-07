@@ -166,6 +166,11 @@ TEST_F(GuideAvatarEditorTest, SlidersMoveWithLeftAndRight) {
     Ui::sendForTesting(Ui::Command::Accept);
     Ui::sendForTesting(Ui::Command::Down);
     ASSERT_TRUE(Label(1).starts_with("Height: ")) << Label(1);
+    // Alice's stored height is drawn by std::uniform_int_distribution, whose output for a seed the
+    // standard library decides: libstdc++ draws 1691 mm here, libc++ 1676 mm. Off the slider's
+    // 10 mm grid a first step only snaps onto it, and from 1676 mm that leaves the label at
+    // "1.68 m", so the test starts from the grid.
+    Ui::sendForTesting(Ui::Command::Right);
     const auto before = Label(1);
     Ui::sendForTesting(Ui::Command::Right);
     EXPECT_NE(before, Label(1));

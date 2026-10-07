@@ -421,6 +421,14 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     {
         GTEST_SKIP() << "The selected renderer intentionally creates no platform window.";
     }
+    // A platform window the platform reports as Headless -- the dummy and offscreen video drivers,
+    // which the CnaPlatformWindowTests ctest forces -- belongs to no window manager: resizable and
+    // borderless are not applied, and minimize and restore are refused as unsupported. A renderer
+    // that draws without a native window still builds the Game there.
+    if (window.GetNativeWindowHandleEXT().system == CNA::Platform::NativeWindowSystem::Headless)
+    {
+        GTEST_SKIP() << "the video driver has no window manager to delegate window state to";
+    }
 
     EXPECT_EQ(window.getTitleProperty(), CNA::Internal::GetDefaultWindowTitle());
     // XNA's GameWindow.AllowUserResizing defaults to false, and GraphicsDevice creates the native

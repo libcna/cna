@@ -19,6 +19,7 @@
 // fail — would look exactly like success.
 
 #include "../../../src/Terminal/TerminalSession.hpp"
+#include "PseudoTerminalHarness.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 
@@ -385,7 +386,8 @@ TEST(TerminalSessionTest, RawModeIsEnteredAndThenPutBackExactly)
 
     termios after{};
     ASSERT_EQ(tcgetattr(pty.Device(), &after), 0);
-    EXPECT_EQ(before.c_lflag, after.c_lflag);
+    EXPECT_EQ(CNA::Platform::TestSupport::ChosenLocalModes(before),
+              CNA::Platform::TestSupport::ChosenLocalModes(after));
     EXPECT_EQ(before.c_iflag, after.c_iflag);
     EXPECT_EQ(before.c_oflag, after.c_oflag);
     EXPECT_EQ(before.c_cc[VMIN], after.c_cc[VMIN]);
