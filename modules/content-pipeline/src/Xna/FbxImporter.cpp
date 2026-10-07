@@ -1847,8 +1847,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     {
                         const std::vector<double> assigned =
                             materialLayer.At(i, controlPoint, polygons.size());
-                        current.material = assigned.empty() ? 0u
-                                                            : static_cast<std::size_t>(assigned.front());
+                        // Through a signed integer: a negative index (-1 is "no material") has no
+                        // unsigned value, and converting -1.0 straight to std::size_t is undefined
+                        // -- x86-64 happened to wrap it past every batch, arm64 saturates it to
+                        // material 0 and merged the null-material batch into the first.
+                        current.material =
+                            assigned.empty()
+                                ? 0u
+                                : static_cast<std::size_t>(static_cast<std::int64_t>(assigned.front()));
                         const std::vector<double> textured =
                             textureLayer.At(i, controlPoint, polygons.size());
                         current.texture = textured.empty() ? -1 : static_cast<int>(textured.front());
