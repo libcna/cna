@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -75,7 +76,10 @@ namespace
             auto& device = getGraphicsDeviceProperty();
             device.SetRenderTarget(target_.get());
             device.Clear(Background);
-            renderer.setWorldProperty(Matrix::getIdentityProperty());
+            // XNA avatars face -Z; a camera on +Z sees the face through a half-turn, as SAMPLE-085 sets it
+            // (GS-009g). That half-turn cancels the renderer's own, so the model-space points below are
+            // the catalog's: facing +Z with the avatar's left on +X.
+            renderer.setWorldProperty(Matrix::CreateRotationY(MathHelper::Pi));
             renderer.setViewProperty(closeUp ? Matrix::CreateLookAt(Vector3(0, 1.64f, 0.75f), Vector3(0, 1.62f, 0), Vector3::Up)
                                              : Matrix::CreateLookAt(Vector3(0, 1.0f, 3.1f), Vector3(0, 0.95f, 0), Vector3::Up));
             renderer.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(0.7853982f, 1.0f, 0.1f, 20.0f));
