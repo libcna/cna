@@ -124,7 +124,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool DeclarationLayout()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, SdlGpu, DirectX9,
-                            DirectX11);
+                            DirectX11, Metal);
 }
 
 // The renderers measured on a real display here. D3D9/D3D11 stay outside it because no D3D
@@ -133,7 +133,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, Software, SdlGpu,
-                           DirectX11);
+                           DirectX11, Metal);
 }
 
 /// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
@@ -173,9 +173,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// still expected to refuse the colliding declarations it now renders -- ten failures on native
 /// Windows that were the test's, not the renderer's (plans/plan_windows_portability_closeout.md
 /// WINCLOSE-0013).
+///
+/// plans/plan_apple_m4.md AM4-035: Metal too. Every built-in pipeline's vertex descriptor is built
+/// from the declaration (MetalDeclaredVertexInput.hpp), each input matched by (usage, usageIndex),
+/// and the layout is part of the pipeline key; measured on an M4.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, DirectX11);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, DirectX11, Metal);
 }
 
 

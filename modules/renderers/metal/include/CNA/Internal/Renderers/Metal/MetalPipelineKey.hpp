@@ -137,10 +137,15 @@ namespace CNA::Internal::Renderers::Metal
     // error, exactly the same class of constraint `colorAttachmentCount` above already documents,
     // now for the orthogonal MSAA axis instead of the MRT one. Defaults to `1` (no MSAA) so every
     // pre-MSAA call site is unaffected.
+    // plans/plan_apple_m4.md AM4-035: `vertexLayout` is the vertex descriptor the pipeline was built
+    // with (MetalDeclaredVertexInput::LayoutKey), now that a declaration -- not the stride alone --
+    // decides it. Zero for the 2D sprite pipeline, which has no vertex descriptor.
     /** @brief Complete identity of one cached Metal render pipeline. */
     struct MetalPipelineCacheKey
     {
         MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1; uint8_t sampleCount = 1;
+        /** @brief Identity of the vertex descriptor; zero when the pipeline has none. */
+        uint64_t vertexLayout = 0;
         /**
          * @brief Compares every field that affects Metal render-pipeline compatibility.
          *
@@ -151,7 +156,7 @@ namespace CNA::Internal::Renderers::Metal
         {
             return kind==other.kind && blend==other.blend &&
                    colorAttachmentCount==other.colorAttachmentCount &&
-                   sampleCount==other.sampleCount;
+                   sampleCount==other.sampleCount && vertexLayout==other.vertexLayout;
         }
     };
     /** @brief Hash functor for Metal render-pipeline cache keys. */
@@ -182,6 +187,7 @@ namespace CNA::Internal::Renderers::Metal
             // churn/regression risk for an already-working scheme) just to make room.
             std::size_t hh = std::hash<uint64_t>()(h);
             hh ^= std::hash<uint8_t>()(key.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            hh ^= std::hash<uint64_t>()(key.vertexLayout) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

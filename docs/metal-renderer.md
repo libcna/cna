@@ -56,7 +56,7 @@ These IDs continue the existing `plans/plan_metal.md` sequence without changing 
 | `METAL-260` — cached `CAMetalDrawable` lacked an owned reference | High | MRR source audit found a `nextDrawable` (+0) result stored across calls and mid-frame commits without retain/release ownership. | Implementation fixed: a portable-tested retained owner keeps it alive, mid-frame commits preserve it, and presentation releases it after command commit. Adapted-Mac validation remains pending. |
 | `METAL-261` — partial renderer construction had no MRR rollback | Medium | Source audit showed that a throw after device/view/layer/queue acquisition (including runtime MSL-library failure) destroyed `impl_` but `Impl` had no destructor. | Implementation fixed: `Impl` now owns bounded teardown for constructor failure and normal destruction, with drawable/layer/view ordering explicit. Adapted-Mac validation remains pending. |
 | `METAL-262` — default device was retained twice | Medium | `MTLCreateSystemDefaultDevice()` supplied the create-rule ownership reference and the constructor immediately sent an additional `retain`. | Implementation fixed: the redundant retain is removed; stored create/`new*` objects each have exactly one owning reference. Adapted-Mac validation remains pending. |
-| `METAL-263` — fixed-stride draws ignored declaration meaning | High | All native routes selected descriptors only by stride, so same-stride semantic/offset/format mismatches could silently reinterpret bytes. | Every indexed/non-indexed ordinary/direct route calls the shared declaration-fidelity oracle before submission; portable canonical/mismatch tests pass. |
+| `METAL-263` — fixed-stride draws ignored declaration meaning | High | All native routes selected descriptors only by stride, so same-stride semantic/offset/format mismatches could silently reinterpret bytes. | Then: every route called the shared declaration-fidelity oracle before submission. Superseded by `AM4-035`: the descriptor is now built from the declaration, so the meaning is bound rather than refused. |
 | `METAL-264` — cube/3D transfers were unchecked, tightly pitched, and mutated in flight | High | Face/mip/range/length arithmetic was incomplete, buffer blits used tight rows, and SetData mutated resources prior draws could still sample. | Overflow-safe transfer layouts use a macOS-safe 256-byte staging-row alignment; readback de-pads; SetData preserves untouched subresources and swaps a completed replacement. Native pixel proof remains pending. |
 | `METAL-265` — Clear/encoder recreation lost viewport and scissor | High | Attachment setup overwrote requested state and fresh encoders omitted effective scissor state. | Requested state is separate from extent and preserved across encoders; the requested viewport is applied unchanged, while the enabled scissor is intersected with the attachment and rasterizer enable toggles apply immediately. |
 | `METAL-266` — OcclusionQuery overclaimed split/exhausting code | High | Clear split query commands and slots were never recycled. | Capability false, factory throws, visibility allocation omitted. |
@@ -126,9 +126,19 @@ requiring Apple headers.
 
 Ordinary draws consume current `GpuDrawParams::vertexStreams` metadata. The supported shape is
 exactly one valid per-vertex stream whose buffer, slot, stride, and combined stride agree with the
-draw argument; the documented legacy empty-stream route remains valid. Pipeline selection uses
-`CombinedVertexStrideOr`, and fog uniforms use the current FNA-compatible four-component
-`fogVector` dot-product contract.
+draw argument; the documented legacy empty-stream route remains valid. Fog uniforms use the
+current FNA-compatible four-component `fogVector` dot-product contract.
+
+Vertex input is declaration-driven (`AM4-035`, `MetalDeclaredVertexInput.hpp`). A buffer that
+received a `VertexDeclaration` selects its stock pipeline from the channels it carries and the
+effect's flags, and every input that pipeline's vertex function reads is bound at the declared
+element's own offset and format, matched by usage and usage index; channels the effect does not
+read are ignored, and the layout is part of the pipeline key. A buffer with no declaration is the
+canonical XNA vertex type its stride names, with exactly the old fixed descriptor. Refused by name:
+a missing input, a raw integer format for a float input, `BLENDINDICES` other than `Byte4`, an
+element outside the record, and a lit `BasicEffect` asked for `VertexColorEnabled` over a `COLOR0`
+channel (no lit Metal vertex function reads colour). `DualTextureEffect` samples its second texture
+with `TEXCOORD1`; a record with one set feeds it to both, as `VULKAN-150` does.
 
 Render-target type, descriptor, slice, cube-face, and foreign-renderer checks occur before changing
 the active target. Renderer resources retain their native device/queue dependencies, active target

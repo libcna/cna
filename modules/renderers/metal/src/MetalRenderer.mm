@@ -24,6 +24,7 @@
 #include "CNA/Internal/Renderers/Metal/MetalBlend.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalBlendFunction.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCullMode.hpp"
+#include "CNA/Internal/Renderers/Metal/MetalDeclaredVertexInput.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalDepthPolicy.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPolicy.hpp"
 // plans/plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
@@ -181,16 +182,24 @@ fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[te
 // DualTextureEffect (plans/plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
 // PSDualTexture -- `color.rgb *= 2; color *= overlay * diffuse;` (a lightmap-style RGB-doubling
 // factor on the FIRST texture only, alpha untouched) -- already found, fixed, and pixel-verified
-// on EasyGL/Vulkan/Bgfx (docs/dualtextureeffect-support.md Task 383). CNA's cross-renderer
-// convention (confirmed against WebGPURenderer's shipped dual-texture dispatch) samples
-// both textures at the SAME shared UV (stride 20/24), not FNA's real separate TexCoord/TexCoord2
-// -- an intentional, already-established simplification this shader matches for consistency
-// with every other CNA renderer rather than reintroducing a second UV set nothing else here uses.
-fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]]) {
+// on EasyGL/Vulkan/Bgfx (docs/dualtextureeffect-support.md Task 383).
+// plans/plan_apple_m4.md AM4-035: the second texture is sampled with TEXCOORD1, as XNA's
+// DualTextureEffect does and Vulkan's has since VULKAN-150; a record without a second set feeds
+// TEXCOORD0 to both (MetalDeclaredVertexInput.hpp), which is what one shared UV used to mean.
+struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; };
+struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]]; };
+struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]]; };
+vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
+    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; return o;
+}
+vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
+    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; return o;
+}
+fragment float4 cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 base = tex0.sample(smp0, in.uv);
     base.rgb *= 2.0;
-    float4 c = base * tex1.sample(smp1, in.uv) * vcolor * m.diffuseColor;
+    float4 c = base * tex1.sample(smp1, in.uv1) * vcolor * m.diffuseColor;
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     return c;
 }
@@ -809,84 +818,6 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     using PipelineCacheKey = MetalPipelineCacheKey;
     using PipelineCacheKeyHash = MetalPipelineCacheKeyHash;
 
-    // Builds the MTLVertexDescriptor for one of the 4 fixed byte-strides this renderer currently
-    // recognizes -- byte-for-byte identical to the 4 descriptors the original constructor built
-    // eagerly (vd16/vd20/vd24/vd32), just refactored so the now-lazy pipeline cache can build one
-    // on demand instead of every stride having to exist up front.
-    static MTLVertexDescriptor* vertexDescriptorForStride(std::size_t stride)
-    {
-        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
-        if(!vd) throw std::runtime_error("Metal: failed to allocate vertex descriptor");
-        switch (stride) {
-            case 16:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatUChar4Normalized; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.layouts[0].stride=16;
-                return vd;
-            case 20:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat2; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.layouts[0].stride=20;
-                return vd;
-            case 24:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatUChar4Normalized; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=16; vd.attributes[2].bufferIndex=0;
-                vd.layouts[0].stride=24;
-                return vd;
-            case 32:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
-                vd.layouts[0].stride=32;
-                return vd;
-            // plans/plan_metal.md METAL-81: PbrEffect layout -- position(12)+normal(12)+tangent(16, real
-            // float4: xyz direction + w bitangent-handedness sign, NOT packed/normalized)+uv(8) = 48.
-            case 48:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat4; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
-                vd.attributes[3].format=MTLVertexFormatFloat2; vd.attributes[3].offset=40; vd.attributes[3].bufferIndex=0;
-                vd.layouts[0].stride=48;
-                return vd;
-            // plans/plan_metal.md METAL-72: SkinnedEffect layout -- position(12)+normal(12)+uv(8)+
-            // boneWeights(16, real float4)+boneIndices(4, packed UChar4, UNNORMALIZED -- read as
-            // an integer type in-shader, not MTLVertexFormatUChar4Normalized's auto-float-convert)
-            // = 52; +color(4, packed UChar4Normalized) = 56.
-            case 52:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
-                vd.attributes[3].format=MTLVertexFormatFloat4; vd.attributes[3].offset=32; vd.attributes[3].bufferIndex=0;
-                vd.attributes[4].format=MTLVertexFormatUChar4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
-                vd.layouts[0].stride=52;
-                return vd;
-            case 56:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
-                vd.attributes[3].format=MTLVertexFormatFloat4; vd.attributes[3].offset=32; vd.attributes[3].bufferIndex=0;
-                vd.attributes[4].format=MTLVertexFormatUChar4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
-                vd.attributes[5].format=MTLVertexFormatUChar4Normalized; vd.attributes[5].offset=52; vd.attributes[5].bufferIndex=0;
-                vd.layouts[0].stride=56;
-                return vd;
-            // plans/plan_metal.md METAL-82: SkinnedPbrEffect layout -- position(12)+normal(12)+
-            // tangent(16, real float4 as in the unskinned PBR case)+uv(8)+boneWeights(16)+
-            // boneIndices(4, UNNORMALIZED UChar4 as in the stride-52/56 skinned case) = 68.
-            case 68:
-                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
-                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
-                vd.attributes[2].format=MTLVertexFormatFloat4; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
-                vd.attributes[3].format=MTLVertexFormatFloat2; vd.attributes[3].offset=40; vd.attributes[3].bufferIndex=0;
-                vd.attributes[4].format=MTLVertexFormatFloat4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
-                vd.attributes[5].format=MTLVertexFormatUChar4; vd.attributes[5].offset=64; vd.attributes[5].bufferIndex=0;
-                vd.layouts[0].stride=68;
-                return vd;
-            default:
-                throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plans/plan_metal.md METAL-27)");
-        }
-    }
-
     // plans/plan_metal.md METAL-27: translates one MetalVertexAttribKind (plain C++, see
     // MetalVertexAttribFormat.hpp) to the real Apple MTLVertexFormat it stands in for -- the one
     // piece of this table that must live here rather than in the plain-C++ header, since
@@ -921,6 +852,22 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // path -- see MetalVertexBuffer::SetVertexDeclaration()'s own comment for why (no built-in
     // PipelineKind shader currently pairs with an arbitrary declaration; this becomes reachable
     // once Phase 14's custom ShaderEffect exists).
+    // plans/plan_apple_m4.md AM4-035: the descriptor of every built-in 3D pipeline. It replaces the
+    // fixed per-stride table; MetalCanonicalElementsFor reproduces that table for an undeclared
+    // buffer (portable test CanonicalLayoutsMatchTheFixedStrideTable pins it).
+    static MTLVertexDescriptor* vertexDescriptorFromInput(const MetalDeclaredVertexInput& input)
+    {
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        if(!vd) throw std::runtime_error("Metal: failed to allocate vertex descriptor");
+        for (const auto& attr : input.attributes) {
+            vd.attributes[attr.location].format = metalVertexFormat(attr.kind);
+            vd.attributes[attr.location].offset = (NSUInteger)attr.offset;
+            vd.attributes[attr.location].bufferIndex = 0;
+        }
+        vd.layouts[0].stride = (NSUInteger)input.stride;
+        return vd;
+    }
+
     static MTLVertexDescriptor* vertexDescriptorFromElements(int stride, const std::vector<VertexElement>& elements)
     {
         const MetalVertexDescriptorPlan plan = BuildMetalVertexDescriptorPlan(stride, elements);
@@ -2033,7 +1980,8 @@ struct MetalRenderer::Impl
 
     // plans/plan_metal.md METAL-23/29: replaces the 5 eagerly-built named pipeline fields with a
     // lazily-populated cache keyed by (shader/vertex-layout variant, current blend state).
-    id<MTLRenderPipelineState> getOrCreatePipeline(PipelineKind kind)
+    id<MTLRenderPipelineState> getOrCreatePipeline(PipelineKind kind,
+                                                   const MetalDeclaredVertexInput* vertexInput=nullptr)
     {
         // plans/plan_metal.md METAL-112/113: clamped the same way SetRenderTargets() itself clamps
         // count, and again here as a defensive bound on whatever activeColorAttachmentCount
@@ -2044,7 +1992,8 @@ struct MetalRenderer::Impl
         // orthogonal MSAA axis -- activeSampleCount is always one of {1,2,4,8} in practice
         // Historical code only ever produced {1,2,4,8}; the supported contract currently keeps 1.
         const uint8_t sampleCountKey = (uint8_t)std::clamp(activeSampleCount, 1, 8);
-        PipelineCacheKey key{kind, currentBlend, colorCount, sampleCountKey};
+        PipelineCacheKey key{kind, currentBlend, colorCount, sampleCountKey,
+                             vertexInput ? vertexInput->LayoutKey() : 0};
         auto it = pipelineCache.find(key);
         if (it != pipelineCache.end()) return it->second;
         NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
@@ -2054,8 +2003,8 @@ struct MetalRenderer::Impl
             case PipelineKind::ColorTex24:       vs=@"cna_v3d_colortex"; fs=@"cna_f3d_texture"; stride=24; break;
             case PipelineKind::LitTex32:         vs=@"cna_v3d_lit";      fs=@"cna_f3d_lit";     stride=32; break;
             case PipelineKind::LitTex32VertexLit: vs=@"cna_v3d_lit_vertexlit"; fs=@"cna_f3d_lit_vertexlit"; stride=32; break;
-            case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
-            case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
+            case PipelineKind::DualTex20:        vs=@"cna_v3d_dualtex";       fs=@"cna_f3d_dualtex"; stride=20; break;
+            case PipelineKind::DualTex24Colored: vs=@"cna_v3d_dualtex_color"; fs=@"cna_f3d_dualtex"; stride=24; break;
             case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
             case PipelineKind::Skinned52:        vs=@"cna_v3d_skinned";       fs=@"cna_f3d_skinned"; stride=52; break;
             case PipelineKind::Skinned56:        vs=@"cna_v3d_skinned_color"; fs=@"cna_f3d_skinned"; stride=56; break;
@@ -2072,7 +2021,12 @@ struct MetalRenderer::Impl
         // correctly declared this way, only this one call site got it wrong. Never caught until
         // this was compiled for the first time ever on real Apple hardware -- Clang's own "type
         // argument 'MTLVertexDescriptor' must be a pointer (requires a '*')" error.
-        MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
+        // plans/plan_apple_m4.md AM4-035: every 3D pipeline's descriptor comes from the declared
+        // input drawMetal3D resolved; the canonical declarations reproduce the old fixed table.
+        if (kind!=PipelineKind::Sprite2D && !vertexInput)
+            throw std::logic_error("Metal: a 3D pipeline needs its resolved vertex input");
+        (void)stride;
+        MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorFromInput(*vertexInput);
         MetalObjectOwner pipelineOwner(retainMetalObject,releaseMetalObject);
         pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
                                          sampleCountKey));
@@ -3847,7 +3801,24 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     // "clear colour only" readback of METAL-258 was 3D geometry that never rasterised.
     Mat4 wvp=multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr));
     const std::size_t drawStride=params ? CombinedVertexStrideOr(*params,vb.stride()) : vb.stride();
-    const PipelineKind kind = selectPipelineKind(drawStride, params);
+    // plans/plan_apple_m4.md AM4-035: a declared buffer selects its pipeline by the channels it
+    // carries and binds them where it declared them; an undeclared one is the canonical XNA vertex
+    // type its stride names, as before. This replaces the declaration-fidelity refusal (METAL-263),
+    // which existed because only the canonical layouts could be bound.
+    const auto& declared=vb.declaration();
+    const std::size_t selectionStride=declared.IsEmpty() ? drawStride
+        : MetalSelectionStrideForDeclaration(declared.GetElements(), params);
+    const PipelineKind kind = selectPipelineKind(selectionStride, params);
+    const MetalDeclaredVertexInput vertexInput = BuildMetalDeclaredVertexInput(
+        kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind) : declared.GetElements(),
+        static_cast<int>(drawStride));
+    if(!vertexInput.IsComplete())
+        throw System::NotSupportedException("Metal: this VertexDeclaration cannot feed the selected stock effect: " +
+                                            vertexInput.refusal + ".");
+    if(!declared.IsEmpty()){
+        const std::string dropped=MetalDroppedVertexColorRefusal(kind, declared.GetElements(), params);
+        if(!dropped.empty()) throw System::NotSupportedException("Metal: " + dropped + ".");
+    }
 
     id<MTLTexture> texture0=nil;
     id<MTLTexture> texture1=nil;
@@ -3906,7 +3877,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
     // After ensureFrame(): the correction depends on the pass's sample count.
     wvp=multiply(wvp,fromXna(xnaPixelCenterCorrection(p,pt)));
-    id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
+    id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind, &vertexInput);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
@@ -4061,8 +4032,6 @@ void MetalRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& v,const M
 {
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
-    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
-                                  "colored-nonindexed");
     drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);
 }
 
@@ -4074,8 +4043,6 @@ void MetalRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& v,
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
-    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
-                                  "colored-indexed");
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,nullptr);
 }
 static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuffer& vb)
@@ -4105,8 +4072,6 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
     ValidateMetalDrawParams(gp,*vb);
-    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
-                                  "ordinary-nonindexed");
     // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
     // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
     // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
@@ -4124,8 +4089,6 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
     ValidateMetalDrawParams(gp,*vb);
-    RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
-                                  "ordinary-indexed");
     // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
     // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
     // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
