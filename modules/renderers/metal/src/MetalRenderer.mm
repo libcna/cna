@@ -3718,6 +3718,40 @@ static void fillSkinnedPbrUniforms(SkinnedPbrTransform& t, PbrUniforms& pu, cons
     FillMetalSkinnedPbrUniforms(t, pu, wvp, params);
 }
 
+// plans/plan_apple_m4.md AM4-029: XNA 4.0 rasterizes with Direct3D 9's pixel centres, so the
+// exact screen-space triangle (x,y),(x+1,y),(x,y+1) of the Primitives sample covers one pixel;
+// Metal samples pixel centres half a pixel further in and drops it. The same clip-space
+// translation EasyGL, Vulkan and WebGPU apply (xnaPixelCenterScale_, 63/128 of a pixel: just under
+// half so the centre stays on the covered side of the fill edge), for the same reasons limited to
+// filled topologies and to single-sampled render targets -- see
+// VulkanRenderer::XnaPixelCenterCorrectionEXT. The pixel is the XNA backbuffer's: on a HiDPI
+// drawable the backbuffer is presented at several physical pixels per logical one, and shifting
+// by half a PHYSICAL pixel would leave the logical pixel's centre uncovered.
+static Matrix xnaPixelCenterCorrection(const MetalRenderer::Impl& p,PrimitiveType pt)
+{
+    if(pt!=PrimitiveType::TriangleList&&pt!=PrimitiveType::TriangleStrip) return Matrix::getIdentityProperty();
+    const bool targetBound=p.currentRenderTarget||p.currentRenderTargetCube||!p.currentMRT.empty();
+    if(targetBound&&p.activeSampleCount>1) return Matrix::getIdentityProperty();
+    const MetalViewportState viewport=p.rasterState.EffectiveViewport();
+    if(viewport.width<=0.0||viewport.height<=0.0) return Matrix::getIdentityProperty();
+    double physicalPerLogicalX=1.0;
+    double physicalPerLogicalY=1.0;
+    if(!targetBound){
+        const auto presentation=p.computeLogicalViewport();
+        if(presentation.logicalWidth>0.0f&&presentation.logicalHeight>0.0f){
+            physicalPerLogicalX=presentation.width/presentation.logicalWidth;
+            physicalPerLogicalY=presentation.height/presentation.logicalHeight;
+        }
+    }
+    constexpr double kXnaPixelCenterScale=63.0/64.0;
+    // Metal's NDC y points up and its framebuffer rows run down, as in GL: +x/-y moves the
+    // geometry right and down on screen, which is EasyGL's unchanged sign.
+    return Matrix::CreateTranslation(
+        static_cast<float>(kXnaPixelCenterScale*physicalPerLogicalX/viewport.width),
+        static_cast<float>(-kXnaPixelCenterScale*physicalPerLogicalY/viewport.height),
+        0.0f);
+}
+
 static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     // plans/plan_apple_m4.md AM4-028: uploaded in XNA's own M11..M44 order, like `world`
@@ -3785,6 +3819,8 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     }
 
     if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
+    // After ensureFrame(): the correction depends on the pass's sample count.
+    wvp=multiply(wvp,fromXna(xnaPixelCenterCorrection(p,pt)));
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
