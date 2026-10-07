@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * skinning-data property of its own). Inherits `System::Object` so it can be pointed to
      * by `Model.Tag`'s own `System::Object*` type.
      */
-    CNAEXT struct SkinningData : public System::Object
+    struct CNAEXT SkinningData : public System::Object
     {
         /** @brief Returns the fully-qualified .NET-style type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -104,7 +104,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * `Update()` every frame, then feed `GetSkinTransforms()` straight into
      * `SkinnedEffect::SetBoneTransforms()` before drawing the mesh.
      */
-    CNAEXT class AnimationPlayer
+    class CNAEXT AnimationPlayer
     {
     public:
         /**
@@ -197,7 +197,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * A file with **both** a skin and rigid node animation therefore has nowhere to put these
      * today; the importer reports that by name rather than dropping it (`GLTF-295`).
      */
-    CNAEXT struct ModelAnimationsEXT : public System::Object
+    struct CNAEXT ModelAnimationsEXT : public System::Object
     {
         /** @brief Returns the fully-qualified .NET-style type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

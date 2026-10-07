@@ -73,7 +73,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * Projection and placement are kept apart, as §3.10 keeps them, because an application
      * animating the camera node must recompute the view without touching the projection.
      */
-    CNAEXT struct ModelCameraEXT
+    struct CNAEXT ModelCameraEXT
     {
         /** @brief The camera's name; may be empty. */
         std::string Name;
@@ -163,7 +163,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * drives. @ref Data and every mesh pointer are owned by the Model's content resources and
      * remain valid for the Model's lifetime.
      */
-    CNAEXT struct ModelSkinEXT
+    struct CNAEXT ModelSkinEXT
     {
         /** @brief The source skin's display name; may be empty. */
         std::string Name;

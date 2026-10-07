@@ -32,7 +32,7 @@ namespace CNA::Input
      * - **Custom**: `direction`, `length`, `delay`, `button`, `interval`, `customChannels`,
      *   `customPeriod`, `customData` (size must be `customChannels * samples`), envelope.
      */
-    CNAEXT struct HapticEffectEXT
+    struct CNAEXT HapticEffectEXT
     {
         /** @brief A `length` value meaning "play forever". */
         static constexpr std::uint32_t InfiniteLengthEXT = 4294967295u;

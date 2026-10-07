@@ -13,7 +13,7 @@ namespace CNA::Input
      * numeric pad, hide password characters, or offer an email keyboard) via
      * `TextInputEXT::StartTextInputWithTypeEXT`.
      */
-    CNAEXT enum class TextInputTypeEXT
+    enum class CNAEXT TextInputTypeEXT
     {
         /** @brief The input is plain text. */
         Text,

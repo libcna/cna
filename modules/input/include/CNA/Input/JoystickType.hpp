@@ -8,7 +8,7 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — the platform-neutral physical category of a raw joystick device.
      */
-    CNAEXT enum class JoystickTypeEXT
+    enum class CNAEXT JoystickTypeEXT
     {
         /** @brief Unknown or unrecognized joystick type. */
         Unknown,

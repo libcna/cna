@@ -12,7 +12,7 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — the static hardware shape and identity of a raw joystick device.
      */
-    CNAEXT struct JoystickCapabilitiesEXT
+    struct CNAEXT JoystickCapabilitiesEXT
     {
         /** @brief True if a joystick with this instance id is currently connected. */
         bool isConnected = false;

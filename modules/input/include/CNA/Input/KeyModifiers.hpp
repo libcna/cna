@@ -16,7 +16,7 @@ namespace CNA::Input
      * `KeyModifier` mask (which collapses left/right variants), so text/UI code can branch on
      * Shift/Ctrl/Alt/Gui and read the Caps/Num/Scroll lock toggles without naming a native backend.
      */
-    CNAEXT enum class KeyModifiersEXT : std::uint32_t
+    enum class CNAEXT KeyModifiersEXT : std::uint32_t
     {
         /** @brief No modifier active. */
         None   = 0,

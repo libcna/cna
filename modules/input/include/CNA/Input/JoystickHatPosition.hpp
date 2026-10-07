@@ -11,7 +11,7 @@ namespace CNA::Input
      * Native APIs often encode hats as combined direction bits; the nine reachable combinations
      * are enumerated here so no native layout becomes public API.
      */
-    CNAEXT enum class JoystickHatPositionEXT
+    enum class CNAEXT JoystickHatPositionEXT
     {
         /** @brief The hat is not pressed in any direction. */
         Centered,

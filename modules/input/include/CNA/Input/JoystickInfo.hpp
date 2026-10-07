@@ -16,7 +16,7 @@ namespace CNA::Input
      * joystick (flight sticks, wheels, throttles, arbitrary HID controllers). This descriptor pairs
      * the platform device id with its human-readable name and physical type.
      */
-    CNAEXT struct JoystickInfoEXT
+    struct CNAEXT JoystickInfoEXT
     {
         /** @brief The platform device id, stable while this joystick stays connected. */
         std::uint32_t id = 0;

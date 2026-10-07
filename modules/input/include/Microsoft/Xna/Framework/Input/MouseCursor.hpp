@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Input
      * @note CNAEXT — this is a MonoGame-derived CNA extension. No MouseCursor type exists
      * in XNA 4.0 or FNA.
      */
-    CNAEXT class MouseCursor : public System::IDisposable
+    class CNAEXT MouseCursor : public System::IDisposable
     {
     public:
         /** @brief Creates a default Arrow cursor. */

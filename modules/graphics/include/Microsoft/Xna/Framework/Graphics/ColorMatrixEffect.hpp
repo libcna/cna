@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * The matrix is row-major: `out[row] = dot(matrix[row], inRGBA) + offset[row]`. Every output
      * component is clamped to [0,1]. The default is the identity transform.
      */
-    CNAEXT class ColorMatrixEffect final : public Effect
+    class CNAEXT ColorMatrixEffect final : public Effect
     {
     public:
         /** @brief Constructs an identity colour transform for @p device. */

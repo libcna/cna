@@ -19,7 +19,7 @@ namespace CNA::Input
      * permission- and user-gesture-gated, so `SetTextEXT` may be ignored and `GetTextEXT` may be empty.
      * A platform with no clipboard at all reports empty and ignores writes, rather than failing.
      */
-    CNAEXT class Clipboard
+    class CNAEXT Clipboard
     {
     public:
         /** @brief Static-only utility; not instantiable. */

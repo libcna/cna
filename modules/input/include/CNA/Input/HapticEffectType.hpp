@@ -9,7 +9,7 @@ namespace CNA::Input
      * @brief CNAEXT — which force-feedback effect family a `HapticEffectEXT` describes, using
      *        CNA-owned values distinct from the capability bitmask in `HapticFeatureEXT`.
      */
-    CNAEXT enum class HapticEffectTypeEXT
+    enum class CNAEXT HapticEffectTypeEXT
     {
         /** @brief A steady directional push. */
         Constant,

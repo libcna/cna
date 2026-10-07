@@ -27,7 +27,7 @@ namespace CNA
     /**
      * @brief Declares the XNA project's graphics profile before the game starts.
      */
-    CNAEXT struct ProjectGraphicsProfileEXT
+    struct CNAEXT ProjectGraphicsProfileEXT
     {
         /**
          * @brief Registers the profile embedded by the original XNA project build.

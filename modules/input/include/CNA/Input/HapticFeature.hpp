@@ -15,7 +15,7 @@ namespace CNA::Input
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple dual-motor rumble;
      * this CNA extension exposes the platform contract's richer haptic capability query.
      */
-    CNAEXT enum class HapticFeatureEXT : std::uint32_t
+    enum class CNAEXT HapticFeatureEXT : std::uint32_t
     {
         /** @brief No effect families or global capabilities supported. */
         None = 0,

@@ -10,7 +10,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Severity of one glTF import diagnostic. */
-    CNAEXT enum class GltfImportDiagnosticSeverityEXT
+    enum class CNAEXT GltfImportDiagnosticSeverityEXT
     {
         /** @brief Informational conversion or generated data; no authored result was lost. */
         Information,
@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics
     };
 
     /** @brief The kind of change one glTF import diagnostic describes. */
-    CNAEXT enum class GltfImportDiagnosticKindEXT
+    enum class CNAEXT GltfImportDiagnosticKindEXT
     {
         /** @brief An exact conversion or other useful import note. */
         Information,
@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @ref Details names the individual maps, attributes or extensions when a count alone would
      * not be actionable.
      */
-    CNAEXT struct GltfImportDiagnosticEXT
+    struct CNAEXT GltfImportDiagnosticEXT
     {
         /** @brief Stable lower-case, hyphen-separated diagnostic identifier. */
         std::string Code;
@@ -82,7 +82,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * discovery and contains only outcomes that occurred; consumers must branch on @ref
      * GltfImportDiagnosticEXT::Code rather than on its display message or vector position.
      */
-    CNAEXT struct GltfImportReportEXT
+    struct CNAEXT GltfImportReportEXT
     {
         /** @brief Nodes imported from the represented source scene. */
         std::size_t NodeCount = 0;

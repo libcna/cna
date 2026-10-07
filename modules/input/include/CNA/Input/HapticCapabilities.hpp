@@ -11,7 +11,7 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — the static hardware shape of an opened haptic device.
      */
-    CNAEXT struct HapticCapabilitiesEXT
+    struct CNAEXT HapticCapabilitiesEXT
     {
         /** @brief True if the device handle is currently open. */
         bool isOpen = false;

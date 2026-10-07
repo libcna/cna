@@ -19,7 +19,7 @@ namespace CNA::Input
      * through `HapticDevice`. Real actuation requires physical force-feedback hardware (a wheel or
      * joystick with actuators) — most gamepads only support simple rumble, not arbitrary effects.
      */
-    CNAEXT class Haptics
+    class CNAEXT Haptics
     {
     public:
         /** @brief Static-only utility; not instantiable. */

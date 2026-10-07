@@ -13,7 +13,7 @@ namespace CNA::Input
      * X/Y). This CNA extension lets UI prompts show the correct glyph. It mirrors the platform
      * contract's `GamepadButtonLabel`.
      */
-    CNAEXT enum class GamePadButtonLabelEXT
+    enum class CNAEXT GamePadButtonLabelEXT
     {
         /** @brief No known label (non-face button, or the controller type is unknown). */
         Unknown,

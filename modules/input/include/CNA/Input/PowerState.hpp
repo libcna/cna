@@ -11,7 +11,7 @@ namespace CNA::Input
      * XNA 4.0 has no battery API; this is a CNA extension shared by `GamePad::GetPowerInfoEXT`
      * (per-controller) and `CNA::Input::Power` (host system).
      */
-    CNAEXT enum class PowerStateEXT
+    enum class CNAEXT PowerStateEXT
     {
         /** @brief The power state could not be determined (error querying the source). */
         Error,

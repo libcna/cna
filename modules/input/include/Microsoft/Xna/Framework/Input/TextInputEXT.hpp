@@ -37,7 +37,7 @@ namespace Microsoft::Xna::Framework::Input
      *       the string carefully, since a byte offset is not a character/code-point count for
      *       multi-byte text.
      */
-    CNAEXT class TextInputEXT
+    class CNAEXT TextInputEXT
     {
     public:
         /** @brief TextInputEXT is a static class (FNA `public static class TextInputEXT`) and cannot be instantiated. */

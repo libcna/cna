@@ -12,7 +12,7 @@ namespace CNA::Input
      * platform contract's `GamepadConnectionState`. Games can use it to warn about a low-battery
      * wireless pad.
      */
-    CNAEXT enum class GamePadConnectionStateEXT
+    enum class CNAEXT GamePadConnectionStateEXT
     {
         /** @brief The connection medium is unknown (or the controller is disconnected). */
         Unknown,

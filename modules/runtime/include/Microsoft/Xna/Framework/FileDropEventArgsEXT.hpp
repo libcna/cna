@@ -16,7 +16,7 @@ namespace Microsoft::Xna::Framework
      * @note CNAEXT — CNA extension, not XNA API. XNA had no drag and drop; the shape is
      * MonoGame's `FileDropEventArgs`, so a game ported from there finds what it expects.
      */
-    CNAEXT class FileDropEventArgsEXT : public System::EventArgs
+    class CNAEXT FileDropEventArgsEXT : public System::EventArgs
     {
     public:
         /**

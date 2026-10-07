@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework
      *
      * @note CNAEXT — CNA extension, not XNA API. XNA had no drag and drop.
      */
-    CNAEXT class TextDropEventArgsEXT : public System::EventArgs
+    class CNAEXT TextDropEventArgsEXT : public System::EventArgs
     {
     public:
         /**

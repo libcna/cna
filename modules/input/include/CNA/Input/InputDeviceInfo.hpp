@@ -15,7 +15,7 @@ namespace CNA::Input
      * CNA extension descriptor pairs an SDL device instance id with its human-readable name. It is
      * metadata only — XNA input state stays merged across devices.
      */
-    CNAEXT struct InputDeviceInfoEXT
+    struct CNAEXT InputDeviceInfoEXT
     {
         /** @brief The stable platform device instance id. */
         std::uint64_t id = 0;

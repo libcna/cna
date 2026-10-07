@@ -19,7 +19,7 @@ namespace CNA::Input
      * Platform notes: desktop (Windows/Linux) enumerate fully; macOS is partial; Android/Web expose a
      * single logical device (the lists are typically short or empty).
      */
-    CNAEXT class InputDevices
+    class CNAEXT InputDevices
     {
     public:
         /** @brief Static-only utility; not instantiable. */

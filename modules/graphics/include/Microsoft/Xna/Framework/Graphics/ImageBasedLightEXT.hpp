@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * two thirds of the answer, it is a wrong one. @ref IsValidEXT is that test, and an effect
      * given an invalid bundle falls back to its flat ambient term.
      */
-    CNAEXT struct ImageBasedLightEXT
+    struct CNAEXT ImageBasedLightEXT
     {
         /** @brief Cosine-convolved diffuse irradiance, indexed by the surface normal. */
         TextureCube* Irradiance = nullptr;

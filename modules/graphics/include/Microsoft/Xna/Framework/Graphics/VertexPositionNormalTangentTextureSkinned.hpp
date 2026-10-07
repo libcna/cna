@@ -25,7 +25,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * established precedent, extended with VertexPositionNormalTangentTexture's own Tangent field
      * (plans/plan_cnj.md CNB-57/Phase 13A follow-up: PBR + skinning combination).
      */
-    CNAEXT struct VertexPositionNormalTangentTextureSkinned : public IVertexType
+    struct CNAEXT VertexPositionNormalTangentTextureSkinned : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;

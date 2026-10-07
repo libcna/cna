@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * reaching a PBR effect. Rotation is counter-clockwise in radians. The identity defaults make
      * an unconfigured effect behave exactly as it did before this property existed.
      */
-    CNAEXT struct TextureTransformEXT
+    struct CNAEXT TextureTransformEXT
     {
         /** @brief Translation applied after scale and rotation. */
         Vector2 Offset{0.0f, 0.0f};

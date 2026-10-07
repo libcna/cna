@@ -120,7 +120,7 @@ namespace Microsoft::Xna::Framework::Audio
         // FACT_internal.c's play_sound(), where a triggered check unconditionally overwrites
         // fade_in_ms with the (possibly zero) authored fadeInMS, discarding whatever an earlier
         // check set it to; `fadeInMS` is only meaningful when `triggered` is true.
-        CNAEXT struct InstanceLimitDecision
+        struct CNAEXT InstanceLimitDecision
         {
             bool     allowed;
             bool     triggered;

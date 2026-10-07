@@ -14,7 +14,7 @@ namespace CNA::Input
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple rumble; this
      * descriptor pairs the platform device id with its human-readable name.
      */
-    CNAEXT struct HapticInfoEXT
+    struct CNAEXT HapticInfoEXT
     {
         /** @brief The platform device id, stable while the device remains connected. */
         std::uint32_t id = 0;

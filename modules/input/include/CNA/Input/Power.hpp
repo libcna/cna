@@ -15,7 +15,7 @@ namespace CNA::Input
      * battery state; on the web it is best-effort (the Battery Status API is deprecated in some
      * browsers) and typically reports Unknown.
      */
-    CNAEXT class Power
+    class CNAEXT Power
     {
     public:
         /** @brief Static-only utility; not instantiable. */

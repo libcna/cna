@@ -74,7 +74,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * change -- a deliberate simplicity-over-throughput tradeoff (see plans/plan_cnj.md CNB-62's own
      * design-decision notes for the full reasoning).
      */
-    CNAEXT struct MorphTargetDataEXT : public System::Object
+    struct CNAEXT MorphTargetDataEXT : public System::Object
     {
         /** @brief Returns the fully-qualified .NET-style type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

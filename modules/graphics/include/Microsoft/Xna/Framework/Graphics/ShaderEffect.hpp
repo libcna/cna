@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @note The GLSL is compiled as written: on OpenGL it keeps GL's [-1, 1] clip depth, where the
      *       stock effects match XNA's [0, 1] with `gl_Position.z = 2.0 * gl_Position.z - w`.
      */
-    CNAEXT class ShaderEffect : public Effect, public IEffectMatrices
+    class CNAEXT ShaderEffect : public Effect, public IEffectMatrices
     {
     public:
         /**

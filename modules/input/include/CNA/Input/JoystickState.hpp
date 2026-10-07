@@ -17,7 +17,7 @@ namespace CNA::Input
      * count are whatever the hardware/driver reports, with no XNA-style semantic assignment
      * (LeftThumbstick, A button, …). Games that need mapped semantics should use `GamePad` instead.
      */
-    CNAEXT struct JoystickStateEXT
+    struct CNAEXT JoystickStateEXT
     {
         /** @brief Raw signed axis values (-32768 to 32767), one per axis. */
         std::vector<std::int16_t> axes;

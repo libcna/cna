@@ -13,7 +13,7 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — the kind of a host-device motion sensor, using CNA-owned vocabulary.
      */
-    CNAEXT enum class SensorTypeEXT
+    enum class CNAEXT SensorTypeEXT
     {
         /** @brief Unknown or unrecognized sensor. */
         Unknown,
@@ -34,7 +34,7 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — identity of one enumerated host-device motion sensor.
      */
-    CNAEXT struct SensorInfoEXT
+    struct CNAEXT SensorInfoEXT
     {
         /** @brief The platform sensor instance id. */
         std::uint32_t id = 0;
@@ -74,7 +74,7 @@ namespace CNA::Input
      * in m/s², gyroscope in rad/s. Platform notes: mainly a mobile feature (Android full; Windows/Linux
      * partial; macOS none; Web permission-gated), so the enumeration is often empty on desktop.
      */
-    CNAEXT class Sensors
+    class CNAEXT Sensors
     {
     public:
         /** @brief Static-only utility; not instantiable. */

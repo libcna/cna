@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * other game code that hand-builds GPU-skinned meshes. Real XNA has no public skinned-vertex
      * struct.
      */
-    CNAEXT struct VertexPositionNormalTextureSkinned : public IVertexType
+    struct CNAEXT VertexPositionNormalTextureSkinned : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;

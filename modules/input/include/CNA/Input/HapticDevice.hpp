@@ -30,7 +30,7 @@ namespace CNA::Input
      * @note CNAEXT — XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s dual-motor
      *       rumble; this whole class is a CNA extension.
      */
-    CNAEXT class HapticDevice : public System::IDisposable
+    class CNAEXT HapticDevice : public System::IDisposable
     {
     public:
         /** @brief Constructs a closed haptic device. */

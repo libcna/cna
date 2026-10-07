@@ -39,7 +39,7 @@ namespace CNA
      * namespace { const CNA::AssemblyTitleAttributeEXT assemblyTitle{"FuzzyLogic"}; }
      * @endcode
      */
-    CNAEXT struct AssemblyTitleAttributeEXT
+    struct CNAEXT AssemblyTitleAttributeEXT
     {
         /**
          * @brief Declares @p title as the running program's product title.

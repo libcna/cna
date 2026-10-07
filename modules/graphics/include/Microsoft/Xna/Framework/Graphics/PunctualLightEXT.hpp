@@ -11,7 +11,7 @@ namespace Microsoft::Xna::Framework::Graphics {
     class TextureCube;
 
     /** @brief Which kind of punctual light a `PunctualLightEXT` describes. */
-    CNAEXT enum class PunctualLightKindEXT
+    enum class CNAEXT PunctualLightKindEXT
     {
         /** @brief No punctual light; every other field is ignored. */
         None,
@@ -39,7 +39,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * position from another produces a shadow that is merely in the wrong place -- which looks like
      * a bias problem rather than a torn update.
      */
-    CNAEXT struct PunctualLightEXT
+    struct CNAEXT PunctualLightEXT
     {
         /** @brief What this describes; `None` leaves every field below inert. */
         PunctualLightKindEXT Kind = PunctualLightKindEXT::None;

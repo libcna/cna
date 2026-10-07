@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @note CNAEXT — not part of the XNA 4.0 API. CNA extension supporting
      * SkinnedModelEXT's real-rendering animation playback.
      */
-    CNAEXT struct KeyframeEXT
+    struct CNAEXT KeyframeEXT
     {
         /** @brief Time of this keyframe, relative to the start of the clip. */
         System::TimeSpan Time;
@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Graphics
      *
      * @note CNAEXT — not part of the XNA 4.0 API. CNA extension.
      */
-    CNAEXT struct BoneTrackEXT
+    struct CNAEXT BoneTrackEXT
     {
         /** @brief Index of the bone this track drives, into SkinnedModelEXT's bone arrays. */
         int BoneIndex = -1;
@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * that stated neither would let a reader apply one as the other, which is a silent corruption
      * in place of the silent drop `GLTF-293` removed.
      */
-    CNAEXT enum class ClipTargetSpaceEXT
+    enum class CNAEXT ClipTargetSpaceEXT
     {
         /** @brief A slot in one skin's GPU joint palette — what `SkinningData` indexes. */
         JointPalette,
@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clips are looked up by the
      * name they were loaded under (see SkinnedModelEXT::Clips).
      */
-    CNAEXT struct AnimationClipEXT
+    struct CNAEXT AnimationClipEXT
     {
         /** @brief Total playback duration of this clip. */
         System::TimeSpan Duration;
@@ -96,13 +96,13 @@ namespace Microsoft::Xna::Framework::Graphics
      * (real XNA's multi-part model animation) rather than per-vertex GPU skinning. Unrelated to
      * the XNA avatar API, whose 71-bone rig is AvatarRenderer's own.
      */
-    CNAEXT class SkinnedModelEXT
+    class CNAEXT SkinnedModelEXT
     {
     public:
         /**
          * @brief Names a single renderable part of the model.
          */
-        CNAEXT struct PartEXT
+        struct CNAEXT PartEXT
         {
             /**
              * @brief Part name as written by the content pipeline (the source mesh name);

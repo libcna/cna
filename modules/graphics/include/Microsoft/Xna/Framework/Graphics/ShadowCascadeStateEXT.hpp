@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * Always compiled, like `IShadowReceiverEXT` itself, so an effect's public surface does not
      * change with a build flag. Applications or renderers may fill it.
      */
-    CNAEXT struct ShadowCascadeStateEXT
+    struct CNAEXT ShadowCascadeStateEXT
     {
         /** @brief Largest number of cascades a receiver shader carries. */
         static constexpr int kMaxCascades = 4;

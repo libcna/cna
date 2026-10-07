@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework
     class Game;
 
     /** @brief CNA-specific presentation/scaling policy for the rendering renderer. */
-    CNAEXT enum class PresentationMode
+    enum class CNAEXT PresentationMode
     {
         /** @brief Scale with black bars to preserve aspect ratio. */
         Letterbox = 0,

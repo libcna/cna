@@ -22,7 +22,7 @@ namespace CNA::Input
      * cannot represent. A device the platform also maps as a gamepad is visible here too (as
      * `JoystickTypeEXT::Gamepad`); this is an independent, unmapped view of the same hardware.
      */
-    CNAEXT class Joysticks
+    class CNAEXT Joysticks
     {
     public:
         /** @brief Static-only utility; not instantiable. */

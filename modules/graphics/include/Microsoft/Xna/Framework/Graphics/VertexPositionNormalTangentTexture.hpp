@@ -22,7 +22,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * content pipeline this describes. Mirrors VertexPositionNormalTextureSkinned's own
      * established precedent for a CNA-original vertex format (plans/plan_cnj.md CNB-57, Phase 13A).
      */
-    CNAEXT struct VertexPositionNormalTangentTexture : public IVertexType
+    struct CNAEXT VertexPositionNormalTangentTexture : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
