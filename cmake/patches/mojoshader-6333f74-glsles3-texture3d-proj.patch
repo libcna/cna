@@ -1,0 +1,14 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -654,6 +654,10 @@
+         output_line(ctx, "#define texture2DProjGrad textureProjGrad");
+         output_line(ctx, "#define texture3D texture");
+         output_line(ctx, "#define texture3DLod textureLod");
++        // GLSL ES 3.00 has no texture3DProj; its textureProj is overloaded for sampler3D. A
++        // ps_2_0 texldp on a volume sampler emits texture3DProj, which failed to compile as an
++        // undeclared identifier. -CNA
++        output_line(ctx, "#define texture3DProj textureProj");
+         output_line(ctx, "#define textureCube texture");
+         output_line(ctx, "#define textureCubeLod textureLod");
+         output_line(ctx, "#define texture2DRect texture");
