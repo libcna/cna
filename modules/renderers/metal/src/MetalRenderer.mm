@@ -2689,7 +2689,10 @@ public:
     // outgoing MRT set, not just whichever one BindAsRenderTarget() itself last tracked.
     void regenerateMipsIfNeeded()
     {
-        if (!mipMap_) return;
+        // plans/plan_apple_m4.md AM4-031: a mipMap=true 1x1 target has a one-level chain, and Metal
+        // rejects generateMipmapsForTexture: on it (validation: "mipmapLevelCount(1) must be > 1").
+        // FNA3D gates the same call on `levelCount > 1`; there is nothing to generate.
+        if (!mipMap_ || levelCount_<=1) return;
         auto owner=lockOwner();
         // plans/plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
         // content on every unbind when mipMap was requested, unconditionally -- matches
@@ -2925,7 +2928,7 @@ public:
             // Metal's own documented behavior for a cube texture, matching
             // EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget's own single glGenerateMipmap
             // call over the whole cube map, not a separate call per face).
-            if (mipMap_) {
+            if (mipMap_ && levelCount_>1) { // AM4-031: a one-level chain has nothing to generate
                 if (owner->encoder) { [owner->encoder endEncoding]; [owner->encoder release]; owner->encoder=nil; }
                 try {
                     if (!owner->command) {
