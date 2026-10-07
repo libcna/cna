@@ -13,6 +13,7 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
+#include "SharpRuntime/PortableFromChars.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -171,10 +172,9 @@ namespace CNA::Content::Pipeline
             if (type == "f64")
             {
                 double result = 0.0;
-                const auto parsed = std::from_chars(value->stringValue.data(),
-                                                    value->stringValue.data() +
-                                                        value->stringValue.size(),
-                                                    result, std::chars_format::general);
+                const auto parsed = SharpRuntime::FromCharsFloat(
+                    value->stringValue.data(),
+                    value->stringValue.data() + value->stringValue.size(), result);
                 if (parsed.ec != std::errc{} ||
                     parsed.ptr != value->stringValue.data() + value->stringValue.size() ||
                     !std::isfinite(result))

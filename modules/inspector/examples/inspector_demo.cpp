@@ -26,6 +26,7 @@
 
 #include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Inspector/Agent.hpp"
+#include "SharpRuntime/PortableFromChars.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -33,6 +34,7 @@
 #include <cstdio>
 #include <memory>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -169,7 +171,11 @@ namespace
     template<typename T>
     bool ParseNumber(std::string_view text, T& value)
     {
-        const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+        std::from_chars_result result{};
+        if constexpr (std::is_floating_point_v<T>)
+            result = SharpRuntime::FromCharsFloat(text.data(), text.data() + text.size(), value);
+        else
+            result = std::from_chars(text.data(), text.data() + text.size(), value);
         return result.ec == std::errc{} && result.ptr == text.data() + text.size();
     }
 }

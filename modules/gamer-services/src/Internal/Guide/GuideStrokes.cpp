@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "GuideStrokes.hpp"
+#include "SharpRuntime/PortableFromChars.hpp"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -18,7 +19,7 @@ std::vector<float> numbers(std::string_view text)
         while(at<text.size()&&text[at]==' ')++at;
         if(at>=text.size())break;
         float value=0;
-        const auto [end,error]=std::from_chars(text.data()+at,text.data()+text.size(),value);
+        const auto [end,error]=SharpRuntime::FromCharsFloat(text.data()+at,text.data()+text.size(),value);
         if(error!=std::errc())break;
         values.push_back(value);
         at=static_cast<std::size_t>(end-text.data());
