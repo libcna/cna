@@ -43,7 +43,8 @@ renderer count is not a goal.
 | RRC-025 | `WEBGPU` sizes its own Asyncify stack under Emscripten | ✅ `bfd4b9e73` |
 | RRC-026 | Vulkan/WebGPU blocks in the indexed-draw suites run only where their renderer is active | ✅ `a18a5d374` |
 | RRC-027 | `common/d3d` and the Metal renderer follow renderer membership, not the default | ✅ `71a0e7313` |
-| RRC-028 | C API coverage: a gate for approval pins naming declarations that no longer exist | ✅ |
+| RRC-028 | C API coverage: a gate for approval pins naming declarations that no longer exist | ✅ `0fc33dac1` |
+| RRC-029 | The renderer benchmark names the renderer it ran, not the compile-time default | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1291,6 +1292,11 @@ built); with `SDL_GPU` selected, its two `SdlGpuIndexedDrawRangeTest` buffer-rew
 `plan_street_perf.md` already records; the benchmark banner still names the compile-time default
 (`RRC-017`).
 
+**Status 2026-10-07:** the first two and the last are fixed by `RRC-026`, `RRC-027` and
+`RRC-029`; `RRC-028` fixes the stale coverage pins this pass also left. The SDL_GPU buffer-rewrite
+cases stay open as their own renderer workstream, now with two WebGPU-only cases of the same class
+beside them (`RRC-026`), as does `CApi_InstalledConsumer`.
+
 ## RRC-026 — Vulkan and WebGPU device checks run only where their renderer is active
 
 Second stabilization pass, opened from the debt `RRC-020`–`RRC-025` left (owner, 2026-10-07).
@@ -1378,3 +1384,19 @@ Second stabilization pass, opened from the debt `RRC-020`–`RRC-025` left (owne
   8,142 symbols unchanged); `COVERAGE.md`, `LIMITATIONS.md` and `RELEASE_GATE.md` regenerated with
   their own tools, and the coverage, limitations, release-gate and export-count checks pass;
   `test_coverage_scope.py` 33 of 33.
+
+## RRC-029 — The renderer benchmark names the renderer it ran, not the compile-time default
+
+- **Symptom.** `cna_bench_graphics_renderer`'s banner, its JSON samples' `renderer` field and the
+  browser's `window.__cnaBenchRenderer` named the build's default: in the `WEBGL2`+`WEBGPU` bundle a
+  `WEBGPU` run reported `=== [WEBGL2]`, and in `cmake-build-multi` every renderer reported
+  `OPENGLES3` -- in the program this campaign used as its multi-renderer smoke test.
+- **Root cause.** The benchmark read `CNA::getCurrentGraphicsRendererName()`, a compile-time
+  constant, chosen when a build could hold one renderer.
+- **Fix.** It asks its device: `GraphicsDevice::GetGraphicsRendererName()`, the renderer the device
+  actually runs.
+- **Verified.** In `cmake-build-multi`, with each of the ten renderers selected at runtime, the
+  banner and the JSON `renderer` field name that renderer; under Wine the `DIRECTX9`-default MinGW
+  tree of `RRC-027` reports `DIRECTX11` when that is selected; in headless Chrome the bundle's
+  `WEBGPU` run reports `=== [WEBGPU]` and `window.__cnaBenchRenderer` `WEBGPU`, its `WEBGL2` run
+  `WEBGL2`.

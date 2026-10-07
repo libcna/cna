@@ -51,13 +51,6 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-// The only "which renderer am I" this file needs -- a compile-time constant already computed from
-// the CNA_RENDERER_* define RendererSelection.cmake sets, the same value every renderer's own
-// getCurrentGraphicsRendererName() call already reports elsewhere in this project. Using it instead
-// of inventing a fresh per-benchmark compile definition keeps this file genuinely renderer-agnostic
-// source -- nothing about it changes per renderer except which CNA_GRAPHICS_RENDERER the CMake
-// configure step that builds it selected.
-#include "CNA/GraphicsRendererType.hpp"
 
 #include <array>
 #include <cmath>
@@ -354,7 +347,9 @@ protected:
             const double churnE2eAvg =
                 churnFramesTimed_ > 0 ? churnEndToEndTotalMs_ / churnFramesTimed_ : -1.0;
 
-            const auto rendererName = CNA::getCurrentGraphicsRendererName();
+            // The renderer this device runs, not the build's compile-time default: a multi-renderer
+            // build selects it at runtime, and every result below is that renderer's.
+            const auto rendererName = getGraphicsDeviceProperty().GetGraphicsRendererName();
             std::printf("=== [%.*s] %d sprites + %d stock-effect meshes/frame ===\n",
                         static_cast<int>(rendererName.size()), rendererName.data(), kSpriteCount,
                         meshDrawCount_);
