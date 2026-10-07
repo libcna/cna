@@ -1191,6 +1191,20 @@ namespace CNA::Internal::Renderers::EasyGL
         std::vector<uint8_t> cpu_data_;
     };
 
+    /**
+     * @brief Makes a GLSL ES 3.x source compile on the current context.
+     *
+     * The identity on an ES context, and on a desktop core context that has the matching
+     * GL_ARB_ES3*_compatibility extension; elsewhere the ES version header is rewritten to the
+     * desktop core GLSL with the same meaning. A source without an ES version header is returned
+     * unchanged. Custom ShaderEffect sources and, where the context cannot compile MojoShader's
+     * desktop GLSL 1.20 dialect, compiled-effect shaders both take this route.
+     *
+     * @param source A complete GLSL shader source.
+     * @return The source the current context should compile.
+     */
+    [[nodiscard]] std::string AdaptGlslEsSourceForContextEXT(const std::string& source);
+
     class EasyGLRenderer : public IGraphicsRenderer,
                            public ::easygl::RecoverableResource
     {
@@ -1259,6 +1273,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// and every one of those programs is then a dead GL name -- see
         /// RequireCompiledEffectContextEXT().
         std::uint64_t mojoShaderContextGeneration_ = 0;
+        /// plans/plan_apple_m4.md AM4-062: `mojoShaderContext_` translates to GLSL ES 3.00 and
+        /// compiles it as desktop core GLSL, because this context refuses GLSL 1.20.
+        bool mojoShaderEs3OnDesktopCore_ = false;
         // plans/plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;

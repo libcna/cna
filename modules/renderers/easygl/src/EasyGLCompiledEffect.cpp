@@ -307,6 +307,66 @@ namespace CNA::Internal::Renderers::EasyGL
             return loader != nullptr ? loader(fnname) : nullptr;
         }
 
+        /// plans/plan_apple_m4.md AM4-062: whether the current context compiles GLSL 1.20, the
+        /// dialect MojoShader writes for desktop GL. A core profile need not: macOS's 4.1 core
+        /// context accepts GLSL 1.40 and later only ("version '120' is not supported"), while
+        /// Mesa's core profile still compiles it. The driver is asked rather than the platform
+        /// guessed.
+        bool ContextCompilesGlsl120()
+        {
+            ::easygl::Shader probe(::easygl::ShaderType::Vertex);
+            probe.create();
+            probe.compile_from_source("#version 120\nvoid main() { gl_Position = vec4(0.0); }\n");
+            return probe.is_compiled();
+        }
+
+        using GlShaderSourceFn = void (*)(unsigned int, int, const char* const*, const int*);
+
+        /// The driver's glShaderSource behind ShaderSourceForDesktopCore. Taken from the loader
+        /// each time a MojoShader context is created for that route.
+        GlShaderSourceFn g_driverGlShaderSource = nullptr;
+
+        /// glShaderSource as MojoShader sees it on the GLSL-ES-on-desktop-core route: every source
+        /// it compiles -- the translated stages and the variants it patches together at link time --
+        /// gets the same ES-to-desktop header rewrite a custom ShaderEffect gets. Called from C, so
+        /// nothing may escape: should the rewrite fail, the source goes through unchanged and the
+        /// compiler reports it.
+        void ShaderSourceForDesktopCore(unsigned int shader, int count, const char* const* strings,
+                                        const int* lengths)
+        {
+            try
+            {
+                std::string source;
+                for (int i = 0; i < count; ++i)
+                {
+                    if (strings[i] == nullptr) continue;
+                    if (lengths != nullptr && lengths[i] >= 0)
+                        source.append(strings[i], static_cast<std::size_t>(lengths[i]));
+                    else
+                        source.append(strings[i]);
+                }
+                const std::string adapted = AdaptGlslEsSourceForContextEXT(source);
+                const char* text = adapted.c_str();
+                const int length = static_cast<int>(adapted.size());
+                g_driverGlShaderSource(shader, 1, &text, &length);
+            }
+            catch (...)
+            {
+                g_driverGlShaderSource(shader, count, strings, lengths);
+            }
+        }
+
+        /// GlProcAddressTrampoline for the GLSL-ES-on-desktop-core route: identical except that
+        /// MojoShader's glShaderSource is ShaderSourceForDesktopCore.
+        void* GlProcAddressTrampolineEsOnDesktopCore(const char* fnname, void* data)
+        {
+            void* proc = GlProcAddressTrampoline(fnname, data);
+            if (proc == nullptr || std::strcmp(fnname, "glShaderSource") != 0)
+                return proc;
+            g_driverGlShaderSource = reinterpret_cast<GlShaderSourceFn>(proc);
+            return reinterpret_cast<void*>(&ShaderSourceForDesktopCore);
+        }
+
         MOJOSHADER_usage ToMojoShaderUsage(VertexElementUsage usage)
         {
             switch (usage)
@@ -754,10 +814,19 @@ namespace CNA::Internal::Renderers::EasyGL
         // The requested dialect follows this renderer instance rather than the build default, so
         // multi-renderer builds keep using the profile of the context that owns this MojoShader
         // context. tools/graphics/mojoshader_gl_probe.cpp independently qualifies the GLES3 route.
+        //
+        // plans/plan_apple_m4.md AM4-062: a desktop core context that refuses GLSL 1.20 (macOS's)
+        // gets MojoShader's GLSL ES 3.00 instead -- the dialect OPENGLES3 and WEBGL2 already run --
+        // compiled through the same ES-to-desktop header rewrite as a custom ShaderEffect.
         void* loaderData = reinterpret_cast<void*>(GetProcAddressLoaderEXT());
-        const char* profile = MojoShaderProfileFor(profile_);
+        const bool esOnDesktopCore = IsDesktopCoreProfile(profile_) && !ContextCompilesGlsl120();
+        const char* profile =
+            esOnDesktopCore ? MOJOSHADER_PROFILE_GLSLES3 : MojoShaderProfileFor(profile_);
         mojoShaderContext_ = MOJOSHADER_glCreateContext(
-            profile, GlProcAddressTrampoline, loaderData, nullptr, nullptr, nullptr);
+            profile,
+            esOnDesktopCore ? GlProcAddressTrampolineEsOnDesktopCore : GlProcAddressTrampoline,
+            loaderData, nullptr, nullptr, nullptr);
+        mojoShaderEs3OnDesktopCore_ = esOnDesktopCore;
         if (mojoShaderContext_ != nullptr)
         {
             MOJOSHADER_glMakeContextCurrent(mojoShaderContext_);
@@ -1221,10 +1290,14 @@ namespace CNA::Internal::Renderers::EasyGL
             // GLSL ES 3 has no sampler-object LOD-bias state. MojoShader's generated vertex
             // TEXLDL expression therefore adds this per-register uniform to its explicit LOD.
             // Desktop GLSL does not declare the uniform and keeps using GL_TEXTURE_LOD_BIAS, so
-            // this call is a no-op there and cannot double-apply the value.
+            // this call is a no-op there and cannot double-apply the value. GLSL ES compiled on a
+            // desktop core context (AM4-062) declares the uniform AND has GL_TEXTURE_LOD_BIAS,
+            // which desktop GL adds to an explicit LOD too, so the uniform stays zero there.
             MOJOSHADER_glProgramVertexSamplerLodBiasInfo(
                 sampler.index,
-                samplerAssigned ? samplerState.getMipMapLevelOfDetailBiasProperty() : 0.0f);
+                samplerAssigned && !mojoShaderEs3OnDesktopCore_
+                    ? samplerState.getMipMapLevelOfDetailBiasProperty()
+                    : 0.0f);
         }
 
         for (int i = 0; i < pixelParseData->sampler_count; ++i)

@@ -1987,6 +1987,11 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
+    std::string AdaptGlslEsSourceForContextEXT(const std::string& source)
+    {
+        return AdaptCustomGlslForContext(source);
+    }
+
     bool EasyGLEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
         compileError_.clear();
