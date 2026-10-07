@@ -38,6 +38,7 @@ in [`docs/apple-platforms.md`](../docs/apple-platforms.md).
 | `AM4-022` | Process exit terminated with `recursive_mutex lock failed: Invalid argument` once a preset state (e.g. `SamplerState::LinearClamp`) had been shared: `GraphicsResource`'s identity mutex was a lazily constructed function-local static, so it was destroyed *before* the static presets whose destructors lock it. glibc tolerates locking a destroyed mutex; Darwin returns `EINVAL` and libc++ throws. The mutex is now intentionally immortal. | Done |
 | `AM4-023` | `ContentFileSha256` on a directory returned a digest on macOS (libc++ opens a directory as an `ifstream` and reports EOF) where libstdc++ fails; directories are now refused up front on every library. | Done |
 | `AM4-024` | `PathUtf8Test.DirectoryEnumeration...` assumed a byte-exact filesystem; APFS is normalization-insensitive, so the NFC and NFD spellings of `étude` are one file. The test expects only names that created their own entry. | Done |
+| `AM4-025` | Metal `ReadBackbuffer` re-enabled (it threw `NotSupportedException` since `METAL-258`). It reads the drawable through the logical viewport, so `GetBackBufferData` answers in backbuffer pixels at Retina scale and under letterbox, after completing the pending pass. Evidence: `metal_capabilities_test`, the shared pixel tests of `AM4-026`. | Done |
 
 ### sharp-runtime (branch `apple/m4-stabilization`)
 

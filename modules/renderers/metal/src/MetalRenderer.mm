@@ -3344,15 +3344,74 @@ bool MetalRenderer::SupportsDepthBuffer() const { return true; }
 bool MetalRenderer::SupportsStencilBuffer() const { return true; }
 bool MetalRenderer::TransformWindowToLogical(float windowX,float windowY,float& logX,float& logY) const{return impl_->transformWindowToLogical(windowX,windowY,logX,logY);}
 bool MetalRenderer::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
-// Historical macOS execution returned only the clear color after real 2D and 3D draws. Reject the
-// operation until a replacement has adapted build and pixel proof instead of returning wrong data.
+// plans/plan_apple_m4.md AM4-025: backbuffer readback, re-enabled after being disabled as METAL-258
+// (clear-colour-only pixels after real draws; the 3D half of that was AM4-028's WVP transpose).
+// Coordinates are the GAME's backbuffer coordinates -- IGraphicsRenderer's contract, and what
+// EasyGL's ReadBackbuffer samples since KF-6 -- while this renderer draws straight into the
+// drawable through the logical viewport, i.e. in drawable pixels, at Retina scale and with any
+// letterbox offset. Each requested pixel is read at the drawable pixel under its centre, so
+// GetBackBufferData answers in backbuffer pixels in every presentation mode and at every display
+// scale (NativeBackBuffer makes the mapping the identity on drawable pixels). The frame's pending
+// render pass completes first and the drawable stays retained, so the frame continues on the same
+// surface. Pixels outside the drawable read as zero, and a frame with no drawable (minimised
+// window) reads all zero, as WebGPU's does.
 void MetalRenderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
 {
-    impl_->throwPendingCommandFailure();
-    (void)x; (void)y; (void)w; (void)h; (void)pixels;
-    throw System::NotSupportedException(
-        "GraphicsDevice::GetBackBufferData: Metal backbuffer readback is disabled because the "
-        "historical macOS test run returned clear-color-only data after real draws.");
+    auto& p=*impl_;
+    p.throwPendingCommandFailure();
+    if(w<=0||h<=0) return;
+    if(!pixels) throw std::invalid_argument("Metal: ReadBackbuffer requires a destination buffer");
+    if(p.currentRenderTarget||p.currentRenderTargetCube||!p.currentMRT.empty())
+        throw std::runtime_error(
+            "Metal: ReadBackbuffer requires the backbuffer to be the active render target");
+    const std::size_t outputBytes=static_cast<std::size_t>(w)*static_cast<std::size_t>(h)*4u;
+    if(!p.ensureFrame() || !p.drawable.HasValue()) { std::memset(pixels,0,outputBytes); return; }
+    id<MTLTexture> source=p.drawable.Get().texture;
+    p.finishActiveCommandSynchronously("Metal: backbuffer render command failed before readback");
+
+    const auto viewport=p.computeLogicalViewport();
+    const int drawableWidth=static_cast<int>(source.width);
+    const int drawableHeight=static_cast<int>(source.height);
+    const float scaleX=viewport.logicalWidth>0.0f ? viewport.width/viewport.logicalWidth : 1.0f;
+    const float scaleY=viewport.logicalHeight>0.0f ? viewport.height/viewport.logicalHeight : 1.0f;
+    auto drawableX=[&](int gameX){ return static_cast<int>(std::floor(viewport.x+(static_cast<float>(gameX)+0.5f)*scaleX)); };
+    auto drawableY=[&](int gameY){ return static_cast<int>(std::floor(viewport.y+(static_cast<float>(gameY)+0.5f)*scaleY)); };
+
+    const int left=std::clamp(drawableX(x),0,drawableWidth-1);
+    const int right=std::clamp(drawableX(x+w-1),0,drawableWidth-1);
+    const int top=std::clamp(drawableY(y),0,drawableHeight-1);
+    const int bottom=std::clamp(drawableY(y+h-1),0,drawableHeight-1);
+    const int regionWidth=right-left+1;
+    const int regionHeight=bottom-top+1;
+    std::vector<std::uint8_t> region(static_cast<std::size_t>(regionWidth)*static_cast<std::size_t>(regionHeight)*4u);
+    MetalTextureTransferLayout layout{};
+    if(!TryPrepareMetalTextureTransfer(
+            drawableWidth,drawableHeight,1,1,0,left,top,0,regionWidth,regionHeight,1,
+            region.data(),static_cast<int>(region.size()),MetalTransferLengthRule::ExactlyTightBytes,
+            MetalMacOsTextureBufferRowAlignment,layout))
+        throw std::runtime_error("Metal: ReadBackbuffer could not lay out the drawable region");
+    auto owner=impl_;
+    blitTextureToClientBuffer(p.device,p.queue,source,0,0,left,top,0,regionWidth,regionHeight,1,
+                              layout,MetalTransferPixelOrder::Bgra,region.data(),
+                              [owner] { owner->throwPendingCommandFailure(); });
+
+    for(int row=0;row<h;++row)
+    {
+        const int sy=drawableY(y+row);
+        for(int col=0;col<w;++col)
+        {
+            const int sx=drawableX(x+col);
+            std::uint8_t* destination=pixels+(static_cast<std::size_t>(row)*w+col)*4u;
+            if(sx<left||sx>right||sy<top||sy>bottom)
+            {
+                destination[0]=destination[1]=destination[2]=destination[3]=0;
+                continue;
+            }
+            const std::uint8_t* sourcePixel=region.data()+
+                (static_cast<std::size_t>(sy-top)*regionWidth+static_cast<std::size_t>(sx-left))*4u;
+            std::memcpy(destination,sourcePixel,4);
+        }
+    }
 }
 std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& d)
 {

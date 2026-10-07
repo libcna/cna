@@ -51,7 +51,7 @@ These IDs continue the existing `plans/plan_metal.md` sequence without changing 
 
 | Finding | Severity | Evidence | Disposition |
 |---|---|---|---|
-| `METAL-258` — backbuffer readback returned successful clear-only pixels | High | Historical run `29814126178`: six draw/readback tests observed only the clear color. | Supported contract disabled: `ReadBackbuffer` throws `NotSupportedException`; dependent native tests are not registered as supported gates. |
+| `METAL-258` — backbuffer readback returned successful clear-only pixels | High | Historical run `29814126178`: six draw/readback tests observed only the clear color. | Supported contract disabled at the time; re-enabled by `plans/plan_apple_m4.md` `AM4-025` with pixel proof on an M4 (see below). The 3D half of the clear-only symptom was `AM4-028`. |
 | `METAL-259` — RenderTarget2D MSAA reported four samples without edge coverage | High | The same run applied sample count four but its diagonal edge remained binary. | Supported contract disabled: MSAA capability is false and every requested sample count clamps/reports zero. |
 | `METAL-260` — cached `CAMetalDrawable` lacked an owned reference | High | MRR source audit found a `nextDrawable` (+0) result stored across calls and mid-frame commits without retain/release ownership. | Implementation fixed: a portable-tested retained owner keeps it alive, mid-frame commits preserve it, and presentation releases it after command commit. Adapted-Mac validation remains pending. |
 | `METAL-261` — partial renderer construction had no MRR rollback | Medium | Source audit showed that a throw after device/view/layer/queue acquisition (including runtime MSL-library failure) destroyed `impl_` but `Impl` had no destructor. | Implementation fixed: `Impl` now owns bounded teardown for constructor failure and normal destruction, with drawable/layer/view ordering explicit. Adapted-Mac validation remains pending. |
@@ -98,7 +98,10 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 
 The following boundaries are deterministic rather than silent degradation:
 
-- `ReadBackbuffer` throws `System::NotSupportedException`; it never returns known-wrong pixels.
+- `ReadBackbuffer` (`AM4-025`) answers in the game's backbuffer coordinates, as EasyGL does since
+  KF-6: each requested pixel is the drawable pixel under its centre, through the logical viewport
+  (Retina scale and letterbox offset included). The pending pass completes first; a frame with no
+  drawable reads zero. It throws while a render target is bound.
 - backbuffer and render-target MSAA report zero and allocate single-sample attachments;
 - `SetRenderTargets` accepts zero descriptors (restore backbuffer) or one normalized 2D/cube-face
   descriptor and throws for MRT;
