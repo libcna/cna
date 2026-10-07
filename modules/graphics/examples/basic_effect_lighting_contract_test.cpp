@@ -222,6 +222,10 @@ class BasicEffectLightingContractTest final : public Game
         effect.Apply();
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         device.SetVertexBuffer(nullptr);
+        // Apply set the effect's texture on GraphicsDevice.Textures[0], as XNA's does (CBIND-156),
+        // and XNA refuses SetData on a texture set on the device (SOFTWARE-246). Unset it, as a
+        // game must, so the next scene can upload into the same texture.
+        device.getTexturesProperty()(0, nullptr);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         const Rectangle center(kSize / 2, kSize / 2, 1, 1);

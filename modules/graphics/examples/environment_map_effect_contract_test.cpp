@@ -207,6 +207,11 @@ class EnvironmentMapEffectContractTest final : public Game
         };
         effect.Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+        // Apply set the texture and the environment map on GraphicsDevice.Textures[0] and [1], as
+        // XNA's does (CBIND-156), and XNA refuses SetData on a texture set on the device
+        // (SOFTWARE-246). Unset both, as a game must, so the next scene can upload into them.
+        device.getTexturesProperty()(0, nullptr);
+        device.getTexturesProperty()(1, nullptr);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         const Rectangle center(kSize / 2, kSize / 2, 1, 1);
@@ -249,6 +254,11 @@ class EnvironmentMapEffectContractTest final : public Game
         };
         effect.Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+        // Apply set the texture and the environment map on GraphicsDevice.Textures[0] and [1], as
+        // XNA's does (CBIND-156), and XNA refuses SetData on a texture set on the device
+        // (SOFTWARE-246). Unset both, as a game must, so the next scene can upload into them.
+        device.getTexturesProperty()(0, nullptr);
+        device.getTexturesProperty()(1, nullptr);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         const auto readNdc = [&](float x, float y)
