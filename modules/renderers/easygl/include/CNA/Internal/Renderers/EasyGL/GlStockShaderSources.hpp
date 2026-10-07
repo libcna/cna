@@ -1596,7 +1596,13 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 skinnedNormal=cnaSkinNormal(skinDirectionMat,aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
-"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
+// A singular World makes uNormalMatrix zero (BindDrawParams' invDet is 0 there). normalize() of
+// the zero vector is undefined, and on macOS's GL what it produced slipped past the fragment
+// stage's own length guard below, so the surface lost every light. A zero normal is passed on as
+// zero instead, which that guard replaces -- what the rigid program, which does not normalize
+// here, always did.
+"    vec3 worldNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
+"    vNormal=dot(worldNormal,worldNormal)>1e-8?normalize(worldNormal):vec3(0.0);\n"
 "    mat3 worldDirectionMat=mat3(uWorld);\n"
 "    vTangent=worldDirectionMat*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
 "    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
