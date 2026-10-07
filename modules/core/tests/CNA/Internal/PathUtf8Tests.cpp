@@ -161,9 +161,17 @@ TEST(PathUtf8Test, DirectoryEnumerationAgreesWithTheUtf8TextOfWhatWasWritten)
     for (const PathClass& item : Classes())
     {
         const fs::path file = scope.Path() / PathFromUtf8(std::string(item.utf8) + ".bin");
+        // APFS (and HFS+) are normalization-insensitive: the NFC and NFD spellings of "étude"
+        // name ONE file there, and the second open reuses the first entry. Only a name that
+        // creates its own entry can be expected back from the enumeration.
+        std::error_code existsError;
+        const bool alreadyNamed = fs::exists(file, existsError);
         std::ofstream out(file, std::ios::binary);
         ASSERT_TRUE(out.is_open()) << "class " << item.label;
-        expected.push_back(PathToUtf8(file.filename()));
+        if (!alreadyNamed)
+        {
+            expected.push_back(PathToUtf8(file.filename()));
+        }
     }
 
     std::vector<std::string> found;
