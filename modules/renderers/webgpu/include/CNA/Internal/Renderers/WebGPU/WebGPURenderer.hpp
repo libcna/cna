@@ -2179,6 +2179,16 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
+         * @brief Whether a half-float colour texture can be sampled with linear filtering.
+         *
+         * plans/plan_apple_m4.md AM4-187: yes -- `rgba16float`, the storage of HalfVector4 and
+         * HdrBlendable Texture2D, is filterable in core WebGPU. XNA still refuses a classic draw
+         * that filters HalfVector4, which GraphicsDevice enforces; this says what the device can do.
+         *
+         * @return True.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override { return true; }
+        /**
          * @brief plans/plan_webgpu.md WEBGPU-163: the CUBE storage verdict, which is narrower here.
          *
          * `WEBGPU-144` made block-compressed `Texture2D` real, and `ClassifySurfaceFormatEXT`

@@ -145,6 +145,12 @@ namespace CNA::Internal::Renderers::WebGPU
             // stop. They stay refused, by name, and GetAdditionalLimitationsTextEXT() says so.
             case SurfaceFormat::NormalizedByte2: return {WGPUTextureFormat_RG8Snorm, false, 2};
             case SurfaceFormat::NormalizedByte4: return {WGPUTextureFormat_RGBA8Snorm, false, 4};
+            // plans/plan_apple_m4.md AM4-187: XNA's four-channel half-float formats -- HdrBlendable
+            // is RGBA16F, as the render-target map already states -- are core WebGPU `rgba16float`,
+            // which is sampleable, filterable and renderable without any feature, so the game's
+            // eight bytes per texel are stored exactly and mip generation works as for RGBA8.
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:    return {WGPUTextureFormat_RGBA16Float, false, 8};
             default:                         return {WGPUTextureFormat_RGBA8Unorm, false, 4};
             }
         }
@@ -1645,7 +1651,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // MSR-018: RG8Snorm/RGBA8Snorm cannot be render attachments, so their mip levels are the
         // explicit XNA levels supplied through UpdatePixelsLevel. This is the path compiled XNB
         // normal maps use. A level-zero write does not invent or overwrite those authored levels.
-        if (mipLevels_ > 1 && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_))
+        // plans/plan_apple_m4.md AM4-187: and the same for every other non-RGBA8 storage. The
+        // blit cascade is built for RGBA8Unorm, and XNA itself never generates a Texture2D's
+        // levels, so `rgba16float` levels are exactly what the game authored.
+        if (mipLevels_ > 1 && wgpuFormat_ == WGPUTextureFormat_RGBA8Unorm)
             owner_->GenerateMips2D(texture_, width_, height_, mipLevels_);
     }
 
@@ -11716,6 +11725,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // emulation. GetMaxVertexStreams() below says how many the device will take.
         if (capability == CNA::GraphicsCapability::MultiStreamVertexInput) return true;
 
+        if (capability == CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)
+            return SupportsHalfFloatTextureLinearFilteringEXT();
+
         // WEBGPU-195: answer from the probe, not from the shared permissive default. This renderer
         // already asks the device empirically -- Supports4xMsaa() creates a scratch multisampled
         // texture inside a WGPUErrorFilter_Validation scope and reads whether it was rejected -- so
@@ -11854,6 +11866,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             if (requested == SurfaceFormat::NormalizedByte2 ||
                 requested == SurfaceFormat::NormalizedByte4)
                 return RendererFormatVerdict::Supported;
+            // AM4-187: stored natively as `rgba16float` (ClassifyWebGPUTextureFormat).
+            if (requested == SurfaceFormat::HalfVector4 || requested == SurfaceFormat::HdrBlendable)
+                return RendererFormatVerdict::Supported;
         }
         return RendererFormatVerdict::Defer;
     }
@@ -11868,6 +11883,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // cube view, and WGPUFeatureName_TextureCompressionBC does not restrict BC to non-array 2D).
         // The verdict is therefore the same one the 2D path gives -- including its device-feature
         // gate, so 163's refusal survives exactly where it should: on a device without BC.
+        // plans/plan_apple_m4.md AM4-187: except the half-float formats the 2D path now stores;
+        // a plain cube has no `rgba16float` storage, so it keeps the framework's own rule.
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            const auto requested = static_cast<SurfaceFormat>(surfaceFormat);
+            if (requested == SurfaceFormat::HalfVector4 || requested == SurfaceFormat::HdrBlendable)
+                return RendererFormatVerdict::Defer;
+        }
         return ClassifySurfaceFormatEXT(surfaceFormat);
     }
 
