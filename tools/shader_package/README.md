@@ -2,7 +2,9 @@
 
 `generate_shader_package.py` turns a JSON manifest plus declared shader sources into a checked-in
 C++ header. Text variants are embedded verbatim. Vulkan GLSL variants are compiled to SPIR-V with
-the system `libshaderc.so.1`; `--shaderc-library` or `CNA_SHADERC_LIBRARY` selects an explicit copy.
+the system shaderc -- `libshaderc.so.1` in the Linux library directories, or `libshaderc_shared` in
+the directory `pkg-config shaderc` names (Homebrew's, among others); `--shaderc-library` or
+`CNA_SHADERC_LIBRARY` selects an explicit copy. Without one the check exits 77 (CTest: skipped).
 
 The generated header records the SHA-256 of the manifest, every source and the exact shaderc shared
 library, together with shaderc's reported SPIR-V version/revision and all fixed compilation options.

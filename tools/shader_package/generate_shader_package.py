@@ -162,12 +162,25 @@ def find_shaderc(explicit: str | None) -> Path:
         "/usr/local/lib/libshaderc.so.1",
     ]
     candidates.extend(sorted(glob.glob("/usr/lib/*/libshaderc.so.1")))
+    # plans/plan_apple_m4.md AM4-168: shaderc's own build (Homebrew's among them) names the shared
+    # library libshaderc_shared, and a macOS prefix is not a Linux multiarch directory. Ask
+    # pkg-config where the installed shaderc lives rather than guessing a package manager's prefix.
+    names = ("libshaderc.so.1", "libshaderc_shared.so.1", "libshaderc_shared.1.dylib",
+             "libshaderc_shared.dylib")
+    pkg_config = shutil.which("pkg-config")
+    if pkg_config:
+        completed = subprocess.run([pkg_config, "--variable=libdir", "shaderc"],
+                                   capture_output=True, text=True, check=False)
+        libdir = completed.stdout.strip()
+        if completed.returncode == 0 and libdir:
+            candidates.extend(str(Path(libdir) / name) for name in names)
     for candidate in candidates:
         path = Path(candidate)
         if path.is_file():
             return path.resolve()
     raise ToolchainUnavailable(
-        "libshaderc.so.1 was not found; install shaderc or set CNA_SHADERC_LIBRARY")
+        "shaderc was not found (" + ", ".join(names) + "); install shaderc or set "
+        "CNA_SHADERC_LIBRARY")
 
 
 def configure_shaderc(library: ctypes.CDLL) -> None:
