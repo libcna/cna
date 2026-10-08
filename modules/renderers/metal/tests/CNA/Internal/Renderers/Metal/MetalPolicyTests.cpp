@@ -71,7 +71,41 @@ TEST(MetalPolicy, FormatAndSampleCountNeverOverclaim)
     EXPECT_EQ(MetalAppliedMultiSampleCount(8,fourOnly),4);
     EXPECT_EQ(MetalAppliedMultiSampleCount(2,fourOnly),0);
     EXPECT_EQ(MetalAppliedMultiSampleCount(4,0u),0);
-    EXPECT_FALSE(MetalRenderTargetCubeUploadSupported());
+    // AM4-147: a single-sampled cube target stores an upload; a multisampled one refuses it.
+    EXPECT_TRUE(MetalRenderTargetCubeUploadSupported(0));
+    EXPECT_FALSE(MetalRenderTargetCubeUploadSupported(2));
+    EXPECT_FALSE(MetalRenderTargetCubeUploadSupported(8));
+}
+
+// plans/plan_apple_m4.md AM4-147
+TEST(MetalPolicy, Bgra4444ReadbackInvertsTheUploadRotation)
+{
+    for (std::uint32_t texel = 0; texel <= 0xFFFFu; ++texel)
+    {
+        const auto xna = static_cast<std::uint16_t>(texel);
+        ASSERT_EQ(MetalAbgr4ToBgra4444(MetalBgra4444ToAbgr4(xna)), xna);
+    }
+    // XNA A4R4G4B4 0xA123 (a=A r=1 g=2 b=3) is Metal R4G4B4A4 0x123A.
+    EXPECT_EQ(MetalBgra4444ToAbgr4(0xA123u), 0x123Au);
+    EXPECT_EQ(MetalAbgr4ToBgra4444(0x123Au), 0xA123u);
+}
+
+TEST(MetalPolicy, CubesAndVolumesRefuseTheFormatsXnaKeepsToTexture2D)
+{
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    for (const bool volume : {false, true})
+    {
+        EXPECT_TRUE(MetalIsTexture2DOnlyFormat(static_cast<int>(SurfaceFormat::NormalizedByte2), volume));
+        EXPECT_TRUE(MetalIsTexture2DOnlyFormat(static_cast<int>(SurfaceFormat::NormalizedByte4), volume));
+        EXPECT_FALSE(MetalIsTexture2DOnlyFormat(static_cast<int>(SurfaceFormat::Color), volume));
+        EXPECT_FALSE(MetalIsTexture2DOnlyFormat(static_cast<int>(SurfaceFormat::HdrBlendable), volume));
+        EXPECT_FALSE(MetalIsTexture2DOnlyFormat(static_cast<int>(SurfaceFormat::Bgra4444), volume));
+    }
+    for (const SurfaceFormat dxt : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        EXPECT_FALSE(MetalIsTexture2DOnlyFormat(static_cast<int>(dxt), false));
+        EXPECT_TRUE(MetalIsTexture2DOnlyFormat(static_cast<int>(dxt), true));
+    }
 }
 
 TEST(MetalPolicy, Texture2DImageRequiresColorExactBaseBytesAndCompleteMipShape)

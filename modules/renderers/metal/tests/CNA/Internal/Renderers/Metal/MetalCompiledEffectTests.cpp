@@ -1198,11 +1198,11 @@ TEST(MetalCompiledEffectDrawTest, ConstructsTheSpirvProfileCannotExpressRefuseBy
     expectRefusal("VertexSamplerResultSwizzle",
                   [](GraphicsDevice& d) { RunCompiledEffectVertexSamplerResultSwizzleContract(d); },
                   "Swizzle of a value with an unknown type");
-    // And this one at its Vector4 volume and cube textures: Metal stores TextureCube and Texture3D
-    // in Color only so far (docs/metal-renderer.md).
+    // And this one at FX-109 too: since plans/plan_apple_m4.md AM4-147 Metal stores its Vector4
+    // volume and cube textures, so construction reaches the vertex samplers they feed.
     expectRefusal("VertexSamplerDimensions",
                   [](GraphicsDevice& d) { RunCompiledEffectVertexSamplerDimensionsContract(d); },
-                  "SurfaceFormat 15 is not implemented by the selected graphics renderer");
+                  "VERTEX shader samples a texture");
 }
 
 #endif  // CNA_METAL_COMPILED_EFFECTS

@@ -104,7 +104,7 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
 | `CustomEffects` | true | `AM4-077`: SpriteBatch-scoped MSL (`docs/metal-shader-effect-contract.md`); a 3D draw with a custom effect throws. |
 | `CompiledEffects` | true with `CNA_METAL_COMPILED_EFFECTS=ON` (off by default), else false | `AM4-144`: XNA Effect Framework bytecode -- MojoShader's SPIR-V profile linked per draw against the bound declarations, translated to MSL in process by SPIRV-Cross and compiled by Metal once per linked body. 3D draws (buffered, user, indexed, multi-stream, instanced) and `SpriteBatch.Begin(..., effect)` (each same-texture run once per pass, XNA's SpriteEffect supplying a pixel-only pass's vertex stage). Direct3D 9 pixel centres, integer `vPos`, device slots authoritative after `Apply()`, unbound samplers opaque black. Evidence: every shared conformance section Vulkan/SDL_GPU/WebGPU run plus nine Shader Model 1-3 sections, 43 Metal tests, under the validation layers; what the SPIR-V profile cannot express (and vertex textures, FX-109) refuses by name -- `docs/fx-compiled-effects.md`. |
-| `Texture3D` | true | Color-format native 3D textures. |
+| `Texture3D` | true | Native 3D textures in every uncompressed classic format (`AM4-147`; see below). |
 | `MultiStreamVertexInput` | true | `AM4-143`: up to sixteen streams, each bound at its own vertex-buffer index and `VertexOffset`; the stock functions' semantics are looked up in the per-vertex streams' combined declaration, with XNA's binding-time usage-index remap, and each attribute reads the stream that holds it. A stream that supplies nothing is not fetched. |
 | `Instancing` | true | `AM4-143`: `DrawInstancedPrimitives` with every stock effect. The first four elements of the per-instance streams (concatenated in slot order, whatever their usages) are CNA's per-instance world matrix, as on EasyGL (`REMED-GFX-122`), applied before the effect's World -- after skinning, and to normals and PBR tangents -- in a vertex-function variant specialized on a function constant, so ordinary pipelines are unchanged; a missing column reads (0, 0, 0, 1). Each per-instance stream steps once per `InstanceFrequency` instances; `baseVertex` advances the per-vertex streams only. A per-instance stream, or one of several per-vertex streams, needs a VertexDeclaration. Evidence: the shared `Instanced*`/`*MultiStream*`/`*BindingOffset*` CnaTests (103) and `instanced_textured_draw_test` (37 legs: texture, World, alpha test, lighting, DualTexture, skinned, PBR, env-map), under the validation layers; each of four deliberate breakages (step rate, stream offset, instance matrix, stream index) fails 14-27 of them. |
 | `StencilBuffer` | true | Native stencil plane and state mapping. |
@@ -135,7 +135,14 @@ The following boundaries are deterministic rather than silent degradation:
   Vector4, HalfSingle, HalfVector2, HalfVector4 and HdrBlendable (`AM4-142`), so HDR, bloom and float
   shadow maps keep their range; any other preference becomes Color, as XNA's
   `QueryRenderTargetFormat` does. Pipelines are keyed on the bound targets' pixel formats;
-- TextureCube and Texture3D accept only `SurfaceFormat::Color`; unsupported formats throw;
+- TextureCube and Texture3D store the same uncompressed formats natively (`AM4-147`), with the same
+  4444 rotation, swizzled sampling views and point-filter rule; each transfers its texels as XNA lays
+  them out (`SetDataBytesEXT`/`GetDataBytesEXT`). NormalizedByte2/4 are refused for both, as XNA
+  keeps them to Texture2D, and DXT for a volume; a DXT cube still has no route;
+- RenderTargetCube accepts `SetData` (`AM4-147`): the face region is uploaded into a replacement cube
+  after this target's pending pass is committed, every other face and level blitted across. A
+  multisampled cube refuses it -- its faces render into separate multisample textures, so the next
+  resolve would overwrite the upload;
 - render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`), and
   `ColorWriteChannels1..3` for the MRT attachments a compiled pixel shader writes (`AM4-146`; the
   built-in effects write COLOR0 only and leave the other attachments untouched). Sampler `MaxMipLevel` is the sampler's

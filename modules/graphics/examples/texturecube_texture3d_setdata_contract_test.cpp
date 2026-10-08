@@ -199,11 +199,11 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-026: RenderTargetCube::SetData is refused with
-    // NotSupportedException (MetalRenderTargetCubeUploadSupported), never accepted and dropped.
+    // plans/plan_apple_m4.md AM4-147: RenderTargetCube::SetData stores the face (it was refused
+    // with NotSupportedException since AM4-026; MetalRenderTargetCubeUploadSupported).
     constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, true};
+                                 Support::Exact, true};
 #else
 #error "REMED-GFX-135: this renderer has no declared TextureCube/Texture3D SetData contract."
 #endif

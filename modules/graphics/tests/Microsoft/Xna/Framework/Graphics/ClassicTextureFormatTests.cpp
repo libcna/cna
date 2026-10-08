@@ -166,6 +166,23 @@ namespace
         EXPECT_NEAR(pixel.getAProperty(), a, tolerance);
     }
 
+    /**
+     * @brief Whether Metal must store a classic format in a cube or a volume on this device.
+     *
+     * plans/plan_apple_m4.md AM4-147: every one this file transfers, except that the packed 16-bit
+     * trio exists only on Apple GPUs -- so for those the device's Texture2D verdict decides.
+     */
+    [[nodiscard]] bool MetalMustStoreCubeOrVolumeFormat(GraphicsDevice& device, SurfaceFormat format)
+    {
+        if (!CNA_RENDERER_IS(Metal))
+            return false;
+        if (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
+            format == SurfaceFormat::Bgra4444)
+            return device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                   RendererFormatVerdict::Supported;
+        return true;
+    }
+
     template<typename T, typename Factory>
     void VerifyExactCubeTransfers(GraphicsDevice& device, SurfaceFormat format, Factory makeValue)
     {
@@ -175,6 +192,9 @@ namespace
         {
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic cube SurfaceFormat ordinal "
+                              << static_cast<int>(format);
+            if (MetalMustStoreCubeOrVolumeFormat(device, format))
+                ADD_FAILURE() << "Metal must support classic cube SurfaceFormat ordinal "
                               << static_cast<int>(format);
             return;
         }
@@ -237,6 +257,9 @@ namespace
         {
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic volume SurfaceFormat ordinal "
+                              << static_cast<int>(format);
+            if (MetalMustStoreCubeOrVolumeFormat(device, format))
+                ADD_FAILURE() << "Metal must support classic volume SurfaceFormat ordinal "
                               << static_cast<int>(format);
             return;
         }
@@ -381,7 +404,12 @@ namespace
     {
         if (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)) !=
             RendererFormatVerdict::Supported)
+        {
+            if (MetalMustStoreCubeOrVolumeFormat(device, format))
+                ADD_FAILURE() << "Metal must sample classic cube SurfaceFormat ordinal "
+                              << static_cast<int>(format);
             return;
+        }
         SCOPED_TRACE(static_cast<int>(format));
         TextureCube cube(device, 1, false, format);
         cube.SetData(CubeMapFace::PositiveZ, &value, 1);
@@ -753,9 +781,10 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
 {
     // WINCLOSE-0013: DirectX11's ClassifyTexture3DFormatEXT states this same contract.
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan joined once its volume stored every
-    // uncompressed classic format natively.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan))
-        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11 and Vulkan";
+    // uncompressed classic format natively. plans/plan_apple_m4.md AM4-147: so did Metal.
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, Metal))
+        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11, "
+                        "Vulkan and Metal";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -777,6 +806,15 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
             device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)) ==
                 RendererFormatVerdict::Unsupported)
         {
+            EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format), System::NotSupportedException);
+            continue;
+        }
+        // AM4-147: a Metal device without the packed 16-bit formats (not an Apple GPU) refuses
+        // them for a volume exactly as it does for a Texture2D.
+        if (CNA_RENDERER_IS(Metal) && !MetalMustStoreCubeOrVolumeFormat(device, format))
+        {
+            EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)),
+                      RendererFormatVerdict::Unsupported);
             EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format), System::NotSupportedException);
             continue;
         }

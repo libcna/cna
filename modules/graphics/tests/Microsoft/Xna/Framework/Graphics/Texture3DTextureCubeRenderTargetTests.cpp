@@ -225,7 +225,10 @@ namespace
         // per-face flush its readback uses; the exact round trip is asserted below.
         // plans/plan_apple_m4.md AM4-092: SDL_GPU's RenderTargetCube uploads the face too
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan, SdlGpu);
+        // plans/plan_apple_m4.md AM4-147: and Metal's single-sampled cube target, through the
+        // plain cube's replace-and-preserve upload (MetalRenderTargetCubeUploadSupported).
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan, SdlGpu,
+                               Metal);
     }
 }
 
@@ -283,7 +286,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, Vulkan, Metal);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

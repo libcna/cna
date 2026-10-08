@@ -261,12 +261,21 @@ namespace CNA::Internal::Renderers::Metal
          */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
-         * @brief Keeps TextureCube on the framework's rule: its storage is still RGBA8 only.
+         * @brief Whether a TextureCube may be created with the given surface format.
          *
          * @param surfaceFormat XNA SurfaceFormat ordinal.
-         * @return Defer.
+         * @return Supported for every format Metal stores natively except the signed-normalized
+         *         pair XNA keeps out of a cube; Defer for the DXT formats (the framework's rule);
+         *         Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether a Texture3D may be created with the given surface format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported for every uncompressed format Metal stores natively; Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(int surfaceFormat) const override;
         /**
          * @brief Reports that half-float colour textures filter linearly.
          *

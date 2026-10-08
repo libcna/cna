@@ -46,10 +46,12 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -471,6 +473,45 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
     EXPECT_FLOAT_EQ(centre.Y, kGreen);
     EXPECT_FLOAT_EQ(centre.Z, kBlue);
     EXPECT_FLOAT_EQ(centre.W, 1.0f);
+}
+
+// plans/plan_apple_m4.md AM4-147: a float cube target's own texels through TextureCube.GetData and
+// SetData -- the declared-format transfer, not the Color one. Metal's cube target had no typed
+// route before this task (a rendered HdrBlendable or Vector4 face could be sampled but not read);
+// the other renderers answer this in their own suites.
+TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)
+{
+    using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Metal);
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
+        GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
+
+    RenderTargetCube cube(gd, kSize, false, SurfaceFormat::Vector4, DepthFormat::None);
+    gd.SetRenderTarget(&cube, CubeMapFace::NegativeY);
+    gd.Clear(kRed, kGreen, kBlue, 1.0f);
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    const Vector4 cleared(kRed, kGreen, kBlue, 1.0f);
+    std::vector<Vector4> rendered(static_cast<std::size_t>(kSize) * kSize, Vector4(-7.0f));
+    cube.GetData(CubeMapFace::NegativeY, rendered.data(), static_cast<int>(rendered.size()));
+    for (const Vector4& texel : rendered)
+        EXPECT_EQ(texel, cleared);
+
+    std::vector<Vector4> uploaded;
+    for (int i = 0; i < kSize * kSize; ++i)
+        uploaded.emplace_back(i * 0.5f - 3.0f, 100.0f + i, -0.125f * i, 1.0f + i);
+    cube.SetData(CubeMapFace::PositiveZ, uploaded.data(), static_cast<int>(uploaded.size()));
+    std::vector<Vector4> readback(uploaded.size(), Vector4(-7.0f));
+    cube.GetData(CubeMapFace::PositiveZ, readback.data(), static_cast<int>(readback.size()));
+    EXPECT_EQ(readback, uploaded);
+
+    // The upload replaced one face; the rendered one is still there.
+    std::fill(rendered.begin(), rendered.end(), Vector4(-7.0f));
+    cube.GetData(CubeMapFace::NegativeY, rendered.data(), static_cast<int>(rendered.size()));
+    for (const Vector4& texel : rendered)
+        EXPECT_EQ(texel, cleared);
 }
 
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetSamplesWithoutAnRgba8Intermediate)

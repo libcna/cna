@@ -1250,6 +1250,17 @@ static std::vector<uint8_t> metalTextureUploadBytes(const MetalTextureStorageInf
     return out;
 }
 
+// plans/plan_apple_m4.md AM4-147: XNA's Bgra4444 texels back from Metal's ABGR4Unorm, in place.
+static void metalTextureReadbackToXna(const MetalTextureStorageInfo& storage,void* data,std::size_t length)
+{
+    if(!storage.rotate4444) return;
+    auto* bytes=static_cast<uint8_t*>(data);
+    for(std::size_t i=0;i+1<length;i+=2){
+        const uint16_t xna=MetalAbgr4ToBgra4444((uint16_t)(bytes[i]|(bytes[i+1]<<8)));
+        bytes[i]=(uint8_t)(xna&0xFF); bytes[i+1]=(uint8_t)(xna>>8);
+    }
+}
+
 // AM4-142: the view a shader samples a one- or two-channel target through. Direct3D 9 (XNA)
 // returns 1 for the channels such a format does not store -- (r,1,1,1) and (r,g,1,1) -- where
 // Metal returns 0 for colour; a +1 retained view, or nil when the texture samples as it is.
@@ -1420,8 +1431,9 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
         std::function<void()> ownerHealthCheck_;
     };
 
-    // The factory validates SurfaceFormat::Color before construction. Metal allocates its RGBA8
-    // cube mip chain as one texture object, so each requested level exists before SetData.
+    // The factory resolves the SurfaceFormat to its native storage (MetalTextureStorageFor, AM4-147)
+    // before construction. Metal allocates the cube mip chain as one texture object, so each
+    // requested level exists before SetData.
     class MetalTextureCube final : public ITextureCubeRenderer
     {
     public:
@@ -1434,8 +1446,10 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
         // scope match to Texture2D's own precedent.
         MetalTextureCube(id<MTLDevice> dev, id<MTLCommandQueue> queue, int size, bool mipMap,
                          std::shared_ptr<MetalResourceHealth> resourceHealth,
-                         std::function<void()> ownerHealthCheck)
+                         std::function<void()> ownerHealthCheck,
+                         MetalTextureStorageInfo storage=MetalTextureStorageInfo{},int surfaceFormat=0)
             : size_(size), mipMap_(mipMap), levelCount_(MetalMipLevelCount(size, size, mipMap)),
+              surfaceFormat_(surfaceFormat), storage_(storage),
               resourceHealth_(std::move(resourceHealth)),
               ownerHealthCheck_(std::move(ownerHealthCheck))
         {
@@ -1447,7 +1461,7 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             MetalObjectOwner textureOwner(retainMetalObject, releaseMetalObject);
             deviceOwner.Reset(dev);
             queueOwner.Reset(queue);
-            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size mipmapped:mipMap];
+            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:metalTexturePixelFormat(storage_.storage) size:(NSUInteger)size mipmapped:mipMap];
             if(!d) throw std::runtime_error("Metal: failed to allocate cube texture descriptor");
             d.usage=MTLTextureUsageShaderRead;
             textureOwner.Adopt([dev newTextureWithDescriptor:d]);
@@ -1456,12 +1470,48 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             queue_=(id<MTLCommandQueue>)queueOwner.ReleaseOwnership();
             texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
         }
-        ~MetalTextureCube() override { [texture_ release]; [queue_ release]; [dev_ release]; }
+        ~MetalTextureCube() override { [samplingView_ release]; [texture_ release]; [queue_ release]; [dev_ release]; }
         // Face ordinals (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) already match Metal's own cube `slice`
         // ordering directly -- same convention documented on IRenderTargetCubeRenderer and already
         // relied upon, unchanged, by every other renderer (confirmed against
         // EasyGLTextureCubeRenderer's own kCubeFaceTargets order).
+        // AM4-147: SetData/GetData carry Color (RGBA8) texels; every other format arrives through
+        // the *BytesEXT pair as XNA lays its texels out.
         bool SetData(int face,int level,int x,int y,int w,int h,const void* data,int dataLength) override
+        {
+            if(storage_.storage!=MetalTextureStorage::Rgba8) return false;
+            return store(face,level,x,y,w,h,data,dataLength);
+        }
+        bool SetDataBytesEXT(int face,int level,int x,int y,int w,int h,const void* data,int dataLength) override
+        {
+            return store(face,level,x,y,w,h,data,dataLength);
+        }
+        bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            if(storage_.storage!=MetalTextureStorage::Rgba8) return false;
+            return read(face,level,x,y,w,h,data,dataLength);
+        }
+        bool GetDataBytesEXT(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            return read(face,level,x,y,w,h,data,dataLength);
+        }
+        int GetSizeEXT() const noexcept override { return size_; }
+        int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        id<MTLTexture> native() const
+        {
+            ownerHealthCheck_();
+            return texture_;
+        }
+        /// AM4-147: what a shader samples (see makeXnaSamplingView).
+        id<MTLTexture> samplingTexture() const
+        {
+            ownerHealthCheck_();
+            if (storage_.channels>=4) return texture_;
+            if (!samplingView_) samplingView_=makeXnaSamplingView(texture_,storage_.channels);
+            return samplingView_ ? samplingView_ : texture_;
+        }
+    private:
+        bool store(int face,int level,int x,int y,int w,int h,const void* data,int dataLength)
         {
             const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
@@ -1469,12 +1519,13 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             MetalTextureTransferLayout layout{};
             if (!TryPrepareMetalTextureTransfer(
                     size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
-                    MetalTransferLengthRule::AtLeastTightBytes,1,layout)) return false;
+                    MetalTransferLengthRule::AtLeastTightBytes,1,layout,
+                    (std::size_t)storage_.bytesPerTexel)) return false;
             reallocateAndUpdate(face,level,x,y,w,h,data,layout);
             ownerHealthCheck_();
             return true;
         }
-        bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        bool read(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const
         {
             const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
@@ -1483,25 +1534,21 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             if (!TryPrepareMetalTextureTransfer(
                     size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
                     MetalTransferLengthRule::ExactlyTightBytes,
-                    MetalMacOsTextureBufferRowAlignment,layout)) return false;
+                    MetalMacOsTextureBufferRowAlignment,layout,
+                    (std::size_t)storage_.bytesPerTexel)) return false;
             blitTextureToClientBuffer(dev_,queue_,texture_,(NSUInteger)face,level,x,y,0,w,h,1,
-                                      layout,MetalTransferPixelOrder::Rgba,data,
-                                      ownerHealthCheck_);
+                                      layout,storage_.storage==MetalTextureStorage::Rgba8
+                                          ? MetalTransferPixelOrder::Rgba : MetalTransferPixelOrder::Raw,
+                                      data,ownerHealthCheck_);
+            metalTextureReadbackToXna(storage_,data,layout.tightTotalBytes);
             ownerHealthCheck_();
             return true;
         }
-        int GetSizeEXT() const noexcept override { return size_; }
-        id<MTLTexture> native() const
-        {
-            ownerHealthCheck_();
-            return texture_;
-        }
-    private:
         void reallocateAndUpdate(int face,int level,int x,int y,int w,int h,const void* data,
                                  const MetalTextureTransferLayout& layout)
         {
             MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
-            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size_ mipmapped:mipMap_];
+            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:metalTexturePixelFormat(storage_.storage) size:(NSUInteger)size_ mipmapped:mipMap_];
             if(!d) throw std::runtime_error("Metal: failed to allocate replacement cube texture descriptor");
             d.usage=MTLTextureUsageShaderRead;
             replacementOwner.Adopt([dev_ newTextureWithDescriptor:d]);
@@ -1529,14 +1576,19 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: cube preservation blit failed: "+describeMetalCommandBufferError(command.error));
             ownerHealthCheck_();
             MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
+            const std::vector<uint8_t> bytes=metalTextureUploadBytes(
+                storage_,static_cast<const uint8_t*>(data),layout.tightTotalBytes);
             [replacement replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face
-                             withBytes:data bytesPerRow:(NSUInteger)layout.tightRowBytes bytesPerImage:0];
+                             withBytes:bytes.data() bytesPerRow:(NSUInteger)layout.tightRowBytes bytesPerImage:0];
             [texture_ release];
             texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+            [samplingView_ release]; samplingView_=nil;   // AM4-147: it named the old texture
         }
         id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         int size_=0; bool mipMap_=false; int levelCount_=1;
+        int surfaceFormat_=0; MetalTextureStorageInfo storage_;   // AM4-147
         id<MTLTexture> texture_=nil;
+        mutable id<MTLTexture> samplingView_=nil;               // AM4-147
         std::shared_ptr<MetalResourceHealth> resourceHealth_;
         std::function<void()> ownerHealthCheck_;
     };
@@ -1550,9 +1602,11 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
         // a render-target-only concern.
         MetalTexture3D(id<MTLDevice> dev, id<MTLCommandQueue> queue, int w,int h,int depth,bool mipMap,
                        std::shared_ptr<MetalResourceHealth> resourceHealth,
-                       std::function<void()> ownerHealthCheck)
+                       std::function<void()> ownerHealthCheck,
+                       MetalTextureStorageInfo storage=MetalTextureStorageInfo{},int surfaceFormat=0)
             : w_(w), h_(h), depth_(depth),
               levelCount_(MetalVolumeMipLevelCount(w,h,depth,mipMap)),
+              surfaceFormat_(surfaceFormat), storage_(storage),
               resourceHealth_(std::move(resourceHealth)),
               ownerHealthCheck_(std::move(ownerHealthCheck))
         {
@@ -1565,7 +1619,7 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             deviceOwner.Reset(dev); queueOwner.Reset(queue);
             MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
             if(!d) throw std::runtime_error("Metal: failed to allocate 3D texture descriptor");
-            d.textureType=MTLTextureType3D; d.pixelFormat=MTLPixelFormatRGBA8Unorm;
+            d.textureType=MTLTextureType3D; d.pixelFormat=metalTexturePixelFormat(storage_.storage);
             d.width=(NSUInteger)w; d.height=(NSUInteger)h; d.depth=(NSUInteger)depth;
             d.mipmapLevelCount=(NSUInteger)levelCount_;
             d.usage=MTLTextureUsageShaderRead;
@@ -1575,23 +1629,63 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             queue_=(id<MTLCommandQueue>)queueOwner.ReleaseOwnership();
             texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
         }
-        ~MetalTexture3D() override { [texture_ release]; [queue_ release]; [dev_ release]; }
+        ~MetalTexture3D() override { [samplingView_ release]; [texture_ release]; [queue_ release]; [dev_ release]; }
+        // AM4-147: as MetalTextureCube's -- Color through SetData/GetData, every format through
+        // the *BytesEXT pair.
         bool SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int dataLength) override
+        {
+            if(storage_.storage!=MetalTextureStorage::Rgba8) return false;
+            return store(level,x,y,z,w,h,depth,data,dataLength);
+        }
+        bool SetDataBytesEXT(int level,int x,int y,int z,int w,int h,int depth,const void* data,int dataLength) override
+        {
+            return store(level,x,y,z,w,h,depth,data,dataLength);
+        }
+        // plans/plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
+        // always 0 for a 3D texture (there is no per-slice concept the way a cube's 6 faces have;
+        // `z`/`depth` address the volume directly within slice 0).
+        bool GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
+        {
+            if(storage_.storage!=MetalTextureStorage::Rgba8) return false;
+            return read(level,x,y,z,w,h,depth,data,dataLength);
+        }
+        bool GetDataBytesEXT(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
+        {
+            return read(level,x,y,z,w,h,depth,data,dataLength);
+        }
+        void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override
+        {
+            width=w_; height=h_; depth=depth_;
+        }
+        int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        id<MTLTexture> native() const
+        {
+            ownerHealthCheck_();
+            return texture_;
+        }
+        /// AM4-147: what a shader samples (see makeXnaSamplingView).
+        id<MTLTexture> samplingTexture() const
+        {
+            ownerHealthCheck_();
+            if (storage_.channels>=4) return texture_;
+            if (!samplingView_) samplingView_=makeXnaSamplingView(texture_,storage_.channels);
+            return samplingView_ ? samplingView_ : texture_;
+        }
+    private:
+        bool store(int level,int x,int y,int z,int w,int h,int depth,const void* data,int dataLength)
         {
             const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             MetalTextureTransferLayout layout{};
             if(!TryPrepareMetalTextureTransfer(
                     w_,h_,depth_,levelCount_,level,x,y,z,w,h,depth,data,dataLength,
-                    MetalTransferLengthRule::AtLeastTightBytes,1,layout)) return false;
+                    MetalTransferLengthRule::AtLeastTightBytes,1,layout,
+                    (std::size_t)storage_.bytesPerTexel)) return false;
             reallocateAndUpdate(level,x,y,z,w,h,depth,data,layout);
             ownerHealthCheck_();
             return true;
         }
-        // plans/plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
-        // always 0 for a 3D texture (there is no per-slice concept the way a cube's 6 faces have;
-        // `z`/`depth` address the volume directly within slice 0).
-        bool GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
+        bool read(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const
         {
             const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
@@ -1599,29 +1693,23 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             if(!TryPrepareMetalTextureTransfer(
                     w_,h_,depth_,levelCount_,level,x,y,z,w,h,depth,data,dataLength,
                     MetalTransferLengthRule::ExactlyTightBytes,
-                    MetalMacOsTextureBufferRowAlignment,layout)) return false;
+                    MetalMacOsTextureBufferRowAlignment,layout,
+                    (std::size_t)storage_.bytesPerTexel)) return false;
             blitTextureToClientBuffer(dev_,queue_,texture_,0,level,x,y,z,w,h,depth,layout,
-                                      MetalTransferPixelOrder::Rgba,data,ownerHealthCheck_);
+                                      storage_.storage==MetalTextureStorage::Rgba8
+                                          ? MetalTransferPixelOrder::Rgba : MetalTransferPixelOrder::Raw,
+                                      data,ownerHealthCheck_);
+            metalTextureReadbackToXna(storage_,data,layout.tightTotalBytes);
             ownerHealthCheck_();
             return true;
         }
-        void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override
-        {
-            width=w_; height=h_; depth=depth_;
-        }
-        id<MTLTexture> native() const
-        {
-            ownerHealthCheck_();
-            return texture_;
-        }
-    private:
         void reallocateAndUpdate(int level,int x,int y,int z,int w,int h,int depth,const void* data,
                                  const MetalTextureTransferLayout& layout)
         {
             MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
             MTLTextureDescriptor* descriptor=[[MTLTextureDescriptor alloc] init];
             if(!descriptor) throw std::runtime_error("Metal: failed to allocate replacement 3D texture descriptor");
-            descriptor.textureType=MTLTextureType3D; descriptor.pixelFormat=MTLPixelFormatRGBA8Unorm;
+            descriptor.textureType=MTLTextureType3D; descriptor.pixelFormat=metalTexturePixelFormat(storage_.storage);
             descriptor.width=(NSUInteger)w_; descriptor.height=(NSUInteger)h_; descriptor.depth=(NSUInteger)depth_;
             descriptor.mipmapLevelCount=(NSUInteger)levelCount_; descriptor.usage=MTLTextureUsageShaderRead;
             replacementOwner.Adopt([dev_ newTextureWithDescriptor:descriptor]); [descriptor release];
@@ -1650,14 +1738,19 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
             ownerHealthCheck_();
             MTLRegion region=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,
                                              (NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
-            [replacement replaceRegion:region mipmapLevel:(NSUInteger)level slice:0 withBytes:data
+            const std::vector<uint8_t> bytes=metalTextureUploadBytes(
+                storage_,static_cast<const uint8_t*>(data),layout.tightTotalBytes);
+            [replacement replaceRegion:region mipmapLevel:(NSUInteger)level slice:0 withBytes:bytes.data()
                            bytesPerRow:(NSUInteger)layout.tightRowBytes
                          bytesPerImage:(NSUInteger)layout.tightImageBytes];
             [texture_ release]; texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+            [samplingView_ release]; samplingView_=nil;   // AM4-147: it named the old texture
         }
         id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         int w_=0, h_=0, depth_=0; int levelCount_=1;
+        int surfaceFormat_=0; MetalTextureStorageInfo storage_;   // AM4-147
         id<MTLTexture> texture_=nil;
+        mutable id<MTLTexture> samplingView_=nil;               // AM4-147
         std::shared_ptr<MetalResourceHealth> resourceHealth_;
         std::function<void()> ownerHealthCheck_;
     };
@@ -3712,14 +3805,25 @@ public:
             throw;
         }
     }
+    // plans/plan_apple_m4.md AM4-147: TextureCube.SetData on a render target. Color texels arrive
+    // through SetData as RGBA, every other format through SetDataBytesEXT as XNA lays it out; both
+    // replace the face region the way MetalTextureCube's upload does. A multisampled cube refuses
+    // (MetalRenderTargetCubeUploadSupported).
     bool SetData(int face,int level,int x,int y,int w,int h,
                  const void* data,int dataLength) override
     {
-        const MetalAutoreleaseScope autoreleaseScope;
-        (void)lockOwner();
-        (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
-        (void)data; (void)dataLength;
-        return MetalRenderTargetCubeUploadSupported();
+        if (!storage_.bgraOrder) return false;
+        return upload(face,level,x,y,w,h,data,dataLength);
+    }
+    bool SetDataBytesEXT(int face,int level,int x,int y,int w,int h,
+                         const void* data,int dataLength) override
+    {
+        return upload(face,level,x,y,w,h,data,dataLength);
+    }
+    bool GetDataBytesEXT(int face,int level,int x,int y,int w,int h,
+                         void* data,int dataLength) const override
+    {
+        return GetData(face,level,x,y,w,h,data,dataLength);
     }
     // plans/plan_metal.md METAL-131 (cube analog): same shared-helper readback and exact source-command
     // verification as MetalRenderTargetRenderer::GetData() -- checked against
@@ -3779,6 +3883,63 @@ private:
         auto owner=RequireMetalResourceOwner(resourceHealth_,owner_);
         owner->throwPendingCommandFailure();
         return owner;
+    }
+
+    // AM4-147: as MetalTextureCube::reallocateAndUpdate -- a replacement cube, every other
+    // subresource blitted across, then the region written -- after ending this target's pass so
+    // the draws already recorded into it reach the old cube first.
+    bool upload(int face,int level,int x,int y,int w,int h,const void* data,int dataLength)
+    {
+        const MetalAutoreleaseScope autoreleaseScope;
+        auto owner=lockOwner();
+        if (face<0||face>=6||!MetalRenderTargetCubeUploadSupported(appliedSampleCount_)) return false;
+        MetalTextureTransferLayout layout{};
+        if(!TryPrepareMetalTextureTransfer(
+                size_,size_,1,levelCount_,level,x,y,0,w,h,1,data,dataLength,
+                MetalTransferLengthRule::AtLeastTightBytes,1,layout,
+                (std::size_t)storage_.bytesPerTexel)) return false;
+        if (owner->currentRenderTargetCube==this) owner->endActiveEncoding(false);
+        MetalObjectOwner replacementOwner(retainMetalObject,releaseMetalObject);
+        MTLTextureDescriptor* descriptor=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:colorFormat_
+            size:(NSUInteger)size_ mipmapped:mipMap_];
+        if(!descriptor) throw std::runtime_error("Metal: failed to allocate replacement RenderTargetCube descriptor");
+        descriptor.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
+        replacementOwner.Adopt([owner->device newTextureWithDescriptor:descriptor]);
+        if(!replacementOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate replacement RenderTargetCube texture");
+        id<MTLTexture> replacement=(id<MTLTexture>)replacementOwner.Get();
+        MetalObjectOwner commandOwner(retainMetalObject,releaseMetalObject);
+        commandOwner.Reset([owner->queue commandBuffer]);
+        if(!commandOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube preservation command buffer");
+        id<MTLCommandBuffer> command=(id<MTLCommandBuffer>)commandOwner.Get();
+        id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];
+        if(!blit) throw std::runtime_error("Metal: failed to create RenderTargetCube preservation blit encoder");
+        for(int mip=0;mip<levelCount_;++mip){
+            const NSUInteger dimension=(NSUInteger)MetalTextureTransferDetail::MipDimension(size_,mip);
+            for(int slice=0;slice<6;++slice){
+                const bool replacesWholeSubresource=slice==face&&mip==level&&x==0&&y==0&&
+                    (NSUInteger)w==dimension&&(NSUInteger)h==dimension;
+                if(replacesWholeSubresource) continue;
+                [blit copyFromTexture:colorTexture_ sourceSlice:(NSUInteger)slice sourceLevel:(NSUInteger)mip
+                          sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(dimension,dimension,1)
+                             toTexture:replacement destinationSlice:(NSUInteger)slice destinationLevel:(NSUInteger)mip
+                    destinationOrigin:MTLOriginMake(0,0,0)];
+            }
+        }
+        [blit endEncoding]; [command commit]; [command waitUntilCompleted];
+        if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTargetCube preservation blit failed: "+describeMetalCommandBufferError(command.error));
+        owner->throwPendingCommandFailure();
+        std::vector<std::uint8_t> bytes(layout.tightTotalBytes);
+        if(!CopyMetalTightRgbaToTextureBytes(static_cast<const std::uint8_t*>(data),layout,
+               storage_.bgraOrder ? MetalTransferPixelOrder::Bgra : MetalTransferPixelOrder::Raw,
+               bytes.data(),bytes.size()))
+            throw std::runtime_error("Metal: RenderTargetCube upload conversion failed");
+        [replacement replaceRegion:MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h)
+                      mipmapLevel:(NSUInteger)level slice:(NSUInteger)face withBytes:bytes.data()
+                      bytesPerRow:(NSUInteger)layout.tightRowBytes bytesPerImage:0];
+        [colorTexture_ release]; colorTexture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+        [samplingView_ release]; samplingView_=nil;
+        owner->throwPendingCommandFailure();
+        return true;
     }
 
     std::weak_ptr<MetalRenderer::Impl> owner_;
@@ -3999,7 +4160,7 @@ static id<MTLTexture> nativeTextureFor(const ITextureRenderer* t)
 static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeRenderer* t)
 {
     if (!t) return nil;
-    if (auto* mt = dynamic_cast<const MetalTextureCube*>(t)) return mt->native();
+    if (auto* mt = dynamic_cast<const MetalTextureCube*>(t)) return mt->samplingTexture();   // AM4-147
     if (auto* rt = dynamic_cast<const MetalRenderTargetCubeRenderer*>(t)) return rt->samplingTexture();   // AM4-142
     return nil;
 }
@@ -4351,11 +4512,13 @@ std::unique_ptr<ITextureCubeRenderer> MetalRenderer::CreateTextureCube(int size,
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
-    if (!MetalSupportsSurfaceFormat(surfaceFormat))
-        throw System::NotSupportedException("Metal TextureCube supports only SurfaceFormat::Color.");
+    MetalTextureStorageInfo storage{};
+    if (ClassifyTextureCubeFormatEXT(surfaceFormat)!=RendererFormatVerdict::Supported ||
+        !MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage))   // AM4-147
+        throw System::NotSupportedException("Metal TextureCube does not store this SurfaceFormat.");
     if(size<=0) throw std::invalid_argument("Metal TextureCube size must be positive.");
     return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap,
-        impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_));
+        impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_),storage,surfaceFormat);
 }
 // plans/plan_apple_m4.md AM4-077: the SpriteBatch-scoped MSL facility, compiled from the two sources
 // the way D3D11 and Vulkan compile theirs. A source that does not compile yields an invalid effect
@@ -4388,11 +4551,13 @@ std::unique_ptr<ITexture3DRenderer> MetalRenderer::CreateTexture3D(int w,int h,i
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
-    if (!MetalSupportsSurfaceFormat(surfaceFormat))
-        throw System::NotSupportedException("Metal Texture3D supports only SurfaceFormat::Color.");
+    MetalTextureStorageInfo storage{};
+    if (ClassifyTexture3DFormatEXT(surfaceFormat)!=RendererFormatVerdict::Supported ||
+        !MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage))   // AM4-147
+        throw System::NotSupportedException("Metal Texture3D does not store this SurfaceFormat.");
     if(w<=0||h<=0||depth<=0) throw std::invalid_argument("Metal Texture3D dimensions must be positive.");
     return std::make_unique<MetalTexture3D>(impl_->device,impl_->queue,w,h,depth,mipMap,
-        impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_));
+        impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_),storage,surfaceFormat);
 }
 // Preserve/discard behavior remains owned by the shared GraphicsDevice binding path. Requested
 // multisampling is deliberately clamped to zero at this boundary.
@@ -4440,10 +4605,25 @@ RendererFormatVerdict MetalRenderer::ClassifySurfaceFormatEXT(int surfaceFormat)
     return MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage) ? RendererFormatVerdict::Supported
                                                                                 : RendererFormatVerdict::Defer;
 }
-RendererFormatVerdict MetalRenderer::ClassifyTextureCubeFormatEXT(int /*surfaceFormat*/) const
+// plans/plan_apple_m4.md AM4-147: a cube and a volume store every format a Texture2D does, except
+// the two signed-normalized formats XNA keeps out of both (Texture::IsCubeFormatAllowedByProfileEXT)
+// and, for a volume, the DXT formats it never carries.
+RendererFormatVerdict MetalRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
 {
-    // TextureCube storage is still RGBA8 here; the framework's Color-only rule answers it.
-    return RendererFormatVerdict::Defer;
+    using SF=Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    if (MetalIsTexture2DOnlyFormat(surfaceFormat,false)) return RendererFormatVerdict::Unsupported;
+    MetalTextureStorageInfo storage{};
+    if (MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage)) return RendererFormatVerdict::Supported;
+    const SF format=static_cast<SF>(surfaceFormat);
+    return (format==SF::Dxt1||format==SF::Dxt3||format==SF::Dxt5) ? RendererFormatVerdict::Defer
+                                                                   : RendererFormatVerdict::Unsupported;
+}
+RendererFormatVerdict MetalRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+{
+    if (MetalIsTexture2DOnlyFormat(surfaceFormat,true)) return RendererFormatVerdict::Unsupported;
+    MetalTextureStorageInfo storage{};
+    return MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage) ? RendererFormatVerdict::Supported
+                                                                                : RendererFormatVerdict::Unsupported;
 }
 bool MetalRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
 {
@@ -5209,7 +5389,7 @@ namespace
                 return nil;
             case MetalCompiledTextureKind::Texture3D:
                 if (auto* volume = dynamic_cast<Texture3D*>(texture))
-                    if (auto* metal = dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())) return metal->native();
+                    if (auto* metal = dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())) return metal->samplingTexture();   // AM4-147
                 return nil;
             case MetalCompiledTextureKind::Texture2D:
                 if (dynamic_cast<TextureCube*>(texture) || dynamic_cast<Texture3D*>(texture)) return nil;

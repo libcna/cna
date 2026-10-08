@@ -194,12 +194,19 @@ namespace CNA::Internal::Renderers::Metal
     }
 
     /**
-     * @brief Reports whether RenderTargetCube accepts CPU uploads in the current contract.
-     * @return False; uploads are rejected instead of silently discarded.
+     * @brief Reports whether a RenderTargetCube accepts a CPU upload (TextureCube.SetData).
+     *
+     * plans/plan_apple_m4.md AM4-147: a single-sampled cube target stores the face it is given. A
+     * multisampled one renders each face into its own multisample texture and only resolves into
+     * the cube, so an upload into the cube would be overwritten by the next resolve of stale
+     * samples; it is refused rather than accepted and lost.
+     *
+     * @param appliedSampleCount The target's applied multisample count (0 when single-sampled).
+     * @return True when the upload is stored.
      */
-    [[nodiscard]] constexpr bool MetalRenderTargetCubeUploadSupported() noexcept
+    [[nodiscard]] constexpr bool MetalRenderTargetCubeUploadSupported(int appliedSampleCount) noexcept
     {
-        return false;
+        return appliedSampleCount <= 0;
     }
 
     /**
@@ -447,6 +454,47 @@ namespace CNA::Internal::Renderers::Metal
     [[nodiscard]] constexpr uint16_t MetalBgra4444ToAbgr4(uint16_t xna) noexcept
     {
         return static_cast<uint16_t>(((xna << 4) | (xna >> 12)) & 0xFFFFu);
+    }
+
+    /**
+     * @brief Converts one Metal ABGR4Unorm texel back to XNA's Bgra4444 layout (A in the high
+     *        nibble) -- the inverse of MetalBgra4444ToAbgr4, for readback.
+     *
+     * @param metal The Metal R4G4B4A4 texel.
+     * @return The XNA A4R4G4B4 texel.
+     */
+    [[nodiscard]] constexpr uint16_t MetalAbgr4ToBgra4444(uint16_t metal) noexcept
+    {
+        return static_cast<uint16_t>(((metal >> 4) | (metal << 12)) & 0xFFFFu);
+    }
+
+    /**
+     * @brief Whether XNA keeps a format out of a TextureCube or a Texture3D although a Texture2D
+     *        stores it.
+     *
+     * plans/plan_apple_m4.md AM4-147: NormalizedByte2 and NormalizedByte4 are Texture2D-only for
+     * both kinds (Texture::IsCubeFormatAllowedByProfileEXT), and a volume carries no DXT format
+     * (Texture::IsVolumeFormatAllowedByProfileEXT).
+     *
+     * @param surfaceFormat SurfaceFormat ordinal.
+     * @param volume True for a Texture3D, false for a TextureCube.
+     * @return True when the format is refused for that kind.
+     */
+    [[nodiscard]] constexpr bool MetalIsTexture2DOnlyFormat(int surfaceFormat, bool volume) noexcept
+    {
+        using SF = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SF>(surfaceFormat))
+        {
+            case SF::NormalizedByte2:
+            case SF::NormalizedByte4:
+                return true;
+            case SF::Dxt1:
+            case SF::Dxt3:
+            case SF::Dxt5:
+                return volume;
+            default:
+                return false;
+        }
     }
 
     /** @brief Bit for a sample count in a supported-count mask (2, 4 and 8 are the counts asked about). */
