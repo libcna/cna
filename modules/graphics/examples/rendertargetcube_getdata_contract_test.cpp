@@ -204,13 +204,12 @@ namespace
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-026: `msaaCubeTargets` false -- Metal reports
-    // MultiSampleAntiAliasing false (METAL-259) and clamps every requested sample count to zero, so
-    // a "multisampled" cube target is a single-sample one and reads back as such. `rtCubeSetData`
-    // false: RenderTargetCube::SetData is refused with NotSupportedException
+    // plans/plan_apple_m4.md AM4-141: `msaaCubeTargets` true -- each face renders into its own 2D
+    // multisample texture and resolves into the cube's slice. `rtCubeSetData` false:
+    // RenderTargetCube::SetData is refused with NotSupportedException
     // (MetalRenderTargetCubeUploadSupported), never accepted and dropped.
     constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #else
 #error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
 #endif

@@ -174,7 +174,7 @@ namespace CNA::Internal::Renderers::Metal
         {
             case CNA::GraphicsCapability::ThreeD:                    return true;
             case CNA::GraphicsCapability::DepthStencilBuffer:       return true;
-            case CNA::GraphicsCapability::MultiSampleAntiAliasing:  return false;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:  return false;  // per device: MetalRenderer::SupportsCapability (AM4-141)
             case CNA::GraphicsCapability::MultipleRenderTargets:    return true;   // AM4-097
             case CNA::GraphicsCapability::AnisotropicFiltering:     return true;
             case CNA::GraphicsCapability::WireFrame:                return true;
@@ -247,14 +247,29 @@ namespace CNA::Internal::Renderers::Metal
         return MetalTexture2DImagePolicy::Supported;
     }
 
-    /**
-     * @brief Clamps every requested sample count to the currently supported value zero.
-     * @param requestedMultiSampleCount Requested public sample count.
-     * @return Zero; Metal MSAA is deliberately outside the supported contract.
-     */
-    [[nodiscard]] constexpr int MetalAppliedMultiSampleCount(int requestedMultiSampleCount)
+    /** @brief Bit for a sample count in a supported-count mask (2, 4 and 8 are the counts asked about). */
+    [[nodiscard]] constexpr unsigned MetalSampleCountBit(int samples) noexcept
     {
-        (void)requestedMultiSampleCount;
+        return (samples == 2 || samples == 4 || samples == 8) ? (1u << samples) : 0u;
+    }
+
+    /**
+     * @brief The multisample count a request gets on a device.
+     *
+     * plans/plan_apple_m4.md AM4-141: a request is rounded down to the nearest count the device
+     * supports (`supportsTextureSampleCount:`), as XNA's own validation lowers an unsupported
+     * PresentationParameters.MultiSampleCount; 0 and 1 mean single-sampled, reported as 0.
+     *
+     * @param requestedMultiSampleCount Requested public sample count.
+     * @param supportedMask MetalSampleCountBit of every count the device supports.
+     * @return The applied public count: 0, 2, 4 or 8.
+     */
+    [[nodiscard]] constexpr int MetalAppliedMultiSampleCount(int requestedMultiSampleCount,
+                                                             unsigned supportedMask) noexcept
+    {
+        for (int samples = 8; samples >= 2; samples /= 2)
+            if (requestedMultiSampleCount >= samples && (supportedMask & MetalSampleCountBit(samples)) != 0)
+                return samples;
         return 0;
     }
 
@@ -273,6 +288,40 @@ namespace CNA::Internal::Renderers::Metal
     [[nodiscard]] constexpr float MetalDepthBiasUnits(float xnaDepthBias) noexcept
     {
         return xnaDepthBias * 16777215.0f;
+    }
+
+    /** @brief What a draw does under BlendState.MultiSampleMask on its target. */
+    enum class MetalSampleMaskAdmission
+    {
+        /** @brief Draw normally: a single-sample target, or every sample kept. */
+        Draw,
+        /** @brief Skip the draw: no sample of the target is kept, so nothing would be written. */
+        Skip,
+        /** @brief Draw writing [[sample_mask]]: some samples kept and some dropped. */
+        Masked
+    };
+
+    /**
+     * @brief Judges BlendState.MultiSampleMask against the sample count of the target drawn to.
+     *
+     * plans/plan_apple_m4.md AM4-141: XNA's mask "has no effect when rendering to a single sample
+     * buffer" (D3D9). On a multisampled target, a mask that keeps no sample writes nothing -- exact
+     * by not drawing -- and a partial one is applied by the fragment's [[sample_mask]] output,
+     * since Metal has no pipeline sample mask.
+     *
+     * @param mask BlendState.MultiSampleMask.
+     * @param sampleCount Native sample count of the bound target (1 when single-sampled).
+     * @return Draw, Skip or Masked.
+     */
+    [[nodiscard]] constexpr MetalSampleMaskAdmission DescribeMetalSampleMaskAdmission(
+        unsigned mask, int sampleCount) noexcept
+    {
+        if (sampleCount <= 1) return MetalSampleMaskAdmission::Draw;
+        const unsigned every = sampleCount >= 32 ? 0xFFFFFFFFu : ((1u << sampleCount) - 1u);
+        const unsigned kept = mask & every;
+        if (kept == every) return MetalSampleMaskAdmission::Draw;
+        if (kept == 0) return MetalSampleMaskAdmission::Skip;
+        return MetalSampleMaskAdmission::Masked;
     }
 
     /**

@@ -120,15 +120,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         TIMEOUT 60 LABELS "Metal"
         ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
 
-    # plans/plan_apple_m4.md AM4-097: the shared MRT contract (SOFTWARE-120), its multisampled scenarios
-    # compiled out because Metal reports no MSAA -- the test then asserts that report.
+    # plans/plan_apple_m4.md AM4-097: the shared MRT contract (SOFTWARE-120). Its multisampled
+    # scenarios run since AM4-141 gave Metal MSAA.
     add_executable(cna_test_metal_mrt_stock_effect_contract
         ${CMAKE_SOURCE_DIR}/modules/graphics/examples/mrt_stock_effect_contract_test.cpp)
     target_link_libraries(cna_test_metal_mrt_stock_effect_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_test_metal_mrt_stock_effect_contract PRIVATE SDL3::SDL3main)
     endif()
-    target_compile_definitions(cna_test_metal_mrt_stock_effect_contract PRIVATE MRT_CONTRACT_WITHOUT_MSAA)
     cna_register_renderer_test(NAME Metal_MRT_StockEffectContract
         COMMAND cna_test_metal_mrt_stock_effect_contract
         TIMEOUT 60 LABELS "Metal"
@@ -186,6 +185,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         graphicsdevice_default_state_occlusion_test
         graphicsdevice_depth_contract_test
         graphicsdevice_ordered_clear_test
+        msaa_fragment_contract_test
         occlusion_query_test
         point_sampling_contract_test
         present_lifecycle_contract_test
@@ -248,6 +248,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
     cna_register_renderer_test(NAME Metal_DepthBias COMMAND cna_test_metal_depth_bias
         TIMEOUT 120 LABELS "Metal")
+    # plans/plan_apple_m4.md AM4-141: backbuffer MSAA, its MultiSampleMask and its readback; every
+    # Metal GPU multisamples at 4x.
+    cna_metal_test(cna_test_metal_presentation_msaa_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
+    cna_register_renderer_test(NAME Metal_PresentationMsaaContract
+        COMMAND cna_test_metal_presentation_msaa_contract 4 TIMEOUT 120 LABELS "Metal")
     foreach(_cna_metal_shared IN LISTS CNA_METAL_SHARED_GRAPHICS_TESTS)
         cna_metal_test(cna_test_metal_${_cna_metal_shared}
             ${CNA_GRAPHICS_EXAMPLES_DIR}/${_cna_metal_shared}.cpp)
@@ -255,6 +261,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
             COMMAND cna_test_metal_${_cna_metal_shared}
             TIMEOUT 120 LABELS "Metal;MetalShared")
     endforeach()
+    # plans/plan_apple_m4.md AM4-141: the MSAA MultiSampleMask leg uses only all-or-nothing masks,
+    # which Metal applies exactly.
+    target_compile_definitions(cna_test_metal_gfx077_colorwritechannels_3d_test PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)
     unset(_cna_metal_shared)
 endif()
 

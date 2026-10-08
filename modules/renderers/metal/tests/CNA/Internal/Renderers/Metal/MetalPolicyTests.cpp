@@ -58,10 +58,19 @@ TEST(MetalPolicy, FormatAndSampleCountNeverOverclaim)
     EXPECT_TRUE(MetalSupportsSurfaceFormat(static_cast<int>(SurfaceFormat::Color)));
     EXPECT_FALSE(MetalSupportsSurfaceFormat(1));
     EXPECT_FALSE(MetalSupportsSurfaceFormat(26));
-    EXPECT_EQ(MetalAppliedMultiSampleCount(-1),0);
-    EXPECT_EQ(MetalAppliedMultiSampleCount(0),0);
-    EXPECT_EQ(MetalAppliedMultiSampleCount(2),0);
-    EXPECT_EQ(MetalAppliedMultiSampleCount(8),0);
+    // AM4-141: rounded down to a count the device supports; 0/1 are single-sampled.
+    const unsigned all=MetalSampleCountBit(2)|MetalSampleCountBit(4)|MetalSampleCountBit(8);
+    const unsigned fourOnly=MetalSampleCountBit(4);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(-1,all),0);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(0,all),0);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(1,all),0);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(2,all),2);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(3,all),2);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(8,all),8);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(16,all),8);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(8,fourOnly),4);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(2,fourOnly),0);
+    EXPECT_EQ(MetalAppliedMultiSampleCount(4,0u),0);
     EXPECT_FALSE(MetalRenderTargetCubeUploadSupported());
 }
 
@@ -193,4 +202,18 @@ TEST(MetalPolicy, DepthBiasIsConvertedToTwentyFourBitUnits)
     EXPECT_FLOAT_EQ(MetalDepthBiasUnits(0.0f), 0.0f);
     EXPECT_FLOAT_EQ(MetalDepthBiasUnits(-1.0e-4f), -1.0e-4f * 16777215.0f);
     EXPECT_FLOAT_EQ(MetalDepthBiasUnits(1.0f / 16777215.0f), 1.0f);
+}
+
+// plans/plan_apple_m4.md AM4-141: MultiSampleMask is judged against the target's sample count.
+TEST(MetalPolicy, SampleMaskIsIgnoredSingleSampledAndPartialMasksAreWrittenByTheFragment)
+{
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0u,1),MetalSampleMaskAdmission::Draw)
+        << "XNA: no effect on a single-sample target";
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0xFFFFFFFFu,4),MetalSampleMaskAdmission::Draw);
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0xFu,4),MetalSampleMaskAdmission::Draw);
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0xF0u,4),MetalSampleMaskAdmission::Skip)
+        << "bits beyond the target's samples keep nothing";
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0u,8),MetalSampleMaskAdmission::Skip);
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0x1u,4),MetalSampleMaskAdmission::Masked);
+    EXPECT_EQ(DescribeMetalSampleMaskAdmission(0x7Fu,8),MetalSampleMaskAdmission::Masked);
 }

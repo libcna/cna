@@ -215,6 +215,12 @@ namespace
     static const char* kMetalShaderSource = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
+// plans/plan_apple_m4.md AM4-141: BlendState.MultiSampleMask that keeps some samples of a
+// multisampled target. Metal has no pipeline sample mask, so every stock fragment function can
+// also write [[sample_mask]] -- only in the pipeline variant specialized with cnaSampleMaskOut,
+// so an ordinary draw neither carries the output nor binds buffer 28.
+constant bool cnaSampleMaskOut [[function_constant(0)]];
+struct CnaFragOut { float4 color [[color(0)]]; uint mask [[sample_mask, function_constant(cnaSampleMaskOut)]]; };
 
 struct U3D { float4x4 wvp; };
 // plans/plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest/DualTexture
@@ -259,19 +265,19 @@ inline bool cna_alpha_test_fails(float a, float4 at) {
 // plans/plan_apple_m4.md AM4-106: XNA's unlit vertex shaders hand DiffuseColor (times the vertex colour
 // in their Vc variants) to COLOR0, which Direct3D 9 saturates before interpolation and texturing --
 // EasyGL's SOFTWARE-153/155 and WebGPU's AM4-096 rule. The product with a texel is not clamped.
-fragment float4 cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 c = saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
-fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 c = tex.sample(smp, in.uv) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 // DualTextureEffect (plans/plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
 // PSDualTexture -- `color.rgb *= 2; color *= overlay * diffuse;` (a lightmap-style RGB-doubling
@@ -289,14 +295,14 @@ vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[
 vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
     V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
-fragment float4 cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 base = tex0.sample(smp0, in.uv);
     base.rgb *= 2.0;
     float4 c = base * tex1.sample(smp1, in.uv1) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // BasicEffect per-pixel lighting (plans/plan_metal.md METAL-38/40-47), ported line-for-line from
@@ -343,7 +349,7 @@ vertex VLitOut cna_v3d_lit(V3NormalTexColorIn in [[stage_in]], constant LitTrans
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     return o;
 }
-fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.normal);
     float3 E = normalize(lu.eyePosition.xyz - in.worldPos);
     float dotL0 = dot(N, -lu.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
@@ -360,7 +366,7 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     c.rgb += specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
     c.rgb = mix(lu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // plans/plan_metal.md METAL-39: real XNA BasicEffect defaults PreferPerPixelLighting=false, which selects
@@ -395,12 +401,12 @@ vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]]
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), lu.fogVector), 0.0, 1.0);
     return o;
 }
-fragment float4 cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 c = tex.sample(smp, in.uv) * float4(in.litRGB, in.alpha);
     c.rgb += in.specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
     c.rgb = mix(lu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // EnvironmentMapEffect (plans/plan_metal.md METAL-64/66-68), ported line-for-line from
@@ -449,7 +455,7 @@ vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransfo
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), eu.fogVector), 0.0, 1.0);
     return o;
 }
-fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], texturecube<float> envMap [[texture(1)]], sampler envSmp [[sampler(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], texturecube<float> envMap [[texture(1)]], sampler envSmp [[sampler(1)]], constant EnvUniforms& eu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.worldNormal);
     float3 E = normalize(in.eyeDir);
     float NdotL0 = max(dot(N, -eu.light0Dir.xyz), 0.0);
@@ -467,7 +473,7 @@ fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[t
     float4 c = float4(rgb, combinedAlpha);
     if (cna_alpha_test_fails(c.a, eu.alphaTest)) discard_fragment();
     c.rgb = mix(eu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // SkinnedEffect (plans/plan_metal.md METAL-72-80), ported line-for-line from
@@ -530,7 +536,7 @@ vertex VSkinnedOut cna_v3d_skinned(VSkinnedIn in [[stage_in]], constant SkinnedT
 vertex VSkinnedOut cna_v3d_skinned_color(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, bones, su.fogVector);
 }
-fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.normal);
     float3 E = normalize(su.eyePosition.xyz - in.worldPos);
     float dotL0 = dot(N, -su.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
@@ -552,7 +558,7 @@ fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> te
     c.rgb *= vc.rgb;
     if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
     c.rgb = mix(su.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // plans/plan_metal.md METAL-76: real XNA SkinnedEffect defaults PreferPerPixelLighting=false too, same as
@@ -600,7 +606,7 @@ vertex VSkinnedVertexLitOut cna_v3d_skinned_vertexlit(VSkinnedIn in [[stage_in]]
 vertex VSkinnedVertexLitOut cna_v3d_skinned_color_vertexlit(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, su, bones);
 }
-fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]]) {
+fragment CnaFragOut cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 texColor = tex.sample(smp, in.uv);
     float4 vc = (su.vertexColorEnabled.x > 0.5) ? in.color : float4(1.0);
     float4 c = float4(in.litRGB * texColor.rgb, su.diffuseColor.w * texColor.a * vc.a);
@@ -608,7 +614,7 @@ fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], 
     c.rgb *= vc.rgb;
     if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
     c.rgb = mix(su.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // CNAEXT PBR (plans/plan_metal.md METAL-81/83-86, plans/plan_cnj.md CNB-58), ported line-for-line from
@@ -703,7 +709,7 @@ inline float2 cna_pbr_uv(float2 uv0, float2 uv1, int slot, constant PbrUniforms&
     uint mask = uint(pu.textureCoordinateSets.x + 0.5);
     return ((mask >> uint(slot)) & 1u) != 0u ? uv1 : uv0;
 }
-fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
+fragment CnaFragOut cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
     texture2d<float> normalMap [[texture(1)]], sampler normalSmp [[sampler(1)]],
     texture2d<float> mrMap [[texture(2)]], sampler mrSmp [[sampler(2)]],
@@ -711,7 +717,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
     texture2d<float> specularMap [[texture(5)]], sampler specularSmp [[sampler(5)]],
     texture2d<float> specularColorMap [[texture(6)]], sampler specularColorSmp [[sampler(6)]],
-    constant PbrUniforms& pu [[buffer(2)]])
+    constant PbrUniforms& pu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]])
 {
     float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(cna_pbr_uv(in.uv, in.uv1, 0, pu), 0, pu));
     float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
@@ -754,7 +760,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
                            cna_srgb_to_linear(pu.fogColorEnabled.xyz), pu.srgbFlags.z);
     c.rgb = mix(fogLinear, c.rgb, in.fogFactor);
     c.rgb = mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z);
-    return c;
+    { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 
 // CNAEXT SkinnedPbrEffect (plans/plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
@@ -811,8 +817,8 @@ vertex V2Out cna_v2d(uint vid [[vertex_id]], const device V2In* v [[buffer(0)]],
     float2 ndc = i.position * u.scale + u.offset;
     o.position=float4(ndc,0.0,1.0); o.uv=i.uv; o.color=i.color; return o;
 }
-fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
-    return tex.sample(smp, in.uv) * in.color;
+fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
+    { CnaFragOut cnaOut; cnaOut.color = (tex.sample(smp, in.uv) * in.color); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 )MSL";
 
@@ -1043,12 +1049,18 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev, id<MTLLibrary> lib,
                                                     NSString* vs, NSString* fs,
                                                     MTLVertexDescriptor* vd, const BlendKey& blend,
-        int colorCount=1, int sampleCount=1)
+        int colorCount=1, int sampleCount=1, bool sampleMaskOutput=false)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
         d.vertexFunction=[lib newFunctionWithName:vs];
-        d.fragmentFunction=[lib newFunctionWithName:fs];
+        // AM4-141: every stock fragment function is specialized on cnaSampleMaskOut.
+        MTLFunctionConstantValues* constants=[[MTLFunctionConstantValues alloc] init];
+        const bool maskOutput=sampleMaskOutput;
+        [constants setConstantValue:&maskOutput type:MTLDataTypeBool atIndex:0];
+        NSError* functionError=nil;
+        d.fragmentFunction=[lib newFunctionWithName:fs constantValues:constants error:&functionError];
+        [constants release];
         if(!d.vertexFunction||!d.fragmentFunction){
             [d.vertexFunction release]; [d.fragmentFunction release]; [d release];
             throw std::runtime_error("Metal: built-in shader function lookup failed");
@@ -1666,6 +1678,51 @@ struct MetalRenderer::Impl
     // MetalPipelineCacheKey the same way.
     id<MTLTexture> msaaColorTexture=nil;
     int deviceSampleCount=1;
+    // AM4-141: MetalSampleCountBit of every count supportsTextureSampleCount: accepts.
+    unsigned supportedSampleCountMask=0;
+    // AM4-141: BlendState.MultiSampleMask, judged per draw against activeSampleCount.
+    unsigned sampleMask=0xFFFFFFFFu;
+    /// AM4-141: the current draw writes [[sample_mask]] (set by admitSampleMask, read by
+    /// getOrCreatePipeline and bindSampleMask).
+    bool sampleMaskOutput=false;
+    /// AM4-141: RasterizerState.MultiSampleAntiAlias, and whether the open pass was built with
+    /// every sample at the pixel centre (what "off" means on a multisampled target).
+    bool multisampleRasterization=true;
+    bool encoderCentreSamples=false;
+
+    /// AM4-141: sample positions for a pass being built -- all at the pixel centre while
+    /// multisample rasterization is off on a multisampled pass.
+    void applyRasterizationSamplePositions(MTLRenderPassDescriptor* rp,int sampleCount)
+    {
+        encoderCentreSamples=false;
+        if(sampleCount<=1||multisampleRasterization||!device.programmableSamplePositionsSupported) return;
+        std::array<MTLSamplePosition,8> centre{};
+        for(auto& position:centre) position=MTLSamplePositionMake(0.5f,0.5f);
+        [rp setSamplePositions:centre.data() count:(NSUInteger)sampleCount];
+        encoderCentreSamples=true;
+    }
+
+    /// AM4-141: false when the draw keeps no sample of a multisampled target (it writes nothing);
+    /// a partial mask selects the pipeline variant whose fragment writes it. Call after ensureFrame().
+    bool admitSampleMask()
+    {
+        sampleMaskOutput=false;
+        switch(DescribeMetalSampleMaskAdmission(sampleMask,activeSampleCount))
+        {
+            case MetalSampleMaskAdmission::Draw: return true;
+            case MetalSampleMaskAdmission::Skip: return false;
+            case MetalSampleMaskAdmission::Masked: sampleMaskOutput=true; return true;
+        }
+        return true;
+    }
+
+    /// AM4-141: binds the mask the masked pipeline variant reads; call after setRenderPipelineState.
+    void bindSampleMask()
+    {
+        if(!sampleMaskOutput) return;
+        const uint32_t bits=sampleMask;
+        [encoder setFragmentBytes:&bits length:sizeof(bits) atIndex:28];
+    }
     int activeSampleCount=1;
     int virtualW=0,virtualH=0,presentationMode=0,swapInterval=1;
     bool depthEnabled=true,depthWrite=true;
@@ -2039,14 +2096,17 @@ struct MetalRenderer::Impl
             // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
             // RT's single-sample texture) every time this encoder ends.
             for (NSUInteger i=0;i<colors.size();++i) {
-                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slices[i];
+                rp.colorAttachments[i].texture=colors[i];
                 rp.colorAttachments[i].loadAction=MTLLoadActionLoad;
-                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
-                else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+                // AM4-141: a resolved attachment renders into a 2D multisample texture and resolves
+                // into slices[i] -- a cube target's face; a plain one renders into slices[i] itself.
+                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].resolveSlice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+                else { rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
             }
             rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
             rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
             rp.visibilityResultBuffer=visibilityBuffer;
+            applyRasterizationSamplePositions(rp,sampleCount);   // AM4-141
             encoder=[command renderCommandEncoderWithDescriptor:rp];
             if(!encoder) throw std::runtime_error("Metal: failed to create render command encoder");
             [encoder retain];
@@ -2101,13 +2161,14 @@ struct MetalRenderer::Impl
             //
             // plans/plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
             for (NSUInteger i=0;i<colors.size();++i) {
-                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
-                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
-                else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
+                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+                if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].resolveSlice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+                else { rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
             }
             rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
             rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
             rp.visibilityResultBuffer=visibilityBuffer;
+            applyRasterizationSamplePositions(rp,sampleCount);   // AM4-141
             encoder=[command renderCommandEncoderWithDescriptor:rp];
             if(!encoder) throw std::runtime_error("Metal: failed to create clear render encoder");
             [encoder retain];
@@ -2206,7 +2267,7 @@ struct MetalRenderer::Impl
         // Historical code only ever produced {1,2,4,8}; the supported contract currently keeps 1.
         const uint8_t sampleCountKey = (uint8_t)std::clamp(activeSampleCount, 1, 8);
         PipelineCacheKey key{kind, currentBlend, colorCount, sampleCountKey,
-                             vertexInput ? vertexInput->LayoutKey() : 0};
+                             vertexInput ? vertexInput->LayoutKey() : 0, sampleMaskOutput};
         auto it = pipelineCache.find(key);
         if (it != pipelineCache.end()) return it->second;
         NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
@@ -2242,7 +2303,7 @@ struct MetalRenderer::Impl
         MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorFromInput(*vertexInput);
         MetalObjectOwner pipelineOwner(retainMetalObject,releaseMetalObject);
         pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
-                                         sampleCountKey));
+                                         sampleCountKey, sampleMaskOutput));
         const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
         return inserted->second;
     }
@@ -2643,7 +2704,7 @@ private:
         // drawing a previously-rendered-to RenderTarget2D as a sprite works, not just a plain Texture2D.
         id<MTLTexture> nativeTex=nativeTextureFor(&t); if(!nativeTex) throw std::runtime_error("Metal: foreign texture renderer");
         auto& p=b_.impl();
-        if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
+        if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()||!p.admitSampleMask()) return;
         struct V{float x,y,u,v,r,g,b,a;}; V q[6];
         // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- Rectangle/Vector2 in this codebase
         // use plain public fields (X/Y/Width/Height), matching real XNA's own struct convention,
@@ -2690,6 +2751,11 @@ private:
             if (ceb && !ceb->IsValid()) ceb=nullptr;
         }
         id<MTLRenderPipelineState> pipe = nil;
+        if (ceb && p.sampleMaskOutput)
+            throw System::NotSupportedException(
+                "Metal: a SpriteBatch custom effect's MSL cannot be given a [[sample_mask]] output, so "
+                "a BlendState.MultiSampleMask that keeps only some samples of a multisampled target "
+                "is refused for it (AM4-141).");
         if (ceb) {
             // plans/plan_apple_m4.md AM4-077: a valid effect whose pipeline cannot be built for the
             // active blend state is reported rather than drawn with the stock shader in its place.
@@ -2699,6 +2765,7 @@ private:
             pipe=p.getOrCreatePipeline(PipelineKind::Sprite2D);
         }
         [p.encoder setRenderPipelineState:pipe]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
+        p.bindSampleMask();   // AM4-141
         if (ceb) {
             const float* m=ceb->GetMatrix(); const float* col=ceb->GetColor(); float f0=ceb->GetFloat0();
             [p.encoder setVertexBytes:m length:16*sizeof(float) atIndex:2]; [p.encoder setVertexBytes:col length:4*sizeof(float) atIndex:3]; [p.encoder setVertexBytes:&f0 length:sizeof(float) atIndex:4];
@@ -2879,14 +2946,14 @@ static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> 
 class MetalRenderTargetRenderer final : public IRenderTargetRenderer
 {
 public:
-    // MSAA stays allocated out of the supported contract: the historical Mac run engaged sample
-    // count 4 but its rendered edge was binary. The target therefore reports the applied value 0.
+    // plans/plan_apple_m4.md AM4-141: appliedSampleCount is already rounded to what the device
+    // supports (MetalAppliedMultiSampleCount); 0 is a single-sampled target.
     MetalRenderTargetRenderer(std::shared_ptr<MetalRenderer::Impl> owner, int w, int h,
-                             int depthFormat, bool mipMap, int /*requestedMultiSampleCount*/=0)
+                             int depthFormat, bool mipMap, int appliedSampleCount=0)
         : owner_(owner), resourceHealth_(owner ? owner->resourceHealth : nullptr),
           w_(w), h_(h), mipMap_(mipMap),
           appliedDepthFormat_(MetalAppliedRenderTargetDepthFormat(depthFormat)),
-          levelCount_(MetalMipLevelCount(w,h,mipMap)), appliedSampleCount_(0),
+          levelCount_(MetalMipLevelCount(w,h,mipMap)), appliedSampleCount_(appliedSampleCount),
           definedMipLevels_(levelCount_)
     {
         if(!owner||!resourceHealth_)
@@ -3183,11 +3250,11 @@ class MetalRenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
 {
 public:
     MetalRenderTargetCubeRenderer(std::shared_ptr<MetalRenderer::Impl> owner, int size,
-                                 int depthFormat, bool mipMap)
+                                 int depthFormat, bool mipMap, int appliedSampleCount=0)
         : owner_(owner), resourceHealth_(owner ? owner->resourceHealth : nullptr),
           size_(size), mipMap_(mipMap),
           appliedDepthFormat_(MetalAppliedRenderTargetDepthFormat(depthFormat)),
-          levelCount_(MetalMipLevelCount(size,size,mipMap))
+          levelCount_(MetalMipLevelCount(size,size,mipMap)), appliedSampleCount_(appliedSampleCount)
     {
         if(!owner||!resourceHealth_)
             throw std::invalid_argument("Metal RenderTargetCube requires an active owner");
@@ -3199,10 +3266,15 @@ public:
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
         colorOwner.Adopt([owner->device newTextureWithDescriptor:cd]);
         if(!colorOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube color texture");
-        MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];
-        if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTargetCube depth descriptor");
-        dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-        depthOwner.Adopt([owner->device newTextureWithDescriptor:dd]);
+        if (appliedSampleCount_ > 0) {
+            // AM4-141: the faces share one depth buffer, as the single-sampled cube's do.
+            depthOwner.Adopt(makeMultisampleTexture(owner->device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)size, (NSUInteger)size, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
+        } else {
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];
+            if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTargetCube depth descriptor");
+            dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
+            depthOwner.Adopt([owner->device newTextureWithDescriptor:dd]);
+        }
         if(!depthOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube depth texture");
         colorTexture_=(id<MTLTexture>)colorOwner.ReleaseOwnership();
         depthTexture_=(id<MTLTexture>)depthOwner.ReleaseOwnership();
@@ -3218,9 +3290,11 @@ public:
             }
             owner->detachMrtMember(this);  // plans/plan_apple_m4.md AM4-097
         }
+        for (id<MTLTexture>& face : msaaFaces_) { [face release]; face=nil; }
         [depthTexture_ release]; [colorTexture_ release];
     }
     int GetSize() const override { return size_; }
+    int GetMultiSampleCount() const override { return appliedSampleCount_; }
     int GetSizeEXT() const noexcept override { return size_; }
     // plans/plan_apple_m4.md AM4-032: as MetalRenderTargetRenderer's.
     int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
@@ -3311,6 +3385,23 @@ public:
     }
     id<MTLTexture> colorTexture() const { (void)lockOwner(); return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { (void)lockOwner(); return depthTexture_; }
+    /// AM4-141: what a pass renders a face into -- that face's own 2D multisample texture when the
+    /// cube is multisampled (allocated on first use, so a face keeps its samples across binds),
+    /// otherwise the cube itself.
+    id<MTLTexture> colorTextureForFace(int face) const
+    {
+        auto owner=lockOwner();
+        if (appliedSampleCount_<=0) return colorTexture_;
+        id<MTLTexture>& slot=msaaFaces_[static_cast<std::size_t>(std::clamp(face,0,5))];
+        if (!slot) {
+            slot=makeMultisampleTexture(owner->device, MTLPixelFormatBGRA8Unorm, (NSUInteger)size_, (NSUInteger)size_,
+                                        (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget);
+            if (!slot) throw std::runtime_error("Metal: failed to create RenderTargetCube MSAA face texture");
+        }
+        return slot;
+    }
+    /// AM4-141: the cube a multisampled face resolves into; nil when single-sampled.
+    id<MTLTexture> resolveTargetForFace() const { (void)lockOwner(); return appliedSampleCount_>0 ? colorTexture_ : nil; }
 private:
     [[nodiscard]] std::shared_ptr<MetalRenderer::Impl> lockOwner() const
     {
@@ -3325,8 +3416,10 @@ private:
     bool mipMap_;
     int appliedDepthFormat_;
     int levelCount_=1;
+    int appliedSampleCount_=0;   // AM4-141
     id<MTLTexture> colorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
+    mutable std::array<id<MTLTexture>,6> msaaFaces_{};   // AM4-141, allocated per face on first use
 };
 
 void MetalRenderer::Impl::activeTargetDepthPlanes(bool& hasDepth, bool& hasStencil) const
@@ -3352,12 +3445,13 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
         return true;
     }
     if (currentRenderTargetCube) {
-        // plans/plan_metal.md METAL-104: RenderTargetCube deliberately stays out of MSAA scope for this
-        // pass (see resolveActiveColorAttachments()'s own MRT+MSAA scope-decision comment for the
-        // same reasoning applied to a different axis) -- always single-sampled.
-        colorOut = currentRenderTargetCube->colorTexture();
+        // plans/plan_apple_m4.md AM4-141: a multisampled cube renders the face into that face's own
+        // 2D multisample texture and resolves into the face (slice) of the cube.
+        colorOut = currentRenderTargetCube->colorTextureForFace(currentRenderTargetCubeFace);
+        resolveOut = currentRenderTargetCube->resolveTargetForFace();
         depthOut = currentRenderTargetCube->depthTextureNative();
         sliceOut = currentRenderTargetCubeFace;
+        if (resolveOut) sampleCountOut = currentRenderTargetCube->GetMultiSampleCount();
         return true;
     }
     if(!drawable.HasValue()){
@@ -3409,14 +3503,13 @@ bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTextur
 {
     if (currentMRT.size() >= 2) {
         colorsOut.clear(); resolvesOut.clear(); slicesOut.clear();
-        // plans/plan_metal.md METAL-104: true MRT and MSAA are deliberately never combined in this pass
-        // (see this method's own declaration comment for the full reasoning) -- every MRT target
-        // contributes its plain, always-single-sampled colorTexture(), never
-        // colorTextureForRenderPass(), and every resolvesOut entry stays nil.
+        // plans/plan_apple_m4.md AM4-141: a multisampled member renders into its own multisampled
+        // texture and resolves into its colour texture, as a single target does; XNA requires one
+        // sample count across the set, so slot 0's is the pass's.
         // plans/plan_apple_m4.md AM4-097: a cube member contributes its cube texture at its own face.
         for (const MrtMember& m : currentMRT) {
-            colorsOut.push_back(m.target ? m.target->colorTexture() : m.cube->colorTexture());
-            resolvesOut.push_back(nil);
+            colorsOut.push_back(m.target ? m.target->colorTextureForRenderPass() : m.cube->colorTextureForFace(m.face));
+            resolvesOut.push_back(m.target ? m.target->resolveTargetForRenderPass() : m.cube->resolveTargetForFace());
             slicesOut.push_back(m.target ? 0 : m.face);
         }
         // plans/plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
@@ -3429,7 +3522,8 @@ bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTextur
         // AM4-097: slot 0 owns depth, whichever kind it is.
         depthOut = currentMRT[0].target ? currentMRT[0].target->depthTextureNative()
                                         : currentMRT[0].cube->depthTextureNative();
-        sampleCountOut = 1;
+        sampleCountOut = std::max(1,currentMRT[0].target ? currentMRT[0].target->GetMultiSampleCount()
+                                                         : currentMRT[0].cube->GetMultiSampleCount());
         return true;
     }
     id<MTLTexture> c=nil, r=nil; NSUInteger slice=0;
@@ -3638,9 +3732,11 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // is already +1; only borrowed factory/getter results that survive their call scope
     // (CAMetalLayer, command buffers/encoders, and drawables) receive an explicit retain.
     p.device=MTLCreateSystemDefaultDevice(); if(!p.device) throw std::runtime_error("Metal: MTLCreateSystemDefaultDevice failed");
-    // The historical MSAA path engaged on macOS CI but did not produce correct edge coverage.
-    // Keep the supported contract deterministic until an adapted build has passing Mac evidence.
-    p.deviceSampleCount=MetalAppliedMultiSampleCount(args.multiSampleCount)+1;
+    // plans/plan_apple_m4.md AM4-141: MSAA is supported for the counts this device accepts.
+    for (const int samples : {2,4,8})
+        if ([p.device supportsTextureSampleCount:(NSUInteger)samples])
+            p.supportedSampleCountMask|=MetalSampleCountBit(samples);
+    p.deviceSampleCount=std::max(1,MetalAppliedMultiSampleCount(args.multiSampleCount,p.supportedSampleCountMask));
     p.view=[[CNAMetalView alloc] initWithFrame:[contentView bounds]];
     if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed view");
     [contentView addSubview:p.view];
@@ -3752,20 +3848,26 @@ void MetalRenderer::SetSwapInterval(int i)
     impl_->layer.displaySyncEnabled=(i!=0);
 #endif
 }
-// The historical MSAA implementation engaged real sample-count-four attachments but did not
-// produce correct coverage. Keep the public and internal values at their single-sample identity.
+// plans/plan_apple_m4.md AM4-141: the backbuffer renders into a multisampled colour and depth
+// texture and resolves into the drawable at every encoder boundary (StoreAndMultisampleResolve).
 int MetalRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
 {
     const MetalAutoreleaseScope autoreleaseScope;
-    (void)requestedMultiSampleCount;
     auto& p=*impl_;
-    p.deviceSampleCount=MetalAppliedMultiSampleCount(requestedMultiSampleCount)+1;
+    const int applied=MetalAppliedMultiSampleCount(requestedMultiSampleCount,p.supportedSampleCountMask);
+    // The textures are reallocated lazily at the new count; an open pass at the old count ends first.
+    if(p.encoder||p.command) p.endActiveEncoding(false);
+    p.deviceSampleCount=std::max(1,applied);
     [p.msaaColorTexture release]; p.msaaColorTexture=nil;
     [p.depthTexture release]; p.depthTexture=nil;
-    return 0;
+    return applied;
 }
-// Public count zero means unsupported/no MSAA; Metal's native sample-count identity is one.
-int MetalRenderer::GetMultiSampleCount() const { return 0; }
+// Public count zero means no MSAA; Metal's native sample-count identity is one.
+int MetalRenderer::GetMultiSampleCount() const { return impl_->deviceSampleCount>1 ? impl_->deviceSampleCount : 0; }
+int MetalRenderer::GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+{
+    return MetalAppliedMultiSampleCount(requestedMultiSampleCount,impl_->supportedSampleCountMask);
+}
 int MetalRenderer::GetAppliedBackBufferFormatEXT(int /*requestedFormat*/) const
 {
     return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
@@ -3918,9 +4020,9 @@ std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2D(int w
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
-    (void)multiSampleCount;
     if(w<=0||h<=0) throw std::invalid_argument("Metal RenderTarget2D dimensions must be positive.");
-    return std::make_unique<MetalRenderTargetRenderer>(impl_, w, h, depthFormat, mipMap, 0);
+    return std::make_unique<MetalRenderTargetRenderer>(impl_, w, h, depthFormat, mipMap,
+        MetalAppliedMultiSampleCount(multiSampleCount,impl_->supportedSampleCountMask));   // AM4-141
 }
 std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
     int w,int h,int depthFormat,bool preserveContents,bool mipMap,int multiSampleCount,int surfaceFormat)
@@ -3931,12 +4033,13 @@ std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
     return CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount);
 }
 std::unique_ptr<IRenderTargetCubeRenderer> MetalRenderer::CreateRenderTargetCube(
-    int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
+    int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     if(size<=0) throw std::invalid_argument("Metal RenderTargetCube size must be positive.");
-    return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, depthFormat, mipMap);
+    return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, depthFormat, mipMap,
+        MetalAppliedMultiSampleCount(multiSampleCount,impl_->supportedSampleCountMask));   // AM4-141
 }
 // plans/plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
 // SetRenderTarget2D() and the new SetRenderTargetCubeFace() below must cross-unbind whichever OTHER
@@ -4074,6 +4177,7 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
     p.currentBlend.colorFunc=(uint8_t)colorBlendFunc; p.currentBlend.alphaFunc=(uint8_t)alphaBlendFunc;
     p.currentBlend.enabled = !(colorSrcBlend==0 && colorDstBlend==1 && alphaSrcBlend==0 && alphaDstBlend==1);
     p.currentBlend.writeMask=(uint8_t)writeState.colorWriteChannels[0];   // AM4-079
+    p.sampleMask=writeState.multiSampleMask;                               // AM4-141
 }
 void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnable,int depthFunc,
                                                    bool stencilEnable,int stencilFunc,int stencilPass,int stencilFail,int stencilDepthFail,
@@ -4129,6 +4233,17 @@ void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
             (NSUInteger)s.width,(NSUInteger)s.height};
         [impl_->encoder setScissorRect:native];
     }
+}
+void MetalRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+{
+    const MetalAutoreleaseScope autoreleaseScope;
+    auto& p=*impl_;
+    p.multisampleRasterization=enabled;
+    // AM4-141: sample positions belong to the pass, so a multisampled pass built for the other
+    // setting ends here and the next draw starts one with the positions this setting needs.
+    const bool wantCentre=!enabled&&p.activeSampleCount>1&&p.device.programmableSamplePositionsSupported;
+    if(p.encoder&&p.activeSampleCount>1&&wantCentre!=p.encoderCentreSamples)
+        p.endActiveEncoding(false);
 }
 void MetalRenderer::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy)
 {
@@ -4348,11 +4463,12 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
             break;
     }
 
-    if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
+    if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()||!p.admitSampleMask()) return;
     // After ensureFrame(): the correction depends on the pass's sample count.
     wvp=multiply(wvp,fromXna(xnaPixelCenterCorrection(p,pt)));
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind, &vertexInput);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
+    p.bindSampleMask();   // AM4-141
     if (vertexInput.UsesConstantAttributes())
         [p.encoder setVertexBytes:kMetalConstantAttributeBlock length:sizeof(kMetalConstantAttributeBlock)
                           atIndex:kMetalConstantAttributeBufferIndex];
@@ -4593,6 +4709,9 @@ void MetalRenderer::SetStringMarkerEXT(const char* m)
 
 bool MetalRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
 {
+    // AM4-141: whether this device multisamples is the device's answer, not the static table's.
+    if (capability==CNA::GraphicsCapability::MultiSampleAntiAliasing)
+        return impl_->supportedSampleCountMask!=0;
     return MetalSupportsCapability(capability);
 }
 

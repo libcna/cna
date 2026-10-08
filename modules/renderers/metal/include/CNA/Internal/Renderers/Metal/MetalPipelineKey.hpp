@@ -168,6 +168,8 @@ namespace CNA::Internal::Renderers::Metal
         MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1; uint8_t sampleCount = 1;
         /** @brief Identity of the vertex descriptor; zero when the pipeline has none. */
         uint64_t vertexLayout = 0;
+        /** @brief The fragment function writes [[sample_mask]] (a partial MultiSampleMask, AM4-141). */
+        bool sampleMaskOutput = false;
         /**
          * @brief Compares every field that affects Metal render-pipeline compatibility.
          *
@@ -178,7 +180,8 @@ namespace CNA::Internal::Renderers::Metal
         {
             return kind==other.kind && blend==other.blend &&
                    colorAttachmentCount==other.colorAttachmentCount &&
-                   sampleCount==other.sampleCount && vertexLayout==other.vertexLayout;
+                   sampleCount==other.sampleCount && vertexLayout==other.vertexLayout &&
+                   sampleMaskOutput==other.sampleMaskOutput;
         }
     };
     /** @brief Hash functor for Metal render-pipeline cache keys. */
@@ -211,6 +214,7 @@ namespace CNA::Internal::Renderers::Metal
             hh ^= std::hash<uint8_t>()(key.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint64_t>()(key.vertexLayout) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint8_t>()(key.blend.writeMask) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            hh ^= std::hash<bool>()(key.sampleMaskOutput) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

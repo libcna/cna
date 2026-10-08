@@ -85,18 +85,25 @@ namespace CNA::Internal::Renderers::Metal
          */
         void SetSwapInterval(int interval) override;
         /**
-         * @brief Rejects backbuffer MSAA by applying zero samples.
+         * @brief Applies a backbuffer multisample count the device supports.
          *
          * @param requestedMultiSampleCount Requested XNA multisample count.
-         * @return Zero because Metal MSAA is outside the supported contract.
+         * @return The applied count: the request rounded down to a supported 2, 4 or 8, or 0.
          */
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         /**
-         * @brief Reports zero because MSAA is not in the supported Metal contract.
+         * @brief Reports the backbuffer's applied multisample count.
          *
-         * @return The applied XNA multisample count, always zero.
+         * @return 2, 4 or 8 while the backbuffer is multisampled, otherwise 0.
          */
         [[nodiscard]] int GetMultiSampleCount() const override;
+        /**
+         * @brief Reports the count a request would get, without applying it.
+         *
+         * @param requestedMultiSampleCount Requested XNA multisample count.
+         * @return The request rounded down to a supported 2, 4 or 8, or 0.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const override;
         /**
          * @brief Reports the fixed BGRA8 backbuffer as XNA SurfaceFormat::Color.
          *
@@ -400,6 +407,16 @@ namespace CNA::Internal::Renderers::Metal
                                     int stencilDepthFail, int stencilMask, int stencilWriteMask,
                                     int referenceStencil, bool twoSidedStencilMode, int ccwStencilFunc,
                                     int ccwStencilPass, int ccwStencilFail, int ccwStencilDepthFail) override;
+        /**
+         * @brief Applies RasterizerState.MultiSampleAntiAlias.
+         *
+         * plans/plan_apple_m4.md AM4-141: with it off, a multisampled pass puts every sample at the
+         * pixel centre (programmable sample positions), so coverage is evaluated once and replicated;
+         * a change ends the open pass so the next one starts with the positions it needs.
+         *
+         * @param enabled Whether independent multisample rasterization is enabled.
+         */
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         /**
          * @brief Applies culling, fill mode, scissor enablement, and depth bias.
          *

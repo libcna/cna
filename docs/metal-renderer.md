@@ -97,8 +97,8 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 |---|---:|---|
 | `ThreeD` | true | Built-in fixed-layout Metal pipelines only. |
 | `DepthStencilBuffer` | true | Native combined depth/stencil attachments. |
-| `MultiSampleAntiAliasing` | false | Every requested public sample count is clamped to zero. |
-| `MultipleRenderTargets` | true | `AM4-097`: up to eight RenderTarget2D or RenderTargetCube-face members; slot 0 owns depth; stock pipelines write COLOR0 only and mask the other attachments out; each member's mip chain is regenerated at unbind; a destroyed member leaves the set. Evidence: the shared `mrt_stock_effect_contract_test` as `Metal_MRT_StockEffectContract`, 19/19 with the validation layers (its multisampled scenarios compiled out, see MSAA). |
+| `MultiSampleAntiAliasing` | true where the device multisamples (every Metal GPU does at 4x) | `AM4-141`: backbuffer, RenderTarget2D, RenderTargetCube and MRT; a request is rounded down to a count `supportsTextureSampleCount:` accepts (the M4: 2 and 4, not 8). Each target renders into a multisample texture and resolves at every encoder boundary (`StoreAndMultisampleResolve`); a cube face has its own 2D multisample texture. `MultiSampleMask` is ignored single-sampled, as in XNA; on a multisampled target a mask keeping every sample draws normally, one keeping none is not drawn, and a partial one is written by the stock fragment's `[[sample_mask]]` (a pipeline variant specialized on a function constant), refused for a SpriteBatch custom effect's MSL. Evidence: `Metal_Shared_rendertarget_msaa_*`, `rendertargetcube_msaa_face_test`, `gfx077_colorwritechannels_3d_test`'s MSAA leg, `Metal_MRT_StockEffectContract` 22/22 with its multisampled scenarios, under the validation layers. |
+| `MultipleRenderTargets` | true | `AM4-097`: up to eight RenderTarget2D or RenderTargetCube-face members; slot 0 owns depth; stock pipelines write COLOR0 only and mask the other attachments out; each member's mip chain is regenerated at unbind; a destroyed member leaves the set. Evidence: the shared `mrt_stock_effect_contract_test` as `Metal_MRT_StockEffectContract`, 19/19 with the validation layers (22/22 with its multisampled scenarios since `AM4-141`). |
 | `AnisotropicFiltering` | true | Native sampler-state mapping. |
 | `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
 | `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
@@ -115,7 +115,6 @@ The following boundaries are deterministic rather than silent degradation:
   KF-6: each requested pixel is the drawable pixel under its centre, through the logical viewport
   (Retina scale and letterbox offset included). The pending pass completes first; a frame with no
   drawable reads zero. It throws while a render target is bound.
-- backbuffer and render-target MSAA report zero and allocate single-sample attachments;
 - `SetRenderTargets` accepts zero descriptors (restore backbuffer), one normalized 2D/cube-face
   descriptor, or an MRT set of up to eight (`AM4-097`); array slices are refused;
 - a non-null `GpuDrawParams::customEffectRenderer` (a 3D draw with a custom effect) throws; custom
@@ -124,8 +123,7 @@ The following boundaries are deterministic rather than silent degradation:
   `System::NotSupportedException`;
 - TextureCube, Texture3D, and `CreateRenderTarget2DEXT` accept only
   `SurfaceFormat::Color`; unsupported formats throw;
-- render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`); a non-default
-  multisample coverage mask throws instead of being ignored. Sampler `MaxMipLevel` is the sampler's
+- render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`). Sampler `MaxMipLevel` is the sampler's
   `lodMinClamp` and `MipMapLevelOfDetailBias` its `lodBias` (`AM4-034`), for 3D draws and
   SpriteBatch alike; `lodBias` exists from macOS/iOS 26, and below that a non-zero bias still
   throws.
@@ -202,10 +200,10 @@ cross-renderer fix.
 MSL is embedded in `MetalRenderer.mm` and compiled at runtime with
 `newLibraryWithSource:`. The CPU-side matrix, uniform, enum, vertex-layout, capability, format,
 sample, and stream-policy helpers remain plain C++ so they can be compiled and tested off Apple
-platforms. Historical MSAA implementation scaffolding is not reachable through the supported
-contract and must not be re-enabled merely by changing a capability bit; the custom-effect
-scaffolding was re-enabled by `AM4-077` and MRT by `AM4-097`, each only with the evidence listed for
-it above.
+platforms. The custom-effect scaffolding was re-enabled by `AM4-077`, MRT by `AM4-097` and MSAA by
+`AM4-141`, each only with the evidence listed for it above. `METAL-259`'s binary edge did not
+reproduce once the policy applied real sample counts: the shared multisampled contracts read back
+partially covered edges.
 
 ## Validation
 

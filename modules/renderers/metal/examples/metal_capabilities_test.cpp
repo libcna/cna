@@ -40,7 +40,8 @@ protected:
 
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
-        check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing unsupported");
+        // plans/plan_apple_m4.md AM4-141: every Metal GPU multisamples at 4x (supportsTextureSampleCount).
+        check(dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing supported");
         // plans/plan_apple_m4.md AM4-097: asked of the renderer, like Texture3D below -- the device's
         // answer folds in the profile (RLGL-040), and Reach, the default here, has one render target.
         check(dev.GetRenderer().SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets supported");

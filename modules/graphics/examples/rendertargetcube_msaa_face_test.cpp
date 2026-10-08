@@ -181,9 +181,9 @@ namespace
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-026: Metal reports MultiSampleAntiAliasing false (METAL-259) and
-    // clamps every requested sample count to zero, so a "multisampled" target is single-sample.
-    constexpr Contract kContract{"METAL", true, Support::Exact, false,
+    // plans/plan_apple_m4.md AM4-141: a multisampled cube face renders into that face's own 2D
+    // multisample texture and resolves into the cube's slice.
+    constexpr Contract kContract{"METAL", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
