@@ -2049,6 +2049,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_depth_bias_test.cpp)
         cna_register_renderer_test(NAME EasyGL_DepthBias COMMAND cna_test_easygl_depth_bias
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # plans/plan_apple_m4.md AM4-134: the bias's magnitude, against a 1e-4 depth gap.
+        cna_easygl_test(cna_test_easygl_depth_bias_magnitude
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/depth_bias_magnitude_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DepthBias_Magnitude COMMAND cna_test_easygl_depth_bias_magnitude
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertarget2d_properties

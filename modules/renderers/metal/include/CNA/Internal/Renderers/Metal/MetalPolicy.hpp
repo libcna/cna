@@ -259,6 +259,23 @@ namespace CNA::Internal::Renderers::Metal
     }
 
     /**
+     * @brief Converts XNA's normalized RasterizerState.DepthBias into Metal's depth-bias units.
+     *
+     * plans/plan_apple_m4.md AM4-134: XNA's DepthBias is an offset in normalized depth, while
+     * setDepthBias:slopeScale:clamp: counts the depth attachment's minimum resolvable difference.
+     * Every depth attachment of this renderer is Depth32Float_Stencil8, whose resolution in
+     * [0.5, 1) is 2^-24 -- the 24-bit scale FNA3D, EasyGL and WebGPU apply. Handed over unscaled,
+     * a typical bias of 1e-4 moved depth by about 6e-12 and did nothing.
+     *
+     * @param xnaDepthBias RasterizerState.DepthBias.
+     * @return The value to pass to setDepthBias:.
+     */
+    [[nodiscard]] constexpr float MetalDepthBiasUnits(float xnaDepthBias) noexcept
+    {
+        return xnaDepthBias * 16777215.0f;
+    }
+
+    /**
      * @brief Reports whether output-write state can be applied without silent degradation.
      *
      * plans/plan_apple_m4.md AM4-079: render target 0's ColorWriteChannels is baked into the

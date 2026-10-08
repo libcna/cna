@@ -4044,13 +4044,13 @@ void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
     impl_->cull=metalCullMode(c);
     impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;
     impl_->rasterState.SetScissorEnabled(se);
-    impl_->depthBias=db;
+    impl_->depthBias=MetalDepthBiasUnits(db);   // AM4-134
     impl_->slopeBias=sb;
     if(impl_->encoder){
         [impl_->encoder setFrontFacingWinding:MTLWindingClockwise];
         [impl_->encoder setCullMode:impl_->cull];
         [impl_->encoder setTriangleFillMode:impl_->fill];
-        [impl_->encoder setDepthBias:db slopeScale:sb clamp:0];
+        [impl_->encoder setDepthBias:impl_->depthBias slopeScale:sb clamp:0];
         const MetalScissorState s=impl_->rasterState.NativeScissor();
         const MTLScissorRect native={(NSUInteger)s.x,(NSUInteger)s.y,
             (NSUInteger)s.width,(NSUInteger)s.height};

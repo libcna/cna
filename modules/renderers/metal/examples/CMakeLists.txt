@@ -168,6 +168,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         deferred_scissor_capture_test
         deferred_source_lifetime_test
         deferred_viewport_capture_test
+        depth_bias_magnitude_contract_test
         descriptor_capacity_contract_test
         dualtexture_slot_sampler_contract_test
         dualtextureeffect_vertexcolor_test
@@ -235,6 +236,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         xna_pixel_center_contract_test
         zero_length_buffer_test
     )
+    # plans/plan_apple_m4.md AM4-134: the renderer-neutral depth-bias fixture, reused in place as the
+    # DirectX parity registrations do. Its coplanar constant-bias leg cannot see a wrong scale on
+    # Apple GPUs (any negative bias wins an equal LESS compare there); depth_bias_magnitude_contract_test
+    # in the shared list below is the one that does.
+    cna_metal_test(cna_test_metal_depth_bias
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
+    cna_register_renderer_test(NAME Metal_DepthBias COMMAND cna_test_metal_depth_bias
+        TIMEOUT 120 LABELS "Metal")
     foreach(_cna_metal_shared IN LISTS CNA_METAL_SHARED_GRAPHICS_TESTS)
         cna_metal_test(cna_test_metal_${_cna_metal_shared}
             ${CNA_GRAPHICS_EXAMPLES_DIR}/${_cna_metal_shared}.cpp)

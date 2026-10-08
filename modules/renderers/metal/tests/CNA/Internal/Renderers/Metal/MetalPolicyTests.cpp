@@ -181,3 +181,12 @@ TEST(MetalPolicy, SingleStreamMustMatchTheUploadedBufferAndStride)
     params.vertexStreams[0].buffer=&foreign;
     EXPECT_FALSE(MetalSingleStreamMatchesUploadedBuffer(params, uploaded, 24));
 }
+
+// plans/plan_apple_m4.md AM4-134: XNA's DepthBias is normalized depth; Metal counts the
+// Depth32Float attachment's resolution in [0.5, 1), 2^-24.
+TEST(MetalPolicy, DepthBiasIsConvertedToTwentyFourBitUnits)
+{
+    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(-1.0e-4f), -1.0e-4f * 16777215.0f);
+    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(1.0f / 16777215.0f), 1.0f);
+}
