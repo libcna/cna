@@ -94,7 +94,7 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1050** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1051** |
 | Files referencing SDL (all) | **217** |
 | Production files (`src/` + `include/`) referencing SDL | **54** |
 | …of which are renderer production files | **18** |
