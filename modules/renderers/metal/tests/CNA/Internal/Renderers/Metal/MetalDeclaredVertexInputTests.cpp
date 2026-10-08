@@ -207,6 +207,15 @@ TEST(MetalDeclaredVertexInput, ALitBasicEffectReadsAnActiveVertexColour)
                                        {3, A::UChar4Normalized, 24}}));
     basic.vertexColorEnabled = false;
     EXPECT_TRUE(MetalDroppedVertexColorRefusal(K::LitTex32, pnct, &basic).empty());
+    // AM4-098: with VertexColorEnabled off XNA's BasicEffect ignores a declared COLOR0, so the lit
+    // functions read the constant opaque white rather than the record's colour -- both lit variants.
+    for (const K lit : {K::LitTex32, K::LitTex32VertexLit})
+    {
+        const auto ignored = BuildMetalDeclaredVertexInput(lit, pnct, 36, &basic);
+        ASSERT_TRUE(ignored.IsComplete()) << ignored.refusal;
+        EXPECT_EQ(ignored.attributes, Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 28},
+                                             {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
+    }
     basic.vertexColorEnabled = true;
     EXPECT_TRUE(MetalDroppedVertexColorRefusal(K::ColorTex24, MetalCanonicalElementsFor(K::ColorTex24),
                                                &basic).empty());

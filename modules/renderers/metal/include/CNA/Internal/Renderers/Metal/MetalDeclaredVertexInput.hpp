@@ -343,8 +343,13 @@ namespace CNA::Internal::Renderers::Metal
             // base colour. The record's colour is read only when the effect's VertexColorEnabledEXT
             // asks for it; otherwise -- and for a record without one, glTF's absent COLOR_0 -- the
             // multiplier is the identity, the constant block's opaque white.
-            if (semantic == MetalVertexSemantic::Color &&
-                (kind == MetalPipelineKind::Pbr48 || kind == MetalPipelineKind::SkinnedPbr68) &&
+            // AM4-098: the lit BasicEffect functions multiply by COLOR0 unconditionally (AM4-081), and
+            // XNA's BasicEffect reads it only in its VertexColorEnabled permutations, so the same
+            // switch decides there: a declared colour with the switch off is ignored, as on XNA.
+            const bool pbrKind = kind == MetalPipelineKind::Pbr48 || kind == MetalPipelineKind::SkinnedPbr68;
+            const bool litKind = (kind == MetalPipelineKind::LitTex32 || kind == MetalPipelineKind::LitTex32VertexLit) &&
+                                 params != nullptr;
+            if (semantic == MetalVertexSemantic::Color && (pbrKind || litKind) &&
                 !(params != nullptr && params->vertexColorEnabled && element != nullptr))
             {
                 input.attributes.push_back(MetalDeclaredAttribute{
@@ -534,10 +539,11 @@ namespace CNA::Internal::Renderers::Metal
     /**
      * @brief Why a BasicEffect-family draw cannot honour VertexColorEnabled on this pipeline.
      *
-     * A lit BasicEffect over a vertex that also carries COLOR0 multiplies by it on XNA; Metal's
-     * lit vertex functions read no colour, so drawing would silently drop it. Refused instead.
-     * Only the BasicEffect family is judged: the other stock effects either read colour themselves
-     * or have no VertexColorEnabled.
+     * A BasicEffect with VertexColorEnabled over a vertex that carries COLOR0 multiplies by it on
+     * XNA. A pipeline whose vertex function reads no colour would silently drop it, so such a draw
+     * is refused instead. Every BasicEffect-family function reads COLOR0 since AM4-081, so this is
+     * a guard for future pipeline kinds. Only the BasicEffect family is judged: the other stock
+     * effects either read colour themselves or have no VertexColorEnabled.
      *
      * @param kind Pipeline kind the draw selected.
      * @param elements The declaration's elements.

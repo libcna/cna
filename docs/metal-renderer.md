@@ -149,9 +149,10 @@ effect's flags, and every input that pipeline's vertex function reads is bound a
 element's own offset and format, matched by usage and usage index; channels the effect does not
 read are ignored, and the layout is part of the pipeline key. A buffer with no declaration is the
 canonical XNA vertex type its stride names, with exactly the old fixed descriptor. Refused by name:
-a missing input, a raw integer format for a float input, `BLENDINDICES` other than `Byte4`, an
-element outside the record, and a lit `BasicEffect` asked for `VertexColorEnabled` over a `COLOR0`
-channel (no lit Metal vertex function reads colour). `DualTextureEffect` samples its second texture
+a missing input, a raw integer format for a float input, `BLENDINDICES` other than `Byte4`, and an
+element outside the record. The lit `BasicEffect` functions read `COLOR0` (`AM4-081`) exactly when
+`VertexColorEnabled` is on, as XNA's permutations do; with it off a declared colour is ignored
+(`AM4-098`). `DualTextureEffect` samples its second texture
 with `TEXCOORD1`; a record with one set feeds it to both, as `VULKAN-150` does.
 
 Render-target type, descriptor, slice, cube-face, and foreign-renderer checks occur before changing

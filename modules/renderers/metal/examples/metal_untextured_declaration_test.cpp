@@ -11,6 +11,8 @@
 //      light enabled, black ambient), so the constant coordinate changes nothing.
 // B -- unlit, VertexColorEnabled off, over a position-only declaration: the pixel is DiffuseColor.
 // C -- textured over VertexPositionNormal still refuses, as XNA does.
+// D -- lit with VertexColorEnabled over a declared COLOR0 multiplies by it (AM4-081).
+// E -- lit without VertexColorEnabled over the same declaration ignores it (AM4-098).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -188,6 +190,40 @@ protected:
             catch (const std::exception& e)
             {
                 check(false, "D: lit " + variant + " with vertex colour threw: " + e.what());
+            }
+        }
+
+        // E (AM4-098): the same declaration with VertexColorEnabled off. XNA's BasicEffect then
+        // selects a permutation that does not read COLOR0, so the blue vertices change nothing:
+        // white emissive stays white.
+        for (const bool perPixel : {false, true})
+        {
+            BasicEffect uncoloured(dev);
+            uncoloured.setLightingEnabledProperty(true);
+            uncoloured.setPreferPerPixelLightingProperty(perPixel);
+            uncoloured.setVertexColorEnabledProperty(false);
+            uncoloured.getDirectionalLight0Property().setEnabledProperty(false);
+            uncoloured.getDirectionalLight1Property().setEnabledProperty(false);
+            uncoloured.getDirectionalLight2Property().setEnabledProperty(false);
+            uncoloured.setAmbientLightColorProperty(Vector3(0, 0, 0));
+            uncoloured.setEmissiveColorProperty(Vector3(1, 1, 1));
+            uncoloured.setSpecularColorProperty(Vector3(0, 0, 0));
+            const std::string variant = perPixel ? "per-pixel" : "per-vertex";
+            try
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                dev.SetVertexBuffer(&colouredBuffer);
+                uncoloured.Apply();
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+                dev.SetVertexBuffer(nullptr);
+                const Color e = centre(dev);
+                check(e.getRProperty() == 255 && e.getGProperty() == 255 && e.getBProperty() == 255,
+                      "E: a lit " + variant + " BasicEffect without VertexColorEnabled ignores the "
+                      "declared colour (got " + describe(e) + ", want (255,255,255))");
+            }
+            catch (const std::exception& e)
+            {
+                check(false, "E: lit " + variant + " without vertex colour threw: " + e.what());
             }
         }
 
