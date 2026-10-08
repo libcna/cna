@@ -3989,7 +3989,7 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
     const MetalAutoreleaseScope autoreleaseScope;
     if (!MetalSupportsBlendWriteState(writeState))
         throw System::NotSupportedException(
-            "Metal supports colour-write masks on render target 0 only with the default multisample mask.");
+            "Metal: a ColorWriteChannels value outside Red|Green|Blue|Alpha.");
     // plans/plan_metal.md METAL-6/24: real per-BlendState pipeline selection, replacing the previous
     // complete no-op (every pipeline was hardcoded to a fixed straight-alpha blend regardless of
     // the actual requested BlendState). `enabled` derivation mirrors

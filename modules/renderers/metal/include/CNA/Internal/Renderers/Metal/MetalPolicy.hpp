@@ -281,16 +281,17 @@ namespace CNA::Internal::Renderers::Metal
      * plans/plan_apple_m4.md AM4-079: render target 0's ColorWriteChannels is baked into the
      * pipeline (`MetalBlendKey::writeMask`). Targets 1..3 can be bound since AM4-097, but the
      * built-in functions write COLOR0 only and mask the other attachments out, so their masks
-     * govern nothing. A coverage mask other than
-     * the default still refuses: there is no multisampling to apply it to, and no per-draw sample
-     * mask in Metal.
+     * govern nothing.
+     *
+     * The coverage mask is not judged here (AM4-135): XNA's MultiSampleMask has no effect on a
+     * single-sample target (D3D9: "no effect when rendering to a single sample buffer"), so it can
+     * only be accepted or refused against the target a draw actually goes to.
      *
      * @param state Renderer-neutral color-write masks and multisample coverage mask.
-     * @return True for any target-0 write mask together with the default coverage mask.
+     * @return True for any valid target-0 write mask.
      */
     [[nodiscard]] constexpr bool MetalSupportsBlendWriteState(const BlendWriteState& state)
     {
-        return state.colorWriteChannels[0]>=0 && state.colorWriteChannels[0]<=15 &&
-               state.multiSampleMask==0xFFFFFFFFu;
+        return state.colorWriteChannels[0]>=0 && state.colorWriteChannels[0]<=15;
     }
 }
