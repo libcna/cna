@@ -2582,7 +2582,19 @@ public:
     void SetCustomEffect(Effect* effect) override { customEffect_=effect; }
     void Draw(const ITextureRenderer& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
-    void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
+    void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float layerDepth) override
+    {
+        drawQuad(t,(float)d.X,(float)d.Y,(float)d.Width,(float)d.Height,s,c,rotation,origin,effects,layerDepth);
+    }
+    // plans/plan_apple_m4.md AM4-136: SpriteBatch hands its unrounded destination here (Vector2
+    // positions and scales). The interface default truncates it to a Rectangle, which snapped
+    // every sprite to whole pixels -- the jitter of smooth scrolling and scaling.
+    void Draw(const ITextureRenderer& t,float dx,float dy,float dw,float dh,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float layerDepth) override
+    {
+        drawQuad(t,dx,dy,dw,dh,s,c,rotation,origin,effects,layerDepth);
+    }
+private:
+    void drawQuad(const ITextureRenderer& t,float dx,float dy,float dw,float dh,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float)
     {
         const MetalAutoreleaseScope autoreleaseScope;
         if(!begun_) throw std::runtime_error("Metal SpriteBatch.Draw called outside Begin/End");
@@ -2599,7 +2611,7 @@ public:
         // Vector2 were never converted to properties). Never caught until this was compiled for
         // the first time ever on real Apple hardware -- Clang's own "no member named
         // 'getXProperty'" error.
-        float x0=(float)d.X, y0=(float)d.Y, x1=x0+d.Width, y1=y0+d.Height;
+        float x0=dx, y0=dy, x1=x0+dw, y1=y0+dh;
         float u0=(float)s.X/t.GetWidth(), v0=(float)s.Y/t.GetHeight();
         float u1=(float)(s.X+s.Width)/t.GetWidth(), v1=(float)(s.Y+s.Height)/t.GetHeight();
         if((int)effects & 1) std::swap(u0,u1); if((int)effects & 2) std::swap(v0,v1);
@@ -2609,8 +2621,8 @@ public:
         // -origin * (destination / source) and rotates about the destination's top-left. This used
         // to pivot about x0 + origin unscaled without moving the quad, so any non-zero origin drew
         // the sprite displaced (point_sampling_contract_test L2). Same arithmetic as WebGPU's.
-        const float originScaleX=s.Width!=0 ? static_cast<float>(d.Width)/static_cast<float>(s.Width) : 0.0f;
-        const float originScaleY=s.Height!=0 ? static_cast<float>(d.Height)/static_cast<float>(s.Height) : 0.0f;
+        const float originScaleX=s.Width!=0 ? dw/static_cast<float>(s.Width) : 0.0f;
+        const float originScaleY=s.Height!=0 ? dh/static_cast<float>(s.Height) : 0.0f;
         const float originX=origin.X*originScaleX, originY=origin.Y*originScaleY;
         const float cs=std::cos(rotation), sn=std::sin(rotation);
         auto xf=[&](float x,float y){ const float px=x-x0-originX, py=y-y0-originY; return std::array<float,2>{x0+px*cs-py*sn,y0+px*sn+py*cs};};
@@ -2653,7 +2665,7 @@ public:
         }
         [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
-private: MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
+    MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
     int projectionWidth_=0; int projectionHeight_=0;
     int maxAnisotropy_=1; int maxMipLevel_=0; float lodBias_=0.0f;
 };

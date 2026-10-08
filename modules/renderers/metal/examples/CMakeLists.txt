@@ -222,6 +222,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         spritebatch_presentation_test
         spritebatch_sampler0_publication_test
         spritebatch_sort_mode_semantics_test
+        spritebatch_subpixel_contract_test
         spritebatch_viewport_switch_test
         stock_effect_sampler_contract_test
         texture2d_getdata_contract_test
