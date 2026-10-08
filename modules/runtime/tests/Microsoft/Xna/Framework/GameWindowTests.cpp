@@ -423,12 +423,11 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     }
     // A platform window the platform reports as Headless -- the dummy and offscreen video drivers,
     // which the CnaPlatformWindowTests ctest forces -- belongs to no window manager: resizable and
-    // borderless are not applied, and minimize and restore are refused as unsupported. A renderer
-    // that draws without a native window still builds the Game there.
-    if (window.GetNativeWindowHandleEXT().system == CNA::Platform::NativeWindowSystem::Headless)
-    {
-        GTEST_SKIP() << "the video driver has no window manager to delegate window state to";
-    }
+    // borderless are not applied, and minimize and restore are refused as unsupported. Only those
+    // window-manager steps are left out there; title, size and the screen-device change are the
+    // platform window's own state and are checked on every window.
+    const bool hasWindowManager =
+        window.GetNativeWindowHandleEXT().system != CNA::Platform::NativeWindowSystem::Headless;
 
     EXPECT_EQ(window.getTitleProperty(), CNA::Internal::GetDefaultWindowTitle());
     // XNA's GameWindow.AllowUserResizing defaults to false, and GraphicsDevice creates the native
@@ -442,17 +441,23 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
 
     window.setTitleProperty("platform-window");
     EXPECT_EQ(window.getTitleProperty(), "platform-window");
-    window.setAllowUserResizingProperty(true);
-    EXPECT_TRUE(window.getAllowUserResizingProperty());
-    window.setAllowUserResizingProperty(false);
-    EXPECT_FALSE(window.getAllowUserResizingProperty());
-    window.setIsBorderlessEXTProperty(true);
-    EXPECT_TRUE(window.getIsBorderlessEXTProperty());
+    if (hasWindowManager)
+    {
+        window.setAllowUserResizingProperty(true);
+        EXPECT_TRUE(window.getAllowUserResizingProperty());
+        window.setAllowUserResizingProperty(false);
+        EXPECT_FALSE(window.getAllowUserResizingProperty());
+        window.setIsBorderlessEXTProperty(true);
+        EXPECT_TRUE(window.getIsBorderlessEXTProperty());
+    }
 
     window.BeginScreenDeviceChange(false);
     window.EndScreenDeviceChange("virtual-display", 320, 240);
     EXPECT_EQ(window.getClientBoundsProperty().Width, 320);
     EXPECT_EQ(window.getClientBoundsProperty().Height, 240);
-    EXPECT_NO_THROW(window.MinimizeEXT());
-    EXPECT_NO_THROW(window.RestoreEXT());
+    if (hasWindowManager)
+    {
+        EXPECT_NO_THROW(window.MinimizeEXT());
+        EXPECT_NO_THROW(window.RestoreEXT());
+    }
 }
