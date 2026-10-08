@@ -161,3 +161,6 @@ not move while it was taken: 0 of 600. 32 of the 33 behavioural tests now run on
 repeats clean; only the `IN_ACCESS` read test stays Linux-only, as kqueue reports no reads) and `AM4-127` (audit
 LOW: a rename out of the filter raised nothing on macOS, where Linux reports the old name's `Deleted`; a new
 cross-platform test covers renames out of and into the filter, failing on macOS before the fix).
+`AM4-128` (audit LOW: `utcSecondsFromCivil`, which replaced `timegm()` on Linux too, gained tests against fixed
+instants from `DateTime.MinValue` to `MaxValue` and against the host's `timegm()` wherever it answers) and `AM4-129`
+(the macOS doc's commands named this machine's `~/Desktop/build`).
