@@ -170,7 +170,12 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-texture3d-proj.patch"
         # plans/plan_apple_m4.md AM4-144: the SPIR-V profile ignored a TEXKILL predicate and
         # killed unconditionally (Metal, Vulkan, WebGPU and SDL_GPU compiled effects alike).
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-predicated-texkill.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-predicated-texkill.patch"
+        # plans/plan_apple_m4.md AM4-192: the Metal profile -- which FNA3D's SDL_GPU driver uses on
+        # Apple -- had neither the TEXCRD opcode nor D3D9's oD# clamp; the GLSL/SPIR-V profiles got
+        # both above (glsl-texcrd, spirv-texcrd, vertex-color-clamp).
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-texcrd.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-vertex-color-clamp.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
     set(_cna_fna3d_source_patch

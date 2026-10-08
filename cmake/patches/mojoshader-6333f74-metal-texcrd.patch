@@ -1,0 +1,33 @@
+diff --git a/profiles/mojoshader_profile_metal.c b/profiles/mojoshader_profile_metal.c
+--- a/profiles/mojoshader_profile_metal.c
++++ b/profiles/mojoshader_profile_metal.c
+@@ -1669,7 +1669,28 @@
+     pop_output(ctx);
+ } // emit_METAL_DEFI
+ 
+-EMIT_METAL_OPCODE_UNIMPLEMENTED_FUNC(TEXCRD)
++void emit_METAL_TEXCRD(Context *ctx)
++{
++    char source[64];
++    if (shader_version_atleast(ctx, 1, 4))
++    {
++        make_METAL_srcarg_string_masked(ctx, 0, source, sizeof (source));
++    } // if
++    else
++    {
++        /* ps_1_1 through ps_1_3's texcoord t# reloads the interpolated
++         * TEXCOORD# into the mutable texture register. This is the same
++         * stage input emit_METAL_global() initialises that register from. -CNA */
++        char varname[64];
++        get_METAL_varname_in_buf(ctx, REG_TYPE_TEXTURE, ctx->dest_arg.regnum,
++                                 varname, sizeof (varname));
++        snprintf(source, sizeof (source), "input.%s", varname);
++    } // else
++
++    char code[128];
++    make_METAL_destarg_assign(ctx, code, sizeof (code), "%s", source);
++    output_line(ctx, "%s", code);
++} // emit_METAL_TEXCRD
+ 
+ void emit_METAL_TEXKILL(Context *ctx)
+ {

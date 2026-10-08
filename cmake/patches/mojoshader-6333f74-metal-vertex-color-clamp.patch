@@ -1,0 +1,37 @@
+diff --git a/profiles/mojoshader_profile_metal.c b/profiles/mojoshader_profile_metal.c
+--- a/profiles/mojoshader_profile_metal.c
++++ b/profiles/mojoshader_profile_metal.c
+@@ -477,6 +477,33 @@
+ void emit_METAL_RET(Context *ctx);
+ void emit_METAL_end(Context *ctx)
+ {
++    // Direct3D 9 clamps a vertex shader's colour output registers (oD#) to [0,1] BEFORE the
++    // rasterizer interpolates them. A Metal user(color#) output is a plain varying, clamped
++    // nowhere, so a per-vertex colour above 1 interpolates unclamped and saturates per fragment
++    // instead -- the GLSL ES profiles' gap, closed the same way (vertex-color-clamp). used_registers
++    // already lists oD# here; the outputs are only declared later, by process_definitions(). The
++    // clamp goes to mainline explicitly, because after an explicit RET the current output is the
++    // subroutine buffer, and finalize appends "return output;" to mainline after it. -CNA
++    if (shader_is_vertex(ctx))
++    {
++        const RegisterList *item = ctx->used_registers.next;
++        while (item != NULL)
++        {
++            if (item->regtype == REG_TYPE_ATTROUT)
++            {
++                char var[64];
++                get_METAL_varname_in_buf(ctx, REG_TYPE_ATTROUT, item->regnum, var, sizeof (var));
++                ctx->metal_need_header_common = 1;
++                push_output(ctx, &ctx->mainline);
++                ctx->indent++;
++                output_line(ctx, "%s = clamp(%s, 0.0, 1.0);", var, var);
++                ctx->indent--;
++                pop_output(ctx);
++            } // if
++            item = item->next;
++        } // while
++    } // if
++
+     // !!! FIXME: maybe handle this at a higher level?
+     // ps_1_* writes color to r0 instead oC0. We move it to the right place.
+     // We don't have to worry about a RET opcode messing this up, since
