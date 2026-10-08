@@ -104,7 +104,11 @@ namespace
     {
         using CNA::Internal::Renderers::ShaderDialectEXT;
         const ShaderDialectEXT dialect = gd.GetShaderDialectEXT();
-        if (dialect == ShaderDialectEXT::Hlsl)
+        // plans/plan_apple_m4.md AM4-177: any declared non-GLSL dialect refuses this GLSL payload
+        // at compile time -- HLSL (DirectX11), and WGSL too: WebGPU executes its source, so the
+        // execution query below would otherwise have predicted a valid effect.
+        if (dialect == ShaderDialectEXT::Hlsl || dialect == ShaderDialectEXT::Msl ||
+            dialect == ShaderDialectEXT::Wgsl || dialect == ShaderDialectEXT::SpirV)
             return GlslEffectValidity::Invalid;
         // Software reports CustomEffects false yet accepts the source for resource compatibility;
         // with no declared dialect and nothing executed, validity is that renderer's own choice.

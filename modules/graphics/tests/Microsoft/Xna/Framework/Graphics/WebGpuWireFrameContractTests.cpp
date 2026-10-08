@@ -290,7 +290,11 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    GraphicsDevice gd;
+    // plans/plan_apple_m4.md AM4-177: HiDef -- the neighbouring capabilities asserted below
+    // (several render targets, occlusion queries, volume textures) are HiDef features.
+    GraphicsDevice gd(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+                      Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+                      Microsoft::Xna::Framework::Graphics::PresentationParameters());
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
     std::cout << "[WEBGPU-153] SupportsCapability(WireFrame) == "
@@ -926,7 +930,10 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
     for (const std::unique_ptr<Route>& route : routes)
     {
         SCOPED_TRACE(route->Name());
-        GraphicsDevice gd;
+        // plans/plan_apple_m4.md AM4-177: HiDef, which the instanced route needs.
+        GraphicsDevice gd(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+                          Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+                          Microsoft::Xna::Framework::Graphics::PresentationParameters());
 
         // Solid first: this leg is the proof that the route exists and reaches the GPU at all.
         const RouteRun solid = RunRoute(gd, FillMode::Solid, *route);
@@ -946,7 +953,10 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
             << solid.frame.Describe();
 
         // Then WireFrame, on a fresh device so no state from the Solid leg can carry over.
-        GraphicsDevice wireDevice;
+        GraphicsDevice wireDevice(
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+            Microsoft::Xna::Framework::Graphics::PresentationParameters());
         const RouteRun wire = RunRoute(wireDevice, FillMode::WireFrame, *route);
         PrintRun((std::string(route->Name()) + " wireframe").c_str(), wire);
         ASSERT_TRUE(wire.accepted)

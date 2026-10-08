@@ -181,7 +181,10 @@ TEST(WebGpuMrtOcclusionContract, SingleTargetBindStillRenders)
 TEST(WebGpuMrtOcclusionContract, TwoTargetBindSucceedsAndBothTargetsReceiveOwnContent)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    GraphicsDevice gd;
+    // plans/plan_apple_m4.md AM4-177: HiDef, as XNA requires for more than one render target and
+    // for occlusion queries; a default device is Reach.
+    GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                      PresentationParameters());
     RenderTarget2D t0 = MakeTarget(gd);
     RenderTarget2D t1 = MakeTarget(gd);
 
@@ -239,7 +242,10 @@ TEST(WebGpuMrtOcclusionContract, TwoTargetBindSucceedsAndBothTargetsReceiveOwnCo
 TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsTrue)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    GraphicsDevice gd;
+    // plans/plan_apple_m4.md AM4-177: HiDef, as XNA requires for more than one render target and
+    // for occlusion queries; a default device is Reach.
+    GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                      PresentationParameters());
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery))
         << "WebGPU implements occlusion queries (WEBGPU-84) but SupportsCapability reports false";
     // The query object must be real: constructing and running Begin()/End() must not throw, and a
