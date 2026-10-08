@@ -54,13 +54,16 @@ namespace
         if (ok) ++passCount;
     }
 
-    bool near(int actual, int expected)
-    {
-        return std::abs(actual - expected) <= 1;
-    }
-
+    /// Channels written as 0, 1 or a clear colour's byte reach the target unchanged, so they are
+    /// compared exactly; only a fractional shader value (case D) may round either way.
     bool rgba(const Color& c, int r, int g, int b, int a)
     {
+        return c.getRProperty() == r && c.getGProperty() == g && c.getBProperty() == b && c.getAProperty() == a;
+    }
+
+    bool rgbaRounded(const Color& c, int r, int g, int b, int a)
+    {
+        const auto near = [](int actual, int expected) { return std::abs(actual - expected) <= 1; };
         return near(c.getRProperty(), r) && near(c.getGProperty(), g) && near(c.getBProperty(), b) &&
                near(c.getAProperty(), a);
     }
@@ -205,7 +208,7 @@ protected:
             sb.Draw(tex, kDestination, kRed);
             sb.End();
             const Color inside = ReadBack(dev, 80, 79);
-            check(uniformEffect.IsEffectValid() && rgba(inside, 64, 191, 128, 255),
+            check(uniformEffect.IsEffectValid() && rgbaRounded(inside, 64, 191, 128, 255),
                   "D: buffer(2) float4x4 and buffer(4) float reach the fragment stage (got " +
                       describe(inside) + ", want (64,191,128,255))");
         }
