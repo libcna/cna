@@ -129,8 +129,15 @@ The following boundaries are deterministic rather than silent degradation:
   rotated on upload) on Apple-family GPUs only -- an Intel Mac's GPU has none of the three, and there
   they refuse by name. One- and two-channel formats are sampled through a swizzled view as Direct3D 9
   reads them: (r, 1, 1, 1) and (r, g, 1, 1); Alpha8 reads (0, 0, 0, a). XNA's point-filter-only rule
-  for the float formats is enforced by the shared draw validation, which reads each texture's format.
-  DXT has no native route on macOS yet (iOS has no BC at all);
+  for the float formats is enforced by the shared draw validation, which reads each texture's format;
+- Dxt1/Dxt3/Dxt5 Texture2D and TextureCube (`AM4-148`) transfer as their exact blocks, which the
+  renderer keeps on the CPU for every level (XNA's `GetData` returns them; the framework's partial
+  `SetData` patches them). The GPU samples them as BC1/BC2/BC3 where `supportsBCTextureCompression`
+  (every Mac), and as RGBA8 decoded beside the kept blocks where not (an iPhone GPU) -- the content
+  loaders keep DXT compressed either way, as XNA does. A level written before the texture is first
+  bound is replaced in place; one written after goes into a replacement texture, since a command
+  buffer in flight may still read the old one. `CNA_METAL_FORCE_DXT_FALLBACK=1` takes the decoded
+  route on a Mac, and the `*_DecodedFallback` tests run it;
 - RenderTarget2D and RenderTargetCube render into Color, Rgba1010102, Rg32, Rgba64, Single, Vector2,
   Vector4, HalfSingle, HalfVector2, HalfVector4 and HdrBlendable (`AM4-142`), so HDR, bloom and float
   shadow maps keep their range; any other preference becomes Color, as XNA's
@@ -138,7 +145,7 @@ The following boundaries are deterministic rather than silent degradation:
 - TextureCube and Texture3D store the same uncompressed formats natively (`AM4-147`), with the same
   4444 rotation, swizzled sampling views and point-filter rule; each transfers its texels as XNA lays
   them out (`SetDataBytesEXT`/`GetDataBytesEXT`). NormalizedByte2/4 are refused for both, as XNA
-  keeps them to Texture2D, and DXT for a volume; a DXT cube still has no route;
+  keeps them to Texture2D, and DXT for a volume (a DXT cube: see above);
 - RenderTargetCube accepts `SetData` (`AM4-147`): the face region is uploaded into a replacement cube
   after this target's pending pass is committed, every other face and level blitted across. A
   multisampled cube refuses it -- its faces render into separate multisample textures, so the next

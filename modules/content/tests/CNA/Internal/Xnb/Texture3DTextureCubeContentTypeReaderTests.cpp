@@ -381,7 +381,8 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicCompressedFormatAndExactBlocks)
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan);
+    // plans/plan_apple_m4.md AM4-148: and Metal's, DXT included.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, Metal);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,

@@ -257,16 +257,16 @@ namespace CNA::Internal::Renderers::Metal
          *
          * @param surfaceFormat XNA SurfaceFormat ordinal.
          * @return Supported for every uncompressed XNA format (the packed 16-bit ones on Apple
-         *         GPUs); Defer for the rest, which the framework's own rule answers.
+         *         GPUs) and for Dxt1/3/5 (AM4-148); Defer for the rest, which the framework's own
+         *         rule answers.
          */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
          * @brief Whether a TextureCube may be created with the given surface format.
          *
          * @param surfaceFormat XNA SurfaceFormat ordinal.
-         * @return Supported for every format Metal stores natively except the signed-normalized
-         *         pair XNA keeps out of a cube; Defer for the DXT formats (the framework's rule);
-         *         Unsupported otherwise.
+         * @return Supported for every format Metal stores natively and the DXT formats, except the
+         *         signed-normalized pair XNA keeps out of a cube; Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
         /**
@@ -276,6 +276,26 @@ namespace CNA::Internal::Renderers::Metal
          * @return Supported for every uncompressed format Metal stores natively; Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether a Texture2D format transfers as exact block-compressed bytes.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return True for Dxt1, Dxt3 and Dxt5 on every Metal device.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether a TextureCube format transfers as exact block-compressed bytes.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return True for Dxt1, Dxt3 and Dxt5 on every Metal device.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether the content loaders keep DXT content compressed.
+         *
+         * @return True: Metal keeps a DXT texture's exact blocks, sampling them as BC or decoded.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         /**
          * @brief Reports that half-float colour textures filter linearly.
          *

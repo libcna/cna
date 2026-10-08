@@ -281,6 +281,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
             COMMAND cna_test_metal_${_cna_metal_shared}
             TIMEOUT 120 LABELS "Metal;MetalShared")
     endforeach()
+    # plans/plan_apple_m4.md AM4-148: the DXT cube fixture loads its XNB from tests/assets, as on
+    # EasyGL and Vulkan. A Mac samples DXT as BC1/2/3; an iPhone GPU cannot and holds the decoded
+    # texels beside the exact blocks -- CNA_METAL_FORCE_DXT_FALLBACK takes that route here, for the
+    # two pixel fixtures and for the shared transfer, loader and sampling tests.
+    set_tests_properties(Metal_Shared_dxt_texturecube_test PROPERTIES WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+    foreach(_cna_metal_dxt IN ITEMS dxt1_texture_test dxt_texturecube_test)
+        cna_register_renderer_test(NAME Metal_Shared_${_cna_metal_dxt}_DecodedFallback
+            COMMAND cna_test_metal_${_cna_metal_dxt}
+            TIMEOUT 120 LABELS "Metal;MetalShared" WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
+            ENVIRONMENT "CNA_METAL_FORCE_DXT_FALLBACK=1")
+    endforeach()
+    unset(_cna_metal_dxt)
+    cna_register_renderer_test(NAME Metal_DxtDecodedFallback_SharedTests
+        COMMAND CnaTests "--gtest_filter=UnsupportedFormatConstructionTest.Dxt*:UnsupportedFormatConstructionTest.Compressed*:UnsupportedFormatConstructionTest.EverySurfaceFormat*:TextureCubeTest.*Compressed*:ClassicTextureFormat.Dxt*:ClassicTextureFormat.PlainCube*:SaveAsPngTest.*Dxt*:Texture2DContentTypeReaderTest.*Compressed*:Texture3DTextureCubeContentTypeReaderTest.TextureCube*:TextureCubeCompressedFormatAgreement.*:Texture2DFromStreamFormatTest.Dds*:ContentManagerSpriteFontXnbTest.*"
+        TIMEOUT 300 LABELS "Metal" WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
+        ENVIRONMENT "CNA_METAL_FORCE_DXT_FALLBACK=1")
     # plans/plan_apple_m4.md AM4-141: the MSAA MultiSampleMask leg uses only all-or-nothing masks,
     # which Metal applies exactly.
     target_compile_definitions(cna_test_metal_gfx077_colorwritechannels_3d_test PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)

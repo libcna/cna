@@ -27,6 +27,8 @@
 #include "CNA/Internal/Renderers/Metal/MetalDeclaredVertexInput.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalDepthPolicy.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPolicy.hpp"
+#include "CNA/Internal/Renderers/Metal/MetalCompressedTexture.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #if defined(CNA_METAL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Metal/MetalCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -116,6 +118,7 @@ private:
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -1755,6 +1758,278 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
         std::function<void()> ownerHealthCheck_;
     };
 
+    // plans/plan_apple_m4.md AM4-148: the GPU pixel format of a DXT resource. The BC formats exist
+    // from iOS 16.4 (and every supported macOS); a device without them was given DecodedRgba8.
+    static MTLPixelFormat metalCompressedPixelFormat(MetalCompressedStorage storage)
+    {
+        if (@available(macOS 11.0, iOS 16.4, tvOS 16.4, *))
+        {
+            switch (storage)
+            {
+                case MetalCompressedStorage::Bc1: return MTLPixelFormatBC1_RGBA;
+                case MetalCompressedStorage::Bc2: return MTLPixelFormatBC2_RGBA;
+                case MetalCompressedStorage::Bc3: return MTLPixelFormatBC3_RGBA;
+                case MetalCompressedStorage::DecodedRgba8: break;
+            }
+        }
+        return MTLPixelFormatRGBA8Unorm;
+    }
+
+    static std::vector<uint8_t> decodeMetalDxtLevel(int surfaceFormat,const std::vector<uint8_t>& blocks,int width,int height)
+    {
+        using CNA::Internal::Graphics::DxtUtil;
+        using SF=Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SF>(surfaceFormat))
+        {
+            case SF::Dxt1: return DxtUtil::DecompressDxt1(blocks.data(),blocks.size(),width,height);
+            case SF::Dxt3: return DxtUtil::DecompressDxt3(blocks.data(),blocks.size(),width,height);
+            default:       return DxtUtil::DecompressDxt5(blocks.data(),blocks.size(),width,height);
+        }
+    }
+
+    // One whole level (of one cube face) from its exact blocks: the blocks themselves into a BC
+    // texture, their decoded texels into an RGBA8 one.
+    static void uploadMetalCompressedLevel(id<MTLTexture> texture,MetalCompressedStorage storage,int surfaceFormat,
+                                           const std::vector<uint8_t>& blocks,int level,int width,int height,
+                                           NSUInteger slice)
+    {
+        const MTLRegion region=MTLRegionMake2D(0,0,(NSUInteger)width,(NSUInteger)height);
+        if (storage==MetalCompressedStorage::DecodedRgba8) {
+            const std::vector<uint8_t> rgba=decodeMetalDxtLevel(surfaceFormat,blocks,width,height);
+            [texture replaceRegion:region mipmapLevel:(NSUInteger)level slice:slice withBytes:rgba.data()
+                       bytesPerRow:(NSUInteger)width*4u bytesPerImage:0];
+            return;
+        }
+        [texture replaceRegion:region mipmapLevel:(NSUInteger)level slice:slice withBytes:blocks.data()
+                   bytesPerRow:(NSUInteger)MetalBlockRowBytes(width,MetalDxtBlockBytes(surfaceFormat))
+                 bytesPerImage:0];
+    }
+
+    // plans/plan_apple_m4.md AM4-148: a DXT1/3/5 Texture2D. XNA's GetData returns a DXT texture's
+    // exact blocks and the framework's partial SetData patches them, so every level's blocks live in
+    // a CPU store (zero-filled until written, as the framework's own level-zero upload is); the GPU
+    // holds them as BC1/2/3, or decoded to RGBA8 on a device that does not sample BC. A level
+    // written before the texture is first bound is replaced in place; one written after may still
+    // be read by a command buffer in flight (METAL-256), so the store is uploaded into a
+    // replacement texture instead.
+    class MetalCompressedTexture final : public ITextureRenderer
+    {
+    public:
+        MetalCompressedTexture(id<MTLDevice> dev,const ImageData& data,MetalCompressedStorage storage,
+                               std::shared_ptr<MetalResourceHealth> resourceHealth,
+                               std::function<void()> ownerHealthCheck)
+            : w_(data.width), h_(data.height), surfaceFormat_(data.surfaceFormat),
+              blockBytes_(MetalDxtBlockBytes(data.surfaceFormat)), levelCount_(std::max(1,data.mipLevels)),
+              storage_(storage), resourceHealth_(std::move(resourceHealth)),
+              ownerHealthCheck_(std::move(ownerHealthCheck))
+        {
+            if(!resourceHealth_||!ownerHealthCheck_)
+                throw std::invalid_argument("Metal compressed texture requires owner health");
+            ownerHealthCheck_();
+            levels_.resize((std::size_t)levelCount_);
+            for(int level=0;level<levelCount_;++level)
+                levels_[(std::size_t)level].assign(MetalBlockRegionBytes(levelWidth(level),levelHeight(level),blockBytes_),0);
+            if(!data.pixels.empty()) std::memcpy(levels_[0].data(),data.pixels.data(),levels_[0].size());
+            MetalObjectOwner deviceOwner(retainMetalObject, releaseMetalObject);
+            deviceOwner.Reset(dev);
+            MetalObjectOwner textureOwner(retainMetalObject, releaseMetalObject);
+            textureOwner.Adopt(allocate(dev));
+            for(int level=0;level<levelCount_;++level) upload((id<MTLTexture>)textureOwner.Get(),level);
+            dev_=(id<MTLDevice>)deviceOwner.ReleaseOwnership();
+            texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
+        }
+        ~MetalCompressedTexture() override { [texture_ release]; [dev_ release]; }
+        int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        int GetWidth() const override { return w_; }
+        int GetHeight() const override { return h_; }
+        void UpdatePixels(const uint8_t* blocks,int stride) override
+        {
+            if(stride!=(int)MetalBlockRowBytes(w_,blockBytes_))
+                throw std::invalid_argument("Metal: invalid compressed Texture2D level-zero upload");
+            UpdatePixelsLevel(0,blocks,w_,h_);
+        }
+        void UpdatePixelsLevel(int level,const uint8_t* blocks,int lw,int lh) override
+        {
+            const MetalAutoreleaseScope autoreleaseScope;
+            ownerHealthCheck_();
+            if(!blocks||level<0||level>=levelCount_||lw!=levelWidth(level)||lh!=levelHeight(level))
+                throw std::invalid_argument("Metal: invalid compressed Texture2D level upload");
+            std::memcpy(levels_[(std::size_t)level].data(),blocks,levels_[(std::size_t)level].size());
+            commit(level);
+            ownerHealthCheck_();
+        }
+        // The exact blocks of a block-aligned region, tightly packed by block row.
+        bool GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            ownerHealthCheck_();
+            if(level<0||level>=levelCount_||dataLength<0) return false;
+            return CopyMetalBlockRegionOut(levels_[(std::size_t)level].data(),levelWidth(level),levelHeight(level),
+                                           blockBytes_,x,y,w,h,static_cast<uint8_t*>(data),(std::size_t)dataLength);
+        }
+        id<MTLTexture> samplingTexture() const
+        {
+            ownerHealthCheck_();
+            sampled_=true;
+            return texture_;
+        }
+    private:
+        int levelWidth(int level) const { return MetalTextureTransferDetail::MipDimension(w_,level); }
+        int levelHeight(int level) const { return MetalTextureTransferDetail::MipDimension(h_,level); }
+        id<MTLTexture> allocate(id<MTLDevice> dev) const
+        {
+            MTLTextureDescriptor* d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metalCompressedPixelFormat(storage_)
+                width:(NSUInteger)w_ height:(NSUInteger)h_ mipmapped:(levelCount_>1)];
+            if(!d) throw std::runtime_error("Metal: failed to allocate compressed texture descriptor");
+            d.mipmapLevelCount=(NSUInteger)levelCount_;
+            d.usage=MTLTextureUsageShaderRead;
+            id<MTLTexture> texture=[dev newTextureWithDescriptor:d];
+            if(!texture) throw std::runtime_error("Metal: failed to create compressed texture");
+            return texture;
+        }
+        void upload(id<MTLTexture> texture,int level) const
+        {
+            uploadMetalCompressedLevel(texture,storage_,surfaceFormat_,levels_[(std::size_t)level],level,
+                                       levelWidth(level),levelHeight(level),0);
+        }
+        void commit(int level)
+        {
+            if(!sampled_){ upload(texture_,level); return; }
+            MetalObjectOwner replacementOwner(retainMetalObject, releaseMetalObject);
+            replacementOwner.Adopt(allocate(dev_));
+            for(int each=0;each<levelCount_;++each) upload((id<MTLTexture>)replacementOwner.Get(),each);
+            [texture_ release];
+            texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+            sampled_=false;
+        }
+        id<MTLDevice> dev_=nil;
+        int w_, h_; int surfaceFormat_; int blockBytes_; int levelCount_;
+        MetalCompressedStorage storage_;
+        std::vector<std::vector<uint8_t>> levels_;
+        id<MTLTexture> texture_=nil;
+        mutable bool sampled_=false;
+        std::shared_ptr<MetalResourceHealth> resourceHealth_;
+        std::function<void()> ownerHealthCheck_;
+    };
+
+    // plans/plan_apple_m4.md AM4-148: a DXT1/3/5 TextureCube, held as MetalCompressedTexture holds a
+    // Texture2D -- every face's levels as exact blocks on the CPU, BC1/2/3 or decoded RGBA8 on the GPU.
+    class MetalCompressedTextureCube final : public ITextureCubeRenderer
+    {
+    public:
+        MetalCompressedTextureCube(id<MTLDevice> dev,int size,bool mipMap,int surfaceFormat,
+                                   MetalCompressedStorage storage,
+                                   std::shared_ptr<MetalResourceHealth> resourceHealth,
+                                   std::function<void()> ownerHealthCheck)
+            : size_(size), surfaceFormat_(surfaceFormat), blockBytes_(MetalDxtBlockBytes(surfaceFormat)),
+              levelCount_(MetalMipLevelCount(size,size,mipMap)), storage_(storage),
+              resourceHealth_(std::move(resourceHealth)), ownerHealthCheck_(std::move(ownerHealthCheck))
+        {
+            if(!resourceHealth_||!ownerHealthCheck_)
+                throw std::invalid_argument("Metal compressed cube texture requires owner health");
+            ownerHealthCheck_();
+            levels_.resize((std::size_t)(6*levelCount_));
+            for(int face=0;face<6;++face)
+                for(int level=0;level<levelCount_;++level)
+                    blocks(face,level).assign(MetalBlockRegionBytes(levelSize(level),levelSize(level),blockBytes_),0);
+            MetalObjectOwner deviceOwner(retainMetalObject, releaseMetalObject);
+            deviceOwner.Reset(dev);
+            MetalObjectOwner textureOwner(retainMetalObject, releaseMetalObject);
+            textureOwner.Adopt(allocate(dev));
+            uploadAll((id<MTLTexture>)textureOwner.Get());
+            dev_=(id<MTLDevice>)deviceOwner.ReleaseOwnership();
+            texture_=(id<MTLTexture>)textureOwner.ReleaseOwnership();
+        }
+        ~MetalCompressedTextureCube() override { [texture_ release]; [dev_ release]; }
+        // The Color route never reaches a DXT cube (TextureCube refuses Color elements for a block
+        // format); its pixels arrive as blocks.
+        bool SetData(int,int,int,int,int,int,const void*,int) override { return false; }
+        bool SetCompressedDataEXT(int face,int level,int x,int y,int w,int h,const void* data,int dataLength) override
+        {
+            const MetalAutoreleaseScope autoreleaseScope;
+            ownerHealthCheck_();
+            if(face<0||face>=6||level<0||level>=levelCount_||dataLength<0) return false;
+            if(!CopyMetalBlockRegionIn(blocks(face,level).data(),levelSize(level),levelSize(level),blockBytes_,
+                                       x,y,w,h,static_cast<const uint8_t*>(data),(std::size_t)dataLength))
+                return false;
+            commit(face,level);
+            ownerHealthCheck_();
+            return true;
+        }
+        bool GetCompressedDataEXT(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            ownerHealthCheck_();
+            if(face<0||face>=6||level<0||level>=levelCount_||dataLength<0) return false;
+            return CopyMetalBlockRegionOut(levels_[index(face,level)].data(),levelSize(level),levelSize(level),
+                                           blockBytes_,x,y,w,h,static_cast<uint8_t*>(data),(std::size_t)dataLength);
+        }
+        // The interface's decoded readback of a compressed cube: RGBA8 texels of the region.
+        bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            ownerHealthCheck_();
+            if(face<0||face>=6||level<0||level>=levelCount_||!data) return false;
+            const int dimension=levelSize(level);
+            if(x<0||y<0||w<=0||h<=0||w>dimension||h>dimension||x>dimension-w||y>dimension-h||
+               (std::size_t)dataLength!=(std::size_t)w*(std::size_t)h*4u)
+                return false;
+            const std::vector<uint8_t> rgba=decodeMetalDxtLevel(surfaceFormat_,levels_[index(face,level)],dimension,dimension);
+            for(int row=0;row<h;++row)
+                std::memcpy(static_cast<uint8_t*>(data)+(std::size_t)row*w*4u,
+                            rgba.data()+((std::size_t)(y+row)*dimension+x)*4u,(std::size_t)w*4u);
+            return true;
+        }
+        int GetSizeEXT() const noexcept override { return size_; }
+        int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        id<MTLTexture> samplingTexture() const
+        {
+            ownerHealthCheck_();
+            sampled_=true;
+            return texture_;
+        }
+    private:
+        std::size_t index(int face,int level) const { return (std::size_t)(face*levelCount_+level); }
+        std::vector<uint8_t>& blocks(int face,int level) { return levels_[index(face,level)]; }
+        int levelSize(int level) const { return MetalTextureTransferDetail::MipDimension(size_,level); }
+        id<MTLTexture> allocate(id<MTLDevice> dev) const
+        {
+            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:metalCompressedPixelFormat(storage_)
+                size:(NSUInteger)size_ mipmapped:(levelCount_>1)];
+            if(!d) throw std::runtime_error("Metal: failed to allocate compressed cube texture descriptor");
+            d.mipmapLevelCount=(NSUInteger)levelCount_;
+            d.usage=MTLTextureUsageShaderRead;
+            id<MTLTexture> texture=[dev newTextureWithDescriptor:d];
+            if(!texture) throw std::runtime_error("Metal: failed to create compressed cube texture");
+            return texture;
+        }
+        void upload(id<MTLTexture> texture,int face,int level) const
+        {
+            uploadMetalCompressedLevel(texture,storage_,surfaceFormat_,levels_[index(face,level)],level,
+                                       levelSize(level),levelSize(level),(NSUInteger)face);
+        }
+        void uploadAll(id<MTLTexture> texture) const
+        {
+            for(int face=0;face<6;++face)
+                for(int level=0;level<levelCount_;++level) upload(texture,face,level);
+        }
+        void commit(int face,int level)
+        {
+            if(!sampled_){ upload(texture_,face,level); return; }
+            MetalObjectOwner replacementOwner(retainMetalObject, releaseMetalObject);
+            replacementOwner.Adopt(allocate(dev_));
+            uploadAll((id<MTLTexture>)replacementOwner.Get());
+            [texture_ release];
+            texture_=(id<MTLTexture>)replacementOwner.ReleaseOwnership();
+            sampled_=false;
+        }
+        id<MTLDevice> dev_=nil;
+        int size_; int surfaceFormat_; int blockBytes_; int levelCount_;
+        MetalCompressedStorage storage_;
+        std::vector<std::vector<uint8_t>> levels_;
+        id<MTLTexture> texture_=nil;
+        mutable bool sampled_=false;
+        std::shared_ptr<MetalResourceHealth> resourceHealth_;
+        std::function<void()> ownerHealthCheck_;
+    };
+
     class MetalVertexBuffer final : public IVertexBufferRenderer
     {
     public:
@@ -1932,6 +2207,7 @@ struct MetalRenderer::Impl
     unsigned supportedSampleCountMask=0;
     // AM4-142: B5G6R5/BGR5A1/ABGR4 textures exist on Apple GPUs only.
     bool packed16Formats=false;
+    bool bcTextures=false;   // AM4-148: the device samples BC1/2/3
     // AM4-142: the colour formats of the open pass's attachments, as the pipelines must declare them.
     std::array<MTLPixelFormat,8> activeColorFormats=[]{ std::array<MTLPixelFormat,8> f{}; f.fill(MTLPixelFormatBGRA8Unorm); return f; }();
     void recordActiveColorFormats(const std::vector<id<MTLTexture>>& colors)
@@ -4153,6 +4429,7 @@ static id<MTLTexture> nativeTextureFor(const ITextureRenderer* t)
 {
     if (!t) return nil;
     if (auto* mt = dynamic_cast<const MetalTexture*>(t)) return mt->samplingTexture();   // AM4-142
+    if (auto* ct = dynamic_cast<const MetalCompressedTexture*>(t)) return ct->samplingTexture();   // AM4-148
     if (auto* rt = dynamic_cast<const MetalRenderTargetRenderer*>(t)) return rt->samplingTexture();   // AM4-142
     return nil;
 }
@@ -4161,6 +4438,7 @@ static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeRenderer* t)
 {
     if (!t) return nil;
     if (auto* mt = dynamic_cast<const MetalTextureCube*>(t)) return mt->samplingTexture();   // AM4-147
+    if (auto* ct = dynamic_cast<const MetalCompressedTextureCube*>(t)) return ct->samplingTexture();   // AM4-148
     if (auto* rt = dynamic_cast<const MetalRenderTargetCubeRenderer*>(t)) return rt->samplingTexture();   // AM4-142
     return nil;
 }
@@ -4272,6 +4550,11 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
         if ([p.device supportsTextureSampleCount:(NSUInteger)samples])
             p.supportedSampleCountMask|=MetalSampleCountBit(samples);
     p.packed16Formats=[p.device supportsFamily:MTLGPUFamilyApple1];   // AM4-142
+    // AM4-148: every Mac GPU samples BC; an iPhone's does not, and holds DXT decoded instead.
+    // CNA_METAL_FORCE_DXT_FALLBACK takes the decoded route on a Mac, so the tests reach it here.
+    if (@available(macOS 11.0, iOS 16.4, tvOS 16.4, *)) p.bcTextures=[p.device supportsBCTextureCompression];
+    if (const char* forced=std::getenv("CNA_METAL_FORCE_DXT_FALLBACK"); forced && std::strcmp(forced,"0")!=0)
+        p.bcTextures=false;
     p.deviceSampleCount=std::max(1,MetalAppliedMultiSampleCount(args.multiSampleCount,p.supportedSampleCountMask));
     p.view=[[CNAMetalView alloc] initWithFrame:[contentView bounds]];
     if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed view");
@@ -4490,6 +4773,16 @@ std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& 
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
+    // AM4-148: a DXT texture's level zero arrives as its blocks.
+    MetalCompressedStorage compressed{};
+    if(MetalCompressedStorageFor(d.surfaceFormat,impl_->bcTextures,compressed)){
+        if(d.width<=0||d.height<=0||d.mipLevels<1||d.mipLevels>MetalMipLevelCount(d.width,d.height,true))
+            throw std::invalid_argument("Metal Texture2D dimensions or mip count are invalid.");
+        if(!d.pixels.empty()&&d.pixels.size()!=MetalBlockRegionBytes(d.width,d.height,MetalDxtBlockBytes(d.surfaceFormat)))
+            throw std::invalid_argument("Metal Texture2D level-zero byte count is invalid.");
+        return std::make_unique<MetalCompressedTexture>(impl_->device,d,compressed,
+            impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_));
+    }
     // AM4-142: the format's native storage; the shape rules are Color's, at the format's texel size.
     MetalTextureStorageInfo storage{};
     if(!MetalTextureStorageFor(d.surfaceFormat,impl_->packed16Formats,storage))
@@ -4512,11 +4805,16 @@ std::unique_ptr<ITextureCubeRenderer> MetalRenderer::CreateTextureCube(int size,
 {
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
-    MetalTextureStorageInfo storage{};
-    if (ClassifyTextureCubeFormatEXT(surfaceFormat)!=RendererFormatVerdict::Supported ||
-        !MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage))   // AM4-147
+    if (ClassifyTextureCubeFormatEXT(surfaceFormat)!=RendererFormatVerdict::Supported)
         throw System::NotSupportedException("Metal TextureCube does not store this SurfaceFormat.");
     if(size<=0) throw std::invalid_argument("Metal TextureCube size must be positive.");
+    MetalCompressedStorage compressed{};
+    if (MetalCompressedStorageFor(surfaceFormat,impl_->bcTextures,compressed))   // AM4-148
+        return std::make_unique<MetalCompressedTextureCube>(impl_->device,size,mipMap,surfaceFormat,compressed,
+            impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_));
+    MetalTextureStorageInfo storage{};
+    if (!MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage))   // AM4-147
+        throw System::NotSupportedException("Metal TextureCube does not store this SurfaceFormat.");
     return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap,
         impl_->resourceHealth,makeMetalResourceOwnerHealthCheck(impl_),storage,surfaceFormat);
 }
@@ -4601,6 +4899,7 @@ RendererFormatVerdict MetalRenderer::ClassifyRenderTargetFormatEXT(int surfaceFo
 }
 RendererFormatVerdict MetalRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
 {
+    if (MetalDxtBlockBytes(surfaceFormat)>0) return RendererFormatVerdict::Supported;   // AM4-148
     MetalTextureStorageInfo storage{};
     return MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage) ? RendererFormatVerdict::Supported
                                                                                 : RendererFormatVerdict::Defer;
@@ -4610,13 +4909,26 @@ RendererFormatVerdict MetalRenderer::ClassifySurfaceFormatEXT(int surfaceFormat)
 // and, for a volume, the DXT formats it never carries.
 RendererFormatVerdict MetalRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
 {
-    using SF=Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     if (MetalIsTexture2DOnlyFormat(surfaceFormat,false)) return RendererFormatVerdict::Unsupported;
     MetalTextureStorageInfo storage{};
     if (MetalTextureStorageFor(surfaceFormat,impl_->packed16Formats,storage)) return RendererFormatVerdict::Supported;
-    const SF format=static_cast<SF>(surfaceFormat);
-    return (format==SF::Dxt1||format==SF::Dxt3||format==SF::Dxt5) ? RendererFormatVerdict::Defer
-                                                                   : RendererFormatVerdict::Unsupported;
+    return MetalDxtBlockBytes(surfaceFormat)>0 ? RendererFormatVerdict::Supported      // AM4-148
+                                               : RendererFormatVerdict::Unsupported;
+}
+// plans/plan_apple_m4.md AM4-148: DXT transfers as its exact blocks on every Metal device -- stored
+// as BC1/2/3 where the GPU samples BC, decoded beside the kept blocks where it does not -- so the
+// content loaders keep it compressed too, as XNA does.
+bool MetalRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+{
+    return MetalDxtBlockBytes(surfaceFormat)>0;
+}
+bool MetalRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+{
+    return MetalDxtBlockBytes(surfaceFormat)>0;
+}
+bool MetalRenderer::LoadsCompressedContentNativelyEXT() const
+{
+    return true;
 }
 RendererFormatVerdict MetalRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
 {

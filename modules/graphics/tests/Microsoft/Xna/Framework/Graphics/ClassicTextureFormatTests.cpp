@@ -607,6 +607,52 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
     EXPECT_NEAR(sampled.getAProperty(), 255, 2);
 }
 
+// plans/plan_apple_m4.md AM4-148: a DXT3 and a DXT5 texture sampled in a real draw, alpha
+// included. Their readbacks return the blocks the renderer kept and the cube fixture's colour halves
+// are identical in BC2 and BC3, so only a sampled alpha tells the two block layouts apart -- found by
+// giving Metal's DXT5 the BC2 format, which every other DXT test still passed.
+TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+        if (!device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            GTEST_SKIP() << "this renderer has no compressed Texture2D transfer route";
+
+    // Red in each colour half (c0 = 0xF800, every index 0). DXT3: every explicit alpha nibble 8,
+    // so 136. DXT5: endpoints 200 and 40, every index selecting the first.
+    const std::uint8_t dxt3[16] = {0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88,
+                                   0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    const std::uint8_t dxt5[16] = {200, 40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                   0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    Texture2D textureThree(device, 4, 4, false, SurfaceFormat::Dxt3);
+    textureThree.SetData(dxt3, 16);
+    const Color three = DrawWithSpriteBatch(device, textureThree);
+    EXPECT_NEAR(three.getRProperty(), 255, 2);
+    EXPECT_NEAR(three.getGProperty(), 0, 2);
+    EXPECT_NEAR(three.getBProperty(), 0, 2);
+    EXPECT_NEAR(three.getAProperty(), 136, 2);
+
+    Texture2D texture(device, 4, 4, false, SurfaceFormat::Dxt5);
+    texture.SetData(dxt5, 16);
+    const Color five = DrawWithSpriteBatch(device, texture);
+    EXPECT_NEAR(five.getRProperty(), 255, 2);
+    EXPECT_NEAR(five.getGProperty(), 0, 2);
+    EXPECT_NEAR(five.getBProperty(), 0, 2);
+    EXPECT_NEAR(five.getAProperty(), 200, 2);
+
+    // Re-filled after a draw sampled it -- green (c0 = 0x07E0), every alpha index now selecting
+    // the second endpoint (40): the next draw sees the new block.
+    const std::uint8_t green[16] = {200, 40, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24,
+                                    0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    texture.SetData(green, 16);
+    const Color refilled = DrawWithSpriteBatch(device, texture);
+    EXPECT_NEAR(refilled.getRProperty(), 0, 2);
+    EXPECT_NEAR(refilled.getGProperty(), 255, 2);
+    EXPECT_NEAR(refilled.getBProperty(), 0, 2);
+    EXPECT_NEAR(refilled.getAProperty(), 40, 2);
+}
+
 TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsPreserveExactTransfers)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -727,8 +773,10 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan joined once its cube stored every format
     // natively and stopped claiming the two signed-normalized formats for a cube.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Vulkan))
-        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL and Vulkan";
+    // plans/plan_apple_m4.md AM4-147/AM4-148: Metal joined once its cube stored every
+    // uncompressed format and DXT.
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Vulkan, Metal))
+        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL, Vulkan and Metal";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -753,6 +801,17 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
              SurfaceFormat::Alpha8})
     {
         SCOPED_TRACE(static_cast<int>(format));
+        // A Metal GPU without the packed 16-bit formats (not an Apple GPU) refuses them for a cube
+        // as it does for a Texture2D.
+        if (CNA_RENDERER_IS(Metal) && !MetalMustStoreCubeOrVolumeFormat(device, format) &&
+            format != SurfaceFormat::Color && format != SurfaceFormat::Dxt1 &&
+            format != SurfaceFormat::Dxt3 && format != SurfaceFormat::Dxt5)
+        {
+            EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
+                      RendererFormatVerdict::Unsupported);
+            EXPECT_THROW(TextureCube(device, 4, false, format), System::NotSupportedException);
+            continue;
+        }
         EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(
                       static_cast<int>(format)),
                   RendererFormatVerdict::Supported);
