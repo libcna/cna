@@ -1542,7 +1542,18 @@ if(CNA_BUILD_TESTS)
     # $XDG_CONFIG_HOME/user-dirs.dirs. Pointing that at a generated fixture gives the suite a
     # deterministic library instead of whatever music the developer's machine happens to hold --
     # and keeps the test from ever reading or writing a real user directory.
+    #
+    # plans/plan_apple_m4.md AM4-164: on Apple, SDL asks Foundation instead
+    # (NSSearchPathForDirectoriesInDomains), which ignores XDG and read the developer's real
+    # ~/Music and ~/Pictures. Foundation takes the user domain from CFFIXED_USER_HOME when it is
+    # set -- $HOME it does not consult -- and the fixture root holds Music/ and Pictures/ at
+    # exactly the places that makes it look.
     set(CNA_C_API_MEDIA_FIXTURE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/media_fixture")
+    set(CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT "XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config")
+    if(APPLE)
+        string(APPEND CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT
+            ";CFFIXED_USER_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}")
+    endif()
     file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/config")
     file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music")
     file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/Pictures")
@@ -2031,22 +2042,22 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_MediaPlayerSmoke COMMAND cna_c_api_media_player_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
         )
     else()
         set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
         )
     endif()
 
     add_test(NAME CApi_MediaLibrarySmoke COMMAND cna_c_api_media_library_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
         )
     else()
         set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
-            ENVIRONMENT "XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+            ENVIRONMENT "${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
         )
     endif()
 
