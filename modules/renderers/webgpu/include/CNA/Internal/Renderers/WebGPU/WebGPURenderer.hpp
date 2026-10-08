@@ -266,6 +266,26 @@ namespace CNA::Internal::Renderers::WebGPU
         /// transparent-black frame as a successful readback.
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Writes level 0 from the caller's rows (RenderTarget2D.SetData).
+         *
+         * plans/plan_apple_m4.md AM4-094: a render target is a Texture2D in XNA, and SetData on one
+         * that is not bound is legal. This target used to inherit the interface's empty default, so
+         * the data was discarded without a word.
+         *
+         * @param data Texels in XNA byte order for this target's surface format.
+         * @param stride Bytes from one source row to the next.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Writes one whole mip level (RenderTarget2D.SetData with a level).
+         *
+         * @param level Mip level to write.
+         * @param data Tightly packed texels in XNA byte order.
+         * @param levelW Width of that level.
+         * @param levelH Height of that level.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;

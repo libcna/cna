@@ -2885,8 +2885,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         WGPUTextureDescriptor colorDescriptor{};
         colorDescriptor.label = StringView("CNA WebGPU RenderTarget2D Color");
+        // plans/plan_apple_m4.md AM4-094: CopyDst for RenderTarget2D.SetData.
         colorDescriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding |
-                                WGPUTextureUsage_CopySrc;
+                                WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst;
         colorDescriptor.dimension = WGPUTextureDimension_2D;
         colorDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         colorDescriptor.format = colorFormat_;
@@ -3088,6 +3089,70 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderTargetRenderer::UnbindAsRenderTarget()
     {
         if (owner_ != nullptr && owner_->currentRenderTarget_ == this) owner_->currentRenderTarget_ = nullptr;
+    }
+
+    void WebGPURenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        if (data == nullptr)
+            throw std::invalid_argument("CNA WebGPU: RenderTarget2D update source cannot be null");
+        const int texelBytes = BytesPerTexelEXT(colorFormat_);
+        if (texelBytes == 0)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: RenderTarget2D.SetData does not know the texel width of this target's "
+                "colour format, so it will not guess one.");
+        }
+        const int rowBytes = width_ * texelBytes;
+        if (stride < rowBytes)
+            throw std::invalid_argument("CNA WebGPU: RenderTarget2D update stride is too small");
+        std::vector<std::uint8_t> packed(static_cast<std::size_t>(rowBytes) * static_cast<std::size_t>(height_));
+        for (int y = 0; y < height_; ++y)
+        {
+            std::memcpy(packed.data() + static_cast<std::size_t>(y) * rowBytes,
+                        data + static_cast<std::size_t>(y) * stride, static_cast<std::size_t>(rowBytes));
+        }
+        UpdatePixelsLevel(0, packed.data(), width_, height_);
+    }
+
+    void WebGPURenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH)
+    {
+        if (owner_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: RenderTarget2D.SetData after its device was lost");
+        if (level < 0 || level >= levelCount_ || data == nullptr || levelW <= 0 || levelH <= 0)
+            throw std::invalid_argument("CNA WebGPU: invalid RenderTarget2D level upload");
+        const int texelBytes = BytesPerTexelEXT(colorFormat_);
+        if (texelBytes == 0)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: RenderTarget2D.SetData does not know the texel width of this target's "
+                "colour format, so it will not guess one.");
+        }
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        owner_->OrderExternalQueueWorkEXT();
+
+        const std::size_t byteCount = static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH) *
+                                      static_cast<std::size_t>(texelBytes);
+        // The mirror of GetData: a BGRA colour texture stores XNA's RGBA bytes swapped.
+        const std::uint8_t* upload = data;
+        std::vector<std::uint8_t> swapped;
+        if (colorFormat_ == WGPUTextureFormat_BGRA8Unorm || colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb)
+        {
+            swapped.assign(data, data + byteCount);
+            for (std::size_t i = 0; i + 3 < byteCount; i += 4)
+                std::swap(swapped[i], swapped[i + 2]);
+            upload = swapped.data();
+        }
+
+        WGPUTexelCopyTextureInfo destination{};
+        destination.texture = colorTexture_;
+        destination.mipLevel = static_cast<std::uint32_t>(level);
+        destination.aspect = WGPUTextureAspect_All;
+        WGPUTexelCopyBufferLayout layout{};
+        layout.bytesPerRow = static_cast<std::uint32_t>(levelW * texelBytes);
+        layout.rowsPerImage = static_cast<std::uint32_t>(levelH);
+        const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
+        wgpuQueueWriteTexture(owner_->Queue(), &destination, upload, byteCount, &layout, &extent);
     }
 
     bool WebGPURenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
