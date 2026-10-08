@@ -199,7 +199,8 @@ namespace
     [[nodiscard]] bool IsCampaignRenderer()
     {
         // WINCLOSE-0020: DirectX11 stores all three as native DXGI render-target formats.
-        return CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11);
+        // plans/plan_apple_m4.md AM4-158: so does Metal since AM4-142.
+        return CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal);
     }
 
     [[nodiscard]] bool HasCompleteNormalizedTargetMatrix(const GraphicsDevice& device)

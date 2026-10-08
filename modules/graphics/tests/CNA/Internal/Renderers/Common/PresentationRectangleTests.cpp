@@ -72,8 +72,9 @@ namespace
     [[nodiscard]] bool HasVirtualResolution()
     {
         // WINCLOSE-0020: DirectX11 computes the same rectangle through ComputeD3DPresentationGeometry
-        // and letterboxes its readback with it (WINCLOSE-0012).
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, WebGPU, DirectX11);
+        // and letterboxes its readback with it (WINCLOSE-0012). plans/plan_apple_m4.md AM4-158:
+        // Metal's GetDefaultViewportRect() is the same letterboxed presentation rectangle.
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, WebGPU, DirectX11, Metal);
     }
 
     [[nodiscard]] std::string RendererName()
@@ -418,11 +419,11 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
     // WINCLOSE-0032: DirectX11's GetBackBufferData returns the LOGICAL back buffer, sampled through
     // the presentation rectangle (WINCLOSE-0012) -- the game's own pixels, which is what XNA's
     // GetBackBufferData means for a letterboxed game -- where the renderers above read raw physical
-    // drawable pixels. EasyGL does too since cna-killer KF-6. So probe them through
-    // that contract. A sprite covering the whole logical area must read back as ink at the logical
+    // drawable pixels. EasyGL does too since cna-killer KF-6, and Metal since plans/plan_apple_m4.md
+    // AM4-025 (enrolled here by AM4-158). So probe them through that contract. A sprite covering the whole logical area must read back as ink at the logical
     // centre AND at the far logical corner: the corner placement this test exists to catch leaves
     // that corner at the clear colour. The bars have no logical pixels, so they are not readable here.
-    if (CNA_RENDERER_IS(DirectX11, OpenGL33, OpenGLES3, WebGL2))
+    if (CNA_RENDERER_IS(DirectX11, OpenGL33, OpenGLES3, WebGL2, Metal))
     {
         for (const auto& [x, y] : {std::pair{virtualSize / 2, virtualSize / 2},
                                    std::pair{virtualSize - 1, virtualSize - 1}})
