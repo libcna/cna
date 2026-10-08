@@ -178,6 +178,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         environmentmapeffect_alphascaledlerp_test
         envmap_cube_sampler_contract_test
         envmap_cube_sampler_state_test
+        environment_map_effect_contract_test
         frontface_winding_test
         fullscreen_spritebatch_then_3d_test
         gfx077_colorwritechannels_3d_test

@@ -73,12 +73,33 @@ TEST(MetalTextureBindingPolicy, EveryStockNullSlotHasTheRequiredNeutralResource)
     };
     for (const Expected& item : expected)
     {
-        EXPECT_EQ(MetalNeutralTextureForSlot(item.slot), item.neutral);
+        EXPECT_EQ(MetalNeutralTextureForSlot(item.slot, false), item.neutral);
         EXPECT_EQ(DescribeMetalStockTextureBinding(item.slot, false, false),
                   MetalTextureBindingDecision::BindNeutralFallback);
         EXPECT_EQ(DescribeMetalStockTextureBinding(item.slot, true, false),
                   MetalTextureBindingDecision::Reject);
     }
+}
+
+// plans/plan_apple_m4.md AM4-140: a classic stock slot the effect samples reads XNA's measured
+// opaque black (GSC-0004); PBR slots keep the glTF defaults whatever the switch says.
+TEST(MetalTextureBindingPolicy, SampledClassicSlotsReadXnaOpaqueBlack)
+{
+    const MetalStockTextureSlot classic2D[] = {
+        MetalStockTextureSlot::BasicDiffuse, MetalStockTextureSlot::AlphaTestDiffuse,
+        MetalStockTextureSlot::DualFirst, MetalStockTextureSlot::DualSecond,
+        MetalStockTextureSlot::EnvironmentDiffuse, MetalStockTextureSlot::SkinnedDiffuse};
+    for (const MetalStockTextureSlot slot : classic2D)
+        EXPECT_EQ(MetalNeutralTextureForSlot(slot, true), MetalNeutralTextureKind::Black2D);
+    EXPECT_EQ(MetalNeutralTextureForSlot(MetalStockTextureSlot::EnvironmentCube, true),
+              MetalNeutralTextureKind::BlackCube);
+    EXPECT_EQ(MetalNeutralTextureForSlot(MetalStockTextureSlot::BasicDiffuse, false),
+              MetalNeutralTextureKind::White2D)
+        << "a BasicEffect with TextureEnabled off is not sampled, so its slot stays the identity";
+    EXPECT_EQ(MetalNeutralTextureForSlot(MetalStockTextureSlot::PbrBaseColor, true),
+              MetalNeutralTextureKind::White2D);
+    EXPECT_EQ(MetalNeutralTextureForSlot(MetalStockTextureSlot::PbrNormal, true),
+              MetalNeutralTextureKind::FlatNormal2D);
 }
 
 TEST(MetalTextureBindingPolicy, BasicAlphaDualAndEnvironmentTransitionsNeverCarryPriorNativeState)

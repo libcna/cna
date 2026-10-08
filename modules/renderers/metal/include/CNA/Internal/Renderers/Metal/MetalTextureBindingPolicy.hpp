@@ -44,7 +44,11 @@ namespace CNA::Internal::Renderers::Metal
         /** @brief Flat tangent-space normal RGBA 2D texture. */
         FlatNormal2D,
         /** @brief Opaque white RGBA cube texture. */
-        WhiteCube
+        WhiteCube,
+        /** @brief Opaque black RGBA 2D texture -- what XNA samples from an unbound classic slot. */
+        Black2D,
+        /** @brief Opaque black RGBA cube texture -- XNA's unbound EnvironmentMap. */
+        BlackCube
     };
 
     /** @brief Deterministic action for one shader texture slot. */
@@ -79,19 +83,35 @@ namespace CNA::Internal::Renderers::Metal
     }
 
     /**
-     * @brief Chooses the neutral resource for a missing built-in shader slot.
+     * @brief Names the renderer-owned resource a slot binds when the draw supplies no texture.
+     *
+     * plans/plan_apple_m4.md AM4-140: XNA measures an unbound texture in a classic stock effect as
+     * opaque black (plans/plan_graphics_shared_cleanup.md GSC-0004), which Vulkan, WebGPU, SDL_GPU
+     * and the GL renderers bind. Metal bound neutral white, the glTF default its PBR slots keep. A
+     * classic slot the effect does not sample -- a BasicEffect with TextureEnabled off, whose Metal
+     * functions still read it -- keeps white, the identity of `texel * colour`.
      *
      * @param slot Built-in shader texture slot.
+     * @param xnaSampled True when the effect samples the slot: its TextureEnabled, or an effect
+     *                   without that switch (AlphaTest, DualTexture, EnvironmentMap, Skinned).
      * @return The renderer-owned neutral texture kind for that slot.
      */
     [[nodiscard]] constexpr MetalNeutralTextureKind MetalNeutralTextureForSlot(
-        MetalStockTextureSlot slot) noexcept
+        MetalStockTextureSlot slot, bool xnaSampled) noexcept
     {
-        if (slot == MetalStockTextureSlot::EnvironmentCube)
-            return MetalNeutralTextureKind::WhiteCube;
         if (slot == MetalStockTextureSlot::PbrNormal)
             return MetalNeutralTextureKind::FlatNormal2D;
-        return MetalNeutralTextureKind::White2D;
+        const bool classic = slot == MetalStockTextureSlot::BasicDiffuse ||
+                             slot == MetalStockTextureSlot::AlphaTestDiffuse ||
+                             slot == MetalStockTextureSlot::DualFirst ||
+                             slot == MetalStockTextureSlot::DualSecond ||
+                             slot == MetalStockTextureSlot::EnvironmentDiffuse ||
+                             slot == MetalStockTextureSlot::EnvironmentCube ||
+                             slot == MetalStockTextureSlot::SkinnedDiffuse;
+        const bool black = classic && xnaSampled;
+        if (slot == MetalStockTextureSlot::EnvironmentCube)
+            return black ? MetalNeutralTextureKind::BlackCube : MetalNeutralTextureKind::WhiteCube;
+        return black ? MetalNeutralTextureKind::Black2D : MetalNeutralTextureKind::White2D;
     }
 
     /**

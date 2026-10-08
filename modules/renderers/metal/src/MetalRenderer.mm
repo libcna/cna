@@ -440,9 +440,12 @@ vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransfo
     o.eyeDir = eyeVector;
     o.uv = in.uv;
     float viewAngle = dot(eyeVector, worldNormal);
-    o.fresnel = (eu.envParams.y > 0.5)
+    // AM4-140: EnvironmentMapEffect.fx carries this factor to the pixel shader in COLOR1, which
+    // Direct3D 9 saturates before interpolation -- EasyGL's SAMPLE-037 rule. EnvironmentMapAmount
+    // reaches past 1, and the unclamped value made the lerp below extrapolate past the cube's colour.
+    o.fresnel = saturate((eu.envParams.y > 0.5)
         ? pow(max(1.0 - abs(viewAngle), 0.0), eu.envParams.z) * eu.envParams.x
-        : eu.envParams.x;
+        : eu.envParams.x);
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), eu.fogVector), 0.0, 1.0);
     return o;
 }
@@ -1813,6 +1816,9 @@ struct MetalRenderer::Impl
     id<MTLTexture> defaultWhiteTexture=nil;
     id<MTLTexture> defaultFlatNormalTexture=nil;
     id<MTLTexture> defaultWhiteCubeTexture=nil;
+    // AM4-140: XNA's opaque black for an unbound classic stock texture (GSC-0004).
+    id<MTLTexture> defaultBlackTexture=nil;
+    id<MTLTexture> defaultBlackCubeTexture=nil;
 
     // Re-applies every piece of encoder-scoped dynamic state this renderer tracks. Metal has no
     // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
@@ -2365,6 +2371,8 @@ MetalRenderer::Impl::~Impl()
     for (auto& entry : pipelineCache) [entry.second release];
     pipelineCache.clear();
     [defaultWhiteCubeTexture release]; defaultWhiteCubeTexture=nil;
+    [defaultBlackCubeTexture release]; defaultBlackCubeTexture=nil;
+    [defaultBlackTexture release]; defaultBlackTexture=nil;
     [defaultFlatNormalTexture release]; defaultFlatNormalTexture=nil;
     [defaultWhiteTexture release]; defaultWhiteTexture=nil;
     [visibilityBuffer release]; visibilityBuffer=nil;
@@ -3531,7 +3539,8 @@ static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeRenderer* t)
 static id<MTLTexture> resolveMetal2DTextureBinding(
     MetalRenderer::Impl& owner,
     const ITextureRenderer* captured,
-    MetalStockTextureSlot slot)
+    MetalStockTextureSlot slot,
+    bool xnaSampled)
 {
     const id<MTLTexture> native=nativeTextureFor(captured);
     switch(DescribeMetalStockTextureBinding(slot,captured!=nullptr,native!=nil))
@@ -3540,8 +3549,13 @@ static id<MTLTexture> resolveMetal2DTextureBinding(
             return native;
         case MetalTextureBindingDecision::BindNeutralFallback:
         {
-            id<MTLTexture> fallback=MetalNeutralTextureForSlot(slot)==MetalNeutralTextureKind::FlatNormal2D
-                ? owner.defaultFlatNormalTexture : owner.defaultWhiteTexture;
+            id<MTLTexture> fallback=owner.defaultWhiteTexture;
+            switch(MetalNeutralTextureForSlot(slot,xnaSampled))
+            {
+                case MetalNeutralTextureKind::FlatNormal2D: fallback=owner.defaultFlatNormalTexture; break;
+                case MetalNeutralTextureKind::Black2D:      fallback=owner.defaultBlackTexture; break;
+                default: break;
+            }
             if(!fallback) throw std::runtime_error("Metal: required neutral 2D texture is unavailable");
             return fallback;
         }
@@ -3555,7 +3569,8 @@ static id<MTLTexture> resolveMetal2DTextureBinding(
 static id<MTLTexture> resolveMetalCubeTextureBinding(
     MetalRenderer::Impl& owner,
     const ITextureCubeRenderer* captured,
-    MetalStockTextureSlot slot)
+    MetalStockTextureSlot slot,
+    bool xnaSampled)
 {
     const id<MTLTexture> native=nativeCubeTextureFor(captured);
     switch(DescribeMetalStockTextureBinding(slot,captured!=nullptr,native!=nil))
@@ -3563,9 +3578,13 @@ static id<MTLTexture> resolveMetalCubeTextureBinding(
         case MetalTextureBindingDecision::BindNative:
             return native;
         case MetalTextureBindingDecision::BindNeutralFallback:
-            if(!owner.defaultWhiteCubeTexture)
+        {
+            id<MTLTexture> fallback=MetalNeutralTextureForSlot(slot,xnaSampled)==MetalNeutralTextureKind::BlackCube
+                ? owner.defaultBlackCubeTexture : owner.defaultWhiteCubeTexture;
+            if(!fallback)
                 throw std::runtime_error("Metal: required neutral cube texture is unavailable");
-            return owner.defaultWhiteCubeTexture;
+            return fallback;
+        }
         case MetalTextureBindingDecision::Reject:
             throw System::NotSupportedException(
                 "Metal: a stock draw captured a non-Metal cube texture renderer.");
@@ -3680,6 +3699,15 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
         for(NSUInteger face=0;face<6;++face)
             [p.defaultWhiteCubeTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0
                 slice:face withBytes:white bytesPerRow:4 bytesPerImage:0];
+        const uint8_t black[4]={0,0,0,255};
+        p.defaultBlackTexture=[p.device newTextureWithDescriptor:td];
+        if(!p.defaultBlackTexture) throw std::runtime_error("Metal: failed to create neutral black texture");
+        [p.defaultBlackTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:black bytesPerRow:4];
+        p.defaultBlackCubeTexture=[p.device newTextureWithDescriptor:cubeDescriptor];
+        if(!p.defaultBlackCubeTexture) throw std::runtime_error("Metal: failed to create neutral black cube texture");
+        for(NSUInteger face=0;face<6;++face)
+            [p.defaultBlackCubeTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0
+                slice:face withBytes:black bytesPerRow:4 bytesPerImage:0];
     }
     p.rebuildDepthState();
 }
@@ -4274,46 +4302,46 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         case PipelineKind::LitTex32:
         case PipelineKind::LitTex32VertexLit:
             texture0=resolveMetal2DTextureBinding(
-                p,params->texture0,MetalStockTextureSlot::BasicDiffuse);
+                p,params->texture0,MetalStockTextureSlot::BasicDiffuse,params->textureEnabled);
             break;
         case PipelineKind::DualTex20:
         case PipelineKind::DualTex24Colored:
             texture0=resolveMetal2DTextureBinding(
-                p,params->texture0,MetalStockTextureSlot::DualFirst);
+                p,params->texture0,MetalStockTextureSlot::DualFirst,params->textureEnabled);
             texture1=resolveMetal2DTextureBinding(
-                p,params->texture1,MetalStockTextureSlot::DualSecond);
+                p,params->texture1,MetalStockTextureSlot::DualSecond,params->textureEnabled);
             break;
         case PipelineKind::EnvMap32:
             texture0=resolveMetal2DTextureBinding(
-                p,params->texture0,MetalStockTextureSlot::EnvironmentDiffuse);
+                p,params->texture0,MetalStockTextureSlot::EnvironmentDiffuse,params->textureEnabled);
             environmentCube=resolveMetalCubeTextureBinding(
-                p,params->envMap,MetalStockTextureSlot::EnvironmentCube);
+                p,params->envMap,MetalStockTextureSlot::EnvironmentCube,params->textureEnabled);
             break;
         case PipelineKind::Skinned52:
         case PipelineKind::Skinned56:
         case PipelineKind::Skinned52VertexLit:
         case PipelineKind::Skinned56VertexLit:
             texture0=resolveMetal2DTextureBinding(
-                p,params->texture0,MetalStockTextureSlot::SkinnedDiffuse);
+                p,params->texture0,MetalStockTextureSlot::SkinnedDiffuse,params->textureEnabled);
             break;
         case PipelineKind::Pbr48:
         case PipelineKind::SkinnedPbr68:
             texture0=resolveMetal2DTextureBinding(
-                p,params->texture0,MetalStockTextureSlot::PbrBaseColor);
+                p,params->texture0,MetalStockTextureSlot::PbrBaseColor,params->textureEnabled);
             normalMap=resolveMetal2DTextureBinding(
-                p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal);
+                p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal,params->textureEnabled);
             metallicRoughnessMap=resolveMetal2DTextureBinding(
-                p,params->pbrMetallicRoughnessMap,MetalStockTextureSlot::PbrMetallicRoughness);
+                p,params->pbrMetallicRoughnessMap,MetalStockTextureSlot::PbrMetallicRoughness,params->textureEnabled);
             emissiveMap=resolveMetal2DTextureBinding(
-                p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive);
+                p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive,params->textureEnabled);
             occlusionMap=resolveMetal2DTextureBinding(
-                p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion);
+                p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion,params->textureEnabled);
             // plans/plan_apple_m4.md AM4-085: KHR_materials_specular's maps, white when absent -- the
             // identity of both products, so a factor-only material shades exactly as before.
             specularMap=resolveMetal2DTextureBinding(
-                p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular);
+                p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular,params->textureEnabled);
             specularColorMap=resolveMetal2DTextureBinding(
-                p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor);
+                p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor,params->textureEnabled);
             break;
         case PipelineKind::Colored16:
         case PipelineKind::Sprite2D:

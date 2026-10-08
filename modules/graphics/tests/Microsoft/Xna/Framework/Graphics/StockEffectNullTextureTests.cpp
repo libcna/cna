@@ -74,7 +74,8 @@ namespace
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
             // plans/plan_apple_m4.md AM4-066 gave SDL_GPU the same opaque black for every classic
             // slot (AM4-107 enrols it here, so that rule is measured rather than only reviewed).
-            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, Vulkan, WebGPU, SdlGpu))
+            // AM4-140 gives Metal the same opaque black and enrols it.
+            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, Vulkan, WebGPU, SdlGpu, Metal))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
             PresentationParameters parameters;

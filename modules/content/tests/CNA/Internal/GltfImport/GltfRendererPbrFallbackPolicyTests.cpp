@@ -210,11 +210,11 @@ namespace
            R"(uniform sampler2D uEmissiveMap;)",
            R"(uniform sampler2D uOcclusionMap;)"}}},
         {"metal", "fragment texture/sampler indices 0,1,2,3,4",
-         {{R"(texture0=resolveMetal2DTextureBinding(p,params->texture0,MetalStockTextureSlot::PbrBaseColor))",
-           R"(normalMap=resolveMetal2DTextureBinding(p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal))",
-           R"(metallicRoughnessMap=resolveMetal2DTextureBinding(p,params->pbrMetallicRoughnessMap,MetalStockTextureSlot::PbrMetallicRoughness))",
-           R"(emissiveMap=resolveMetal2DTextureBinding(p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive))",
-           R"(occlusionMap=resolveMetal2DTextureBinding(p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion))",
+         {{R"(texture0=resolveMetal2DTextureBinding(p,params->texture0,MetalStockTextureSlot::PbrBaseColor,params->textureEnabled))",
+           R"(normalMap=resolveMetal2DTextureBinding(p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal,params->textureEnabled))",
+           R"(metallicRoughnessMap=resolveMetal2DTextureBinding(p,params->pbrMetallicRoughnessMap,MetalStockTextureSlot::PbrMetallicRoughness,params->textureEnabled))",
+           R"(emissiveMap=resolveMetal2DTextureBinding(p,params->pbrEmissiveMap,MetalStockTextureSlot::PbrEmissive,params->textureEnabled))",
+           R"(occlusionMap=resolveMetal2DTextureBinding(p,params->pbrOcclusionMap,MetalStockTextureSlot::PbrOcclusion,params->textureEnabled))",
            R"([p.encoder setFragmentTexture:texture0 atIndex:0])",
            R"([p.encoder setFragmentTexture:normalMap atIndex:1])",
            R"([p.encoder setFragmentTexture:metallicRoughnessMap atIndex:2])",
@@ -900,8 +900,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrMapHasItsSemanticNeutralFallback)
     const std::string metal = RendererText(renderers / "metal");
     EXPECT_NE(std::string::npos, metal.find(Normalize(
         "if (slot == MetalStockTextureSlot::PbrNormal) return MetalNeutralTextureKind::FlatNormal2D")));
+    // plans/plan_apple_m4.md AM4-140: only a sampled CLASSIC slot reads XNA's opaque black; every
+    // PBR slot other than the normal map still falls to white.
     EXPECT_NE(std::string::npos, metal.find(Normalize(
-        "return MetalNeutralTextureKind::White2D")));
+        "const bool black = classic && xnaSampled;")));
+    EXPECT_NE(std::string::npos, metal.find(Normalize(
+        "return black ? MetalNeutralTextureKind::Black2D : MetalNeutralTextureKind::White2D;")));
+    EXPECT_EQ(std::string::npos, metal.find(Normalize("slot == MetalStockTextureSlot::PbrBaseColor ||")))
+        << "a PBR slot joined the classic set that reads opaque black";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrMapReachesTheShaderBindingIntendedByItsRenderer)
@@ -1472,8 +1478,8 @@ TEST(GltfRendererPbrFallbackPolicy, MetalSamplesBothKhrMaterialsSpecularTextures
              "pu.srgbFlags[3]=params.pbrSpecularColorTextureIsSrgb?1.0f:0.0f;",
              "std::memcpy(pu.specularTransformRows, params.pbrSpecularTextureTransformRows,",
              "pu.textureCoordinateSets[0]=static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);",
-             "specularMap=resolveMetal2DTextureBinding(p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular);",
-             "specularColorMap=resolveMetal2DTextureBinding(p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor);",
+             "specularMap=resolveMetal2DTextureBinding(p,params->pbrSpecularMap,MetalStockTextureSlot::PbrSpecular,params->textureEnabled);",
+             "specularColorMap=resolveMetal2DTextureBinding(p,params->pbrSpecularColorMap,MetalStockTextureSlot::PbrSpecularColor,params->textureEnabled);",
              "[p.encoder setFragmentTexture:specularMap atIndex:5];",
              "[p.encoder setFragmentSamplerState:(p.samplerSlots[5]?p.samplerSlots[5]:p.sampler) atIndex:5];",
              "[p.encoder setFragmentTexture:specularColorMap atIndex:6];",
