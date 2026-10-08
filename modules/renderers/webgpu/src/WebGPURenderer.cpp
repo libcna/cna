@@ -1363,7 +1363,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // WGPUSurfaceGetCurrentTextureStatus_Occluded), outside the standard enum's range. Its
         // Metal backend reports it for a window macOS considers not visible instead of blocking up
         // to a second for a drawable; the frame is simply skipped and the next one tries again.
+        // A browser has no wgpu.h and never reports it; the value only feeds the test hook there.
+#if defined(__EMSCRIPTEN__)
         constexpr int kWgpuNativeSurfaceStatusOccluded = 0x00030001;
+#else
+        constexpr int kWgpuNativeSurfaceStatusOccluded = WGPUSurfaceGetCurrentTextureStatus_Occluded;
+#endif
 
         [[nodiscard]] bool IsSurfaceOccluded(WGPUSurfaceGetCurrentTextureStatus status)
         {
