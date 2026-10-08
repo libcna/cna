@@ -62,9 +62,22 @@ static CNA_Result on_draw(
         return result;
     }
 
+    /* plans/plan_apple_m4.md AM4-197: a 2D-only renderer (SDL_RENDERER) keeps no depth or
+       stencil plane whatever was asked for, and XNA refuses a clear of an attachment that does
+       not exist; ask the device, and clear what it has. */
+    CNA_Bool has_depth_stencil = CNA_FALSE;
+    result = cna_graphics_device_supports_capability(
+        state->secondary, CNA_GRAPHICS_CAPABILITY_DEPTH_STENCIL_BUFFER, &has_depth_stencil);
+    if (result != CNA_RESULT_SUCCESS) {
+        state->failure_stage = 6;
+        state->failure_result = result;
+        return result;
+    }
     result = cna_graphics_device_clear_options(
         state->secondary,
-        CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
+        has_depth_stencil == CNA_TRUE
+            ? (CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL)
+            : CNA_CLEAR_OPTION_TARGET,
         (CNA_Color){96U, 48U, 24U, 255U},
         1.0F,
         0);
