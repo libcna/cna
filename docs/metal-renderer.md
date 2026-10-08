@@ -58,6 +58,21 @@ renderer's 81 shared renderer-neutral pixel/contract tests registered (`AM4-026`
 cube textures accept only `SurfaceFormat::Color`), with no validation-layer assertion. The fixes
 it took are `AM4-025`, `AM4-027`..`AM4-029` and `AM4-031`..`AM4-035`.
 
+### Phase 3 completion (2026-10-08)
+
+`plans/plan_apple_m4.md` `AM4-134`..`AM4-159` completed the renderer against a feature inventory taken
+before the work began: MSAA, every XNA surface format, DXT, instancing, multi-stream input, compiled
+XNA effects (opt-in, `CNA_METAL_COMPILED_EFFECTS`), MRT outputs, the backbuffer's depth format and
+Direct3D 9's `DepthBias`, SpriteBatch's whole transform and sprite batching are native (the contract
+below). Evidence on the M4, every Metal test under the validation layers: `ctest -L Metal` 261/261
+(101 shared pixel fixtures, 146 renderer-neutral oracles, 14 native), the full CnaTests suite with no
+Metal failure, the same in a Release tree, and the iOS Simulator probe after every change.
+
+The verdict is **SUPPORTED**. It is not primary-production yet, for reasons outside the code this
+host could prove: compiled effects are off in a default build; on-screen presentation and
+`PresentInterval` pacing were never observed (the console stayed locked, so every window was
+occluded); no physical iOS device ran it; and no soak run has bounded the caches (`AM4-159`).
+
 ### Post-audit findings
 
 These IDs continue the existing `plans/plan_metal.md` sequence without changing any historical finding:

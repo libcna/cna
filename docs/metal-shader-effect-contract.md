@@ -39,16 +39,17 @@ library's single function name instead of requiring one.
 
 The uniform setters ignore their `name` argument -- MSL has no named loose uniforms, which is the
 same fixed-slot answer Direct3D 11 and Vulkan give. A uniform set between two `Draw` calls of one
-batch takes effect on the next sprite, because Metal's SpriteBatch issues one draw per sprite.
+batch takes effect on the next sprite, because Metal's SpriteBatch draws each custom-effect sprite on
+its own (only stock sprites are batched, `AM4-157`).
 `SetUniformFloatArray`/`Vec2Array` and the extra texture units of `BindTexture` (`METAL-147`) are not
 implemented.
 
-The pipeline is built for the active blend state and attachment layout (BGRA8 colour,
-`Depth32Float_Stencil8`); a valid effect whose pipeline cannot be built throws from the draw rather
+The pipeline is built for the active blend state and attachment layout -- the bound targets' colour,
+depth and stencil pixel formats (`AM4-142`, `AM4-151`); a valid effect whose pipeline cannot be built throws from the draw rather
 than being replaced by the stock shader. With several render targets bound (`AM4-097`) only the
 first receives the effect's output: attachments 1 and up are declared with an empty write mask, so a
-fragment function's `[[color(1)]]` and higher outputs are discarded. No Metal draw can write those
-attachments yet, although `SetRenderTargets` binds and clears them. An effect that is not valid draws with the stock sprite
+fragment function's `[[color(1)]]` and higher outputs are discarded. Only a compiled XNA effect
+writes those attachments (`AM4-144`, `AM4-146`). An effect that is not valid draws with the stock sprite
 pipeline, as Direct3D 11's SpriteBatch does.
 
 ## History
