@@ -235,15 +235,18 @@ inline bool cna_alpha_test_fails(float a, float4 at) {
     float w = pass ? at.z : at.w;
     return w < 0.0;
 }
+// plans/plan_apple_m4.md AM4-106: XNA's unlit vertex shaders hand DiffuseColor (times the vertex colour
+// in their Vc variants) to COLOR0, which Direct3D 9 saturates before interpolation and texturing --
+// EasyGL's SOFTWARE-153/155 and WebGPU's AM4-096 rule. The product with a texel is not clamped.
 fragment float4 cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m [[buffer(2)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
-    float4 c = vcolor * m.diffuseColor;
+    float4 c = saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     return c;
 }
 fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
-    float4 c = tex.sample(smp, in.uv) * vcolor * m.diffuseColor;
+    float4 c = tex.sample(smp, in.uv) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     return c;
 }
@@ -267,7 +270,7 @@ fragment float4 cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 base = tex0.sample(smp0, in.uv);
     base.rgb *= 2.0;
-    float4 c = base * tex1.sample(smp1, in.uv1) * vcolor * m.diffuseColor;
+    float4 c = base * tex1.sample(smp1, in.uv1) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     return c;
 }
@@ -357,13 +360,14 @@ vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]]
     float dotL1 = dot(N, -lu.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
     float dotL2 = dot(N, -lu.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
     float3 lightSum = lu.ambientColor.xyz + lu.light0Diffuse.xyz*NdotL0 + lu.light1Diffuse.xyz*NdotL1 + lu.light2Diffuse.xyz*NdotL2;
-    // XNA's VSBasicVertexLightingVc: `vout.Diffuse *= vin.Color` -- the lit colour and the alpha.
-    o.litRGB = (lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz) * in.color.rgb;
-    o.alpha = lu.diffuseColor.w * in.color.a;
+    // XNA's VSBasicVertexLightingVc: `vout.Diffuse *= vin.Color` -- the lit colour and the alpha --
+    // written to COLOR0, which Direct3D 9 saturates before interpolation (AM4-106; EasyGL FX-123/125).
+    o.litRGB = saturate((lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz) * in.color.rgb);
+    o.alpha = saturate(lu.diffuseColor.w * in.color.a);
     float3 h0 = normalize(E - lu.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, lu.specularColorPower.w);
     float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
     float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
-    o.specularRGB = (spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz;
+    o.specularRGB = saturate((spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz);
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), lu.fogVector), 0.0, 1.0);
     return o;
 }
@@ -554,11 +558,12 @@ inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 no
     float dotL1 = dot(N, -su.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
     float dotL2 = dot(N, -su.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
     float3 lightSum = su.light0Diffuse.xyz*NdotL0 + su.light1Diffuse.xyz*NdotL1 + su.light2Diffuse.xyz*NdotL2;
-    o.litRGB = lightSum * su.diffuseColor.xyz + su.emissiveColor.xyz;
+    // AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, saturated by Direct3D 9.
+    o.litRGB = saturate(lightSum * su.diffuseColor.xyz + su.emissiveColor.xyz);
     float3 h0 = normalize(E - su.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, su.specularColorPower.w);
     float3 h1 = normalize(E - su.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, su.specularColorPower.w);
     float3 h2 = normalize(E - su.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, su.specularColorPower.w);
-    o.specularRGB = (spec0*su.light0Specular.xyz + spec1*su.light1Specular.xyz + spec2*su.light2Specular.xyz) * su.specularColorPower.xyz;
+    o.specularRGB = saturate((spec0*su.light0Specular.xyz + spec1*su.light1Specular.xyz + spec2*su.light2Specular.xyz) * su.specularColorPower.xyz);
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, su.fogVector), 0.0, 1.0);
     return o;
 }

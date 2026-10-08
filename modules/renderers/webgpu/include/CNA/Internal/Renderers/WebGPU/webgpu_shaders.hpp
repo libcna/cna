@@ -571,9 +571,14 @@ struct VertexOutput {
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
-    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
-    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    // plans/plan_apple_m4.md AM4-106: XNA's VSBasicVertexLighting(Vc) writes these to COLOR0/COLOR1,
+    // which Direct3D 9 saturates before interpolation, and its Vc variants multiply by the vertex
+    // colour first (`vout.Diffuse *= vin.Color`) -- EasyGL's order (FX-123/FX-125). Unclamped, an
+    // EnableDefaultLighting sum above 1 drew brighter than XNA and EasyGL.
+    let vcv = select(vec4f(1.0), input.color, u.light0DiffuseVertexColor.w > 0.5);
+    output.specularRGB = clamp((spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz, vec3f(0.0), vec3f(1.0));
+    output.litRGB = clamp((lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz) * vcv.rgb, vec3f(0.0), vec3f(1.0));
     // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
@@ -591,7 +596,8 @@ struct VertexOutput {
         let unlit = clamp(u.diffuseColor * vc, vec4f(0.0), vec4f(1.0)) * sampled;
         return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
     }
-    var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled * vc;
+    // The vertex colour's rgb is already in litRGB (AM4-106); its alpha scales the diffuse alpha.
+    var color = vec4f(input.litRGB, u.diffuseColor.a * vc.a) * sampled;
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     // WEBGPU-149: FNA ApplyFog last; mix(FogColor*color.a, rgb, keep).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
@@ -1686,12 +1692,14 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    // plans/plan_apple_m4.md AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
+    // Direct3D 9 saturates before interpolation (EasyGL clamps both the same way).
+    output.litRGB = clamp(lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz, vec3f(0.0), vec3f(1.0));
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
-    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    output.specularRGB = clamp((spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz, vec3f(0.0), vec3f(1.0));
     return output;
 }
 
@@ -1809,12 +1817,14 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    // plans/plan_apple_m4.md AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
+    // Direct3D 9 saturates before interpolation (EasyGL clamps both the same way).
+    output.litRGB = clamp(lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz, vec3f(0.0), vec3f(1.0));
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
-    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
-                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    output.specularRGB = clamp((spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz, vec3f(0.0), vec3f(1.0));
     return output;
 }
 
