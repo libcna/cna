@@ -162,6 +162,18 @@ TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepth
 {
     // plans/plan_apple_m4.md AM4-151: Metal scales the bias to each target's own depth storage.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
+#if defined(__APPLE__)
+    // plans/plan_apple_m4.md AM4-171: Apple's OpenGL keeps every depth format as 32-bit float (it
+    // runs on Metal, and Apple GPUs have no 24-bit depth) -- measured by clearing to a value a
+    // 24-bit unorm cannot hold and reading it back exactly. glPolygonOffset's constant term is then
+    // relative to each fragment's own float exponent, so the same bias is twice as large at
+    // z = 0.50 as at z = 0.49, and GL has no entry point that adds a fixed normalized depth. This
+    // case keeps its depths on both sides of 0.5 because that is exactly what tells a normalized
+    // bias from an exponent-relative one (Metal's is normalized since AM4-151).
+    if (CNA_RENDERER_IS(OpenGL33))
+        GTEST_SKIP() << "Apple's OpenGL stores depth as float32, where glPolygonOffset's constant "
+                        "bias is exponent-relative; a normalized DepthBias is not expressible there";
+#endif
 
     GraphicsDevice device;
     constexpr std::array<DepthFormat, 3> formats{
