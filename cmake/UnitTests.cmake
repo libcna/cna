@@ -1354,11 +1354,18 @@ if(CNA_BUILD_TESTS)
         # running it once; a sweep nobody can re-run cannot notice a fixture that stopped
         # building, a refusal that started saying something else, or a fixture added later.
         if(TARGET cna_content_tool)
+            # plans/plan_apple_m4.md AM4-165: whether the four Draco fixtures build is this build's
+            # choice, not the corpus's; the sweep is told which one was made.
+            set(_cna_model_sweep_draco)
+            if(CNA_DRACO_AVAILABLE)
+                set(_cna_model_sweep_draco --draco-decoder)
+            endif()
             add_test(NAME CnaXnbModelCorpusSweep
                 COMMAND "${Python3_EXECUTABLE}"
                     "${CMAKE_SOURCE_DIR}/tools/xnb/model_corpus_sweep.py"
                     --content-tool "$<TARGET_FILE:cna_content_tool>"
-                    --python "${Python3_EXECUTABLE}")
+                    --python "${Python3_EXECUTABLE}"
+                    ${_cna_model_sweep_draco})
             set_tests_properties(CnaXnbModelCorpusSweep
                 PROPERTIES LABELS "content;xnb;conformance;model" TIMEOUT 900)
         endif()

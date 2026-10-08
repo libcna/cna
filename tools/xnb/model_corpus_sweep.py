@@ -155,7 +155,16 @@ def main(argv: list[str]) -> int:
                         help="rewrite the manifest from what the corpus does now")
     parser.add_argument("--python", default=sys.executable,
                         help="interpreter for the independent conformance parser")
+    # plans/plan_apple_m4.md AM4-165: the manifest records the outcome without a Draco decoder;
+    # a content tool built with one (-DCNA_ENABLE_DRACO, CNA_DRACO_AVAILABLE) must instead build
+    # every fixture recorded as draco-required, to an .xnb the independent parser accepts.
+    parser.add_argument("--draco-decoder", action="store_true",
+                        help="the content tool has a Draco decoder compiled in")
     arguments = parser.parse_args(argv[1:])
+    if arguments.update and arguments.draco_decoder:
+        print("--update records the outcome without a Draco decoder; run it with a content tool "
+              "built without one.", file=sys.stderr)
+        return 1
 
     if not arguments.content_tool.is_file():
         print(f"{arguments.content_tool}: not an executable file.", file=sys.stderr)
@@ -200,9 +209,13 @@ def main(argv: list[str]) -> int:
                 problems.append(f"{fixture.name}: listed as both building and refused.")
                 continue
 
-            if name in expectedBuilds:
+            decoded = (arguments.draco_decoder
+                       and expectedRefuses.get(name) == "draco-required")
+            if name in expectedBuilds or decoded:
                 if not succeeded:
                     problems.append(
+                        f"{fixture.name}: this content tool has a Draco decoder, and the fixture "
+                        f"it needs one for was still refused:\n    {text.strip()}" if decoded else
                         f"{fixture.name}: the manifest says this builds to Model XNB, and it no "
                         f"longer does:\n    {text.strip()}")
                     continue
