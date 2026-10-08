@@ -2044,7 +2044,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Metal);
     RunBindingOffsetAndFrequencyOracle();
 }
 
@@ -2056,13 +2056,13 @@ TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: the same contract, pinned on the two D3D renderers.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, Metal);
     RunBindingOffsetAndFrequencyOracle();
 }
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceSelectsAbsoluteInstanceRecords)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, Metal);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2263,7 +2263,7 @@ TEST_F(InstancedDrawRangeTest, D3DBaseInstanceCombinesShaderIdAndDividedStream)
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceWithoutInstanceStreamRepeatsTheDraw)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, Metal);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 

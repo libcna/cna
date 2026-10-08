@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <cstddef>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Metal
 {
@@ -515,6 +516,68 @@ namespace CNA::Internal::Renderers::Metal
     {
         return first >= 0 && count >= 0 && available >= 0 && first <= available &&
                count <= available - first;
+    }
+
+    /** @brief One run of an instanced draw issued with base instance 0 (AM4-154). */
+    struct MetalInstanceRun
+    {
+        /** @brief The run's first instance, counted from the draw's own first instance. */
+        int first = 0;
+        /** @brief Instances in the run. */
+        int count = 0;
+    };
+
+    /**
+     * @brief How Metal issues an instanced draw that starts at a caller-selected instance.
+     *
+     * plans/plan_apple_m4.md AM4-154: Direct3D reads a per-instance stream of step rate r at record
+     * (firstInstance + i) / r; Metal reads baseInstance + i / r. They agree when every rate is 1,
+     * and the draw is one native run (empty result). Otherwise the draw is issued in runs that
+     * cross no record boundary of any stream stepping slower than once per instance, each with
+     * base instance 0 and every per-instance stream bound at the record Direct3D reads at the
+     * run's first instance (MetalDirect3DInstanceRecord).
+     *
+     * @param firstInstance The draw's first instance.
+     * @param instanceCount Instances drawn.
+     * @param stepRates Each bound per-instance stream's step rate (InstanceFrequency).
+     * @return The runs, or empty when Metal's own baseInstance already reads Direct3D's records.
+     */
+    [[nodiscard]] inline std::vector<MetalInstanceRun> MetalDirect3DInstanceRuns(
+        int firstInstance, int instanceCount, const std::vector<int>& stepRates)
+    {
+        bool slower = false;
+        for (const int rate : stepRates) slower = slower || rate > 1;
+        std::vector<MetalInstanceRun> runs;
+        if (firstInstance <= 0 || !slower || instanceCount <= 0)
+            return runs;
+        MetalInstanceRun current{0, 0};
+        for (int i = 0; i < instanceCount; ++i)
+        {
+            bool boundary = false;
+            for (const int rate : stepRates)
+                boundary = boundary || (rate > 1 && i > 0 && (firstInstance + i) % rate == 0);
+            if (boundary)
+            {
+                runs.push_back(current);
+                current = MetalInstanceRun{i, 0};
+            }
+            ++current.count;
+        }
+        runs.push_back(current);
+        return runs;
+    }
+
+    /**
+     * @brief The record a per-instance stream is bound at for one run of MetalDirect3DInstanceRuns.
+     *
+     * @param firstInstance The draw's first instance.
+     * @param runFirst The run's first instance, counted from firstInstance.
+     * @param stepRate The stream's step rate (at least 1).
+     * @return Direct3D's record index at the run's first instance.
+     */
+    [[nodiscard]] constexpr int MetalDirect3DInstanceRecord(int firstInstance, int runFirst, int stepRate) noexcept
+    {
+        return (firstInstance + runFirst) / (stepRate > 0 ? stepRate : 1);
     }
 
     /** @brief Bit for a sample count in a supported-count mask (2, 4 and 8 are the counts asked about). */

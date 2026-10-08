@@ -161,7 +161,7 @@ TEST(GraphicsDeviceValidationTest, ScissorRejectsInvalidValuesWithoutChangingSta
 
 TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -181,7 +181,7 @@ TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds
 
 TEST(GraphicsDeviceLifecycleTest, ResetUnbindsActiveRenderTargets)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -425,7 +425,7 @@ TEST(TextureCollectionValidationTest, OwnedCollectionsRespectProfileSlotCounts)
 
 TEST(TextureCollectionValidationTest, VertexTextureFormatAndValidationOrderMatchXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     Texture2D color(gd, 1, 1, false, SurfaceFormat::Color);
@@ -575,7 +575,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 
 TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 8);
     gd.SetRenderTarget(&target);
@@ -606,7 +606,7 @@ TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 
 TEST(GraphicsDeviceValidationTest, CubeFaceParticipatesInRenderTargetBindingIdentity)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     RenderTargetCube target(
         gd, 8, false, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color,
@@ -722,7 +722,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 
 TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -754,7 +754,7 @@ TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 
 TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -779,7 +779,7 @@ TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 
 TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndData)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -806,7 +806,7 @@ TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndDa
 
 TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossClassicDrawFamilies)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -833,7 +833,7 @@ TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossCl
 
 TEST(GraphicsDeviceDrawValidationTest, ValidationPrecedenceMatchesRecoveredXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
 

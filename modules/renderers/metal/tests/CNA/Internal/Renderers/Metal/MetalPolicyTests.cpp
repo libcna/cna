@@ -355,3 +355,37 @@ TEST(MetalPolicy, BufferedDrawWindowsMetalCannotIssueAreNotServable)
     EXPECT_FALSE(MetalBufferedDrawRangeIsServable(0, 3, -1));
     EXPECT_FALSE(MetalBufferedDrawRangeIsServable(1, 0x7fffffffLL, 0x7fffffffLL));
 }
+
+// plans/plan_apple_m4.md AM4-154
+TEST(MetalPolicy, Direct3DInstanceRecordsNeedRunsOnlyForSlowerStreamsAfterAFirstInstance)
+{
+    // Every rate 1, or no first instance: Metal's own baseInstance already reads Direct3D's records.
+    EXPECT_TRUE(MetalDirect3DInstanceRuns(5, 4, {1, 1}).empty());
+    EXPECT_TRUE(MetalDirect3DInstanceRuns(0, 4, {2}).empty());
+    EXPECT_TRUE(MetalDirect3DInstanceRuns(3, 4, {}).empty());
+
+    // Rate 2 from first instance 3: Direct3D reads records 1, 2, 2, 3 -- runs [0,1), [1,3), [3,4).
+    const auto runs = MetalDirect3DInstanceRuns(3, 4, {2});
+    ASSERT_EQ(runs.size(), 3u);
+    EXPECT_EQ(runs[0].first, 0); EXPECT_EQ(runs[0].count, 1);
+    EXPECT_EQ(runs[1].first, 1); EXPECT_EQ(runs[1].count, 2);
+    EXPECT_EQ(runs[2].first, 3); EXPECT_EQ(runs[2].count, 1);
+    EXPECT_EQ(MetalDirect3DInstanceRecord(3, runs[0].first, 2), 1);
+    EXPECT_EQ(MetalDirect3DInstanceRecord(3, runs[1].first, 2), 2);
+    EXPECT_EQ(MetalDirect3DInstanceRecord(3, runs[2].first, 2), 3);
+
+    // An aligned first instance still needs its record divided: (2 + i) / 2, not 2 + i / 2.
+    const auto aligned = MetalDirect3DInstanceRuns(2, 2, {2});
+    ASSERT_EQ(aligned.size(), 1u);
+    EXPECT_EQ(aligned[0].count, 2);
+    EXPECT_EQ(MetalDirect3DInstanceRecord(2, 0, 2), 1);
+
+    // Two slower streams split at either one's boundaries; a rate-1 stream never splits.
+    const auto mixed = MetalDirect3DInstanceRuns(1, 5, {2, 3, 1});
+    int total = 0;
+    for (const auto& run : mixed) total += run.count;
+    EXPECT_EQ(total, 5);
+    for (const auto& run : mixed)
+        for (int i = run.first + 1; i < run.first + run.count; ++i)
+            EXPECT_TRUE((1 + i) % 2 != 0 && (1 + i) % 3 != 0) << "boundary inside run at " << i;
+}

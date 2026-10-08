@@ -273,6 +273,12 @@ namespace CNA::Internal::Renderers::Metal
         {
             return false;
         }
+        /**
+         * @brief Whether an instanced draw can start at a caller-selected instance (AM4-154).
+         *
+         * @return True: every Metal draw passes baseInstance (Apple3 and Mac2 GPU families).
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         /**
          * @brief Reports whether a Texture2D is stored natively in a surface format (AM4-142).

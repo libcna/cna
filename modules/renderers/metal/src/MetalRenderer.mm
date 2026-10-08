@@ -282,7 +282,10 @@ struct UMaterialParams { float4 diffuseColor; float4 alphaTest; float4 flags; fl
 // functions fog too. fogVector (vertex buffer 2) is GpuDrawParams.fogVector, zero when fog is off,
 // so the keep factor is 1 and nothing changes; the fragment applies XNA's Common.fxh ApplyFog,
 // lerp(colour, FogColor * alpha, fogFactor), as EasyGL does.
-struct V3Out { float4 position [[position]]; float4 color; float2 uv; float fogFactor; };
+// plans/plan_apple_m4.md AM4-154: every stock 3D vertex output carries a one-pixel point size --
+// CNA's PointListEXT drew nothing on Metal, whose point size is undefined unless the vertex
+// function writes it; Metal ignores it for lines and triangles.
+struct V3Out { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float4 color; float2 uv; float fogFactor; };
 inline float cna_fog_keep(float4 position, float4 fogVector) {
     return 1.0 - clamp(dot(position, fogVector), 0.0, 1.0);
 }
@@ -337,7 +340,7 @@ fragment CnaFragOut cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex 
 // plans/plan_apple_m4.md AM4-035: the second texture is sampled with TEXCOORD1, as XNA's
 // DualTextureEffect does and Vulkan's has since VULKAN-150; a record without a second set feeds
 // TEXCOORD0 to both (MetalDeclaredVertexInput.hpp), which is what one shared UV used to mean.
-struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; float fogFactor; };
+struct V3DualOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float4 color; float2 uv; float2 uv1; float fogFactor; };
 struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]];  CNA_INSTANCE_INPUTS };
 struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]];  CNA_INSTANCE_INPUTS };
 vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
@@ -387,7 +390,7 @@ struct LitUniforms {
     float4 fogColorEnabled;    // xyz = FogColor, w = FogEnabled (0/1)
     float4 fogVector;          // FNA fog vector dotted with the object-space position
 };
-struct VLitOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
+struct VLitOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
 vertex VLitOut cna_v3d_lit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitOut o;
     float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
@@ -428,7 +431,7 @@ fragment CnaFragOut cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[
 // EnsureLit3DProgram() -- only the STAGE it runs in changes). Reuses the SAME LitTransform/
 // LitUniforms structs as the per-pixel variant (just consumed differently), so fillLitUniforms()
 // needs no changes at all.
-struct VLitVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float alpha; };
+struct VLitVertexLitOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float alpha; };
 vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitVertexLitOut o;
     float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
@@ -486,7 +489,7 @@ struct EnvUniforms {
     float4 fogColorEnabled;
     float4 fogVector;
 };
-struct VEnvOut { float4 position [[position]]; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
+struct VEnvOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
 vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
     VEnvOut o;
     float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
@@ -557,7 +560,7 @@ struct SkinnedUniforms {
 };
 struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; CNA_BONE_INDEX_INPUTS(4)  CNA_INSTANCE_INPUTS };
 struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; CNA_BONE_INDEX_INPUTS(4) float4 color [[attribute(5)]];  CNA_INSTANCE_INPUTS };
-struct VSkinnedOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
+struct VSkinnedOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
 inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uint4 boneIndices, float4 vcolor,
                                     constant SkinnedTransform& t, constant float4x4* bones,
                                     float4 fogVector, float4x4 instance) {
@@ -629,7 +632,7 @@ fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float
 // cna_skin_common -- only WHERE lighting is evaluated moves. No separate ambient uniform here,
 // matching cna_f3d_skinned's own shape (SkinnedEffect pre-folds ambient into emissiveColor at the
 // C++ effect layer), so SkinnedUniforms/fillSkinnedUniforms() need no changes.
-struct VSkinnedVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float4 color; };
+struct VSkinnedVertexLitOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float4 color; };
 inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uint4 boneIndices, float4 vcolor,
                                     constant SkinnedTransform& t, constant SkinnedUniforms& su, constant float4x4* bones,
                                     float4x4 instance) {
@@ -711,7 +714,7 @@ struct PbrUniforms {
 // plans/plan_apple_m4.md AM4-084: `color` is glTF's COLOR_0 when the effect enables it and the record
 // carries one, else constant opaque white (BuildMetalDeclaredVertexInput).
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; float2 uv1 [[attribute(5)]];  CNA_INSTANCE_INPUTS };
-struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; float2 uv1; };
+struct VPbrOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; float2 uv1; };
 float cna_direction_handedness(float3x3 m) {
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
@@ -5027,6 +5030,12 @@ RendererFormatVerdict MetalRenderer::ClassifyTextureCubeFormatEXT(int surfaceFor
 // plans/plan_apple_m4.md AM4-148: DXT transfers as its exact blocks on every Metal device -- stored
 // as BC1/2/3 where the GPU samples BC, decoded beside the kept blocks where it does not -- so the
 // content loaders keep it compressed too, as XNA does.
+// plans/plan_apple_m4.md AM4-154: the instanced draws already pass baseInstance (AM4-143); a
+// GPU family without it (none Metal still runs on) would answer false.
+bool MetalRenderer::SupportsBaseInstanceDrawingEXT() const
+{
+    return [impl_->device supportsFamily:MTLGPUFamilyApple3] || [impl_->device supportsFamily:MTLGPUFamilyMac2];
+}
 bool MetalRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
 {
     return MetalDxtBlockBytes(surfaceFormat)>0;
@@ -5731,18 +5740,44 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     if(ib ? !MetalBufferedDrawRangeIsServable(params?params->startIndex:0,n,ib->GetIndexCount())
           : !MetalBufferedDrawRangeIsServable(params?params->vertexStart:0,n,vb.GetVertexCount()))
         return;
-    if(ib){
-        const NSUInteger startIndex=static_cast<NSUInteger>(params?params->startIndex:0);
-        const NSInteger baseVertex=static_cast<NSInteger>(params?params->baseVertex:0);
-        const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
-        [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
-            indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
-            indexBuffer:ib->native() indexBufferOffset:startIndex*indexSize
-            instanceCount:instanceCount baseVertex:baseVertex baseInstance:firstInstance];
-    } else {
-        const NSUInteger vertexStart=static_cast<NSUInteger>(params?params->vertexStart:0);
-        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n
-                    instanceCount:instanceCount baseInstance:firstInstance];
+    const auto issue=[&](NSUInteger count, NSUInteger base){
+        if(ib){
+            const NSUInteger startIndex=static_cast<NSUInteger>(params?params->startIndex:0);
+            const NSInteger baseVertex=static_cast<NSInteger>(params?params->baseVertex:0);
+            const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
+            [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
+                indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
+                indexBuffer:ib->native() indexBufferOffset:startIndex*indexSize
+                instanceCount:count baseVertex:baseVertex baseInstance:base];
+        } else {
+            const NSUInteger vertexStart=static_cast<NSUInteger>(params?params->vertexStart:0);
+            [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n
+                        instanceCount:count baseInstance:base];
+        }
+    };
+    // AM4-154: a first instance with a stream stepping slower than once per instance reads
+    // Direct3D's records only in runs (MetalDirect3DInstanceRuns).
+    std::vector<int> stepRates;
+    if (streamRoute)
+        for (int i=0; i<streamParams->vertexStreamCount; ++i)
+            if (streamParams->vertexStreams[(std::size_t)i].instanceFrequency>0)
+                stepRates.push_back(streamParams->vertexStreams[(std::size_t)i].instanceFrequency);
+    const std::vector<MetalInstanceRun> runs=MetalDirect3DInstanceRuns((int)firstInstance,(int)instanceCount,stepRates);
+    if (runs.empty()) { issue(instanceCount,firstInstance); return; }
+    for (const MetalInstanceRun& run : runs) {
+        for (int i=0; i<streamParams->vertexStreamCount; ++i) {
+            const auto& stream=streamParams->vertexStreams[(std::size_t)i];
+            if (stream.instanceFrequency<=0) continue;
+            const int bufferIndex=MetalVertexStreamBufferIndex(stream.slot);
+            bool bound=false;
+            for (const auto& layout : vertexInput.layouts) bound = bound || layout.bufferIndex==bufferIndex;
+            if (!bound) continue;
+            const int record=stream.vertexOffset+MetalDirect3DInstanceRecord((int)firstInstance,run.first,stream.instanceFrequency);
+            [p.encoder setVertexBuffer:streamBuffers[(std::size_t)i]->native()
+                                offset:(NSUInteger)record*(NSUInteger)stream.strideInBytes
+                               atIndex:(NSUInteger)bufferIndex];
+        }
+        issue((NSUInteger)run.count,0);
     }
 }
 void MetalRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& v,const Matrix& w,
@@ -6079,15 +6114,31 @@ static void drawMetalCompiled(MetalRenderer::Impl& p, const MetalVertexBuffer& v
     }
     const NSUInteger n=(NSUInteger)primitiveVertexCount(pt,pc);
     const NSUInteger instances=(NSUInteger)(instancedRoute ? std::max(params.instanceCount,1) : 1);
-    if (ib) {
-        const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
-        [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
-            indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
-            indexBuffer:ib->native() indexBufferOffset:(NSUInteger)params.startIndex*indexSize
-            instanceCount:instances baseVertex:(NSInteger)params.baseVertex baseInstance:(NSUInteger)params.firstInstance];
-    } else {
-        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:(NSUInteger)params.vertexStart vertexCount:n
-                    instanceCount:instances baseInstance:(NSUInteger)params.firstInstance];
+    const auto issue=[&](NSUInteger count, NSUInteger base){
+        if (ib) {
+            const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
+            [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
+                indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
+                indexBuffer:ib->native() indexBufferOffset:(NSUInteger)params.startIndex*indexSize
+                instanceCount:count baseVertex:(NSInteger)params.baseVertex baseInstance:base];
+        } else {
+            [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:(NSUInteger)params.vertexStart vertexCount:n
+                        instanceCount:count baseInstance:base];
+        }
+    };
+    // AM4-154: as drawMetal3D, Direct3D's per-instance records in runs when a stream steps slower.
+    std::vector<int> stepRates;
+    for (const auto& source : sources) if (source.instanceFrequency>0) stepRates.push_back(source.instanceFrequency);
+    const std::vector<MetalInstanceRun> runs=MetalDirect3DInstanceRuns(params.firstInstance,(int)instances,stepRates);
+    if (runs.empty()) issue(instances,(NSUInteger)params.firstInstance);
+    for (const MetalInstanceRun& run : runs) {
+        for (std::size_t i=0;i<sources.size();++i) {
+            if (!used[i] || sources[i].instanceFrequency<=0) continue;
+            const std::size_t record=(std::size_t)MetalDirect3DInstanceRecord(params.firstInstance,run.first,sources[i].instanceFrequency);
+            [p.encoder setVertexBuffer:sources[i].buffer->native() offset:sources[i].byteOffset+record*sources[i].stride
+                               atIndex:(NSUInteger)MetalVertexStreamBufferIndex((int)i)];
+        }
+        issue((NSUInteger)run.count,0);
     }
     if (shifted) {
         [p.encoder setViewport:p.nativeViewport()];

@@ -1256,7 +1256,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, Metal);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1311,7 +1311,7 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu, Metal);
     RequirePointRendering();
 
     constexpr int kSize = 128;
