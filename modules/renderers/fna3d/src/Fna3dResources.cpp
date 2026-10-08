@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -151,6 +152,37 @@ namespace CNA::Internal::Renderers::Fna3d
     {
     }
 
+    bool Fna3dTextureRenderer::WidensNormalizedByte2EXT() const noexcept
+    {
+        return surfaceFormat_ ==
+               static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::NormalizedByte2);
+    }
+
+    void Fna3dTextureRenderer::SetLevelBytesEXT(int level, int levelW, int levelH,
+                                                const std::uint8_t* logical, int logicalBytes)
+    {
+        FNA3D_Device* device = deviceState_->RequireDevice("Texture2D upload");
+        if (!WidensNormalizedByte2EXT())
+        {
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
+                                   const_cast<std::uint8_t*>(logical), logicalBytes);
+            return;
+        }
+        // AM4-193: two signed bytes per texel become four, B and A at +1 (0x7F), which is the
+        // value Direct3D 9 samples for the channels NormalizedByte2 does not have.
+        const std::size_t texels = static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH);
+        std::vector<std::uint8_t> wide(texels * 4u);
+        for (std::size_t i = 0; i < texels; ++i)
+        {
+            wide[i * 4u + 0u] = logical[i * 2u + 0u];
+            wide[i * 4u + 1u] = logical[i * 2u + 1u];
+            wide[i * 4u + 2u] = 0x7Fu;
+            wide[i * 4u + 3u] = 0x7Fu;
+        }
+        FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level, wide.data(),
+                               static_cast<int32_t>(wide.size()));
+    }
+
     Fna3dTextureRenderer::~Fna3dTextureRenderer()
     {
         if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
@@ -206,10 +238,10 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
 
+        (void)device;
         if (stride == tightStride || stride <= 0)
         {
-            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0,
-                                   const_cast<std::uint8_t*>(pixels), levelBytes);
+            SetLevelBytesEXT(0, width_, height_, pixels, levelBytes);
         }
         else
         {
@@ -220,8 +252,7 @@ namespace CNA::Internal::Renderers::Fna3d
                             pixels + static_cast<std::size_t>(row) * stride,
                             static_cast<std::size_t>(tightStride));
             }
-            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0, packed.data(),
-                                   static_cast<int32_t>(packed.size()));
+            SetLevelBytesEXT(0, width_, height_, packed.data(), static_cast<int>(packed.size()));
         }
         MarkLevelDefinedEXT(0);
     }
@@ -234,14 +265,12 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return;
         }
-        FNA3D_Device* device = deviceState_->RequireDevice("Texture2D mip upload");
         const int levelBytes = FormatRegionByteCount(surfaceFormat_, levelW, levelH);
         if (levelBytes <= 0)
         {
             return;
         }
-        FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
-                               const_cast<std::uint8_t*>(pixels), levelBytes);
+        SetLevelBytesEXT(level, levelW, levelH, pixels, levelBytes);
         MarkLevelDefinedEXT(level);
     }
 
@@ -265,6 +294,21 @@ namespace CNA::Internal::Renderers::Fna3d
         if (!compressedReadback_ && IsBlockCompressedFormat(surfaceFormat_))
         {
             return false;
+        }
+        if (WidensNormalizedByte2EXT())
+        {
+            // AM4-193: read the four stored bytes, return the two the format has.
+            const std::size_t texels = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
+            std::vector<std::uint8_t> wide(texels * 4u);
+            FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, wide.data(),
+                                   static_cast<int32_t>(wide.size()));
+            auto* out = static_cast<std::uint8_t*>(data);
+            for (std::size_t i = 0; i < texels; ++i)
+            {
+                out[i * 2u + 0u] = wide[i * 4u + 0u];
+                out[i * 2u + 1u] = wide[i * 4u + 1u];
+            }
+            return true;
         }
         FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, data, regionBytes);
         return true;
@@ -1046,7 +1090,16 @@ namespace CNA::Internal::Renderers::Fna3d
         const int width = data.width > 0 ? data.width : 1;
         const int height = data.height > 0 ? data.height : 1;
         const int levelCount = data.mipLevels > 0 ? data.mipLevels : 1;
-        const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(data.surfaceFormat);
+        // plans/plan_apple_m4.md AM4-193: NormalizedByte2 is stored as NormalizedByte4, B and A at
+        // +1, because no FNA3D driver swizzles: its SDL_GPU driver samples RG8 SNORM as
+        // (R, G, 0, 1), where Direct3D 9 samples (R, G, 1, 1). Fna3dTextureRenderer widens on
+        // upload and narrows on readback; the texture's own format stays NormalizedByte2.
+        const bool widenNormalizedByte2 =
+            data.surfaceFormat ==
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::NormalizedByte2);
+        const FNA3D_SurfaceFormat format = widenNormalizedByte2
+            ? FNA3D_SURFACEFORMAT_NORMALIZEDBYTE4
+            : ToFna3dSurfaceFormat(data.surfaceFormat);
         RequireTextureFormatSupportedEXT(data.surfaceFormat, "Texture2D");
         if (!data.pixels.empty())
         {

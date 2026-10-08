@@ -170,6 +170,15 @@ namespace CNA::Internal::Renderers::Fna3d
         bool compressedReadback_ = true;
         /** @brief Bit i set once level i has been written by the caller. */
         std::uint32_t definedLevels_ = 0;
+
+        /**
+         * @brief plans/plan_apple_m4.md AM4-193: whether this NormalizedByte2 texture is stored as
+         * NormalizedByte4 with B and A at +1, so every driver samples Direct3D 9's (R, G, 1, 1).
+         */
+        [[nodiscard]] bool WidensNormalizedByte2EXT() const noexcept;
+        /** @brief Uploads one whole level, widening NormalizedByte2 when stored as four. */
+        void SetLevelBytesEXT(int level, int levelW, int levelH, const std::uint8_t* logical,
+                              int logicalBytes);
     };
 
     /**

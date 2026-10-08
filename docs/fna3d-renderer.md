@@ -155,7 +155,9 @@ fixed from the descriptor's own request.
 - `Texture2D`, `Texture3D`, `TextureCube`: creation, mip levels, sub-rectangle upload and readback.
   The public `Texture2D` format gate includes native signed-normalized `NormalizedByte2/4` storage;
   byte round-trip, GPU sampling and authored mip levels are covered on both FNA3D OpenGL and
-  SDL_GPU drivers (`FNA3D-52` / `MSR-019`).
+  SDL_GPU drivers (`FNA3D-52` / `MSR-019`). `NormalizedByte2` is stored as `NormalizedByte4` with B
+  and A at +1, so every driver samples Direct3D 9's (R, G, 1, 1) -- no FNA3D driver swizzles, and
+  its SDL_GPU driver samples RG8 SNORM as (R, G, 0, 1) (`AM4-193`).
 - `RenderTarget2D` and `RenderTargetCube`: MSAA colour renderbuffers with resolve-on-unbind, mip
   generation, per-target depth/stencil renderbuffers, `PreserveContents`, MRT sets, readback.
 - Vertex and index buffers (16- and 32-bit) with `SetDataOptions` forwarded verbatim, growing the
