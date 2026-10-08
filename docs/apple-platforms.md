@@ -167,6 +167,44 @@ smoke app launches one frame. It does not mean correct pixels have been observed
 `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON` downgrades any refusal to a warning for experimentation;
 expect build or runtime failures, and nothing about such a configuration is supported.
 
+## Mac mini M4 qualification (2026-10-07/08)
+
+`plans/plan_apple_m4.md` (`AM4-*`) is the task-by-task record; this is its summary. Host: Mac mini
+M4 (arm64, 16 GB), macOS 27.0.1, Xcode 27.0 / Apple clang 21, CMake 4.4.4, `CNA_PLATFORM=SDL3`
+(SDL's Cocoa and UIKit drivers -- CNA has no Cocoa/AppKit/UIKit backend of its own). Every number
+below was measured on that machine. Statuses: **PASS**, **PASS WITH KNOWN LIMITATION**,
+**BUILD ONLY**, **FAIL**, **NOT APPLICABLE**, **NOT TESTED**, **OUT OF SCOPE**.
+
+The final full-suite run (`ctest -j3`, one tree per renderer) ran while the console session was
+**locked**, which makes macOS report every window occluded. Renderers that draw the back buffer
+offscreen (Metal, EasyGL, SOFTWARE) are unaffected; WebGPU dropped such frames until `AM4-089`.
+Tests sharing network ports or a profile store also interfered under `-j3`; every failure counted
+below as interference passes when run alone or serially.
+
+| Component | Status | Evidence on the M4 | Known limitations / notes |
+|---|---|---|---|
+| sharp-runtime (standalone) | PASS WITH KNOWN LIMITATION | 18,084 tests: 18,058 pass, 25 skip (native float `from_chars` absent below macOS 26, live SOAP, `/rv` fixtures, x86-64 layout pin), 1 intermittent (`ServiceHostTest`, passes alone) | FileSystemWatcher has an FSEvents backend since this campaign |
+| SDL3 platform baseline (`SDL_RENDERER`) | PASS WITH KNOWN LIMITATION | `SDL_Renderer_*` 77/80; full CnaTests 10,671/10,892 | 205 of the 221 are CnaTests assuming a 3D-capable default renderer (they pass on SOFTWARE; CI runs the unfiltered suite only on OPENGLES3); 3 `SDL_Renderer_*` expectation conflicts await an owner decision |
+| `METAL` | PASS WITH KNOWN LIMITATION | `ctest -L Metal` 86/86 with `MTL_DEBUG_LAYER`/`MTL_SHADER_VALIDATION`; CnaTests 10,773/10,795 in the final run, 10 left after `AM4-083`..`087` (5 are the gaps at right, 5 are shared environment/owner gates); cna-examples 248/248; cna-samples 71/91; cna-car-simulator runs | No MRT, MSAA, non-`Color` surface formats (DXT, float render targets), instancing, multi-stream input or compiled XNA effects; custom effects are SpriteBatch-scoped MSL (`docs/metal-renderer.md`) |
+| `OPENGL33` (EasyGL) | PASS WITH KNOWN LIMITATION | `EasyGL_*` 399/400; compiled effects 1,875/1,875 (`CNA_EASYGL_COMPILED_EFFECTS=ON`); CnaTests 11,834/11,863 in the final run, 7 left at the campaign head (all classified); cna-samples 90/91 | Apple's GL ("4.1 Metal") stores 24-bit depth as float32, so a constant `DepthBias` is exact only for depths in [0.5, 1) (proved by a clear/readback probe); `EasyGL_Anisotropic_GlState` asserts Mesa's clamp-on-store (owner call) |
+| `SDL_GPU` (SDL's Metal driver) | PASS WITH KNOWN LIMITATION | `SdlGpu_*` 195/197; cna-samples 89/91; CnaTests 10,861/10,914, every failure classified in `AM4-092` | 2 `SdlGpu_*` are design gaps on every platform (draw-range throwing, unimplemented float `Texture2D` formats); point lists draw nothing on Metal because no stock vertex shader writes `gl_PointSize` (fix described in `AM4-092`; regenerating the SPIR-V needs libshaderc); custom GLSL effects need libshaderc |
+| `WEBGPU` (wgpu-native v29.0.1.1, Metal backend) | PASS WITH KNOWN LIMITATION | `WebGPU_*` 147/149 under the locked session after `AM4-088`/`089` (before `AM4-088` the launcher skipped them all on macOS); cna-samples 90/91; of the 95 WebGPU-only CnaTests failures of the final run, 82 pass after `AM4-089`/`091` and the rest are classified in `AM4-092` | wgpu-native's Metal backend ignores `MultiSampleMask` (Metal pipelines have no sample-mask state) and counts occlusion as a boolean (`AM4-091`); platform-independent WebGPU gaps found here are listed in `AM4-092` |
+| `SOFTWARE` | PASS WITH KNOWN LIMITATION | `Software_*` 159/159; CnaTests 11,008/11,036 in the final run, 6 left at the campaign head (shared gates) plus one timeout | A Debug build draws the Guide below two frames a second (input fixed in `AM4-086`); one exhaustive click-scan Guide test exceeds its timeout |
+| `FNA3D` (FNA3D's Metal driver) | PASS WITH KNOWN LIMITATION | `Fna3d_*` 13/13; CnaTests 10,784/10,827 (8 failures unique to this tree, all the driver's boundaries); cna-samples 89/91 | FNA3D's Metal driver has no occlusion queries (LensFlare); MojoShader's Metal profile lacks `TEXCRD`; its driver accepts NormalizedByte2/4 where the GL driver refuses them |
+| `OPENGLES3` | NOT APPLICABLE | -- | macOS has no native OpenGL ES |
+| `WEBGL2` | NOT TESTED | -- | Emscripten/browser; no emsdk on this host |
+| `HEADLESS`, `STUB` | NOT TESTED | -- | Not part of this campaign's matrix |
+| `VULKAN` (MoltenVK) | OUT OF SCOPE | -- | Excluded on Apple by the campaign brief |
+| `DIRECTX9`, `DIRECTX11` | NOT APPLICABLE | -- | Windows only |
+| iOS Simulator, SDL3 + `METAL` | PASS WITH KNOWN LIMITATION | `cna_ios_pixel_probe` exact on 29 of 31 launches (iOS 27 Simulator, iPhone 17 profile) | The two all-zero runs right after first install did not reproduce |
+| iOS device (arm64) | BUILD ONLY | Final-linked `.app` for `iphoneos` | No physical iPhone, signing identity or Apple account available |
+| C API (`modules/c-api`) | PASS WITH KNOWN LIMITATION | 111/115 on SOFTWARE, 108/115 on `SDL_RENDERER` (`AM4-072`..`075` fixed the first run's 13) | 3 documentation gates need Doxygen 1.9.8 (Homebrew has 1.18, which crashes on the limitations parse); the media-library smoke reads the real `~/Music` (SDL's user folders ignore `HOME`); 3 `SDL_RENDERER` smokes exercise features that 2D renderer refuses (they pass on SOFTWARE) |
+| cna-examples | PASS | 248/248 demos render on Metal | Net demos fixed in cna-examples `ede3473` |
+| cna-samples (multi-renderer Release) | PASS WITH KNOWN LIMITATION | per-renderer counts above | Yacht fails on every platform |
+| house-simulator | PASS WITH KNOWN LIMITATION | Builds and runs on `OPENGL33`; content-smoke renders all six content types | World content needs the Blender pipeline, so most integration tests cannot run here |
+| cna-car-simulator | PASS WITH KNOWN LIMITATION | Runs on Metal (chase, cockpit, night rain, mirrors); unit 320/321 | One test depends on `std::uniform_int_distribution`, whose algorithm differs between libc++ and libstdc++ |
+| cna-gamer-services-server | PASS WITH KNOWN LIMITATION | 37/46 pass with Homebrew curl | 7 skip (Linux namespaces); 2 need `lo0` aliases, which require `sudo`; the system libcurl 8.7.1 has no WebSocket support |
+
 ## Runtime behavior on Apple platforms
 
 ### Platform identification
@@ -273,5 +311,4 @@ These remain outside the verified support boundary:
 - No safe-area handling: the notch/home-indicator insets are not exposed to the game, so
   full-screen UI can sit under them.
 - No app-icon or asset-catalog generation, no `.ipa` packaging, no App Store metadata.
-- `METAL` is refused on iOS by default even though it is the platform's native API.
 - No Mac Catalyst, tvOS, watchOS or visionOS target.
