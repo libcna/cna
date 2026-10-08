@@ -78,8 +78,15 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
     for (size_t index = 0U; index < sizeof(extrema) / sizeof(extrema[0]); ++index) {
         blend.alpha_blend_function = extrema[index];
         blend.color_blend_function = extrema[index];
-        if (cna_graphics_device_set_blend_state(graphics_device, &blend) != CNA_RESULT_SUCCESS) {
+        /* plans/plan_apple_m4.md AM4-198: a backend that cannot draw Min/Max blending refuses it
+           by name -- SDL_RENDERER's software backend, which the dummy video driver selects -- and
+           that is the documented NOT_SUPPORTED answer rather than a failure of the binding. */
+        const CNA_Result extremum = cna_graphics_device_set_blend_state(graphics_device, &blend);
+        if (extremum != CNA_RESULT_SUCCESS && extremum != CNA_RESULT_NOT_SUPPORTED) {
             return CNA_RESULT_INVALID_STATE;
+        }
+        if (extremum == CNA_RESULT_NOT_SUPPORTED) {
+            continue;
         }
         CNA_BlendState blend_copy = {0};
         blend_copy.struct_size = sizeof(CNA_BlendState);
@@ -91,6 +98,11 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
             blend_copy.color_blend_function != extrema[index]) {
             return CNA_RESULT_INVALID_STATE;
         }
+    }
+    /* AM4-198: the checks below are about passing states through, not about Min/Max, so they get
+       an ordinary blend state rather than whichever extremum the loop above left behind. */
+    if (cna_blend_state_init(CNA_BLEND_STATE_PRESET_OPAQUE, &blend) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
     }
 
     CNA_Result depth_result = cna_graphics_device_set_depth_stencil_state(graphics_device, &depth);

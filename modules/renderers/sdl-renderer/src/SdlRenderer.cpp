@@ -735,11 +735,19 @@ namespace CNA::Internal::Renderers::SdlRenderer
             ToSdlBlendOperation(colorBlendFunc),
             ToSdlBlendFactor(alphaSrcBlend), ToSdlBlendFactor(alphaDstBlend),
             ToSdlBlendOperation(alphaBlendFunc));
-        blendMode_ = mode;
-        if (!SDL_SetRenderDrawBlendMode(renderer, blendMode_))
+        // plans/plan_apple_m4.md AM4-198: SDL composes any factor/operation pair, but each backend
+        // decides which composed modes it can draw -- its software backend (what the dummy video
+        // driver selects) refuses MINIMUM/MAXIMUM and most custom factors. That is this renderer
+        // declining a state it cannot express, refused by name, so the blend state in force stays
+        // the last one that was applied rather than becoming an internal failure.
+        if (!SDL_SetRenderDrawBlendMode(renderer, mode))
         {
-            throw std::runtime_error(std::string("SDL_SetRenderDrawBlendMode failed: ") + SDL_GetError());
+            const char* backend = SDL_GetRendererName(renderer);
+            throw System::NotSupportedException(
+                std::string("SDL_Renderer: the '") + (backend != nullptr ? backend : "?") +
+                "' SDL render backend cannot draw this BlendState: " + SDL_GetError());
         }
+        blendMode_ = mode;
     }
 
     void SdlRenderer::SetScissorRect(int x, int y, int w, int h)
