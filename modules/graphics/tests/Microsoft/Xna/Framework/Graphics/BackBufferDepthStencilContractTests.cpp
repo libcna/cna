@@ -495,7 +495,9 @@ namespace
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    // plans/plan_apple_m4.md AM4-151: Metal joined this file's depth/stencil contracts once its
+    // backbuffer and targets had exactly the planes their DepthFormat names.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderDepthWinner(DepthFormat::None), Color::Green);
     EXPECT_EQ(RenderDepthWinner(DepthFormat::Depth24), Color::Red);
@@ -507,7 +509,7 @@ TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAccept
 TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBeforeFirstDraw)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
-        DirectX11);
+        DirectX11, Metal);
 
     EXPECT_EQ(RenderConstructorDefaultDepthWinner(), Color::Red);
 }
@@ -518,28 +520,28 @@ TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBefo
 TEST(BackBufferDepthStencilContractTest, DepthlessConstructionThenResetRetainsDefaultDepthState)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
-        DirectX11);
+        DirectX11, Metal);
 
     EXPECT_EQ(RenderDepthlessConstructionResetDefaultDepthWinner(), Color::Red);
 }
 
 TEST(BackBufferDepthStencilContractTest, SingleSampleDepth24DoesNotExposeHiddenStencil)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderStencilProbe(DepthFormat::Depth24, 0), Color::Green);
 }
 
 TEST(BackBufferDepthStencilContractTest, MultisampleDepth24Stencil8OwnsStencilSamples)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderStencilProbe(DepthFormat::Depth24Stencil8, 4), Color::Black);
 }
 
 TEST(BackBufferDepthStencilContractTest, ExplicitMissingDepthOrStencilThrowsAtomically)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -566,7 +568,7 @@ TEST(BackBufferDepthStencilContractTest, ExplicitMissingDepthOrStencilThrowsAtom
 
 TEST(BackBufferDepthStencilContractTest, DepthOnlySurfaceAllowsDepthButRejectsStencilAtomically)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -586,7 +588,7 @@ TEST(BackBufferDepthStencilContractTest, DepthOnlySurfaceAllowsDepthButRejectsSt
 
 TEST(BackBufferDepthStencilContractTest, ExplicitMissingRenderTargetAttachmentsThrowAtomically)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device;
     RenderTarget2D colorOnly(
@@ -623,7 +625,7 @@ TEST(BackBufferDepthStencilContractTest, ExplicitMissingRenderTargetAttachmentsT
 
 TEST(BackBufferDepthStencilContractTest, SingleArgumentClearUsesOneInsteadOfViewportMaxDepth)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, SdlGpu, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, SdlGpu, DirectX11, Metal);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -650,7 +652,7 @@ TEST(BackBufferDepthStencilContractTest, SingleArgumentClearUsesOneInsteadOfView
 
 TEST(BackBufferDepthStencilContractTest, ExplicitDepthClearSaturatesLikeMicrosoftXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const float infinity = std::numeric_limits<float>::infinity();
     EXPECT_EQ(RenderClearDepthProbe(-0.25f, CompareFunction::Greater, 0.0f), Color::Black);
@@ -665,7 +667,7 @@ TEST(BackBufferDepthStencilContractTest, ExplicitDepthClearSaturatesLikeMicrosof
 
 TEST(BackBufferDepthStencilContractTest, StockEffectUsesXnaClipDepthConvention)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -742,7 +744,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchUsesViewportDepthRange)
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchVectorDrawPreservesNegativeSourceOrigin)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const auto [expected, opposite] = RenderSpriteNegativeSourceOriginProbe(false);
     EXPECT_EQ(expected, Color::Red);
@@ -751,7 +753,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchVectorDrawPreservesNegativeS
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchRectangleDrawPreservesNegativeSourceOrigin)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const auto [expected, opposite] = RenderSpriteNegativeSourceOriginProbe(true);
     EXPECT_EQ(expected, Color::Red);
@@ -774,7 +776,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchSourceEndpointsUseFloatDomai
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

@@ -309,8 +309,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     # WebGPU already reuse unchanged (state, buffers, effects and their goldens, SpriteBatch and
     # SpriteFont, texture/cube/volume transfers, models, presentation). Those that read GL state
     # stay EasyGL's. Run from the source root, where the goldens and content live. Two join with the
-    # work they need: rendertargetcube_properties with native Depth16 targets (AM4-151) and
-    # skinnedeffect_vector4_bone_indices with float BLENDINDICES (AM4-152).
+    # work they need: rendertargetcube_properties came with native Depth16 targets (AM4-151);
+    # skinnedeffect_vector4_bone_indices waits for float BLENDINDICES (AM4-152).
     set(CNA_METAL_EASYGL_ORACLES
         alphatest_modes
         alphatest_vertexcolor_diffuse
@@ -394,6 +394,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         rasterizerstate_cullmode
         rasterizerstate_cullmode_golden
         real_window_resize
+        rendertargetcube_properties
         resource_events
         resource_leak
         sample_dualtexture_swap

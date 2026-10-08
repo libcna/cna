@@ -117,12 +117,20 @@ namespace CNA::Internal::Renderers::Metal
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
         /**
-         * @brief Reports the fixed combined depth/stencil attachment as Depth24Stencil8.
+         * @brief Reports the backbuffer DepthFormat a request is given (AM4-151).
          *
          * @param requestedFormat Requested XNA depth/stencil-format value.
-         * @return The applied XNA DepthFormat::Depth24Stencil8 value.
+         * @return The request itself: every XNA DepthFormat has a Metal storage.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Applies a Reset's backbuffer depth/stencil format from the next pass on (AM4-151).
+         *
+         * @param backBufferFormat Requested SurfaceFormat ordinal (the backbuffer stays BGRA8).
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested full-screen state (unused).
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat, bool isFullScreen) override;
         /**
          * @brief Reports that the Metal backbuffer owns a usable depth plane.
          *

@@ -160,7 +160,8 @@ namespace
 
 TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepthFormats)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    // plans/plan_apple_m4.md AM4-151: Metal scales the bias to each target's own depth storage.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device;
     constexpr std::array<DepthFormat, 3> formats{
@@ -192,7 +193,7 @@ TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepth
 
 TEST(RasterizerDepthBiasContractTest, ConstantBiasAlsoAppliesToWireFrameFragments)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, Metal);
 
     GraphicsDevice device;
     EXPECT_GT(DrawWireLayerAndCountGreen(device, 0.0f), 0)

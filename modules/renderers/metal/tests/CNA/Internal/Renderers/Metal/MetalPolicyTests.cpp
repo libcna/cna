@@ -264,9 +264,16 @@ TEST(MetalPolicy, StreamZeroMustMatchTheUploadedBufferAndStride)
 // Depth32Float attachment's resolution in [0.5, 1), 2^-24.
 TEST(MetalPolicy, DepthBiasIsConvertedToTwentyFourBitUnits)
 {
-    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(0.0f), 0.0f);
-    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(-1.0e-4f), -1.0e-4f * 16777215.0f);
-    EXPECT_FLOAT_EQ(MetalDepthBiasUnits(1.0f / 16777215.0f), 1.0f);
+    // AM4-151: the constant bias moves the viewport's depth range, so it is one offset in
+    // normalized depth wherever the fragment lies and whatever the attachment.
+    const MetalDepthRange none=MetalBiasedDepthRange(0.0, 1.0, 0.0f);
+    EXPECT_DOUBLE_EQ(none.minDepth, 0.0);
+    EXPECT_DOUBLE_EQ(none.maxDepth, 1.0);
+    const MetalDepthRange pushed=MetalBiasedDepthRange(0.25, 0.75, 0.02f);
+    EXPECT_DOUBLE_EQ(pushed.minDepth, 0.25 + (double)0.02f);
+    EXPECT_DOUBLE_EQ(pushed.maxDepth, 0.75 + (double)0.02f);
+    const MetalDepthRange pulled=MetalBiasedDepthRange(0.0, 1.0, -1.0e-4f);
+    EXPECT_DOUBLE_EQ(pulled.minDepth, (double)-1.0e-4f);
 }
 
 // plans/plan_apple_m4.md AM4-141: MultiSampleMask is judged against the target's sample count.

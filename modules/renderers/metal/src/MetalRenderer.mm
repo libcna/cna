@@ -1118,7 +1118,9 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
                                                     NSString* vs, NSString* fs,
                                                     MTLVertexDescriptor* vd, const BlendKey& blend,
         int colorCount=1, int sampleCount=1, bool sampleMaskOutput=false,
-        const std::array<MTLPixelFormat,8>* colorFormats=nullptr, bool instanceMatrix=false)
+        const std::array<MTLPixelFormat,8>* colorFormats=nullptr, bool instanceMatrix=false,
+        MTLPixelFormat depthFormat=MTLPixelFormatDepth32Float_Stencil8,
+        MTLPixelFormat stencilFormat=MTLPixelFormatDepth32Float_Stencil8)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
@@ -1138,7 +1140,7 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
             throw std::runtime_error("Metal: built-in shader function lookup failed");
         }
         d.vertexDescriptor=vd;
-        d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        d.depthAttachmentPixelFormat=depthFormat; d.stencilAttachmentPixelFormat=stencilFormat;   // AM4-151
         d.rasterSampleCount=(NSUInteger)sampleCount; // sampleCount: deprecated since macOS 13 / iOS 16
         for (int i=0;i<colorCount;++i) {
             // AM4-142: each attachment's own format (BGRA8 for the backbuffer and Color targets).
@@ -1241,6 +1243,18 @@ static MTLPixelFormat metalTexturePixelFormat(MetalTextureStorage storage)
         case MetalTextureStorage::Rgba16Float: return MTLPixelFormatRGBA16Float;
     }
     return MTLPixelFormatRGBA8Unorm;
+}
+
+// plans/plan_apple_m4.md AM4-151: a target's depth texture format, and the texture a pass binds as
+// its stencil attachment -- the depth texture itself when it has a stencil plane, else none.
+static MTLPixelFormat metalDepthPixelFormat(MetalDepthStorage storage)
+{
+    return storage==MetalDepthStorage::Depth16Unorm ? MTLPixelFormatDepth16Unorm
+                                                    : MTLPixelFormatDepth32Float_Stencil8;
+}
+static id<MTLTexture> metalStencilAttachmentFor(id<MTLTexture> depth)
+{
+    return (depth && depth.pixelFormat==MTLPixelFormatDepth32Float_Stencil8) ? depth : nil;
 }
 
 // AM4-142: XNA's texel bytes as the native format wants them (only Bgra4444 differs).
@@ -2213,6 +2227,18 @@ struct MetalRenderer::Impl
     bool bcTextures=false;   // AM4-148: the device samples BC1/2/3
     // AM4-142: the colour formats of the open pass's attachments, as the pipelines must declare them.
     std::array<MTLPixelFormat,8> activeColorFormats=[]{ std::array<MTLPixelFormat,8> f{}; f.fill(MTLPixelFormatBGRA8Unorm); return f; }();
+    // AM4-151: the open pass's depth and stencil attachment formats, as the pipelines must declare
+    // them -- Invalid for a plane the attachment does not have (a Depth16 target has no stencil).
+    MTLPixelFormat activeDepthFormat=MTLPixelFormatDepth32Float_Stencil8;
+    MTLPixelFormat activeStencilFormat=MTLPixelFormatDepth32Float_Stencil8;
+    // AM4-151: the backbuffer's applied DepthFormat (PresentationParameters.DepthStencilFormat).
+    int backbufferDepthFormat=static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    void recordActiveDepthFormat(id<MTLTexture> depth)
+    {
+        activeDepthFormat=depth ? depth.pixelFormat : MTLPixelFormatInvalid;
+        activeStencilFormat=(depth && depth.pixelFormat==MTLPixelFormatDepth32Float_Stencil8)
+            ? MTLPixelFormatDepth32Float_Stencil8 : MTLPixelFormatInvalid;
+    }
     void recordActiveColorFormats(const std::vector<id<MTLTexture>>& colors)
     {
         activeColorFormats.fill(MTLPixelFormatBGRA8Unorm);
@@ -2269,7 +2295,16 @@ struct MetalRenderer::Impl
     MetalRasterState rasterState{};
     MTLCullMode cull=MTLCullModeNone;
     MTLTriangleFillMode fill=MTLTriangleFillModeFill;
+    // AM4-134/151: RasterizerState.DepthBias as XNA gives it. Its constant term is carried by the
+    // viewport's depth range (nativeViewport, MetalBiasedDepthRange), so the encoder's own
+    // constant bias stays zero; the slope-scaled term is Metal's.
     float depthBias=0,slopeBias=0;
+    MTLViewport nativeViewport(double shiftX=0.0, double shiftY=0.0) const
+    {
+        const MetalViewportState v=rasterState.EffectiveViewport();
+        const MetalDepthRange depth=MetalBiasedDepthRange(v.minDepth,v.maxDepth,depthBias);
+        return MTLViewport{v.x+shiftX,v.y+shiftY,v.width,v.height,depth.minDepth,depth.maxDepth};
+    }
     BlendKey currentBlend; // real per-BlendState pipeline selection key, see ApplyBlendState() below
     // plans/plan_metal.md METAL-7/9/10: real DepthStencilState fields, defaults matching
     // DepthStencilState::DepthStencilState()'s own real values exactly (DepthStencilState.cpp).
@@ -2444,20 +2479,17 @@ struct MetalRenderer::Impl
         // been burned by before (see Vulkan's own front/back stencil swap, discovered the hard way).
         // Setting it explicitly here removes that risk permanently.
         [encoder setFrontFacingWinding:MTLWindingClockwise];
-        const MetalViewportState requestedViewport=rasterState.EffectiveViewport();
-        const MTLViewport nativeViewport={requestedViewport.x,requestedViewport.y,
-            requestedViewport.width,requestedViewport.height,
-            requestedViewport.minDepth,requestedViewport.maxDepth};
+        const MTLViewport biasedViewport=nativeViewport();   // AM4-151: DepthBias included
         const MetalScissorState requestedScissor=rasterState.NativeScissor();
         const MTLScissorRect nativeScissor={(NSUInteger)requestedScissor.x,(NSUInteger)requestedScissor.y,
             (NSUInteger)requestedScissor.width,(NSUInteger)requestedScissor.height};
-        [encoder setViewport:nativeViewport]; [encoder setScissorRect:nativeScissor];
+        [encoder setViewport:biasedViewport]; [encoder setScissorRect:nativeScissor];
         [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
         bool targetHasDepth=true, targetHasStencil=true;
         activeTargetDepthPlanes(targetHasDepth,targetHasStencil);
         if(targetHasDepth!=depthStateTargetHasDepth||targetHasStencil!=depthStateTargetHasStencil)
             rebuildDepthState();
-        [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
+        [encoder setDepthBias:0.0f slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
         [encoder setStencilReferenceValue:(uint32_t)refStencil];
         [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
         rearmActiveOcclusionQuery();
@@ -2652,7 +2684,8 @@ struct MetalRenderer::Impl
                 else { rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
             }
             rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
-            rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
+            rp.stencilAttachment.texture=metalStencilAttachmentFor(depthTex); rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
+            recordActiveDepthFormat(depthTex);                    // AM4-151
             rp.visibilityResultBuffer=visibilityBuffer;
             applyRasterizationSamplePositions(rp,sampleCount);   // AM4-141
             recordActiveColorFormats(colors);                     // AM4-142
@@ -2715,7 +2748,8 @@ struct MetalRenderer::Impl
                 else { rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
             }
             rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
-            rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
+            rp.stencilAttachment.texture=metalStencilAttachmentFor(depthTex); rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
+            recordActiveDepthFormat(depthTex);                    // AM4-151
             rp.visibilityResultBuffer=visibilityBuffer;
             applyRasterizationSamplePositions(rp,sampleCount);   // AM4-141
             recordActiveColorFormats(colors);                     // AM4-142
@@ -2820,6 +2854,7 @@ struct MetalRenderer::Impl
                              vertexInput ? vertexInput->LayoutKey() : 0, sampleMaskOutput};
         for (std::size_t i=0;i<key.colorFormats.size();++i)
             key.colorFormats[i]=(uint16_t)activeColorFormats[i];   // AM4-142
+        key.depthFormat=(uint16_t)activeDepthFormat; key.stencilFormat=(uint16_t)activeStencilFormat;   // AM4-151
         auto it = pipelineCache.find(key);
         if (it != pipelineCache.end()) return it->second;
         NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
@@ -2856,7 +2891,8 @@ struct MetalRenderer::Impl
         MetalObjectOwner pipelineOwner(retainMetalObject,releaseMetalObject);
         pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
                                          sampleCountKey, sampleMaskOutput, &activeColorFormats,
-                                         vertexInput && vertexInput->instanceMatrix));   // AM4-143
+                                         vertexInput && vertexInput->instanceMatrix,   // AM4-143
+                                         activeDepthFormat, activeStencilFormat));     // AM4-151
         const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
         return inserted->second;
     }
@@ -3120,7 +3156,9 @@ public:
     {
         if (pipeline_ && blend == lastBlend_ && owner_.activeSampleCount == lastSampleCount_ &&
             owner_.activeColorAttachmentCount == lastColorCount_ &&
-            owner_.activeColorFormats == lastColorFormats_) return pipeline_;
+            owner_.activeColorFormats == lastColorFormats_ &&
+            owner_.activeDepthFormat == lastDepthFormat_ &&
+            owner_.activeStencilFormat == lastStencilFormat_) return pipeline_;
         if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
         MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
         d.vertexFunction = vertFn_;
@@ -3134,8 +3172,8 @@ public:
             d.colorAttachments[i].pixelFormat = owner_.activeColorFormats[(std::size_t)i];
             d.colorAttachments[i].writeMask = MTLColorWriteMaskNone;
         }
-        d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        d.depthAttachmentPixelFormat = owner_.activeDepthFormat;       // AM4-151
+        d.stencilAttachmentPixelFormat = owner_.activeStencilFormat;
         d.rasterSampleCount = (NSUInteger)owner_.activeSampleCount;
         d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
         if (blend.enabled) {
@@ -3158,6 +3196,8 @@ public:
         lastBlend_ = blend;
         lastSampleCount_ = owner_.activeSampleCount;
         lastColorFormats_ = owner_.activeColorFormats;
+        lastDepthFormat_ = owner_.activeDepthFormat;
+        lastStencilFormat_ = owner_.activeStencilFormat;
         lastColorCount_ = owner_.activeColorAttachmentCount;
         return pipeline_;
     }
@@ -3203,6 +3243,8 @@ private:
     BlendKey lastBlend_{};
     int lastSampleCount_=1; // plans/plan_metal.md METAL-104
     std::array<MTLPixelFormat,8> lastColorFormats_{};   // AM4-142
+    MTLPixelFormat lastDepthFormat_=MTLPixelFormatInvalid;     // AM4-151
+    MTLPixelFormat lastStencilFormat_=MTLPixelFormatInvalid;
     int lastColorCount_=1; // plans/plan_apple_m4.md AM4-097
     bool valid_ = false;
     std::string compileError_;
@@ -3701,9 +3743,9 @@ public:
         // VulkanRenderTargetRenderer's own identical "depthView_ is never sampled externally" note),
         // so there is no separate depth-resolve concern to handle the way color has one.
         if (appliedSampleCount_ > 0) {
-            depthOwner.Adopt(makeMultisampleTexture(owner->device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
+            depthOwner.Adopt(makeMultisampleTexture(owner->device, metalDepthPixelFormat(MetalDepthStorageFor(appliedDepthFormat_)), (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
         } else {
-            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metalDepthPixelFormat(MetalDepthStorageFor(appliedDepthFormat_)) width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];   // AM4-151
             if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTarget2D depth descriptor");
             dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
             depthOwner.Adopt([owner->device newTextureWithDescriptor:dd]);
@@ -3999,9 +4041,9 @@ public:
         if(!colorOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTargetCube color texture");
         if (appliedSampleCount_ > 0) {
             // AM4-141: the faces share one depth buffer, as the single-sampled cube's do.
-            depthOwner.Adopt(makeMultisampleTexture(owner->device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)size, (NSUInteger)size, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
+            depthOwner.Adopt(makeMultisampleTexture(owner->device, metalDepthPixelFormat(MetalDepthStorageFor(appliedDepthFormat_)), (NSUInteger)size, (NSUInteger)size, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
         } else {
-            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metalDepthPixelFormat(MetalDepthStorageFor(appliedDepthFormat_)) width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];   // AM4-151
             if(!dd) throw std::runtime_error("Metal: failed to allocate RenderTargetCube depth descriptor");
             dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
             depthOwner.Adopt([owner->device newTextureWithDescriptor:dd]);
@@ -4238,7 +4280,7 @@ private:
 
 void MetalRenderer::Impl::activeTargetDepthPlanes(bool& hasDepth, bool& hasStencil) const
 {
-    int applied=static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    int applied=backbufferDepthFormat;   // AM4-151: the backbuffer's own planes
     if(currentRenderTarget) applied=currentRenderTarget->appliedDepthFormat();
     else if(currentRenderTargetCube) applied=currentRenderTargetCube->appliedDepthFormat();
     hasDepth=MetalDepthFormatHasDepth(applied);
@@ -4292,16 +4334,18 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
     } else {
         colorOut = activeDrawable.texture;
     }
-    if(!depthTexture || depthTexture.width!=w || depthTexture.height!=h){
+    // AM4-151: in the format PresentationParameters.DepthStencilFormat asked for.
+    const MTLPixelFormat backbufferDepthPixelFormat=metalDepthPixelFormat(MetalDepthStorageFor(backbufferDepthFormat));
+    if(!depthTexture || depthTexture.width!=w || depthTexture.height!=h || depthTexture.pixelFormat!=backbufferDepthPixelFormat){
         id<MTLTexture> replacement=nil;
         // plans/plan_metal.md METAL-104: same "depth sample count must match its paired color attachment"
         // constraint MetalRenderTargetRenderer's own constructor comment documents, applied to the
         // backbuffer's own depth texture.
         if (deviceSampleCount > 1) {
-            replacement=makeMultisampleTexture(device,MTLPixelFormatDepth32Float_Stencil8,w,h,
+            replacement=makeMultisampleTexture(device,backbufferDepthPixelFormat,w,h,
                 (NSUInteger)deviceSampleCount,MTLTextureUsageRenderTarget);
         } else {
-            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:w height:h mipmapped:NO];
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:backbufferDepthPixelFormat width:w height:h mipmapped:NO];
             if(!dd) throw std::runtime_error("Metal: failed to allocate backbuffer depth descriptor");
             dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
             replacement=[device newTextureWithDescriptor:dd];
@@ -4526,6 +4570,7 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // phase since nothing consumed `presentationMode` yet; matters now that computeLogicalViewport()
     // does.
     p.presentationMode=(int)args.presentationMode;
+    p.backbufferDepthFormat=MetalAppliedRenderTargetDepthFormat(args.depthStencilFormat);   // AM4-151
 #if TARGET_OS_OSX
     CNA::Platform::CocoaNativeWindow nativeWindow;
     if(!CNA::Platform::TryGetCocoa(p.surface.GetNativeHandle(),nativeWindow))
@@ -4694,9 +4739,20 @@ int MetalRenderer::GetAppliedBackBufferFormatEXT(int /*requestedFormat*/) const
 {
     return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
 }
-int MetalRenderer::GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const
+// plans/plan_apple_m4.md AM4-151: the backbuffer has the planes PresentationParameters asked for --
+// a Depth24 backbuffer has no stencil and a None one neither plane, as on XNA -- in the storage a
+// render target of that format gets.
+int MetalRenderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
 {
-    return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    return MetalAppliedRenderTargetDepthFormat(requestedFormat);
+}
+void MetalRenderer::UpdatePresentationFormatEXT(int /*backBufferFormat*/,int depthStencilFormat,bool /*isFullScreen*/)
+{
+    const int applied=MetalAppliedRenderTargetDepthFormat(depthStencilFormat);
+    if (applied==impl_->backbufferDepthFormat) return;
+    // The open pass declared the old planes; the next one allocates the new depth texture.
+    impl_->endActiveEncoding(false);
+    impl_->backbufferDepthFormat=applied;
 }
 bool MetalRenderer::SupportsDepthBuffer() const { return true; }
 bool MetalRenderer::SupportsStencilBuffer() const { return true; }
@@ -5136,13 +5192,14 @@ void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
     impl_->cull=metalCullMode(c);
     impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;
     impl_->rasterState.SetScissorEnabled(se);
-    impl_->depthBias=MetalDepthBiasUnits(db);   // AM4-134
+    impl_->depthBias=db;   // AM4-134/151: carried by the viewport depth range
     impl_->slopeBias=sb;
     if(impl_->encoder){
         [impl_->encoder setFrontFacingWinding:MTLWindingClockwise];
         [impl_->encoder setCullMode:impl_->cull];
         [impl_->encoder setTriangleFillMode:impl_->fill];
-        [impl_->encoder setDepthBias:impl_->depthBias slopeScale:sb clamp:0];
+        [impl_->encoder setDepthBias:0.0f slopeScale:sb clamp:0];
+        [impl_->encoder setViewport:impl_->nativeViewport()];   // AM4-151: the bias moved its range
         const MetalScissorState s=impl_->rasterState.NativeScissor();
         const MTLScissorRect native={(NSUInteger)s.x,(NSUInteger)s.y,
             (NSUInteger)s.width,(NSUInteger)s.height};
@@ -5196,9 +5253,7 @@ void MetalRenderer::SetViewport(int x,int y,int w,int h,float mn,float mx)
     const MetalAutoreleaseScope autoreleaseScope;
     impl_->rasterState.SetViewport(x,y,w,h,mn,mx);
     if(impl_->encoder){
-        const MetalViewportState v=impl_->rasterState.EffectiveViewport();
-        const MTLViewport native={v.x,v.y,v.width,v.height,v.minDepth,v.maxDepth};
-        [impl_->encoder setViewport:native];
+        [impl_->encoder setViewport:impl_->nativeViewport()];   // AM4-151: DepthBias included
     }
 }
 std::unique_ptr<IVertexBufferRenderer> MetalRenderer::CreateVertexBuffer(int c){ const MetalAutoreleaseScope autoreleaseScope; return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
@@ -5787,6 +5842,7 @@ namespace
         const std::uint8_t sampleCount=(std::uint8_t)std::clamp(p.activeSampleCount,1,8);
         MetalPipelineCacheKey key{PipelineKind::Sprite2D, p.currentBlend, colorCount, sampleCount, layout, false};
         for (std::size_t i=0;i<key.colorFormats.size();++i) key.colorFormats[i]=(uint16_t)p.activeColorFormats[i];
+        key.depthFormat=(uint16_t)p.activeDepthFormat; key.stencilFormat=(uint16_t)p.activeStencilFormat;   // AM4-151
         if (const auto it=p.compiledPipelines.find(key); it!=p.compiledPipelines.end()) return it->second;
 
         MTLVertexDescriptor* vd=[MTLVertexDescriptor vertexDescriptor];
@@ -5813,7 +5869,7 @@ namespace
         d.vertexFunction=compiledFunction(p,*linked.vertex);
         d.fragmentFunction=compiledFunction(p,*linked.pixel);
         d.vertexDescriptor=vd;
-        d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        d.depthAttachmentPixelFormat=p.activeDepthFormat; d.stencilAttachmentPixelFormat=p.activeStencilFormat;   // AM4-151
         d.rasterSampleCount=sampleCount;
         const MetalBlendKey& blend=p.currentBlend;
         for (int i=0;i<colorCount;++i) {
@@ -5969,8 +6025,7 @@ static void drawMetalCompiled(MetalRenderer::Impl& p, const MetalVertexBuffer& v
     const double shiftY=-(double)centre.M42*viewport.height*0.5;
     const bool shifted=shiftX!=0.0||shiftY!=0.0;
     if (shifted) {
-        const MTLViewport moved={viewport.x+shiftX,viewport.y+shiftY,viewport.width,viewport.height,viewport.minDepth,viewport.maxDepth};
-        [p.encoder setViewport:moved];
+        [p.encoder setViewport:p.nativeViewport(shiftX,shiftY)];
     }
     const NSUInteger n=(NSUInteger)primitiveVertexCount(pt,pc);
     const NSUInteger instances=(NSUInteger)(instancedRoute ? std::max(params.instanceCount,1) : 1);
@@ -5985,8 +6040,7 @@ static void drawMetalCompiled(MetalRenderer::Impl& p, const MetalVertexBuffer& v
                     instanceCount:instances baseInstance:(NSUInteger)params.firstInstance];
     }
     if (shifted) {
-        const MTLViewport restored={viewport.x,viewport.y,viewport.width,viewport.height,viewport.minDepth,viewport.maxDepth};
-        [p.encoder setViewport:restored];
+        [p.encoder setViewport:p.nativeViewport()];
     }
 }
 

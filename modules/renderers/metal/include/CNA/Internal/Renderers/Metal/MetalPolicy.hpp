@@ -543,21 +543,35 @@ namespace CNA::Internal::Renderers::Metal
         return 0;
     }
 
-    /**
-     * @brief Converts XNA's normalized RasterizerState.DepthBias into Metal's depth-bias units.
-     *
-     * plans/plan_apple_m4.md AM4-134: XNA's DepthBias is an offset in normalized depth, while
-     * setDepthBias:slopeScale:clamp: counts the depth attachment's minimum resolvable difference.
-     * Every depth attachment of this renderer is Depth32Float_Stencil8, whose resolution in
-     * [0.5, 1) is 2^-24 -- the 24-bit scale FNA3D, EasyGL and WebGPU apply. Handed over unscaled,
-     * a typical bias of 1e-4 moved depth by about 6e-12 and did nothing.
-     *
-     * @param xnaDepthBias RasterizerState.DepthBias.
-     * @return The value to pass to setDepthBias:.
-     */
-    [[nodiscard]] constexpr float MetalDepthBiasUnits(float xnaDepthBias) noexcept
+    /** @brief A viewport's depth range. */
+    struct MetalDepthRange
     {
-        return xnaDepthBias * 16777215.0f;
+        /** @brief Depth the near clip plane maps to. */
+        double minDepth = 0.0;
+        /** @brief Depth the far clip plane maps to. */
+        double maxDepth = 1.0;
+    };
+
+    /**
+     * @brief The viewport depth range that carries XNA's constant RasterizerState.DepthBias.
+     *
+     * plans/plan_apple_m4.md AM4-151 (refining AM4-134): Direct3D 9 adds DepthBias to a fragment's
+     * depth after the viewport transform -- a plain offset in normalized depth, whatever the depth
+     * format. setDepthBias: cannot say that for a float attachment: it counts the minimum
+     * resolvable difference at the primitive's own exponent, so AM4-134's 2^-24 scale was exact
+     * only for depth in [0.5, 1) and half as large below 0.5. Moving the viewport's depth range by
+     * the bias adds exactly that offset in every format; the slope-scaled term stays native.
+     *
+     * @param minDepth Viewport.MinDepth.
+     * @param maxDepth Viewport.MaxDepth.
+     * @param xnaDepthBias RasterizerState.DepthBias.
+     * @return The range to hand to setViewport:.
+     */
+    [[nodiscard]] constexpr MetalDepthRange MetalBiasedDepthRange(double minDepth, double maxDepth,
+                                                                  float xnaDepthBias) noexcept
+    {
+        return MetalDepthRange{minDepth + static_cast<double>(xnaDepthBias),
+                               maxDepth + static_cast<double>(xnaDepthBias)};
     }
 
     /** @brief What a draw does under BlendState.MultiSampleMask on its target. */

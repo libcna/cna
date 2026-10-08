@@ -180,6 +180,10 @@ namespace CNA::Internal::Renderers::Metal
         bool sampleMaskOutput = false;
         /** @brief Each colour attachment's MTLPixelFormat value (AM4-142); 80 is BGRA8Unorm. */
         std::array<uint16_t, 8> colorFormats{80, 80, 80, 80, 80, 80, 80, 80};
+        /** @brief The depth attachment's MTLPixelFormat (AM4-151); 260 is Depth32Float_Stencil8. */
+        uint16_t depthFormat = 260;
+        /** @brief The stencil attachment's MTLPixelFormat; 0 (Invalid) when the pass has none. */
+        uint16_t stencilFormat = 260;
         /**
          * @brief Compares every field that affects Metal render-pipeline compatibility.
          *
@@ -191,7 +195,8 @@ namespace CNA::Internal::Renderers::Metal
             return kind==other.kind && blend==other.blend &&
                    colorAttachmentCount==other.colorAttachmentCount &&
                    sampleCount==other.sampleCount && vertexLayout==other.vertexLayout &&
-                   sampleMaskOutput==other.sampleMaskOutput && colorFormats==other.colorFormats;
+                   sampleMaskOutput==other.sampleMaskOutput && colorFormats==other.colorFormats &&
+                   depthFormat==other.depthFormat && stencilFormat==other.stencilFormat;
         }
     };
     /** @brief Hash functor for Metal render-pipeline cache keys. */
@@ -230,6 +235,8 @@ namespace CNA::Internal::Renderers::Metal
             hh ^= std::hash<bool>()(key.sampleMaskOutput) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             for (const uint16_t format : key.colorFormats)
                 hh ^= std::hash<uint16_t>()(format) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            const uint32_t depthStencil = (uint32_t)key.depthFormat | ((uint32_t)key.stencilFormat << 16);
+            hh ^= std::hash<uint32_t>()(depthStencil) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
@@ -113,6 +114,11 @@ public:
         // budget. Disabling it here -- before Game::DoInitialize()'s CreateDevice() call reads
         // it -- is the correct, property-level way to request Immediate presentation.
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+        // plans/plan_apple_m4.md AM4-151: every frame clears the stencil, so the backbuffer must
+        // have one. XNA's default PreferredDepthStencilFormat is Depth24, which has none, and
+        // Metal now gives the backbuffer only the planes requested -- as XNA, which throws for
+        // this Clear on a Depth24 backbuffer.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
     }
 
     int getResult() const { return result_; }

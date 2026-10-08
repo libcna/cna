@@ -7,6 +7,8 @@
 using CNA::Internal::Renderers::Metal::MetalAppliedRenderTargetDepthFormat;
 using CNA::Internal::Renderers::Metal::MetalDepthFormatHasDepth;
 using CNA::Internal::Renderers::Metal::MetalDepthFormatHasStencil;
+using CNA::Internal::Renderers::Metal::MetalDepthStorage;
+using CNA::Internal::Renderers::Metal::MetalDepthStorageFor;
 using CNA::Internal::Renderers::Metal::MetalEffectiveDepthWriteEnabled;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 
@@ -46,12 +48,22 @@ TEST(MetalDepthPolicy, Depth24TargetHasDepthButNoStencil)
     EXPECT_FALSE(MetalDepthFormatHasStencil(applied));
 }
 
-TEST(MetalDepthPolicy, Depth16IsReportedAsTheDepth24ItIsStoredAs)
+// plans/plan_apple_m4.md AM4-151: Depth16 is stored as 16-bit depth, so it is reported as itself.
+TEST(MetalDepthPolicy, Depth16IsStoredAndReportedAsItself)
 {
     const int applied = MetalAppliedRenderTargetDepthFormat(static_cast<int>(DepthFormat::Depth16));
-    EXPECT_EQ(applied, static_cast<int>(DepthFormat::Depth24));
+    EXPECT_EQ(applied, static_cast<int>(DepthFormat::Depth16));
     EXPECT_TRUE(MetalDepthFormatHasDepth(applied));
     EXPECT_FALSE(MetalDepthFormatHasStencil(applied));
+    EXPECT_EQ(MetalDepthStorageFor(applied), MetalDepthStorage::Depth16Unorm);
+}
+
+TEST(MetalDepthPolicy, EveryOtherDepthFormatKeepsTheFloatDepthStencilStorage)
+{
+    for (const DepthFormat format : {DepthFormat::None, DepthFormat::Depth24, DepthFormat::Depth24Stencil8})
+        EXPECT_EQ(MetalDepthStorageFor(MetalAppliedRenderTargetDepthFormat(static_cast<int>(format))),
+                  MetalDepthStorage::Depth32FloatStencil8)
+            << static_cast<int>(format);
 }
 
 TEST(MetalDepthPolicy, Depth24Stencil8TargetHasBothPlanes)
