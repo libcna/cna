@@ -144,13 +144,17 @@ namespace CNA::Internal::Renderers::Metal
          */
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
         /**
-         * @brief Deterministically rejects backbuffer readback until it has adapted-Mac proof.
+         * @brief Reads a rectangle of the backbuffer, in the game's backbuffer coordinates, as RGBA8.
+         *
+         * Completes the pending pass first; each requested pixel is the drawable pixel under its
+         * centre through the logical viewport (Retina scale and letterbox included). A frame with no
+         * drawable reads zero. Throws while a render target is bound (plans/plan_apple_m4.md AM4-025).
          *
          * @param x Horizontal origin of the requested source rectangle.
          * @param y Vertical origin of the requested source rectangle.
          * @param w Width of the requested source rectangle.
          * @param h Height of the requested source rectangle.
-         * @param pixels Destination byte buffer, unused because the operation is unsupported.
+         * @param pixels Destination byte buffer of at least w * h * 4 bytes.
          */
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         /**
@@ -176,9 +180,12 @@ namespace CNA::Internal::Renderers::Metal
          */
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         /**
-         * @brief Rejects occlusion queries until command splitting and slot reuse are fixed.
+         * @brief Creates an occlusion query counting visibility per encoder it spans, summed.
          *
-         * @return No value; the method always throws a not-supported exception.
+         * One query may be open at a time; IsComplete commits the command buffer its run counted in
+         * (plans/plan_apple_m4.md AM4-038, AM4-108).
+         *
+         * @return The newly allocated occlusion-query renderer.
          */
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         /**
@@ -218,10 +225,13 @@ namespace CNA::Internal::Renderers::Metal
          */
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         /**
-         * @brief Consumes one normalized target descriptor and rejects MRT atomically.
+         * @brief Binds up to eight RenderTarget2D or RenderTargetCube-face targets, or the backbuffer.
+         *
+         * Slot 0 owns depth; the built-in pipelines write COLOR0 only and mask the other attachments
+         * (plans/plan_apple_m4.md AM4-097). The set is validated before any state changes.
          *
          * @param renderTargets Normalized render-target descriptor array, or null when count is zero.
-         * @param count Number of descriptors; only zero or one is supported.
+         * @param count Number of descriptors, zero through eight.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
         /**
@@ -257,11 +267,14 @@ namespace CNA::Internal::Renderers::Metal
          */
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         /**
-         * @brief Rejects custom effects until the historical path has adapted-Mac proof.
+         * @brief Compiles a SpriteBatch-scoped MSL custom effect (plans/plan_apple_m4.md AM4-077).
          *
-         * @param vertSrc Vertex-stage source text, unused because custom effects are unsupported.
-         * @param fragSrc Fragment-stage source text, unused because custom effects are unsupported.
-         * @return No value; the method always throws a not-supported exception.
+         * A source that does not compile gives an effect whose IsEffectValid() is false and whose
+         * compile error carries the Metal compiler's message (docs/metal-shader-effect-contract.md).
+         *
+         * @param vertSrc Metal Shading Language source declaring one vertex function.
+         * @param fragSrc Metal Shading Language source declaring one fragment function.
+         * @return The newly allocated effect renderer.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc, const std::string& fragSrc) override;
         /**

@@ -137,8 +137,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     # plans/plan_apple_m4.md AM4-026: the shared, renderer-neutral pixel and contract tests from
     # modules/graphics/examples now run against Metal too; until backbuffer readback worked
     # (AM4-025) none of them could observe a pixel. Each declares Metal's contract in its own
-    # renderer table, so a feature Metal reports unsupported (MSAA, MRT, RenderTargetCube upload,
-    # custom effects) is asserted as a refusal, not assumed. Not registered: the two
+    # renderer table, so a feature Metal reports unsupported (MSAA and RenderTargetCube upload; MRT
+    # and custom effects were refusals until AM4-097 and AM4-077) is asserted as a refusal, not
+    # assumed. Not registered: the two
     # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL) and the instancing
     # fixture, whose feature Metal reports false (docs/metal-renderer.md).
     macro(cna_metal_test target src)

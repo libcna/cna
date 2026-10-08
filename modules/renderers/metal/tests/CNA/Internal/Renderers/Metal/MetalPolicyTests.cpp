@@ -87,8 +87,9 @@ TEST(MetalPolicy, Texture2DImageRequiresColorExactBaseBytesAndCompleteMipShape)
 
 TEST(MetalPolicy, BlendWriteStateAcceptsTargetZeroMasksWithTheDefaultCoverage)
 {
-    // plans/plan_apple_m4.md AM4-079: target 0's mask is a pipeline property; targets 1..3 cannot
-    // be bound on Metal, so their masks govern nothing; only the coverage mask still refuses.
+    // plans/plan_apple_m4.md AM4-079: target 0's mask is a pipeline property. Targets 1 and up can be
+    // bound since AM4-097, but no Metal pipeline writes them, so their masks govern nothing yet;
+    // only the coverage mask still refuses.
     BlendWriteState state{};
     EXPECT_TRUE(MetalSupportsBlendWriteState(state));
     state.colorWriteChannels[0]=7;
