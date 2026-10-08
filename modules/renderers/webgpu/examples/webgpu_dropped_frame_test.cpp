@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-078: a backbuffer frame WebGPU cannot acquire is dropped whole.
+// plans/plan_apple_m4.md AM4-078/089: a backbuffer frame on an occluded WebGPU surface.
 //
-// When the surface reports Occluded (a macOS window that is not visible) or cannot be configured,
-// the frame is skipped. That path used to drop only the queued SpriteBatch draws: a 3D draw queued
-// for the backbuffer survived, and the next bind cycle replayed it into whatever target that cycle
-// opened. A post-process sample -- draw a render target to the screen, then render into that same
-// target next frame -- then sampled the target inside its own pass, and wgpu-native's validation
-// aborted the process ("conflicting usages ... COLOR_TARGET is an exclusive usage").
+// A surface reports Occluded for a macOS window that is not on screen -- every window of a locked
+// session. AM4-078 found that dropping such a frame dropped only its queued SpriteBatch draws: a 3D
+// draw queued for the backbuffer survived, and the next bind cycle replayed it into whatever target
+// that cycle opened. A post-process sample -- draw a render target to the screen, then render into
+// that same target next frame -- then sampled the target inside its own pass, and wgpu-native's
+// validation aborted the process ("conflicting usages ... COLOR_TARGET is an exclusive usage").
+// AM4-089 then stopped dropping it: XNA's back buffer exists whether or not the window is shown, so
+// the frame renders into an offscreen stand-in and only the present is skipped.
 //
-// Registered with CNA_WEBGPU_TEST_SURFACE_OCCLUDED, so every backbuffer frame here is dropped:
-//   frame 1 -- render red into target A; draw a textured quad sampling A to the (dropped) backbuffer.
-//   frame 2 -- render blue into A, unbind, read A back: blue, and the process alive to say so.
-// Before the fix frame 2's pass for A carried frame 1's quad and the process aborted in the submit.
+// Registered with CNA_WEBGPU_TEST_SURFACE_OCCLUDED, so every backbuffer frame here is occluded:
+//   frame 1 -- render red into target A; draw a textured quad sampling A to the backbuffer and read
+//              the backbuffer back: red, the frame rendered although nothing could be presented.
+//   frame 2 -- render blue into A, unbind, read A back: blue, untouched by frame 1's draws, and the
+//              process alive to say so.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -82,6 +85,11 @@ protected:
             device.DrawUserPrimitives(PrimitiveType::TriangleStrip, quad, 0, 2);
             // XNA refuses SetData/rendering hazards on a texture left set on the device.
             device.getTexturesProperty()(0, nullptr);
+            Color shown(0, 0, 0, 0);
+            const Rectangle centre(64, 64, 1, 1);
+            device.GetBackBufferData(&centre, &shown, 0, 1);
+            check(shown.getRProperty() == 255 && shown.getGProperty() == 0 && shown.getBProperty() == 0,
+                  "an occluded backbuffer frame renders: the quad sampling the red target reads back red");
         }
         else if (frame_ == 2)
         {

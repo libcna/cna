@@ -3664,6 +3664,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // matching the Vulkan/Bgfx renderers' own on-demand-submit readback semantics. Returns
         // false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
+        // plans/plan_apple_m4.md AM4-089: an offscreen stand-in for the surface texture of an occluded
+        // window, in the surface's render format and size with the surface's usage; null when the
+        // surface has no size or format yet.
+        WGPUTexture CreateOccludedBackbufferEXT();
         // WEBGPU-133: releases the currently acquired canvas surface texture and marks it re-
         // acquirable. Used on Emscripten after a readback wait yields to the browser (which presents
         // and invalidates the current texture), so the next flush obtains a fresh one.
@@ -4218,6 +4222,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
+        // plans/plan_apple_m4.md AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
+        // surface's, so Present() skips the surface present.
+        bool acquiredOffscreenEXT_ = false;
         // WEBGPU-133 (Emscripten): set when a readback's browser-yielding map has let the browser
         // invalidate the acquired surface texture; the next render discards and re-acquires, while a
         // same-frame re-read still reuses readbackBuffer_. Always false on native.

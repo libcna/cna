@@ -262,6 +262,14 @@ causes the normal surface configuration path to rebuild them. The 180-frame vali
 above exercised resize, minimize, restore and normal teardown with exit status 0 and no WebGPU
 error.
 
+An **occluded** surface is different: it is configured and intact, but wgpu-native reports its own
+`Occluded` status (`0x00030001`) instead of a texture -- on macOS for any window the system does not
+show, which is every window while the session is locked. XNA's back buffer exists regardless, so
+such a frame renders into an offscreen texture of the surface's format, size and usage, and only the
+present is skipped (`plans/plan_apple_m4.md` `AM4-089`): `GetBackBufferData` reads it and the frame's
+render-target work stays ordered as on a visible window. Only a surface that cannot be configured,
+or another non-success status, still drops the frame -- whole, every draw family (`AM4-078`).
+
 ## Independent application integration and native 2D baseline
 
 `WEBGPU-130` integrated `../mobile-eggbert` (`WindowsPhoneSpeedyBlupi`, an independently-developed

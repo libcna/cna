@@ -4254,6 +4254,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (hasAcquiredTexture_ && acquiredTexture_ != nullptr) wgpuTextureRelease(acquiredTexture_);
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
+        acquiredOffscreenEXT_ = false;
         framePending_ = false;
     }
 
@@ -12265,6 +12266,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             {
                 if (surfaceTexture.texture != nullptr)
                     wgpuTextureRelease(surfaceTexture.texture);
+                surfaceTexture.texture = nullptr;
                 // An occluded surface is intact, merely not on screen: nothing to reconfigure.
                 if (IsSurfaceRecoverable(surfaceTexture.status))
                     ConfigureSurface(true);
@@ -12272,9 +12274,20 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     throw std::runtime_error(
                         "CNA WebGPU: unrecoverable surface acquisition failure (status " +
                         std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
-                // AM4-078: dropped whole, as above.
-                DiscardQueuedCommands();
-                return false;
+                // plans/plan_apple_m4.md AM4-089: XNA's back buffer exists whether or not the window
+                // is on screen. An occluded surface -- a window macOS does not show, which is every
+                // window of a locked session -- renders this frame into an offscreen stand-in, so
+                // GetBackBufferData still reads it and the frame's render-target work stays ordered
+                // as on a visible window; only the present is skipped.
+                if (IsSurfaceOccluded(surfaceTexture.status))
+                    surfaceTexture.texture = CreateOccludedBackbufferEXT();
+                if (surfaceTexture.texture == nullptr)
+                {
+                    // AM4-078: dropped whole, as above.
+                    DiscardQueuedCommands();
+                    return false;
+                }
+                acquiredOffscreenEXT_ = true;
             }
 
             acquiredTexture_ = surfaceTexture.texture;
@@ -12597,11 +12610,31 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // ("use requestAnimationFrame instead"). The canvas's current texture is shown automatically
         // once control returns to the event loop, which Game::RunLoop() does every frame by awaiting
         // requestAnimationFrame. The queue submit above is the whole frame.
-        wgpuSurfacePresent(surface_);
+        if (!acquiredOffscreenEXT_)
+            wgpuSurfacePresent(surface_);
 #endif
         wgpuTextureRelease(acquiredTexture_);
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
+        acquiredOffscreenEXT_ = false;
+    }
+
+    WGPUTexture WebGPURenderer::CreateOccludedBackbufferEXT()
+    {
+        if (physicalWidth_ <= 0 || physicalHeight_ <= 0 || surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return nullptr;
+        // Created directly in surfaceFormat_, the format every backbuffer view and the readback
+        // already use, so no view reinterpretation is needed.
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Occluded BackBuffer");
+        descriptor.usage = surfaceConfig_.usage;
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = {static_cast<std::uint32_t>(physicalWidth_),
+                           static_cast<std::uint32_t>(physicalHeight_), 1};
+        descriptor.format = surfaceFormat_;
+        descriptor.mipLevelCount = 1;
+        descriptor.sampleCount = 1;
+        return wgpuDeviceCreateTexture(device_, &descriptor);
     }
 
     void WebGPURenderer::CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture)
@@ -12745,6 +12778,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             wgpuTextureRelease(acquiredTexture_);
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
+        acquiredOffscreenEXT_ = false;
         acquiredBackbufferStale_ = false;
     }
 
