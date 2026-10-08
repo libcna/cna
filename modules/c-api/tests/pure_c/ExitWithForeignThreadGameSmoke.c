@@ -12,6 +12,7 @@
 
 #include "CnaTestReport.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include "CnaTestThreads.h"
 
@@ -91,6 +92,47 @@ static int owner(void* const argument)
         CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS);
 }
 
+#if defined(__APPLE__)
+static int exit_from_this_thread(void* const argument)
+{
+    (void)argument;
+    exit(0);
+}
+
+/*
+ * plans/plan_apple_m4.md AM4-122: where Apple refused the foreign-thread owner, the same exit is
+ * taken the other way round -- the game is owned by the main thread, as Apple requires, and the
+ * process exits from a thread that is not its owner (Java's System.exit from a worker thread).
+ * The exiting thread has no graphics context of the game's either, so the graph must again be left
+ * to the operating system; the test is that this exits zero.
+ */
+static int exit_with_main_thread_game(void)
+{
+    int created = 0;
+    const CNA_GameCallbacks callbacks = {
+        sizeof(CNA_GameCallbacks), UINT32_C(1), 0, on_update, 0, 0, 0, &created
+    };
+    static const char Title[] = "C API exit from a foreign thread";
+    const CNA_GameCreateInfo create_info = {
+        sizeof(CNA_GameCreateInfo), UINT32_C(1), CNA_TRUE,
+        {0U, 0U, 0U, 0U, 0U, 0U, 0U}, INT64_C(166667),
+        {Title, sizeof(Title) - 1U}, &callbacks
+    };
+    CNA_Handle game = CNA_INVALID_HANDLE;
+    thrd_t exiting;
+    if (!CNA_TEST_STAGE(cna_game_create(&create_info, &game) == CNA_RESULT_SUCCESS) ||
+        !CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS) ||
+        /* the update ran; a 2D-only renderer (SDL_RENDERER) refuses the vertex buffer itself */
+        !CNA_TEST_STAGE(created != 0) ||
+        thrd_create(&exiting, exit_from_this_thread, NULL) != thrd_success) {
+        return CNA_TEST_FAIL(1);
+    }
+    /* Never returns: the process exits from the other thread with the game alive. */
+    (void)thrd_join(exiting, NULL);
+    return CNA_TEST_FAIL(1);
+}
+#endif
+
 int main(void)
 {
     int created = 0;
@@ -103,6 +145,11 @@ int main(void)
         !CNA_TEST_STAGE(created == (g_refused_off_main_thread ? 0 : 1))) {
         return CNA_TEST_FAIL(1);
     }
+#if defined(__APPLE__)
+    if (g_refused_off_main_thread) {
+        return exit_with_main_thread_game();
+    }
+#endif
     /* The owning thread has ended; the game and its buffer are still alive. */
     return 0;
 }
