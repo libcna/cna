@@ -26,6 +26,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -256,6 +258,28 @@ TEST(GraphicsDeviceCapabilityTest, TheMultipleRenderTargetCapabilityMatchesWhatB
 TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
 {
     GraphicsDevice gd;
+    if (CNA_RENDERER_IS(Fna3d))
+    {
+        // plans/plan_apple_m4.md AM4-189: FNA3D's answer is its selected driver's, measured at
+        // device creation by creating a query: the OpenGL and Direct3D 11 drivers have queries,
+        // its SDL_GPU driver (the one macOS gets) has none, as SDL3's GPU API has none. So the
+        // capability is asked to agree with what OcclusionQuery's constructor does on HiDef.
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice hiDef(
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+            Microsoft::Xna::Framework::Graphics::PresentationParameters());
+        bool constructed = false;
+        try
+        {
+            Microsoft::Xna::Framework::Graphics::OcclusionQuery query(hiDef);
+            constructed = true;
+        }
+        catch (const System::NotSupportedException&)
+        {
+        }
+        EXPECT_EQ(hiDef.SupportsCapability(GraphicsCapability::OcclusionQuery), constructed);
+        return;
+    }
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), ExpectedCapabilities().occlusionQuery);
 }
 

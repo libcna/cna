@@ -766,8 +766,10 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
     // FNA3D's D3D11 mapping (WINCLOSE-0013).
     // plans/plan_apple_m4.md AM4-142: Metal stores it as MTLPixelFormatRG8Snorm on every device.
+    // plans/plan_apple_m4.md AM4-189: and on FNA3D, natively signed-normalized on its OpenGL and
+    // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11,
-                        Metal))
+                        Metal, Fna3d))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -781,8 +783,10 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
     // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013); Metal as MTLPixelFormatRGBA8Snorm (AM4-142).
+    // plans/plan_apple_m4.md AM4-189: and on FNA3D, natively signed-normalized on its OpenGL and
+    // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11,
-                        Metal))
+                        Metal, Fna3d))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -1206,7 +1210,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // BGR5A1Unorm and ABGR4Unorm, the mappings MoltenVK uses -- exists only on Apple-family
         // GPUs (an Intel Mac's AMD GPU has none of the three), a device fact like Bgra4444 above,
         // so the trio is asked of the renderer through its first member.
-        const bool metalSignedNormalized = CNA_RENDERER_IS(Metal);
+        // AM4-189: FNA3D's public Texture2D gate promotes both signed-normalized formats (MSR-019).
+        const bool metalSignedNormalized = CNA_RENDERER_IS(Metal, Fna3d);
         const bool metalPacked16 =
             CNA_RENDERER_IS(Metal) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) ==

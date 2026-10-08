@@ -335,6 +335,12 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
             << " target cleared to red sampled back without its red -- the clear did not reach the "
                "target, or sampling it does not read what was written";
     }
+    // plans/plan_apple_m4.md AM4-189: FNA3D's declared boundary. Its render targets other than
+    // Color defer to the shared rule (a Color target): promoting the float ones is measured but not
+    // done -- its SDL_GPU driver has no channel swizzle, Metal refuses Bgra4444 as an attachment,
+    // and float cubes and partial transfers have their own gaps.
+    if (measured == 0 && CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d))
+        GTEST_SKIP() << "FNA3D promotes no 16-bit float render target (declared boundary)";
     EXPECT_GT(measured, 0)
         << RendererName() << " reports no 16-bit float render target at all, so this measures "
            "nothing -- if that is genuinely true here the test needs its own declared boundary";
@@ -467,6 +473,9 @@ TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackEx
         ++measured;
     }
 
+    // AM4-189: FNA3D's declared boundary, as in ASixteenBitFloatTargetsContentIsSamplableBack.
+    if (measured == 0 && CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d))
+        GTEST_SKIP() << "FNA3D promotes no classic numeric render target (declared boundary)";
     EXPECT_GT(measured, 0) << RendererName() << " exposes no classic numeric render target";
 }
 
