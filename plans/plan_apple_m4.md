@@ -158,4 +158,6 @@ macOS they found two defects -- `readdir` is not a snapshot, so a rename landing
 `Deleted` + `Created` in 53 of 300 runs, and `LastAccess` was left out of `NOTE_ATTRIB` although the attribute
 event serves every content filter on both platforms. A listing is now kept only when the directory's timestamps did
 not move while it was taken: 0 of 600. 32 of the 33 behavioural tests now run on macOS, all passing, 30 shuffled
-repeats clean; only the `IN_ACCESS` read test stays Linux-only, as kqueue reports no reads).
+repeats clean; only the `IN_ACCESS` read test stays Linux-only, as kqueue reports no reads) and `AM4-127` (audit
+LOW: a rename out of the filter raised nothing on macOS, where Linux reports the old name's `Deleted`; a new
+cross-platform test covers renames out of and into the filter, failing on macOS before the fix).
