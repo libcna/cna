@@ -2009,20 +2009,40 @@ namespace CNA::Internal::Renderers::WebGPU
         if (data == nullptr || w <= 0 || h <= 0) return false;
         const int levelSize = MipDim(size_, level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        // Whole-level only. A block-aligned sub-rectangle is expressible natively, but the block
-        // STORE this renderer keeps for readback is per level, so accepting a partial write would
-        // make that store disagree with the texture. Refused rather than half-tracked.
-        if (x != 0 || y != 0 || w != levelSize || h != levelSize) return false;
+        // plans/plan_apple_m4.md AM4-186: a block-aligned sub-rectangle (its extent may stop short
+        // of a block only where it reaches the level's edge -- GetCompressedDataEXT's own rule) is
+        // patched into the level's block store, which stays the readback authority, and the whole
+        // level is then written from that store, so the two can never disagree. A level never
+        // written before starts as zero blocks, which is what WebGPU initializes a texture to.
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
 
-        const int blockCols = (w + 3) / 4;
-        const int blockRows = (h + 3) / 4;
-        const std::size_t byteCount = static_cast<std::size_t>(blockCols) * blockRows *
-                                      static_cast<std::size_t>(blockBytes_);
-        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < byteCount) return false;
+        const int rectBlockCols = (w + 3) / 4;
+        const int rectBlockRows = (h + 3) / 4;
+        const std::size_t rectRowBytes =
+            static_cast<std::size_t>(rectBlockCols) * static_cast<std::size_t>(blockBytes_);
+        if (dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < rectRowBytes * static_cast<std::size_t>(rectBlockRows))
+            return false;
 
-        const auto* blocks = static_cast<const std::uint8_t*>(data);
-        compressedLevels_[static_cast<std::size_t>(face * mipLevels_ + level)]
-            .assign(blocks, blocks + byteCount);
+        const int blockCols = (levelSize + 3) / 4;
+        const int blockRows = (levelSize + 3) / 4;
+        const std::size_t levelRowBytes =
+            static_cast<std::size_t>(blockCols) * static_cast<std::size_t>(blockBytes_);
+        const std::size_t byteCount = levelRowBytes * static_cast<std::size_t>(blockRows);
+        std::vector<std::uint8_t>& store =
+            compressedLevels_[static_cast<std::size_t>(face * mipLevels_ + level)];
+        if (store.size() != byteCount) store.assign(byteCount, 0u);
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        for (int row = 0; row < rectBlockRows; ++row)
+        {
+            std::memcpy(store.data() + static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                            static_cast<std::size_t>(x / 4) * static_cast<std::size_t>(blockBytes_),
+                        source + static_cast<std::size_t>(row) * rectRowBytes, rectRowBytes);
+        }
+        const std::uint8_t* blocks = store.data();
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;

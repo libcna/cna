@@ -407,21 +407,22 @@ namespace CNA::Internal::Renderers::WebGPU
         /// renderer, which escaped the public API as raw std exceptions instead of the shared
         /// layer's own deterministic `System::NotSupportedException`.
         /**
-         * @brief WEBGPU-206: uploads one cube face's mip level as raw block-compressed blocks.
+         * @brief WEBGPU-206: uploads raw block-compressed blocks into one cube face's mip level.
          *
          * `TextureCube::SetData`'s compressed overload has already validated block alignment and
-         * computed the exact payload size, so this performs the native copy and keeps the blocks as
-         * the authoritative store a readback would need.
+         * computed the exact payload size. AM4-186: the region may be any block-aligned
+         * sub-rectangle; it is patched into the level's block store -- the authority a readback
+         * uses -- and the level is written from that store.
          *
          * @param face Cube face index, 0..5.
          * @param level Mip level.
-         * @param x Left edge in texels; must be 0.
-         * @param y Top edge in texels; must be 0.
-         * @param w Width in texels; must be the level's full size.
-         * @param h Height in texels; must be the level's full size.
-         * @param data The blocks.
+         * @param x Left edge in texels; a multiple of four.
+         * @param y Top edge in texels; a multiple of four.
+         * @param w Width in texels; a multiple of four unless the region reaches the level's edge.
+         * @param h Height in texels; a multiple of four unless the region reaches the level's edge.
+         * @param data The region's blocks, tightly packed by block row.
          * @param dataLength Size of @p data in bytes.
-         * @return Whether the whole level was stored.
+         * @return Whether the region was stored.
          */
         [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
                                                 const void* data, int dataLength) override;
