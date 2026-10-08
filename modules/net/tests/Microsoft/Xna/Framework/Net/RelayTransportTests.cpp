@@ -46,6 +46,22 @@ TEST(RelayTransportTest, RoutesAreStableAtomicBoundedAndStopIsIdempotent) {
     bridge.stop();bridge.stop();const auto status=bridge.status();EXPECT_EQ(RelayTransportState::Stopped,status.state);EXPECT_EQ(0,status.queued);
     rejected([&]{bridge.setRoutes({other});},"RELAY_STOPPED");EXPECT_EQ(0,bridge.routePort(other));
 }
+// plans/plan_apple_m4.md AM4-123: the capability rule on synthetic libcurl version data, so the
+// connection-failure test below does not merely agree with whatever the product decided.
+TEST(RelayTransportTest, RefusalNeedsWsAndWssWithTlsFromCurl7860) {
+    const char* const both[]={"http","https","ws","wss",nullptr};
+    const char* const appleSystem[]={"dict","file","ftp","ftps","http","https","imap","smtp",nullptr};
+    const char* const plainOnly[]={"http","ws",nullptr};
+    EXPECT_EQ(nullptr,relayTransportRefusalFor(0x080B00,both,true));
+    EXPECT_EQ(nullptr,relayTransportRefusalFor(0x075600,both,true))<<"7.86.0 has curl_ws_*";
+    EXPECT_STREQ("RELAY_SECURE_WEBSOCKET_UNAVAILABLE",relayTransportRefusalFor(0x075500,both,true));
+    EXPECT_STREQ("RELAY_SECURE_WEBSOCKET_UNAVAILABLE",relayTransportRefusalFor(0x080701,appleSystem,true))
+        <<"Apple's system libcurl 8.7.1 lists no ws/wss";
+    EXPECT_STREQ("RELAY_SECURE_WEBSOCKET_UNAVAILABLE",relayTransportRefusalFor(0x080B00,plainOnly,true));
+    EXPECT_STREQ("RELAY_SECURE_WEBSOCKET_UNAVAILABLE",relayTransportRefusalFor(0x080B00,both,false))
+        <<"wss needs a TLS backend";
+    EXPECT_STREQ("RELAY_SECURE_WEBSOCKET_UNAVAILABLE",relayTransportRefusalFor(0x080B00,nullptr,true));
+}
 TEST(RelayTransportTest, ConnectionFailureIsObservedWithoutCallbackOrDetachedWorker) {
     RelayTransport bridge(settings(),ticket(),12000,{});
     const auto limit=std::chrono::steady_clock::now()+std::chrono::seconds(8);

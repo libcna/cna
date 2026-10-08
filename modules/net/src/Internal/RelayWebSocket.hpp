@@ -14,6 +14,11 @@ std::string relayEndpoint(const CNA::GamerServices::Configuration& configuration
  * libcurl without ws/wss (Apple's system libcurl is one).
  * @return The relay error code, or nullptr where a connection can be attempted. */
 const char* relayTransportRefusal() noexcept;
+/** @brief The libcurl capability rule relayTransportRefusal applies, on given version data.
+ * @param versionNumber curl_version_info's version_num (0xXXYYZZ). @param protocols Its
+ * null-terminated protocol list, or nullptr. @param tls Whether it has a TLS backend.
+ * @return "RELAY_SECURE_WEBSOCKET_UNAVAILABLE", or nullptr where ws and wss can be used. */
+const char* relayTransportRefusalFor(unsigned versionNumber,const char* const* protocols,bool tls) noexcept;
 /** @brief One worker-owned verified WebSocket; never calls XNA objects or callbacks. */
 class RelayWebSocket {
 public:

@@ -7,7 +7,22 @@
 #include <array>
 #include <chrono>
 #include <mutex>
+#include <string_view>
 #include <thread>
+
+namespace CNA::Internal::Net {
+const char* relayTransportRefusalFor(unsigned versionNumber,const char* const* protocols,bool tls) noexcept {
+    const auto offers=[protocols](std::string_view required) {
+        if(protocols)for(auto name=protocols;*name;++name)if(required==*name)return true;
+        return false;
+    };
+    // curl_ws_recv/curl_ws_send first shipped in 7.86.0; ws and wss are listed only when the build
+    // enabled WebSockets (Apple's system libcurl 8.7.1 does not), and wss needs a TLS backend.
+    if(versionNumber<0x075600||!offers("ws")||!offers("wss")||!tls)
+        return "RELAY_SECURE_WEBSOCKET_UNAVAILABLE";
+    return nullptr;
+}
+}
 
 #ifdef CNA_SERVICE_TLS_TRANSPORT
 namespace CNA::Internal::Net {
@@ -23,10 +38,6 @@ bool hex(std::string_view value,std::size_t length) {
     if(value.size()!=length)return false;
     for(char c:value)if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;
     return true;
-}
-bool protocol(const char* const* names,std::string_view required) {
-    if(names)for(;*names;++names)if(required==*names)return true;
-    return false;
 }
 RelayMessageKind kind(int flags) {
     constexpr int allowed=CURLWS_TEXT|CURLWS_BINARY|CURLWS_CONT|CURLWS_CLOSE|CURLWS_PING|CURLWS_PONG;
@@ -62,10 +73,9 @@ std::string relayEndpoint(const CNA::GamerServices::Configuration& configuration
 }
 const char* relayTransportRefusal() noexcept {
     const auto* version=curl_version_info(CURLVERSION_NOW);
-    if(!version||version->version_num<0x075600||!protocol(version->protocols,"ws")||
-       !protocol(version->protocols,"wss")||!(version->features&CURL_VERSION_SSL))
-        return "RELAY_SECURE_WEBSOCKET_UNAVAILABLE";
-    return nullptr;
+    if(!version)return "RELAY_SECURE_WEBSOCKET_UNAVAILABLE";
+    return relayTransportRefusalFor(version->version_num,version->protocols,
+        (version->features&CURL_VERSION_SSL)!=0);
 }
 struct RelayWebSocket::Impl {
     std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> handle{nullptr,curl_easy_cleanup};
