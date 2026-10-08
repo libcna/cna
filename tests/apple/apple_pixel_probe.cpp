@@ -2,10 +2,14 @@
 // right pixels where they belong. Each frame clears to a known colour, draws a SpriteBatch quad and,
 // on a renderer with 3D, a BasicEffect triangle, then reads the three spots back through
 // GetBackBufferData before presenting. The first frames of an iOS app can run before its view is
-// on screen, with nothing to draw into yet, so the probe runs up to kMaxFrames frames and reports
-// the first that read back correctly. The verdict goes to stdout, where `simctl launch --console`
-// and a macOS shell can both see it.
+// on screen, with nothing to draw into yet, so on iOS the probe waits up to kMaxWarmupFrames frames
+// for the first that reads back correctly; a macOS window exists before the first frame, so there
+// the first frame must already be correct. Once a frame is correct, kConfirmFrames more must be too,
+// so a renderer that is right only now and then does not pass on a lucky frame. The verdict goes to
+// stdout, where `simctl launch --console` and a macOS shell can both see it.
 #include "CNA/Platform/Entrypoint.hpp"
+
+#include <TargetConditionals.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -41,7 +45,12 @@ namespace
     const Color kBackground(10, 20, 30, 255);
     const Color kSprite(255, 0, 0, 255);
     const Color kTriangle(0, 255, 0, 255);
-    constexpr int kMaxFrames = 120;
+#if TARGET_OS_IPHONE
+    constexpr int kMaxWarmupFrames = 120;
+#else
+    constexpr int kMaxWarmupFrames = 1;
+#endif
+    constexpr int kConfirmFrames = 10;
 
     bool Near(const Color& a, const Color& b)
     {
@@ -70,6 +79,11 @@ namespace
         bool ok = false;
         int frames = 0;
         std::string report;
+        /// The first frame that read back correctly, 0 while none has.
+        int firstGoodFrame = 0;
+        /// The first frame after firstGoodFrame that did not, 0 while none has.
+        int firstRelapseFrame = 0;
+        std::string relapseReport;
 
     protected:
         void Draw(const GameTime& gameTime) override
@@ -125,6 +139,12 @@ namespace
                      std::to_string(w) + "x" + std::to_string(h) + " background=" + Describe(background) +
                      " sprite=" + Describe(sprite) +
                      (threeD ? " triangle=" + Describe(triangle) : std::string(" triangle=not-drawn(no 3D)"));
+            if (ok && firstGoodFrame == 0) firstGoodFrame = frames;
+            if (!ok && firstGoodFrame != 0 && firstRelapseFrame == 0)
+            {
+                firstRelapseFrame = frames;
+                relapseReport = report;
+            }
             Game::Draw(gameTime);
         }
 
@@ -139,11 +159,19 @@ int main(int /*argc*/, char* /*argv*/[])
     {
         ApplePixelProbe probe;
         do probe.RunOneFrame();
-        while (!probe.ok && probe.frames < kMaxFrames);
-        std::printf("CNA_APPLE_PIXELS %s\n", probe.report.c_str());
-        std::puts(probe.ok ? "CNA_APPLE_PIXELS_OK" : "CNA_APPLE_PIXELS_FAILED");
+        while (probe.firstGoodFrame == 0 && probe.frames < kMaxWarmupFrames);
+        if (probe.firstGoodFrame != 0)
+        {
+            for (int i = 0; i < kConfirmFrames; ++i) probe.RunOneFrame();
+        }
+        const bool passed = probe.firstGoodFrame != 0 && probe.firstRelapseFrame == 0;
+        std::printf("CNA_APPLE_PIXELS %s first_good_frame=%d confirmed_frames=%d\n", probe.report.c_str(),
+                    probe.firstGoodFrame, probe.firstGoodFrame != 0 ? kConfirmFrames : 0);
+        if (probe.firstRelapseFrame != 0)
+            std::printf("CNA_APPLE_PIXELS relapse %s\n", probe.relapseReport.c_str());
+        std::puts(passed ? "CNA_APPLE_PIXELS_OK" : "CNA_APPLE_PIXELS_FAILED");
         std::fflush(stdout);
-        return probe.ok ? 0 : 1;
+        return passed ? 0 : 1;
     }
     catch (const std::exception& error)
     {

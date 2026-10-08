@@ -49,6 +49,14 @@ if(EMSCRIPTEN)
     list(APPEND CNA_SDL3_PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0004-emscripten-commit-proxied-frame.patch")
 endif()
+# Also CNA's (SDL main still has it): UIKit_ComputeViewFrame swapped a scene window's portrait
+# bounds for a landscape-only app before UIKit had rotated the window, and autoresizing then left
+# the root view 1346x0 once it did (plans/plan_apple_m4.md AM4-120). The file is UIKit-only, so the
+# patch is carried only for iOS and leaves every other build manifest unchanged.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0005-uikit-scene-window-frame.patch")
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)

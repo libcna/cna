@@ -1,0 +1,51 @@
+From: Robert Vokac <robertvokac@robertvokac.com>
+Date: Thu, 8 Oct 2026 12:00:00 +0200
+Subject: [PATCH] uikit: do not flip a scene window's bounds ahead of a pending
+ rotation
+
+UIKit_ComputeViewFrame swaps the UIWindow's width and height whenever the
+app supports no portrait orientation but the bounds are portrait-shaped. A
+UIWindow that belongs to a UIWindowScene is rotated by UIKit itself, so while
+the rotation to a newly narrowed orientation set is still pending the root
+view is given a landscape frame inside a portrait window; when UIKit then
+rotates the window, autoresizing applies the size change to that already
+swapped frame. A landscape-only game started on a portrait iPhone 17
+simulator ended with a 1346x0 view and a 1-pixel-high drawable.
+
+The swap is kept for screen bounds and for windows without a scene, which is
+what the iOS 10 workaround it implements was written for.
+
+Not an upstream commit: SDL main still swaps (checked 2026-10-08). Carried by
+CNA (plans/plan_apple_m4.md AM4-120).
+---
+diff --git a/src/video/uikit/SDL_uikitvideo.m b/src/video/uikit/SDL_uikitvideo.m
+--- a/src/video/uikit/SDL_uikitvideo.m
++++ b/src/video/uikit/SDL_uikitvideo.m
+@@ -239,6 +239,18 @@
+      * https://bugzilla.libsdl.org/show_bug.cgi?id=3505
+      * https://bugzilla.libsdl.org/show_bug.cgi?id=3465
+      * https://forums.developer.apple.com/thread/65337 */
++    /* A UIWindow that belongs to a UIWindowScene is rotated by UIKit itself, and
++     * its bounds are always the interface's current orientation. While a
++     * rotation to a newly narrowed orientation set is still pending, flipping
++     * them here gives the root view a frame of the other orientation, and
++     * UIKit's autoresizing then carries that mismatch through the rotation
++     * (a portrait 402x874 window becoming landscape left the view 1346x0).
++     * The workaround below is for screen bounds and windows without a scene. */
++    BOOL windowFollowsScene = NO;
++    if (@available(iOS 13.0, *)) {
++        windowFollowsScene = data != nil && data.uiwindow != nil && data.uiwindow.windowScene != nil;
++    }
++
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+     UIInterfaceOrientation orient = [UIApplication sharedApplication].statusBarOrientation;
+@@ -249,7 +261,7 @@
+ 
+     /* The orientation flip doesn't make sense when the window is smaller
+      * than the screen (iPad Split View, for example). */
+-    if (fullscreen && (landscape != (frame.size.width > frame.size.height))) {
++    if (!windowFollowsScene && fullscreen && (landscape != (frame.size.width > frame.size.height))) {
+         float height = frame.size.width;
+         frame.size.width = frame.size.height;
+         frame.size.height = height;

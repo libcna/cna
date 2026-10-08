@@ -203,7 +203,7 @@ below as interference passes when run alone or serially.
 | `HEADLESS`, `STUB` | NOT TESTED | -- | Not part of this campaign's matrix |
 | `VULKAN` (MoltenVK) | OUT OF SCOPE | -- | Excluded on Apple by the campaign brief |
 | `DIRECTX9`, `DIRECTX11` | NOT APPLICABLE | -- | Windows only |
-| iOS Simulator, SDL3 + `METAL` | PASS WITH KNOWN LIMITATION | `cna_ios_pixel_probe` exact on 29 of 31 launches (iOS 27 Simulator, iPhone 17 profile) at `AM4-037`; rebuilt at `49bdf63b8` (after every later Metal change), exact on frame 1 in 16 of 16 launches, `cna_ios_smoke` OK | The two all-zero runs right after first install did not reproduce |
+| iOS Simulator, SDL3 + `METAL` | PASS | `cna_ios_pixel_probe` (iOS 27 Simulator, iPhone 17 profile) exact on frame 1 and on the 10 frames after it in 8 of 8 launches at `AM4-120`, `cna_ios_smoke` OK | The all-zero runs seen at `AM4-037` were SDL's UIKit view-frame swap (`AM4-120`): once the window rotated to the landscape-only set, every frame drew into a 1346x0 view. The probe used to stop at the first good frame, which hid it in most launches |
 | iOS device (arm64) | BUILD ONLY | Final-linked `.app` for `iphoneos` (rebuilt at `49bdf63b8`: Mach-O arm64, platform 2, minos 16.3, system frameworks only) | No physical iPhone, signing identity or Apple account available |
 | C API (`modules/c-api`) | PASS WITH KNOWN LIMITATION | 111/115 on SOFTWARE, 108/115 on `SDL_RENDERER` (`AM4-072`..`075` fixed the first run's 13) | 3 documentation gates need Doxygen 1.9.8 (Homebrew has 1.18, which crashes on the limitations parse); the media-library smoke reads the real `~/Music` (SDL's user folders ignore `HOME`); 3 `SDL_RENDERER` smokes exercise features that 2D renderer refuses (they pass on SOFTWARE) |
 | cna-examples | PASS | 248/248 demos render on Metal | Net demos fixed in cna-examples `ede3473` |
@@ -271,6 +271,14 @@ stays CNA-internal bookkeeping, exactly as before.
 
 The *current* orientation continues to be derived from the window bounds on resize, which is what
 a rotation produces, so `OrientationChanged` fires without any iOS-specific code.
+
+A narrowed set rotates the window asynchronously. SDL's `UIKit_ComputeViewFrame` swapped a
+portrait window's bounds for a landscape-only set before that rotation, and UIKit's autoresizing
+then turned the rotation into a 1346x0 root view (iPhone 17 Simulator started in portrait): the
+game ran on, drawing into a drawable one pixel high. CNA carries
+`cmake/patches/sdl-cbe3fbe9-0005-uikit-scene-window-frame.patch` for iOS builds, which keeps a
+scene window's bounds as UIKit reports them (`plans/plan_apple_m4.md` `AM4-120`; SDL main still
+swaps).
 
 ### Storage locations
 
