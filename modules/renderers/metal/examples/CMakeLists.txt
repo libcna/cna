@@ -205,6 +205,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         rendertarget_preserve_across_resize_test
         rendertarget_producer_consumer_test
         rendertarget_sampling_orientation_test
+        rendertarget_surface_format_contract_test
         rendertarget_viewport_scissor_reset_test
         rendertargetcube_getdata_contract_test
         rendertargetcube_msaa_face_test
@@ -247,6 +248,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_metal_test(cna_test_metal_depth_bias
         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
     cna_register_renderer_test(NAME Metal_DepthBias COMMAND cna_test_metal_depth_bias
+        TIMEOUT 120 LABELS "Metal")
+    # plans/plan_apple_m4.md AM4-142: the three packed 16-bit formats sampled in a real draw -- a
+    # readback is served from Texture2D's CPU copy and cannot see a wrong channel order, and the
+    # 4444 one is rotated into ABGR4Unorm on upload. Each leg is gated on the renderer's own
+    # verdict, so a GPU without the formats refuses them by name rather than failing.
+    cna_metal_test(cna_test_metal_packed16_format
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_packed16_format_test.cpp)
+    cna_register_renderer_test(NAME Metal_Packed16Format COMMAND cna_test_metal_packed16_format
         TIMEOUT 120 LABELS "Metal")
     # plans/plan_apple_m4.md AM4-141: backbuffer MSAA, its MultiSampleMask and its readback; every
     # Metal GPU multisamples at 4x.

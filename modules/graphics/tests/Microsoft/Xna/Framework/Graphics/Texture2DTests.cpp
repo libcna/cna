@@ -374,9 +374,14 @@ namespace
 
 TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     GraphicsDevice device;
+    // plans/plan_apple_m4.md AM4-142: Metal's Bgr565 exists only on Apple-family GPUs.
+    if (CNA_RENDERER_IS(Metal) &&
+        device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) !=
+            CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+        GTEST_SKIP() << "this Metal GPU has no packed 16-bit formats";
 
     Texture2D colorTexture(device, 2, 2);
     const std::array<Color, 6> colorSource{
@@ -760,7 +765,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // Software retains the signed values in its canonical CPU sampling plane.
     // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
     // FNA3D's D3D11 mapping (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11))
+    // plans/plan_apple_m4.md AM4-142: Metal stores it as MTLPixelFormatRG8Snorm on every device.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11,
+                        Metal))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -773,8 +780,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
-    // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11))
+    // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013); Metal as MTLPixelFormatRGBA8Snorm (AM4-142).
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11,
+                        Metal))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -792,7 +800,14 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
     // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11))
+    // plans/plan_apple_m4.md AM4-142: Metal's MTLPixelFormatBGR5A1Unorm is the same packing, but
+    // only Apple-family GPUs have it, so that leg asks the renderer.
+    const bool metalPacked16 =
+        CNA_RENDERER_IS(Metal) &&
+        gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra5551)) ==
+            CNA::Internal::Renderers::RendererFormatVerdict::Supported;
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11) ||
+        metalPacked16)
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -804,7 +819,12 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreExact)
 {
-    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11))
+    // plans/plan_apple_m4.md AM4-142: Metal's three packed formats exist on Apple-family GPUs.
+    const bool metalPacked16 =
+        CNA_RENDERER_IS(Metal) &&
+        gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) ==
+            CNA::Internal::Renderers::RendererFormatVerdict::Supported;
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11) && !metalPacked16)
         GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
 
     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -1181,6 +1201,16 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // one here too: B4G4R4A4_UNORM is optional on D3D11 hardware, so it is asked of the
         // renderer below, which now asks the device.
         const bool d3d11Packed16AndSignedNormalized = CNA_RENDERER_IS(DirectX11);
+        // plans/plan_apple_m4.md AM4-142: Metal stores the signed-normalized pair as RG8Snorm and
+        // RGBA8Snorm on every Metal device, so it is named. Its packed 16-bit trio -- B5G6R5Unorm,
+        // BGR5A1Unorm and ABGR4Unorm, the mappings MoltenVK uses -- exists only on Apple-family
+        // GPUs (an Intel Mac's AMD GPU has none of the three), a device fact like Bgra4444 above,
+        // so the trio is asked of the renderer through its first member.
+        const bool metalSignedNormalized = CNA_RENDERER_IS(Metal);
+        const bool metalPacked16 =
+            CNA_RENDERER_IS(Metal) &&
+            gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) ==
+                CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         const bool vulkanA4R4G4B4 =
             CNA_RENDERER_IS(Vulkan, SdlGpu, DirectX11) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
@@ -1216,6 +1246,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                                                      || format == SurfaceFormat::NormalizedByte4))
             || (vulkanSignedNormalized && (format == SurfaceFormat::NormalizedByte2
                                            || format == SurfaceFormat::NormalizedByte4))
+            || (metalSignedNormalized && (format == SurfaceFormat::NormalizedByte2
+                                          || format == SurfaceFormat::NormalizedByte4))
+            || (metalPacked16 && (format == SurfaceFormat::Bgr565
+                                  || format == SurfaceFormat::Bgra5551
+                                  || format == SurfaceFormat::Bgra4444))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.

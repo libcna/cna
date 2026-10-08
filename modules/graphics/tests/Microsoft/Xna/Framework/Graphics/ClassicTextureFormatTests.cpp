@@ -74,6 +74,12 @@ namespace
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic SurfaceFormat ordinal "
                               << static_cast<int>(format);
+            // plans/plan_apple_m4.md AM4-142: so must Metal -- every format this file transfers
+            // has native Metal storage on every Metal device, and a verdict that regressed to
+            // Defer would otherwise turn these checks into silent returns.
+            if (CNA_RENDERER_IS(Metal))
+                ADD_FAILURE() << "Metal must support classic SurfaceFormat ordinal "
+                              << static_cast<int>(format);
             return;
         }
 
@@ -143,7 +149,13 @@ namespace
     {
         if (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) !=
             RendererFormatVerdict::Supported)
+        {
+            // plans/plan_apple_m4.md AM4-142: as in VerifyExactTransfers.
+            if (CNA_RENDERER_IS(Metal))
+                ADD_FAILURE() << "Metal must sample classic SurfaceFormat ordinal "
+                              << static_cast<int>(format);
             return;
+        }
         SCOPED_TRACE(static_cast<int>(format));
         Texture2D texture(device, 1, 1, false, format);
         texture.SetData(&value, 1);

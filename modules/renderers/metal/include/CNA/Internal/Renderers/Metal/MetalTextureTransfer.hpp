@@ -17,7 +17,12 @@ namespace CNA::Internal::Renderers::Metal
         /** @brief Source bytes are already red, green, blue, alpha. */
         Rgba,
         /** @brief Source bytes are blue, green, red, alpha and require red/blue swapping. */
-        Bgra
+        Bgra,
+        /**
+         * @brief Bytes are copied as they are, at any texel size -- the formats whose Metal byte
+         *        layout is already XNA's (float, 16-bit and packed render targets, AM4-142).
+         */
+        Raw
     };
 
     /** @brief Rule applied to the caller-provided transfer buffer length. */
@@ -209,6 +214,7 @@ namespace CNA::Internal::Renderers::Metal
      * @param depth Region depth/image count.
      * @param rowAlignment Required Metal buffer row alignment in bytes.
      * @param layout Receives the complete layout only on success.
+     * @param bytesPerTexel Bytes in one texel (4 for the RGBA8/BGRA8 formats).
      * @return True when every dimension is positive and every byte calculation is representable.
      */
     [[nodiscard]] inline bool TryBuildMetalTextureTransferLayout(
@@ -216,14 +222,15 @@ namespace CNA::Internal::Renderers::Metal
         int height,
         int depth,
         std::size_t rowAlignment,
-        MetalTextureTransferLayout& layout) noexcept
+        MetalTextureTransferLayout& layout,
+        std::size_t bytesPerTexel = 4u) noexcept
     {
-        if (width <= 0 || height <= 0 || depth <= 0 || rowAlignment == 0)
+        if (width <= 0 || height <= 0 || depth <= 0 || rowAlignment == 0 || bytesPerTexel == 0)
             return false;
 
         MetalTextureTransferLayout candidate{};
         if (!MetalTextureTransferDetail::CheckedMultiply(
-                static_cast<std::size_t>(width), 4u, candidate.tightRowBytes) ||
+                static_cast<std::size_t>(width), bytesPerTexel, candidate.tightRowBytes) ||
             !MetalTextureTransferDetail::CheckedMultiply(
                 candidate.tightRowBytes, static_cast<std::size_t>(height),
                 candidate.tightImageBytes) ||
@@ -267,6 +274,7 @@ namespace CNA::Internal::Renderers::Metal
      * @param lengthRule Whether the buffer may contain trailing bytes.
      * @param rowAlignment Required Metal staging row alignment.
      * @param layout Receives the validated byte layout only on success.
+     * @param bytesPerTexel Bytes in one texel (4 for the RGBA8/BGRA8 formats).
      * @return True only when the complete transfer can be represented and fits the mip region.
      */
     [[nodiscard]] inline bool TryPrepareMetalTextureTransfer(
@@ -285,7 +293,8 @@ namespace CNA::Internal::Renderers::Metal
         int dataLength,
         MetalTransferLengthRule lengthRule,
         std::size_t rowAlignment,
-        MetalTextureTransferLayout& layout) noexcept
+        MetalTextureTransferLayout& layout,
+        std::size_t bytesPerTexel = 4u) noexcept
     {
         if (baseWidth <= 0 || baseHeight <= 0 || baseDepth <= 0 || levelCount <= 0 ||
             level < 0 || level >= levelCount || x < 0 || y < 0 || z < 0 ||
@@ -304,7 +313,8 @@ namespace CNA::Internal::Renderers::Metal
         }
 
         MetalTextureTransferLayout candidate{};
-        if (!TryBuildMetalTextureTransferLayout(width, height, depth, rowAlignment, candidate))
+        if (!TryBuildMetalTextureTransferLayout(width, height, depth, rowAlignment, candidate,
+                                                bytesPerTexel))
             return false;
         const std::size_t supplied = static_cast<std::size_t>(dataLength);
         if (lengthRule == MetalTransferLengthRule::ExactlyTightBytes
@@ -341,11 +351,14 @@ namespace CNA::Internal::Renderers::Metal
         std::size_t destinationLength) noexcept
     {
         MetalTextureTransferLayout expected{};
+        const std::size_t bytesPerTexel =
+            width > 0 ? layout.tightRowBytes / static_cast<std::size_t>(width) : 0u;
         if (staging == nullptr || destination == nullptr ||
+            (sourceOrder != MetalTransferPixelOrder::Raw && bytesPerTexel != 4u) ||
             !TryBuildMetalTextureTransferLayout(
                 width, height, depth,
                 layout.alignedRowBytes == 0 ? 0 : layout.alignedRowBytes,
-                expected) ||
+                expected, bytesPerTexel == 0 ? 1u : bytesPerTexel) ||
             expected.tightRowBytes != layout.tightRowBytes ||
             expected.tightImageBytes != layout.tightImageBytes ||
             expected.tightTotalBytes != layout.tightTotalBytes ||
@@ -367,6 +380,11 @@ namespace CNA::Internal::Renderers::Metal
                 std::uint8_t* target = destination
                     + static_cast<std::size_t>(image) * layout.tightImageBytes
                     + static_cast<std::size_t>(row) * layout.tightRowBytes;
+                if (sourceOrder == MetalTransferPixelOrder::Raw)
+                {
+                    for (std::size_t b = 0; b < layout.tightRowBytes; ++b) target[b] = source[b];
+                    continue;
+                }
                 for (int column = 0; column < width; ++column)
                 {
                     const std::size_t offset = static_cast<std::size_t>(column) * 4u;
@@ -407,11 +425,17 @@ namespace CNA::Internal::Renderers::Metal
         std::uint8_t* destination,
         std::size_t destinationLength) noexcept
     {
-        if (source == nullptr || destination == nullptr ||
-            layout.tightTotalBytes == 0 || layout.tightTotalBytes % 4u != 0 ||
+        if (source == nullptr || destination == nullptr || layout.tightTotalBytes == 0 ||
+            (destinationOrder != MetalTransferPixelOrder::Raw && layout.tightTotalBytes % 4u != 0) ||
             destinationLength < layout.tightTotalBytes)
         {
             return false;
+        }
+        if (destinationOrder == MetalTransferPixelOrder::Raw)
+        {
+            for (std::size_t offset = 0; offset < layout.tightTotalBytes; ++offset)
+                destination[offset] = source[offset];
+            return true;
         }
         for (std::size_t offset = 0; offset < layout.tightTotalBytes; offset += 4u)
         {

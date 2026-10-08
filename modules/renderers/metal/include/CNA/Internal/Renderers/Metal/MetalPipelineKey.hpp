@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <functional>
 
@@ -170,6 +171,8 @@ namespace CNA::Internal::Renderers::Metal
         uint64_t vertexLayout = 0;
         /** @brief The fragment function writes [[sample_mask]] (a partial MultiSampleMask, AM4-141). */
         bool sampleMaskOutput = false;
+        /** @brief Each colour attachment's MTLPixelFormat value (AM4-142); 80 is BGRA8Unorm. */
+        std::array<uint16_t, 8> colorFormats{80, 80, 80, 80, 80, 80, 80, 80};
         /**
          * @brief Compares every field that affects Metal render-pipeline compatibility.
          *
@@ -181,7 +184,7 @@ namespace CNA::Internal::Renderers::Metal
             return kind==other.kind && blend==other.blend &&
                    colorAttachmentCount==other.colorAttachmentCount &&
                    sampleCount==other.sampleCount && vertexLayout==other.vertexLayout &&
-                   sampleMaskOutput==other.sampleMaskOutput;
+                   sampleMaskOutput==other.sampleMaskOutput && colorFormats==other.colorFormats;
         }
     };
     /** @brief Hash functor for Metal render-pipeline cache keys. */
@@ -215,6 +218,8 @@ namespace CNA::Internal::Renderers::Metal
             hh ^= std::hash<uint64_t>()(key.vertexLayout) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint8_t>()(key.blend.writeMask) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<bool>()(key.sampleMaskOutput) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            for (const uint16_t format : key.colorFormats)
+                hh ^= std::hash<uint16_t>()(format) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             return hh;
         }
     };

@@ -232,3 +232,42 @@ TEST(MetalTextureTransfer, ConvertsTightRgbaUploadToBgraAcrossWholeRegion)
     EXPECT_EQ(bgra[2], 10);
     EXPECT_EQ(bgra[bgra.size() - 1], 255);
 }
+
+// plans/plan_apple_m4.md AM4-142: float, 16-bit and packed render targets transfer their own
+// texel size verbatim (their Metal byte layout is XNA's).
+TEST(MetalTextureTransfer, RawTransfersKeepAnyTexelSizeVerbatim)
+{
+    MetalTextureTransferLayout layout{};
+    // A 3x2 HalfVector4 (8-byte) region with 32-byte row alignment.
+    ASSERT_TRUE(TryBuildMetalTextureTransferLayout(3, 2, 1, 32, layout, 8u));
+    EXPECT_EQ(layout.tightRowBytes, 24u);
+    EXPECT_EQ(layout.alignedRowBytes, 32u);
+    EXPECT_EQ(layout.tightTotalBytes, 48u);
+    std::vector<std::uint8_t> staging(layout.stagingTotalBytes, 0xEE);
+    for (std::size_t row = 0; row < 2; ++row)
+        for (std::size_t b = 0; b < 24; ++b) staging[row * 32 + b] = static_cast<std::uint8_t>(row * 24 + b);
+    std::vector<std::uint8_t> tight(48, 0);
+    ASSERT_TRUE(CopyMetalTextureReadbackToTightRgba(staging.data(), layout, 3, 2, 1,
+                                                    MetalTransferPixelOrder::Raw, tight.data(), tight.size()));
+    for (std::size_t i = 0; i < 48; ++i) EXPECT_EQ(tight[i], static_cast<std::uint8_t>(i));
+
+    std::vector<std::uint8_t> back(48, 0);
+    ASSERT_TRUE(CopyMetalTightRgbaToTextureBytes(tight.data(), layout, MetalTransferPixelOrder::Raw,
+                                                 back.data(), back.size()));
+    EXPECT_EQ(back, tight);
+
+    // A 2-byte (HalfSingle) texel validates through the prepare path too.
+    std::vector<std::uint8_t> half(2 * 5 * 3);
+    ASSERT_TRUE(TryPrepareMetalTextureTransfer(5, 3, 1, 1, 0, 0, 0, 0, 5, 3, 1, half.data(),
+                                               static_cast<int>(half.size()),
+                                               MetalTransferLengthRule::ExactlyTightBytes, 256, layout, 2u));
+    EXPECT_EQ(layout.tightRowBytes, 10u);
+    EXPECT_FALSE(TryPrepareMetalTextureTransfer(5, 3, 1, 1, 0, 0, 0, 0, 5, 3, 1, half.data(),
+                                                static_cast<int>(half.size()),
+                                                MetalTransferLengthRule::ExactlyTightBytes, 256, layout))
+        << "the same bytes are the wrong length for 4-byte texels";
+    // Swizzling orders still require 4-byte texels.
+    ASSERT_TRUE(TryBuildMetalTextureTransferLayout(3, 2, 1, 32, layout, 8u));
+    EXPECT_FALSE(CopyMetalTextureReadbackToTightRgba(staging.data(), layout, 3, 2, 1,
+                                                     MetalTransferPixelOrder::Bgra, tight.data(), tight.size()));
+}

@@ -217,3 +217,56 @@ TEST(MetalPolicy, SampleMaskIsIgnoredSingleSampledAndPartialMasksAreWrittenByThe
     EXPECT_EQ(DescribeMetalSampleMaskAdmission(0x1u,4),MetalSampleMaskAdmission::Masked);
     EXPECT_EQ(DescribeMetalSampleMaskAdmission(0x7Fu,8),MetalSampleMaskAdmission::Masked);
 }
+
+// plans/plan_apple_m4.md AM4-142: the render-target formats Metal stores natively.
+TEST(MetalPolicy, RenderTargetStorageCoversXnasFloatAndWideFormats)
+{
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    MetalColorStorageInfo info{};
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Color), info));
+    EXPECT_EQ(info.storage, MetalColorStorage::Bgra8);
+    EXPECT_TRUE(info.bgraOrder);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::HdrBlendable), info));
+    EXPECT_EQ(info.storage, MetalColorStorage::Rgba16Float);
+    EXPECT_EQ(info.bytesPerTexel, 8);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::HalfVector4), info));
+    EXPECT_EQ(info.storage, MetalColorStorage::Rgba16Float);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Single), info));
+    EXPECT_EQ(info.storage, MetalColorStorage::R32Float);
+    EXPECT_EQ(info.channels, 1);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Vector2), info));
+    EXPECT_EQ(info.bytesPerTexel, 8);
+    EXPECT_EQ(info.channels, 2);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Vector4), info));
+    EXPECT_EQ(info.bytesPerTexel, 16);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Rg32), info));
+    EXPECT_EQ(info.storage, MetalColorStorage::Rg16Unorm);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Rgba64), info));
+    EXPECT_EQ(info.bytesPerTexel, 8);
+    ASSERT_TRUE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Rgba1010102), info));
+    EXPECT_FALSE(info.bgraOrder);
+    EXPECT_FALSE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Dxt1), info));
+    EXPECT_FALSE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Alpha8), info));
+    EXPECT_FALSE(MetalRenderTargetStorageFor(static_cast<int>(SurfaceFormat::Bgr565), info));
+}
+
+// plans/plan_apple_m4.md AM4-142: the Texture2D formats Metal stores natively.
+TEST(MetalPolicy, TextureStorageCoversEveryUncompressedXnaFormat)
+{
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    MetalTextureStorageInfo info{};
+    ASSERT_TRUE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::Alpha8), true, info));
+    EXPECT_EQ(info.storage, MetalTextureStorage::A8);
+    EXPECT_EQ(info.bytesPerTexel, 1);
+    ASSERT_TRUE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::NormalizedByte2), true, info));
+    EXPECT_EQ(info.channels, 2);
+    ASSERT_TRUE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::Single), false, info));
+    EXPECT_EQ(info.channels, 1);
+    ASSERT_TRUE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::Bgra4444), true, info));
+    EXPECT_TRUE(info.rotate4444);
+    EXPECT_FALSE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::Bgr565), false, info))
+        << "packed 16-bit formats need an Apple GPU";
+    EXPECT_FALSE(MetalTextureStorageFor(static_cast<int>(SurfaceFormat::Dxt1), true, info));
+    // XNA A4R4G4B4 0xA123 (A=A, R=1, G=2, B=3) -> Metal R4G4B4A4 0x123A.
+    EXPECT_EQ(MetalBgra4444ToAbgr4(0xA123u), 0x123Au);
+}

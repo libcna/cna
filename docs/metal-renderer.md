@@ -121,8 +121,19 @@ The following boundaries are deterministic rather than silent degradation:
   effects are a SpriteBatch facility;
 - malformed stream metadata throws `std::invalid_argument`; multistream and instancing throw
   `System::NotSupportedException`;
-- TextureCube, Texture3D, and `CreateRenderTarget2DEXT` accept only
-  `SurfaceFormat::Color`; unsupported formats throw;
+- Texture2D stores every uncompressed XNA format natively (`AM4-142`): the float, half, 10:10:10:2,
+  16-bit-unorm, signed-normalized and Alpha8 formats in their own Metal pixel formats, and the packed
+  Bgr565/Bgra5551/Bgra4444 as `B5G6R5Unorm`/`BGR5A1Unorm`/`ABGR4Unorm` (the 4444 texel's nibbles
+  rotated on upload) on Apple-family GPUs only -- an Intel Mac's GPU has none of the three, and there
+  they refuse by name. One- and two-channel formats are sampled through a swizzled view as Direct3D 9
+  reads them: (r, 1, 1, 1) and (r, g, 1, 1); Alpha8 reads (0, 0, 0, a). XNA's point-filter-only rule
+  for the float formats is enforced by the shared draw validation, which reads each texture's format.
+  DXT has no native route on macOS yet (iOS has no BC at all);
+- RenderTarget2D and RenderTargetCube render into Color, Rgba1010102, Rg32, Rgba64, Single, Vector2,
+  Vector4, HalfSingle, HalfVector2, HalfVector4 and HdrBlendable (`AM4-142`), so HDR, bloom and float
+  shadow maps keep their range; any other preference becomes Color, as XNA's
+  `QueryRenderTargetFormat` does. Pipelines are keyed on the bound targets' pixel formats;
+- TextureCube and Texture3D accept only `SurfaceFormat::Color`; unsupported formats throw;
 - render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`). Sampler `MaxMipLevel` is the sampler's
   `lodMinClamp` and `MipMapLevelOfDetailBias` its `lodBias` (`AM4-034`), for 3D draws and
   SpriteBatch alike; `lodBias` exists from macOS/iOS 26, and below that a non-zero bias still

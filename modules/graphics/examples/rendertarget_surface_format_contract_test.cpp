@@ -40,6 +40,8 @@ namespace
     constexpr const char* kRendererName = "D3D11";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
+#elif defined(CNA_RENDERER_METAL)
+    constexpr const char* kRendererName = "Metal";
 #else
     constexpr const char* kRendererName = "unknown";
 #endif
@@ -72,6 +74,43 @@ void main() { FragColor = vec4(2.0, -1.0, 0.5, 4.0); }
 precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
+)";
+#elif defined(CNA_RENDERER_METAL)
+    // plans/plan_apple_m4.md AM4-142: Metal's custom SpriteBatch effect contract
+    // (docs/metal-shader-effect-contract.md) -- buffer(0) the sprite vertices, buffer(1) the
+    // automatic transform.
+    const char* kVertexShader = R"(
+#include <metal_stdlib>
+using namespace metal;
+struct V2In { float2 position; float2 uv; float4 color; };
+struct U2D { float2 scale; float2 offset; };
+struct V2Out { float4 position [[position]]; };
+vertex V2Out formatVertexMain(uint vid [[vertex_id]],
+                              const device V2In* v [[buffer(0)]],
+                              constant U2D& u [[buffer(1)]])
+{
+    V2Out o;
+    o.position = float4(v[vid].position * u.scale + u.offset, 0.0, 1.0);
+    return o;
+}
+)";
+
+    const char* kSinglePixelShader = R"(
+#include <metal_stdlib>
+using namespace metal;
+fragment float4 singleFragmentMain() { return float4(4.0, 0.0, 0.0, 1.0); }
+)";
+
+    const char* kHalfPixelShader = R"(
+#include <metal_stdlib>
+using namespace metal;
+fragment float4 halfFragmentMain() { return float4(2.0, -1.0, 0.5, 4.0); }
+)";
+
+    const char* kColorPixelShader = R"(
+#include <metal_stdlib>
+using namespace metal;
+fragment float4 colorFragmentMain() { return float4(0.25, 0.5, 0.75, 1.0); }
 )";
 #else
     const char* kVertexShader = R"(

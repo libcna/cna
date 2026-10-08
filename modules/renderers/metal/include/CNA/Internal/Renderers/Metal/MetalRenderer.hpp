@@ -226,6 +226,49 @@ namespace CNA::Internal::Renderers::Metal
             int w, int h, int depthFormat, bool preserveContents, bool mipMap,
             int multiSampleCount, int surfaceFormat) override;
         /**
+         * @brief Creates a cube render target in a native surface format.
+         *
+         * @param size Face size.
+         * @param depthFormat Requested XNA depth format.
+         * @param preserveContents Whether a bound face keeps its contents.
+         * @param mipMap Whether the target has a mip chain.
+         * @param multiSampleCount Requested multisample count.
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @return The cube render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /**
+         * @brief Reports whether Metal renders natively into a surface format (AM4-142).
+         *
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @return Supported for Color, Rgba1010102, Rg32, Rgba64 and the float formats; otherwise
+         *         Unsupported, which the shared layer answers by substituting Color.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether a Texture2D is stored natively in a surface format (AM4-142).
+         *
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @return Supported for every uncompressed XNA format (the packed 16-bit ones on Apple
+         *         GPUs); Defer for the rest, which the framework's own rule answers.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Keeps TextureCube on the framework's rule: its storage is still RGBA8 only.
+         *
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @return Defer.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports that half-float colour textures filter linearly.
+         *
+         * @return True; every Metal GPU filters 16-bit float formats.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+        /**
          * @brief Binds one Metal RenderTarget2D or restores the backbuffer.
          *
          * @param rt Target to bind, or null to restore the backbuffer.
