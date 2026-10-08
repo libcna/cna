@@ -27,6 +27,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -410,7 +411,12 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // (GLTF-473's fixed-function layout refusal was the other one; the only renderer that could
         // give it has been retired, and an allowance that can no longer fire is a place for a
         // regression to hide.)
-        const bool namedRefusal = failure.find("GLTF-477") != std::string::npos;
+        // plans/plan_apple_m4.md AM4-190: and on FNA3D, a stock effect whose vertex shader reads an
+        // input the primitive's layout lacks (DualTextureEffect's TextureCoordinate1 at stride
+        // 20): only FNA3D's OpenGL driver can default it, so its other drivers refuse by name.
+        const bool namedRefusal = failure.find("GLTF-477") != std::string::npos ||
+            (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d) &&
+             failure.find("FNA3D-MISSING-STOCK-INPUT") != std::string::npos);
         EXPECT_TRUE(namedRefusal)
             << "this renderer refused a canonical glTF stride for a reason other than a named "
                "absent shading model: " << failure;

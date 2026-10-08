@@ -1650,6 +1650,10 @@ namespace CNA::Internal::Renderers::Fna3d
         bool supportsSrgbRenderTargets_ = false;
         /// Whether the selected internal FNA3D driver creates real raster occlusion queries.
         bool supportsOcclusionQueries_ = false;
+        /// plans/plan_apple_m4.md AM4-190: whether the selected driver reads a default for a vertex
+        /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDL_GPU and Direct3D 11
+        /// drivers fail the pipeline instead, so a stock draw missing an input is refused first.
+        bool driverDefaultsMissingVertexInputs_ = false;
         int maxTextureSlots_ = 0;
         int maxVertexTextureSlots_ = 0;
     };

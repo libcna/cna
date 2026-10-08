@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -47,6 +48,85 @@ namespace CNA::Internal::Renderers::Fna3d
             if (params.dualTexture)  return StockEffectKind::DualTexture;
             if (AlphaTestActive(params)) return StockEffectKind::AlphaTest;
             return StockEffectKind::Basic;
+        }
+
+        /**
+         * plans/plan_apple_m4.md AM4-190: the inputs the selected XNA stock vertex shader reads,
+         * from the stock effects' own HLSL (BasicEffect.fx and its siblings), as (usage, index).
+         * XNA refuses a draw whose declaration omits one; FNA3D's SDL_GPU and Direct3D 11 drivers
+         * fail the pipeline, and its SDL_GPU driver then draws with a null one and crashes.
+         */
+        void RequireStockVertexInputsDeclared(const GpuDrawParams& params,
+                                              const FNA3D_VertexBufferBinding* bindings,
+                                              int bindingCount)
+        {
+            struct Input { FNA3D_VertexElementUsage usage; int index; const char* name; };
+            std::array<Input, 5> needed{};
+            std::size_t count = 0;
+            const auto need = [&](FNA3D_VertexElementUsage usage, int index, const char* name) {
+                needed[count++] = Input{usage, index, name};
+            };
+            need(FNA3D_VERTEXELEMENTUSAGE_POSITION, 0, "Position0");
+            const StockEffectKind kind = SelectStockEffect(params);
+            const char* effectName = "BasicEffect";
+            switch (kind)
+            {
+                case StockEffectKind::Basic:
+                    if (params.lightingEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
+                    if (params.textureEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
+                    if (params.vertexColorEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_COLOR, 0, "Color0");
+                    break;
+                case StockEffectKind::AlphaTest:
+                    effectName = "AlphaTestEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
+                    if (params.vertexColorEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_COLOR, 0, "Color0");
+                    break;
+                case StockEffectKind::DualTexture:
+                    effectName = "DualTextureEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 1, "TextureCoordinate1");
+                    if (params.vertexColorEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_COLOR, 0, "Color0");
+                    break;
+                case StockEffectKind::EnvironmentMap:
+                    effectName = "EnvironmentMapEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
+                    break;
+                case StockEffectKind::Skinned:
+                    effectName = "SkinnedEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES, 0, "BlendIndices0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT, 0, "BlendWeight0");
+                    break;
+                default:
+                    return;
+            }
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                bool declared = false;
+                for (int b = 0; b < bindingCount && !declared; ++b)
+                {
+                    const FNA3D_VertexDeclaration& declaration = bindings[b].vertexDeclaration;
+                    for (int e = 0; e < declaration.elementCount && !declared; ++e)
+                        declared = declaration.elements[e].vertexElementUsage == needed[i].usage &&
+                                   declaration.elements[e].usageIndex == needed[i].index;
+                }
+                if (!declared)
+                {
+                    throw System::NotSupportedException(
+                        std::string("FNA3D renderer (FNA3D-MISSING-STOCK-INPUT): the ") + effectName +
+                        " variant this draw selects reads " + needed[i].name +
+                        ", which no bound VertexDeclaration declares. XNA refuses such a draw, and "
+                        "FNA3D's SDL_GPU and Direct3D 11 drivers cannot create a pipeline for it "
+                        "(only its OpenGL driver reads a default for a missing input).");
+                }
+            }
         }
 
         const Fna3dSampledTexture* GetSampledTexture(Texture* texture)
@@ -265,6 +345,8 @@ namespace CNA::Internal::Renderers::Fna3d
             describe(*primaryBuffer, 0, 0, binding.vertexDeclaration);
         }
 
+        if (params.compiledEffectRuntime == nullptr && !driverDefaultsMissingVertexInputs_)
+            RequireStockVertexInputsDeclared(params, bindings.data(), bindingCount);
         FNA3D_ApplyVertexBufferBindings(device_, bindings.data(), bindingCount, 1, baseVertex);
     }
 

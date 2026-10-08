@@ -138,7 +138,13 @@ namespace CNA::Internal::Renderers::Fna3d
         // all. Calling it here restores driver selection; the GL attributes it also primes are
         // redundant now rather than load-bearing, since the window's visual is already fixed from
         // the descriptor's own request.
-        (void) FNA3D_PrepareWindowAttributes();
+        //
+        // plans/plan_apple_m4.md AM4-190: the flags it returns name the driver it selected -- only
+        // the OpenGL driver asks for SDL_WINDOW_OPENGL (the window itself is always created as one,
+        // so its own flags cannot tell) -- and only that driver disables an attribute array the
+        // declaration does not fill, so the shader reads (0, 0, 0, 1) for it.
+        driverDefaultsMissingVertexInputs_ =
+            (FNA3D_PrepareWindowAttributes() & SDL_WINDOW_OPENGL) != 0;
 
         int windowWidth = 0;
         int windowHeight = 0;
@@ -338,7 +344,9 @@ namespace CNA::Internal::Renderers::Fna3d
                 ", sRGB render targets " + (supportsSrgbRenderTargets_ ? "yes" : "no") +
                 ", occlusion queries " + (supportsOcclusionQueries_ ? "yes" : "no") +
                 ", texture slots " + std::to_string(maxTextureSlots_) +
-                " (vertex " + std::to_string(maxVertexTextureSlots_) + ")",
+                " (vertex " + std::to_string(maxVertexTextureSlots_) + ")" +
+                ", missing vertex inputs " +
+                (driverDefaultsMissingVertexInputs_ ? "read a default" : "refused by name"),
             CNA::LogCategory::RENDER);
     }
 
