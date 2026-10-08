@@ -1149,15 +1149,36 @@ if(CNA_BUILD_TESTS)
     cna_append_vulkan_validation_gate_pattern(_cna_unit_tests_output_gate CnaTests)
     # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
     string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
+    # plans/plan_apple_m4.md AM4-163: the suites that open real sockets share the machine with each
+    # other. SystemLink discovery answers on one well-known UDP port for the whole machine (as
+    # XNA's does), so a case asserting that a search finds nothing heard a host another case was
+    # announcing at the same moment, and loopback ENet sessions raced each other's peers -- eight
+    # ENetDiscoveryServiceTest cases failed under `ctest -j3` and passed alone. They are
+    # discovered separately and hold one CTest RESOURCE_LOCK, so they run one at a time among
+    # themselves and still in parallel with everything else.
+    set(_cna_unit_tests_network_filter
+        "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
     if(_cna_unit_tests_output_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            TEST_FILTER "-${_cna_unit_tests_network_filter}"
             PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
+                       ${_cna_unit_tests_audio_environment})
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            TEST_FILTER "${_cna_unit_tests_network_filter}"
+            PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
+                       RESOURCE_LOCK cna-network
                        ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            TEST_FILTER "-${_cna_unit_tests_network_filter}"
             ${_cna_unit_tests_audio_properties})
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            TEST_FILTER "${_cna_unit_tests_network_filter}"
+            PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_audio_environment})
     endif()
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
