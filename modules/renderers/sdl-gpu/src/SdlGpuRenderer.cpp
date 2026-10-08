@@ -9953,7 +9953,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::EnvMap:
                 {
                     const EnvMapDrawCommand& c = envMapDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.envMapTexture && c.target == target)
+                    // plans/plan_apple_m4.md AM4-107: no `c.texture`/`c.envMapTexture` requirement.
+                    // IssueEnvMapDraw binds XNA's opaque black for either unbound slot (AM4-066), and
+                    // this guard dropped such a draw silently instead -- the SMG-0033 defect again.
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
                         IssueEnvMapDraw(pass, cmd, c, colorFormat, sampleCount,
                                         depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
