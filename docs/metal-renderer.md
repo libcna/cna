@@ -184,8 +184,10 @@ effect's flags, and every input that pipeline's vertex function reads is bound a
 element's own offset and format, matched by usage and usage index; channels the effect does not
 read are ignored, and the layout is part of the pipeline key. A buffer with no declaration is the
 canonical XNA vertex type its stride names, with exactly the old fixed descriptor. Refused by name:
-a missing input, a raw integer format (`Byte4`, `Short2`, `Short4`) for a float input, which Metal
-will not convert, and an element outside the record. `BLENDINDICES` takes any format, as Direct3D 9
+a missing input and an element outside the record. A raw integer element (`Byte4`, `Short2`,
+`Short4`) feeding a float input, which Direct3D 9 converts and Metal will not fetch as float, is
+fetched normalized and multiplied back per component the format supplies, then rounded -- exact,
+the source being integers (`AM4-155`; function constants 4..10 of the stock vertex functions). `BLENDINDICES` takes any format, as Direct3D 9
 reads it (`AM4-152`): `Byte4` feeds the skinning shaders' `uchar4` input, every other format a
 `float4` one in a pipeline variant specialized on a function constant (`Short2`/`Short4` fetched
 normalized and scaled back), truncated to an index as HLSL's `int` conversion does --

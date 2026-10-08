@@ -794,8 +794,9 @@ namespace
         {"metal",
          "newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16",
          "t.skinParams[0]=(float)params.weightsPerVertex",
-         "if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * in.boneWeights.y",
-         "if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * in.boneWeights.z"},
+         // AM4-155: every stage_in read goes through CNA_SCALED (integer elements, scale 1 otherwise).
+         "if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).y",
+         "if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).z"},
         {"sdl-gpu",
          "out[i] = p.boneTransforms[i]",
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
@@ -1859,7 +1860,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
          "aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness",
          "*cnaDirectionHandedness(skinDirectionMat)"},
         {"metal",
-         "in.tangent.w * cna_direction_handedness(world3)",
+         "CNA_SCALED(in.tangent, cnaScaleTangent).w * cna_direction_handedness(world3)",
          "* cna_direction_handedness(skinMat3)"},
         // plans/plan_street_sdlgpu.md STREETS-0001: the VULKAN-232 reasoning below, on SDL_GPU.
         {"sdl-gpu",

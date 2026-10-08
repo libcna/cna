@@ -452,6 +452,38 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
             TIMEOUT 120 LABELS "Metal;MetalOracle" WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
     endforeach()
     unset(_cna_metal_oracle)
+    # plans/plan_apple_m4.md AM4-155: renderer-neutral fixtures other renderers' directories own and a
+    # second renderer already reuses unchanged (SDL_GPU, EasyGL, DirectX9, Vulkan); the GLSL/SPIR-V
+    # ShaderEffect one stays with Vulkan.
+    set(CNA_METAL_REUSED_FIXTURES
+        webgpu/webgpu_compressed_content
+        webgpu/webgpu_spritebatch_rendertarget
+        webgpu/webgpu_instanced_stock_families
+        webgpu/webgpu_instanced_pbr3d
+        vulkan/vulkan_viewspace_fog
+        vulkan/vulkan_skinnedeffect_fog
+        vulkan/vulkan_fill_mode
+        vulkan/vulkan_environmentmapeffect_fog
+        vulkan/vulkan_dualtextureeffect_fog
+        vulkan/vulkan_alphatest_fog
+        software/software_vertex_declaration
+        software/software_presentation_reset_contract
+        sdl-renderer/sdlrenderer_texture2d_saveas_roundtrip
+        sdl-renderer/sdlrenderer_texture2d_fromstream
+        sdl-renderer/sdlrenderer_disposed_guards
+    )
+    foreach(_cna_metal_reused IN LISTS CNA_METAL_REUSED_FIXTURES)
+        get_filename_component(_cna_metal_reused_name ${_cna_metal_reused} NAME)
+        get_filename_component(_cna_metal_reused_dir ${_cna_metal_reused} DIRECTORY)
+        cna_metal_test(cna_test_metal_reused_${_cna_metal_reused_name}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/${_cna_metal_reused_dir}/examples/${_cna_metal_reused_name}_test.cpp)
+        cna_register_renderer_test(NAME Metal_Reused_${_cna_metal_reused_name}
+            COMMAND cna_test_metal_reused_${_cna_metal_reused_name}
+            TIMEOUT 120 LABELS "Metal;MetalOracle" WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+    endforeach()
+    unset(_cna_metal_reused)
+    unset(_cna_metal_reused_name)
+    unset(_cna_metal_reused_dir)
     # The scene drives itself through the platform module's shared canned-keyboard decorator.
     target_include_directories(cna_test_metal_easygl_oracle_sample_keyboard_cube3d PRIVATE
         "${CMAKE_SOURCE_DIR}/modules/platform/tests")

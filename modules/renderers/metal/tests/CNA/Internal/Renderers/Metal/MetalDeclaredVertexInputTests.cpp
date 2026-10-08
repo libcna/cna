@@ -125,12 +125,39 @@ TEST(MetalDeclaredVertexInput, AMissingInputIsRefusedByName)
     EXPECT_NE(input.refusal.find("Normal0"), std::string::npos) << input.refusal;
 }
 
-TEST(MetalDeclaredVertexInput, IntegerFormatsAreRefusedForFloatInputs)
+// plans/plan_apple_m4.md AM4-155: a raw integer element reaches a float input normalized and scaled back.
+TEST(MetalDeclaredVertexInput, IntegerFormatsReachFloatInputsNormalizedAndScaledBack)
 {
     const std::vector<VertexElement> shortPosition{
         VertexElement(0, F::Short4, U::Position, 0),
-        VertexElement(8, F::Color, U::Color, 0)};
-    EXPECT_FALSE(BuildMetalDeclaredVertexInput(K::Colored16, shortPosition, 12).IsComplete());
+        VertexElement(8, F::Byte4, U::Color, 0)};
+    const MetalDeclaredVertexInput input = BuildMetalDeclaredVertexInput(K::Colored16, shortPosition, 12);
+    ASSERT_TRUE(input.IsComplete()) << input.refusal;
+    EXPECT_EQ(input.attributes[0].kind, A::Short4Normalized);
+    EXPECT_EQ(input.attributes[1].kind, A::UChar4Normalized);
+    const auto& position = input.semanticScales[(std::size_t)MetalSemanticScaleSlot(MetalVertexSemantic::Position)];
+    const auto& color = input.semanticScales[(std::size_t)MetalSemanticScaleSlot(MetalVertexSemantic::Color)];
+    EXPECT_FLOAT_EQ(position[0], 32767.0f);
+    EXPECT_FLOAT_EQ(position[3], 32767.0f);
+    EXPECT_FLOAT_EQ(color[0], 255.0f);
+    // A float element leaves its semantic unscaled, and the variant changes the pipeline key.
+    const MetalDeclaredVertexInput canonical = BuildMetalDeclaredVertexInput(
+        K::Colored16, MetalCanonicalElementsFor(K::Colored16), 16);
+    EXPECT_FLOAT_EQ(canonical.semanticScales[0][0], 1.0f);
+    EXPECT_NE(input.LayoutKey(), canonical.LayoutKey());
+}
+
+TEST(MetalDeclaredVertexInput, Short2ScalesOnlyTheComponentsItSupplies)
+{
+    const MetalIntegerElementInput short2 = MetalIntegerElementScale(F::Short2);
+    EXPECT_EQ(short2.kind, A::Short2Normalized);
+    EXPECT_FLOAT_EQ(short2.scale[0], 32767.0f);
+    EXPECT_FLOAT_EQ(short2.scale[1], 32767.0f);
+    EXPECT_FLOAT_EQ(short2.scale[2], 1.0f);   // filled 0 by the fetch, left as is
+    EXPECT_FLOAT_EQ(short2.scale[3], 1.0f);   // filled 1 by the fetch -- an alpha stays 1
+    EXPECT_TRUE(MetalIsRawIntegerFormat(F::Byte4));
+    EXPECT_FALSE(MetalIsRawIntegerFormat(F::NormalizedShort4));
+    EXPECT_EQ(MetalSemanticScaleSlot(MetalVertexSemantic::BlendIndices), -1);
 }
 
 // plans/plan_apple_m4.md AM4-152: BLENDINDICES in any format, as Direct3D 9 reads it.

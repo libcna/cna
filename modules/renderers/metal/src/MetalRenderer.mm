@@ -259,6 +259,21 @@ constant bool cnaInstanced [[function_constant(1)]];
 constant bool cnaBoneIndicesFloat [[function_constant(2)]];
 constant bool cnaBoneIndicesByte = !cnaBoneIndicesFloat;
 constant float cnaBoneIndexScale [[function_constant(3)]];
+// plans/plan_apple_m4.md AM4-155: a raw integer element (Byte4, Short2, Short4) feeding a float input,
+// which Direct3D 9 converts to float and Metal will not: it is fetched normalized and multiplied back,
+// per component the format supplies, then rounded -- exact, the source being integers. Each
+// semantic's float4 scale is 1 wherever no such element feeds it.
+constant float4 cnaScalePosition [[function_constant(4)]];
+constant float4 cnaScaleNormal [[function_constant(5)]];
+constant float4 cnaScaleUv [[function_constant(6)]];
+constant float4 cnaScaleUv1 [[function_constant(7)]];
+constant float4 cnaScaleColor [[function_constant(8)]];
+constant float4 cnaScaleTangent [[function_constant(9)]];
+constant float4 cnaScaleBoneWeights [[function_constant(10)]];
+inline float4 cna_scaled(float4 v, float4 s) { return select(v, rint(v * s), s != 1.0); }
+inline float3 cna_scaled(float3 v, float4 s) { return select(v, rint(v * s.xyz), s.xyz != 1.0); }
+inline float2 cna_scaled(float2 v, float4 s) { return select(v, rint(v * s.xy), s.xy != 1.0); }
+#define CNA_SCALED(value, scale) cna_scaled(value, scale)
 #define CNA_BONE_INDEX_INPUTS(n) \
     uchar4 boneIndices [[attribute(n), function_constant(cnaBoneIndicesByte)]]; \
     float4 boneIndicesF [[attribute(n), function_constant(cnaBoneIndicesFloat)]];
@@ -305,13 +320,13 @@ inline float4 cna_unlit_color0(float4 vertexColor, constant UMaterialParams& m) 
     return saturate(((m.flags.x > 0.5) ? vertexColor : float4(1.0)) * m.diffuseColor);
 }
 vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=float2(0.0); o.fogFactor=cna_fog_keep(p,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition),1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(CNA_SCALED(in.color, cnaScaleColor),m); o.uv=float2(0.0); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition),1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=CNA_SCALED(in.uv, cnaScaleUv); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition),1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(CNA_SCALED(in.color, cnaScaleColor),m); o.uv=CNA_SCALED(in.uv, cnaScaleUv); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 // Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
 // non-textured colored path) just pass the already-known alpha straight through.
@@ -344,10 +359,10 @@ struct V3DualOut { float4 position [[position]]; float pointSize [[point_size]] 
 struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]];  CNA_INSTANCE_INPUTS };
 struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]];  CNA_INSTANCE_INPUTS };
 vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
-    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition),1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=CNA_SCALED(in.uv, cnaScaleUv); o.uv1=CNA_SCALED(in.uv1, cnaScaleUv1); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
-    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition),1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(CNA_SCALED(in.color, cnaScaleColor),m); o.uv=CNA_SCALED(in.uv, cnaScaleUv); o.uv1=CNA_SCALED(in.uv1, cnaScaleUv1); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 fragment CnaFragOut cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 base = tex0.sample(smp0, in.uv);
@@ -393,12 +408,12 @@ struct LitUniforms {
 struct VLitOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
 vertex VLitOut cna_v3d_lit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitOut o;
-    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    float4 p = CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition), 1.0));
     o.position = t.wvp * p;
-    o.color = in.color;
+    o.color = CNA_SCALED(in.color, cnaScaleColor);
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, in.normal);
-    o.uv = in.uv;
+    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, CNA_SCALED(in.normal, cnaScaleNormal));
+    o.uv = CNA_SCALED(in.uv, cnaScaleUv);
     o.fogFactor = 1.0 - clamp(dot(p, lu.fogVector), 0.0, 1.0);
     o.worldPos = (t.world * p).xyz;
     return o;
@@ -434,11 +449,11 @@ fragment CnaFragOut cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[
 struct VLitVertexLitOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float alpha; };
 vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitVertexLitOut o;
-    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    float4 p = CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition), 1.0));
     o.position = t.wvp * p;
-    o.uv = in.uv;
+    o.uv = CNA_SCALED(in.uv, cnaScaleUv);
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    float3 N = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, in.normal));
+    float3 N = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, CNA_SCALED(in.normal, cnaScaleNormal)));
     float3 worldPos = (t.world * p).xyz;
     float3 E = normalize(lu.eyePosition.xyz - worldPos);
     float dotL0 = dot(N, -lu.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
@@ -447,13 +462,13 @@ vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]]
     float3 lightSum = lu.ambientColor.xyz + lu.light0Diffuse.xyz*NdotL0 + lu.light1Diffuse.xyz*NdotL1 + lu.light2Diffuse.xyz*NdotL2;
     // XNA's VSBasicVertexLightingVc: `vout.Diffuse *= vin.Color` -- the lit colour and the alpha --
     // written to COLOR0, which Direct3D 9 saturates before interpolation (AM4-106; EasyGL FX-123/125).
-    o.litRGB = saturate((lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz) * in.color.rgb);
-    o.alpha = saturate(lu.diffuseColor.w * in.color.a);
+    o.litRGB = saturate((lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz) * CNA_SCALED(in.color, cnaScaleColor).rgb);
+    o.alpha = saturate(lu.diffuseColor.w * CNA_SCALED(in.color, cnaScaleColor).a);
     float3 h0 = normalize(E - lu.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, lu.specularColorPower.w);
     float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
     float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
     o.specularRGB = saturate((spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz);
-    o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), lu.fogVector), 0.0, 1.0);
+    o.fogFactor = 1.0 - clamp(dot(float4(CNA_SCALED(in.position, cnaScalePosition), 1.0), lu.fogVector), 0.0, 1.0);
     return o;
 }
 fragment CnaFragOut cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
@@ -492,15 +507,15 @@ struct EnvUniforms {
 struct VEnvOut { float4 position [[position]]; float pointSize [[point_size]] = 1.0; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
 vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
     VEnvOut o;
-    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    float4 p = CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition), 1.0));
     o.position = t.wvp * p;
     float3 worldPos = (t.world * p).xyz;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    float3 worldNormal = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, in.normal));
+    float3 worldNormal = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, CNA_SCALED(in.normal, cnaScaleNormal)));
     float3 eyeVector = normalize(eu.eyePosition.xyz - worldPos);
     o.worldNormal = worldNormal;
     o.eyeDir = eyeVector;
-    o.uv = in.uv;
+    o.uv = CNA_SCALED(in.uv, cnaScaleUv);
     float viewAngle = dot(eyeVector, worldNormal);
     // AM4-140: EnvironmentMapEffect.fx carries this factor to the pixel shader in COLOR1, which
     // Direct3D 9 saturates before interpolation -- EasyGL's SAMPLE-037 rule. EnvironmentMapAmount
@@ -594,10 +609,10 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     return o;
 }
 vertex VSkinnedOut cna_v3d_skinned(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), float4(1.0), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_common(CNA_SCALED(in.position, cnaScalePosition), CNA_SCALED(in.normal, cnaScaleNormal), CNA_SCALED(in.uv, cnaScaleUv), CNA_SCALED(in.boneWeights, cnaScaleBoneWeights), CNA_BONE_INDICES(in), float4(1.0), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedOut cna_v3d_skinned_color(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), in.color, t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_common(CNA_SCALED(in.position, cnaScalePosition), CNA_SCALED(in.normal, cnaScaleNormal), CNA_SCALED(in.uv, cnaScaleUv), CNA_SCALED(in.boneWeights, cnaScaleBoneWeights), CNA_BONE_INDICES(in), CNA_SCALED(in.color, cnaScaleColor), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.normal);
@@ -669,10 +684,10 @@ inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 no
     return o;
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_vertexlit(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), float4(1.0), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_vertexlit_common(CNA_SCALED(in.position, cnaScalePosition), CNA_SCALED(in.normal, cnaScaleNormal), CNA_SCALED(in.uv, cnaScaleUv), CNA_SCALED(in.boneWeights, cnaScaleBoneWeights), CNA_BONE_INDICES(in), float4(1.0), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_color_vertexlit(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), in.color, t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_vertexlit_common(CNA_SCALED(in.position, cnaScalePosition), CNA_SCALED(in.normal, cnaScaleNormal), CNA_SCALED(in.uv, cnaScaleUv), CNA_SCALED(in.boneWeights, cnaScaleBoneWeights), CNA_BONE_INDICES(in), CNA_SCALED(in.color, cnaScaleColor), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 texColor = tex.sample(smp, in.uv);
@@ -720,20 +735,20 @@ float cna_direction_handedness(float3x3 m) {
 }
 vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
     VPbrOut o;
-    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    float4 p = CNA_INSTANCE_POSITION(in, float4(CNA_SCALED(in.position, cnaScalePosition), 1.0));
     o.position = t.wvp * p;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, in.normal);
+    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, CNA_SCALED(in.normal, cnaScaleNormal));
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
-    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, in.tangent.xyz);
+    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, CNA_SCALED(in.tangent, cnaScaleTangent).xyz);
     const float instanceHandedness = cnaInstanced
         ? cna_direction_handedness(float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz)) : 1.0;
-    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3) * instanceHandedness;
-    o.uv = in.uv;
-    o.uv1 = in.uv1;
+    o.bitangentSign = CNA_SCALED(in.tangent, cnaScaleTangent).w * cna_direction_handedness(world3) * instanceHandedness;
+    o.uv = CNA_SCALED(in.uv, cnaScaleUv);
+    o.uv1 = CNA_SCALED(in.uv1, cnaScaleUv1);
     o.worldPos = (t.world * p).xyz;
     o.fogFactor = 1.0 - clamp(dot(p, pu.fogVector), 0.0, 1.0);
-    o.color = in.color;
+    o.color = CNA_SCALED(in.color, cnaScaleColor);
     return o;
 }
 inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float3 F90, float roughness, float metallic) {
@@ -850,31 +865,31 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     VPbrOut o;
     int weightsPerVertex = int(t.skinParams.x);
     const uint4 boneIndices = CNA_BONE_INDICES(in);   // AM4-152
-    float4x4 skinMat = bones[boneIndices.x] * in.boneWeights.x;
-    if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * in.boneWeights.y;
-    if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * in.boneWeights.z + bones[boneIndices.w] * in.boneWeights.w;
-    float4 skinnedPos = CNA_INSTANCE_POSITION(in, skinMat * float4(in.position, 1.0));
+    float4x4 skinMat = bones[boneIndices.x] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).x;
+    if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).y;
+    if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).z + bones[boneIndices.w] * CNA_SCALED(in.boneWeights, cnaScaleBoneWeights).w;
+    float4 skinnedPos = CNA_INSTANCE_POSITION(in, skinMat * float4(CNA_SCALED(in.position, cnaScalePosition), 1.0));
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    float3 skinnedNormal = cna_skin_normal(skinMat3, in.normal);
+    float3 skinnedNormal = cna_skin_normal(skinMat3, CNA_SCALED(in.normal, cnaScaleNormal));
     float skinnedNormalLen = length(skinnedNormal);
-    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : CNA_SCALED(in.normal, cnaScaleNormal);
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
     o.normal = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, boneNormal));
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
-    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, skinMat3 * in.tangent.xyz);
+    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, skinMat3 * CNA_SCALED(in.tangent, cnaScaleTangent).xyz);
     const float instanceHandedness = cnaInstanced
         ? cna_direction_handedness(float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz)) : 1.0;
-    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3) * instanceHandedness
+    o.bitangentSign = CNA_SCALED(in.tangent, cnaScaleTangent).w * cna_direction_handedness(world3) * instanceHandedness
                                    * cna_direction_handedness(skinMat3);
-    o.uv = in.uv;
-    o.uv1 = in.uv1;
+    o.uv = CNA_SCALED(in.uv, cnaScaleUv);
+    o.uv1 = CNA_SCALED(in.uv1, cnaScaleUv1);
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);
-    o.color = in.color;
+    o.color = CNA_SCALED(in.color, cnaScaleColor);
     return o;
 }
 
@@ -1145,7 +1160,8 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
         const std::array<MTLPixelFormat,8>* colorFormats=nullptr, bool instanceMatrix=false,
         MTLPixelFormat depthFormat=MTLPixelFormatDepth32Float_Stencil8,
         MTLPixelFormat stencilFormat=MTLPixelFormatDepth32Float_Stencil8,
-        bool boneIndicesFloat=false, float boneIndexScale=1.0f)
+        bool boneIndicesFloat=false, float boneIndexScale=1.0f,
+        const std::array<std::array<float,4>,7>* semanticScales=nullptr)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
@@ -1158,6 +1174,11 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
         [constants setConstantValue:&instanced type:MTLDataTypeBool atIndex:1];
         [constants setConstantValue:&boneIndicesFloat type:MTLDataTypeBool atIndex:2];   // AM4-152
         [constants setConstantValue:&boneIndexScale type:MTLDataTypeFloat atIndex:3];
+        // AM4-155: function constants 4..10, each float semantic's integer-element scale.
+        for (std::size_t slot=0; slot<7; ++slot) {
+            const std::array<float,4> scale=semanticScales ? (*semanticScales)[slot] : std::array<float,4>{1.0f,1.0f,1.0f,1.0f};
+            [constants setConstantValue:scale.data() type:MTLDataTypeFloat4 atIndex:4+slot];
+        }
         NSError* functionError=nil;
         d.vertexFunction=[lib newFunctionWithName:vs constantValues:constants error:&functionError];
         d.fragmentFunction=[lib newFunctionWithName:fs constantValues:constants error:&functionError];
@@ -2921,7 +2942,8 @@ struct MetalRenderer::Impl
                                          vertexInput && vertexInput->instanceMatrix,   // AM4-143
                                          activeDepthFormat, activeStencilFormat,       // AM4-151
                                          vertexInput && vertexInput->boneIndicesFloat,
-                                         vertexInput ? vertexInput->boneIndexScale : 1.0f));   // AM4-152
+                                         vertexInput ? vertexInput->boneIndexScale : 1.0f,     // AM4-152
+                                         vertexInput ? &vertexInput->semanticScales : nullptr));   // AM4-155
         const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
         return inserted->second;
     }

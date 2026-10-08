@@ -208,6 +208,16 @@ namespace CNA::Internal::Renderers::Metal
         bool boneIndicesFloat = false;
         /** @brief What the float4 bone-index input is multiplied by before its rounding. */
         float boneIndexScale = 1.0f;
+        /**
+         * @brief Per float semantic (MetalSemanticScaleSlot), the per-component factor its stage_in
+         *        read is multiplied by and rounded with -- 1 everywhere except a raw integer element
+         *        fetched normalized (plans/plan_apple_m4.md AM4-155; MetalIntegerElementScale).
+         */
+        std::array<std::array<float, 4>, 7> semanticScales = []{
+            std::array<std::array<float, 4>, 7> ones{};
+            for (auto& scale : ones) scale = {1.0f, 1.0f, 1.0f, 1.0f};
+            return ones;
+        }();
         /** @brief Why the declaration cannot feed the pipeline; empty when it can. */
         std::string refusal;
 
@@ -264,6 +274,8 @@ namespace CNA::Internal::Renderers::Metal
             mix(instanceMatrix ? 1u : 0u);
             mix(boneIndicesFloat ? 1u : 0u);
             mix(static_cast<std::uint64_t>(boneIndexScale));
+            for (const auto& scale : semanticScales)
+                for (const float factor : scale) mix(static_cast<std::uint64_t>(factor));
             return h == 0 ? 1 : h;
         }
     };
@@ -374,17 +386,81 @@ namespace CNA::Internal::Renderers::Metal
         MetalVertexSemantic semantic,
         Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
     {
+        (void)semantic;
+        (void)format;
+        return true;   // AM4-155: every format reaches every input (MetalIntegerElementScale)
+    }
+
+    /**
+     * @brief Whether a format is a raw (unnormalized) integer one Metal will not fetch as float.
+     *
+     * @param format Element format.
+     * @return True for Byte4, Short2 and Short4.
+     */
+    [[nodiscard]] constexpr bool MetalIsRawIntegerFormat(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
+    {
         using VEF = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
-        if (semantic == MetalVertexSemantic::BlendIndices)
-            return true;
+        return format == VEF::Byte4 || format == VEF::Short2 || format == VEF::Short4;
+    }
+
+    /**
+     * @brief The function-constant slot of a float semantic's scale; -1 for BLENDINDICES.
+     *
+     * @param semantic Shader input.
+     * @return 0..6 for POSITION, NORMAL, TEXCOORD0, TEXCOORD1, COLOR, TANGENT and BLENDWEIGHT
+     *         (function constants 4..10 of the stock shaders).
+     */
+    [[nodiscard]] constexpr int MetalSemanticScaleSlot(MetalVertexSemantic semantic) noexcept
+    {
+        switch (semantic)
+        {
+            case MetalVertexSemantic::Position:    return 0;
+            case MetalVertexSemantic::Normal:      return 1;
+            case MetalVertexSemantic::TexCoord0:   return 2;
+            case MetalVertexSemantic::TexCoord1:   return 3;
+            case MetalVertexSemantic::Color:       return 4;
+            case MetalVertexSemantic::Tangent:     return 5;
+            case MetalVertexSemantic::BlendWeight: return 6;
+            case MetalVertexSemantic::BlendIndices: return -1;
+        }
+        return -1;
+    }
+
+    /** @brief How a raw integer element reaches a float input (AM4-155). */
+    struct MetalIntegerElementInput
+    {
+        /** @brief The normalized vertex format Metal fetches it as. */
+        MetalVertexAttribKind kind = MetalVertexAttribKind::UChar4Normalized;
+        /** @brief The per-component factor that undoes the normalization (1 past its components). */
+        std::array<float, 4> scale{1.0f, 1.0f, 1.0f, 1.0f};
+    };
+
+    /**
+     * @brief The fetch and scale of a raw integer element feeding a float input.
+     *
+     * plans/plan_apple_m4.md AM4-155: Direct3D 9 converts UBYTE4/SHORT2/SHORT4 to float; Metal
+     * fetches them only into integer shader types. The element is fetched normalized and multiplied
+     * back component by component -- only the components the format supplies, so a Short2 colour's
+     * alpha stays the fetch's 1 -- and rounded, which recovers the integer exactly.
+     *
+     * @param format A raw integer element format (MetalIsRawIntegerFormat).
+     * @return The normalized fetch kind and its scale.
+     */
+    [[nodiscard]] inline MetalIntegerElementInput MetalIntegerElementScale(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
+    {
+        using VEF = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         switch (format)
         {
             case VEF::Byte4:
+                return {MetalVertexAttribKind::UChar4Normalized, {255.0f, 255.0f, 255.0f, 255.0f}};
             case VEF::Short2:
+                return {MetalVertexAttribKind::Short2Normalized, {32767.0f, 32767.0f, 1.0f, 1.0f}};
             case VEF::Short4:
-                return false;
+                return {MetalVertexAttribKind::Short4Normalized, {32767.0f, 32767.0f, 32767.0f, 32767.0f}};
             default:
-                return true;
+                return {DescribeMetalVertexElementFormat(format).kind, {1.0f, 1.0f, 1.0f, 1.0f}};
         }
     }
 
@@ -523,6 +599,12 @@ namespace CNA::Internal::Renderers::Metal
                 kind = bones.kind;
                 input.boneIndicesFloat = bones.floatInput;
                 input.boneIndexScale = bones.scale;
+            }
+            else if (MetalIsRawIntegerFormat(format))
+            {
+                const MetalIntegerElementInput integer = MetalIntegerElementScale(format);
+                kind = integer.kind;
+                input.semanticScales[static_cast<std::size_t>(MetalSemanticScaleSlot(semantic))] = integer.scale;
             }
             input.attributes.push_back(MetalDeclaredAttribute{static_cast<int>(location), kind, offset});
         }
@@ -828,7 +910,7 @@ namespace CNA::Internal::Renderers::Metal
             {
                 const auto& e = (*elements)[j];
                 const auto format = e.getVertexElementFormatProperty();
-                if (!MetalSemanticAcceptsFormat(MetalVertexSemantic::Position, format))
+                if (MetalIsRawIntegerFormat(format))
                 {
                     input.refusal = "per-instance vertex stream " + std::to_string(stream.slot) +
                                     " has an integer element Metal cannot convert to the instance "
