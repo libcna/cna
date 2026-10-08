@@ -1016,10 +1016,12 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheRend
 }
 
 // ---------------------------------------------------------------------------
-// SDL_GPU's host-side staging path retains CNA's explicit compatibility range guard. Microsoft
-// XNA itself forwards these native inputs; Software/EasyGL opt out once their paths are safe.
+// plans/plan_apple_m4.md AM4-183: XNA forwards startIndex, baseVertex and the range hints to the
+// native draw rather than validating them, and SDL_GPU now does too. An index window it cannot
+// issue draws nothing; a forwarded baseVertex or hint reaches the GPU as given. Only the
+// arguments XNA itself refuses still throw.
 // ---------------------------------------------------------------------------
-TEST_F(SdlGpuIndexedDrawRangeTest, RejectsIndexedRangesOutsideTheBoundBuffers)
+TEST_F(SdlGpuIndexedDrawRangeTest, ForwardsIndexedRangesAsXnaDoes)
 {
     RequireIndexedRendering();
 
@@ -1043,44 +1045,23 @@ TEST_F(SdlGpuIndexedDrawRangeTest, RejectsIndexedRangesOutsideTheBoundBuffers)
     ApplyVertexColorEffect(effect);
 
     using System::ArgumentOutOfRangeException;
-    // A valid draw with the same buffers, to prove the rejections below are about the arguments.
-    EXPECT_NO_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 3, 0, 3, 0, 1));
-    // Negative startIndex.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, -1, 1),
-        ArgumentOutOfRangeException);
-    // Negative baseVertex.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, -1, 0, 3, 0, 1),
-        ArgumentOutOfRangeException);
-    // Negative minVertexIndex.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, -1, 3, 0, 1),
-        ArgumentOutOfRangeException);
-    // Non-positive numVertices.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1),
-        ArgumentOutOfRangeException);
-    // Non-positive primitiveCount.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 0),
-        ArgumentOutOfRangeException);
-    // startIndex past the end of the index buffer.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 7, 1),
-        ArgumentOutOfRangeException);
-    // startIndex plus the consumed count past the end of the index buffer.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 4, 1),
-        ArgumentOutOfRangeException);
-    // baseVertex plus the declared decoded range past the end of the vertex buffer.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 4, 0, 3, 0, 1),
-        ArgumentOutOfRangeException);
-    // An index count that would overflow when derived from primitiveCount. plans/plan_apple_m4.md
-    // AM4-174: since SOFTWARE-209 XNA's profile limit (HiDef: 1,048,575 primitives) refuses it
-    // first, with NotSupportedException, so no derived count can overflow any more.
+    // Index windows SDL_gpu cannot issue: no exception, and nothing drawn (checked below).
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, -1, 1))
+        << "negative startIndex";
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 7, 1))
+        << "startIndex past the end of the index buffer";
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 4, 1))
+        << "an index window crossing the end of the index buffer";
+    // A valid draw with the same buffers.
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 3, 0, 3, 0, 1));
+
+    // What XNA itself refuses.
+    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1),
+                 ArgumentOutOfRangeException) << "non-positive numVertices";
+    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 0),
+                 ArgumentOutOfRangeException) << "non-positive primitiveCount";
+    // AM4-174: XNA's profile limit (HiDef: 1,048,575 primitives) refuses this first, with
+    // NotSupportedException, so no derived count can overflow.
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 3, 0,
@@ -1092,7 +1073,20 @@ TEST_F(SdlGpuIndexedDrawRangeTest, RejectsIndexedRangesOutsideTheBoundBuffers)
     // Only the one valid draw rendered.
     const TargetSnapshot pixels = CaptureTarget(target);
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "the single valid draw still rendered");
-    ExpectColorAbsent(pixels, Color::Red, "no rejected draw reached the target");
+    ExpectColorAbsent(pixels, Color::Red, "no unservable index window reached the target");
+
+    // Forwarded as given: a negative or out-of-buffer baseVertex and a negative minVertexIndex
+    // hint. What the GPU makes of a vertex outside the buffer is as undefined as it is under
+    // Direct3D, so only the absence of a managed exception is asserted, on a target not read.
+    RenderTarget2D scratch = MakeTarget(device);
+    device.SetRenderTarget(&scratch);
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, -1, 0, 3, 3, 1))
+        << "negative baseVertex";
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 4, 0, 3, 0, 1))
+        << "baseVertex plus the declared range past the end of the vertex buffer";
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, -1, 3, 0, 1))
+        << "negative minVertexIndex";
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 }
 
 // ---------------------------------------------------------------------------

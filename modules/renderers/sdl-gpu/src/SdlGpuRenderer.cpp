@@ -6217,8 +6217,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         const int startIndex = params != nullptr ? params->startIndex : 0;
         const int baseVertex = params != nullptr ? params->baseVertex : 0;
-        const int minVertexIndex = params != nullptr ? params->minVertexIndex : 0;
-        const int numVertices = params != nullptr ? params->numVertices : 0;
 
         if (primitiveCount <= 0)
         {
@@ -6231,24 +6229,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw System::ArgumentOutOfRangeException(
                 "startIndex", std::to_string(startIndex),
                 "CNA SDL_GPU: startIndex is an index-element offset and cannot be negative.");
-        }
-        if (baseVertex < 0)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "baseVertex", std::to_string(baseVertex),
-                "CNA SDL_GPU: baseVertex cannot be negative.");
-        }
-        if (minVertexIndex < 0)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "minVertexIndex", std::to_string(minVertexIndex),
-                "CNA SDL_GPU: minVertexIndex cannot be negative.");
-        }
-        if (numVertices < 0)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "numVertices", std::to_string(numVertices),
-                "CNA SDL_GPU: numVertices cannot be negative.");
         }
 
         // Computed in 64-bit so an overflowing request is rejected instead of wrapping, exactly as
@@ -6284,30 +6264,17 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the requested index range exceeds the bound index buffer.");
         }
 
-        // baseVertex shifts every decoded index, so the caller-declared decoded range
-        // [minVertexIndex, minVertexIndex + numVertices) must still land inside the bound vertex
-        // buffer once shifted. The hints never change addressing; they only bound it. A zero
-        // numVertices means the caller declared no range at all -- the DrawUser* path, whose data
-        // GraphicsDevice has already copied and rebased -- so only baseVertex itself is checked.
-        const std::int64_t availableVertexCount = static_cast<std::int64_t>(vb.GetVertexCount());
-        const std::int64_t declaredVertexEnd = static_cast<std::int64_t>(baseVertex) +
-                                               static_cast<std::int64_t>(minVertexIndex) +
-                                               static_cast<std::int64_t>(numVertices);
-        if (static_cast<std::int64_t>(baseVertex) > availableVertexCount ||
-            (numVertices > 0 && declaredVertexEnd > availableVertexCount))
-        {
-            throw System::ArgumentOutOfRangeException(
-                "baseVertex", std::to_string(baseVertex),
-                "CNA SDL_GPU: the declared vertex range exceeds the bound vertex buffer.");
-        }
+        // plans/plan_apple_m4.md AM4-183: baseVertex reaches SDL_gpu's Sint32 vertex_offset as XNA
+        // hands it to Direct3D, negative or past the buffer, and minVertexIndex/numVertices are
+        // hints that never change addressing: the GPU reads decoded indices from the buffer's own
+        // storage, never through a host copy, so neither is a managed error here.
+        (void)vb;
 
         // SDL takes num_indices/first_index as Uint32 and vertex_offset as Sint32; reject anything
         // the native argument types cannot represent rather than narrowing it silently.
         if (consumedIndexCount > static_cast<std::int64_t>(std::numeric_limits<Uint32>::max()) ||
             static_cast<std::int64_t>(startIndex) >
-                static_cast<std::int64_t>(std::numeric_limits<Uint32>::max()) ||
-            static_cast<std::int64_t>(baseVertex) >
-                static_cast<std::int64_t>(std::numeric_limits<Sint32>::max()))
+                static_cast<std::int64_t>(std::numeric_limits<Uint32>::max()))
         {
             throw System::ArgumentOutOfRangeException(
                 "primitiveCount", std::to_string(primitiveCount),
@@ -8715,12 +8682,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                 continue;
             }
 
+            // plans/plan_apple_m4.md AM4-183: baseVertex is forwarded, as XNA does; only the host
+            // copy's own starting record has to lie inside the shadow.
             const int firstVertex = source.vertexOffset + (ib == nullptr ? params.vertexStart : 0);
-            if (firstVertex < 0 || firstVertex > source.vertexCount ||
-                (ib != nullptr && params.baseVertex > source.vertexCount - firstVertex))
+            if (firstVertex < 0 || firstVertex > source.vertexCount)
             {
                 throw System::ArgumentOutOfRangeException(
-                    "baseVertex", std::to_string(params.baseVertex),
+                    "vertexOffset", std::to_string(source.vertexOffset),
                     "CNA SDL_GPU: a compiled-effect per-vertex stream offset leaves its buffer.");
             }
             const std::size_t byteOffset = static_cast<std::size_t>(firstVertex) * stride;
@@ -11158,11 +11126,26 @@ namespace CNA::Internal::Renderers::SdlGpu
                          nullptr, layout);
     }
 
+    bool SdlGpuRenderer::BufferedDrawWindowIsServableEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params) const
+    {
+        const std::int64_t first = ib != nullptr ? params.startIndex : params.vertexStart;
+        const std::int64_t count = ib != nullptr ? PrimitiveIndexCount(primitive, primitiveCount)
+                                                 : PrimitiveVertexCount(primitive, primitiveCount);
+        const std::int64_t available = ib != nullptr ? ib->GetIndexCount() : vb.GetVertexCount();
+        return first >= 0 && count >= 0 && available >= 0 && first <= available &&
+               count <= available - first;
+    }
+
     void SdlGpuRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
+        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        if (!BufferedDrawWindowIsServableEXT(vb, nullptr, primitive, primitiveCount, params))
+            return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-071: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BuildCompiledEffectVertexAttributes), not
@@ -11183,6 +11166,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
+        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
+            return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
         // RequireFaithfulDeclarationEXT rather than after.
@@ -11202,6 +11188,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
+        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
+            return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -11243,23 +11232,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (std::size_t i = 0; i < streams.count; ++i)
         {
             const StockVertexStreamSourceEXT& source = streams.sources[i];
+            // plans/plan_apple_m4.md AM4-183: a per-instance stream shorter than the instances
+            // it is asked for is forwarded, as XNA does; the host copy stops at the buffer's end
+            // and the records past it read as zero.
             if (source.instanceFrequency > 0)
             {
-                const int lastRecord = source.vertexOffset +
-                    (clampedInstanceCount - 1) / source.instanceFrequency;
-                if (source.vertexOffset < 0 || lastRecord >= source.vertexCount)
+                if (source.vertexOffset < 0)
                 {
                     throw System::ArgumentOutOfRangeException(
-                        "instanceCount", std::to_string(instanceCount),
+                        "vertexOffset", std::to_string(source.vertexOffset),
                         "CNA SDL_GPU: the per-instance stream bound to slot " +
-                        std::to_string(source.slot) + " does not contain the requested record.");
+                        std::to_string(source.slot) + " starts before its buffer.");
                 }
             }
-            else if (source.vertexOffset < 0 || source.vertexOffset > source.vertexCount ||
-                     params.baseVertex > source.vertexCount - source.vertexOffset)
+            else if (source.vertexOffset < 0 || source.vertexOffset > source.vertexCount)
             {
+                // plans/plan_apple_m4.md AM4-183: baseVertex is forwarded, as XNA does; the
+                // binding offset is where the host copy starts, so it must lie inside the buffer.
                 throw System::ArgumentOutOfRangeException(
-                    "baseVertex", std::to_string(params.baseVertex),
+                    "vertexOffset", std::to_string(source.vertexOffset),
                     "CNA SDL_GPU: a per-vertex binding offset leaves its buffer.");
             }
         }

@@ -832,6 +832,27 @@ namespace
 
 namespace
 {
+    /// A forwarded range is not a managed error (plans/plan_apple_m4.md AM4-183). SDL_GPU's stock
+    /// instancing takes per-instance data only as a four-column world matrix (STREETS-0001), so a
+    /// layout without one is a capability refusal there, which is not what these tests measure.
+    template <typename Draw>
+    void ExpectForwardedRange(Draw&& draw)
+    {
+        try
+        {
+            draw();
+        }
+        catch (const System::NotSupportedException& e)
+        {
+            if (!CNA_RENDERER_IS(SdlGpu))
+                ADD_FAILURE() << "a forwarded range was refused: " << e.what();
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << "a forwarded range was refused: " << e.what();
+        }
+    }
+
     /// Everything the mixed-stream legs bind, built once per leg so each leg owns its buffers.
     struct MixedStreamFixture
     {
@@ -2319,7 +2340,7 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamMatchesRangeCo
     if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
         EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
     else
-        EXPECT_NO_THROW(draw());
+        ExpectForwardedRange(draw);
 }
 
 // ---------------------------------------------------------------------------
@@ -2369,7 +2390,7 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondPerInstanceStreamMatchesRangeCon
     if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
         EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
     else
-        EXPECT_NO_THROW(draw());
+        ExpectForwardedRange(draw);
 }
 
 // ---------------------------------------------------------------------------
@@ -2417,7 +2438,7 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
     if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
         EXPECT_THROW(shortDraw(), System::ArgumentOutOfRangeException);
     else
-        EXPECT_NO_THROW(shortDraw());
+        ExpectForwardedRange(shortDraw);
 
     device.SetVertexBuffers({
         VertexBufferBinding(&positionBuffer, kPositionPrefix, 0),
