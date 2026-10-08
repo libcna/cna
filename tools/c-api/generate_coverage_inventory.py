@@ -30,6 +30,16 @@ from typing import Iterable
 
 
 SCHEMA_VERSION = 1
+# plans/plan_apple_m4.md AM4-160: the approval pins below are content IDs of the declarations
+# Doxygen 1.9.x reports, and Doxygen is not a stable parser across releases. 1.18 (Homebrew's)
+# reports a second copy of every Vector3/Matrix/Quaternion overload and a Microsoft::Devices::
+# Sensors::Matrix struct that does not exist, and drops the Dispose(bool) overloads: against it
+# the pins of untouched headers read as "no longer exist". There is no normalization of its output
+# that turns one parse into the other, so the gate measures only with the series its pins were
+# recorded with, and says so -- exiting UNPINNED_DOXYGEN_EXIT, which CTest reports as a skip -- with
+# any other.  selects a specific doxygen; otherwise the one on PATH is used.
+PINNED_DOXYGEN_SERIES = (1, 9)
+UNPINNED_DOXYGEN_EXIT = 77
 PUBLIC_ROOTS = ("Microsoft", "CNA")
 # Compared case-insensitively. CBIND-126: the tuple used to be matched exactly, and
 # `modules/content-pipeline/**/Graphics/detail/` and `**/Serialization/Intermediate/detail/` -- both
@@ -400,12 +410,34 @@ def discover_include_paths(root: Path) -> list[Path]:
     return sorted(candidates)
 
 
-def run_doxygen(root: Path, headers: list[Path], output_directory: Path) -> Path:
-    doxygen = shutil.which("doxygen")
-    if doxygen is None:
+class UnpinnedDoxygen(RuntimeError):
+    """The doxygen found is not the series the approval pins were recorded with."""
+
+
+def resolve_doxygen() -> str:
+    """The doxygen to parse with:  when set, else the one on PATH; 1.9.x only."""
+    doxygen = os.environ.get("CNA_DOXYGEN") or shutil.which("doxygen")
+    if not doxygen:
         raise RuntimeError(
-            "Doxygen is required to regenerate the C API coverage inventory (tested with 1.9.8+)."
+            "Doxygen is required to regenerate the C API coverage inventory (Doxygen 1.9.x)."
         )
+    completed = subprocess.run(
+        [doxygen, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        check=False,
+    )
+    version = completed.stdout.strip().split(" ")[0] if completed.returncode == 0 else ""
+    series = tuple(int(part) for part in re.findall(r"\d+", version)[:2])
+    if series != PINNED_DOXYGEN_SERIES:
+        raise UnpinnedDoxygen(
+            f"Doxygen {version or '(unknown version)'} at {doxygen} is not the 1.9.x series the "
+            "coverage pins were recorded with, and parses CNA's headers differently; set "
+            "CNA_DOXYGEN to a 1.9.x doxygen to run the C API coverage gates."
+        )
+    return doxygen
+
+
+def run_doxygen(root: Path, headers: list[Path], output_directory: Path) -> Path:
+    doxygen = resolve_doxygen()
 
     include_paths = discover_include_paths(root)
     config_lines = (
@@ -1772,6 +1804,9 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except UnpinnedDoxygen as error:
+        print(f"coverage inventory not measured: {error}", file=sys.stderr)
+        raise SystemExit(UNPINNED_DOXYGEN_EXIT) from error
     except (OSError, RuntimeError, subprocess.SubprocessError, json.JSONDecodeError) as error:
         print(f"coverage inventory error: {error}", file=sys.stderr)
         raise SystemExit(2) from error

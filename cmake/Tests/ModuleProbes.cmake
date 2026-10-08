@@ -373,6 +373,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
 
+        # plans/plan_apple_m4.md AM4-160: the three gates above measure the C++ surface through
+        # Doxygen's parser, and their approval pins are content IDs of what Doxygen 1.9.x reports.
+        # Doxygen 1.18 parses the same headers differently -- it reports a second copy of every
+        # Vector3/Matrix/Quaternion overload and drops Dispose(bool) overloads -- so on a machine
+        # whose doxygen is 1.18 (Homebrew's) the gates failed on pins the tree never broke. They now
+        # refuse to measure with any other series and exit 77, which CTest reports as a skip that
+        # names the version; CI, which installs 1.9.x, still fails on a real disagreement. Point
+        # CNA_C_API_DOXYGEN at a 1.9.x doxygen to run them anywhere.
+        set(CNA_C_API_DOXYGEN "" CACHE FILEPATH
+            "Doxygen 1.9.x for the C API coverage gates (empty: the doxygen on PATH)")
+        set_tests_properties(CApiCoverageMatrix CApiLimitations CApiReleaseGate PROPERTIES
+            SKIP_RETURN_CODE 77)
+        if(CNA_C_API_DOXYGEN)
+            set_tests_properties(CApiCoverageMatrix CApiLimitations CApiReleaseGate PROPERTIES
+                ENVIRONMENT "CNA_DOXYGEN=${CNA_C_API_DOXYGEN}")
+        endif()
+
         # plans/plan_binding.md CBIND-039: the ABI layout and export baseline.
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,

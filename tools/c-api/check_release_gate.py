@@ -45,11 +45,23 @@ NOT_MET = "not met"
 BLOCKED = "blocked"
 
 
+# plans/plan_apple_m4.md AM4-160: a tool that cannot measure here (the coverage tools without a
+# Doxygen 1.9.x) exits with this, and the gate then reports nothing rather than a criterion "not
+# met" that only the toolchain decided.
+NOT_MEASURED_EXIT = 77
+
+
+class NotMeasured(Exception):
+    """A criterion's tool could not measure in this environment."""
+
+
 def run_tool(script: str, *arguments: str) -> tuple[bool, str]:
     completed = subprocess.run(
         [sys.executable, str(TOOLS / script), *arguments],
         capture_output=True, text=True, cwd=REPO_ROOT)
     output = (completed.stdout + completed.stderr).strip().splitlines()
+    if completed.returncode == NOT_MEASURED_EXIT:
+        raise NotMeasured(output[0] if output else f"{script} could not measure here")
     return completed.returncode == 0, output[0] if output else ""
 
 
@@ -349,7 +361,11 @@ def main() -> int:
                        help="verify the record and the measurement agree, and the document is current")
     arguments = parser.parse_args()
 
-    evaluation = evaluate()
+    try:
+        evaluation = evaluate()
+    except NotMeasured as error:
+        print(f"release gate not measured: {error}", file=sys.stderr)
+        return NOT_MEASURED_EXIT
     rendered = render(evaluation)
 
     if arguments.run:

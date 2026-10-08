@@ -346,6 +346,10 @@ if __name__ == "__main__":
     # itself is unchanged and still exits non-zero; only its presentation is.
     try:
         sys.exit(main())
+    except coverage_inventory.UnpinnedDoxygen as error:
+        # plans/plan_apple_m4.md AM4-160: no measurement rather than a false one.
+        print(f"limitations not measured: {error}".splitlines()[0], file=sys.stderr)
+        sys.exit(coverage_inventory.UNPINNED_DOXYGEN_EXIT)
     except (OSError, RuntimeError, json.JSONDecodeError) as error:
         print(f"limitations error: {error}".splitlines()[0], file=sys.stderr)
         sys.exit(2)
