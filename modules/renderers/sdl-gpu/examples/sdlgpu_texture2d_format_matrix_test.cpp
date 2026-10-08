@@ -167,7 +167,7 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         // both profiles (SOFTWARE-214, from the recovered XNA validation). This fixture used to
         // build a 7x5 chain, which the shared layer now refuses before any renderer storage
         // exists; the NPOT, edge-block and sub-4x4 subjects it covered are reached legally
-        // below through a 12x8 chain whose lower levels are not block multiples.
+        // below through a 12x12 chain whose lower levels are not block multiples.
         bool unalignedRefused = false;
         try
         {
@@ -179,9 +179,10 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         }
         Check(unalignedRefused, "XNA refuses a 7x5 DXT1 Texture2D before allocating storage");
 
-        // 12x8 -> 6x4 -> 3x2 -> 1x1: level 0 is NPOT, level 1 ends in a 2-texel padded edge
-        // block, and levels 2 and 3 are each a single padded block.
-        Texture2D texture(device, 12, 8, true, SurfaceFormat::Dxt1);
+        // 12x12 -> 6x6 -> 3x3 -> 1x1: level 0 is NPOT, level 1 is a 2x2 block grid whose right
+        // column and bottom row are padded (the bottom-right block in both directions, as the
+        // 7x5 chain's were), and levels 2 and 3 are each a single padded block.
+        Texture2D texture(device, 12, 12, true, SurfaceFormat::Dxt1);
 
         std::vector<std::uint8_t> level0;
         AppendDxt1SolidBlock(level0, 0xF800u); // red
@@ -189,13 +190,16 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         AppendDxt1SolidBlock(level0, 0x001Fu); // blue, top-right
         AppendDxt1SolidBlock(level0, 0xFFFFu); // white
         AppendDxt1SolidBlock(level0, 0xFFE0u); // yellow
-        AppendDxt1SolidBlock(level0, 0xF81Fu); // magenta, bottom-right
+        AppendDxt1SolidBlock(level0, 0xF81Fu); // magenta
+        AppendDxt1SolidBlock(level0, 0x8410u); // grey
+        AppendDxt1SolidBlock(level0, 0x0000u); // black
+        AppendDxt1SolidBlock(level0, 0x7BEFu); // dark grey, bottom-right
         texture.SetData(level0.data(), static_cast<int>(level0.size()));
 
         std::vector<std::uint8_t> roundTrip(level0.size());
         texture.GetData(roundTrip.data(), static_cast<int>(roundTrip.size()));
         Check(roundTrip == level0,
-              "NPOT DXT1 level 0 preserves all six blocks byte-for-byte");
+              "NPOT DXT1 level 0 preserves all nine blocks byte-for-byte");
 
         std::vector<std::uint8_t> replacement;
         AppendDxt1SolidBlock(replacement, 0x07FFu);
@@ -206,11 +210,13 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         std::fill(roundTrip.begin(), roundTrip.end(), 0);
         texture.GetData(roundTrip.data(), static_cast<int>(roundTrip.size()));
         Check(roundTrip == level0,
-              "block-aligned partial DXT1 update changes one NPOT block and preserves five");
+              "block-aligned partial DXT1 update changes one NPOT block and preserves eight");
 
         std::vector<std::uint8_t> mip1;
-        AppendDxt1SolidBlock(mip1, 0xF800u); // level 1 is 6x4: one full block ...
-        AppendDxt1SolidBlock(mip1, 0x07E0u); // ... and one 2-texel padded edge block
+        AppendDxt1SolidBlock(mip1, 0xF800u); // level 1 is 6x6: one full block,
+        AppendDxt1SolidBlock(mip1, 0x07E0u); // a block padded to the right,
+        AppendDxt1SolidBlock(mip1, 0xFFE0u); // a block padded below,
+        AppendDxt1SolidBlock(mip1, 0xF81Fu); // and a 2x2-texel corner block padded both ways
         texture.SetData(1, nullptr, mip1.data(), 0, static_cast<int>(mip1.size()));
         std::vector<std::uint8_t> edgeReplacement;
         AppendDxt1SolidBlock(edgeReplacement, 0x001Fu);
@@ -221,10 +227,21 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         std::vector<std::uint8_t> mip1Read(mip1.size());
         texture.GetData(1, nullptr, mip1Read.data(), 0, static_cast<int>(mip1Read.size()));
         Check(mip1Read == mip1,
-              "edge-reaching partial DXT1 update changes the padded edge block and preserves one");
+              "edge-reaching partial DXT1 update changes the padded edge block and preserves three");
+
+        std::vector<std::uint8_t> cornerReplacement;
+        AppendDxt1SolidBlock(cornerReplacement, 0xFFFFu);
+        const Rectangle cornerBlock(4, 4, 2, 2);
+        texture.SetData(1, &cornerBlock, cornerReplacement.data(), 0,
+                        static_cast<int>(cornerReplacement.size()));
+        std::copy(cornerReplacement.begin(), cornerReplacement.end(), mip1.begin() + 24);
+        std::fill(mip1Read.begin(), mip1Read.end(), 0);
+        texture.GetData(1, nullptr, mip1Read.data(), 0, static_cast<int>(mip1Read.size()));
+        Check(mip1Read == mip1,
+              "a partial DXT1 update of the vertically padded corner block preserves the other three");
 
         std::vector<std::uint8_t> mip2;
-        AppendDxt1SolidBlock(mip2, 0xF800u); // level 2 is 3x2: one padded block
+        AppendDxt1SolidBlock(mip2, 0xF800u); // level 2 is 3x3: one padded block
         texture.SetData(2, nullptr, mip2.data(), 0, static_cast<int>(mip2.size()));
         std::vector<std::uint8_t> mip2Read(mip2.size());
         texture.GetData(2, nullptr, mip2Read.data(), 0, static_cast<int>(mip2Read.size()));
