@@ -77,6 +77,10 @@ struct ServiceENetSession::Impl {
     // Client whose host vanished in a session allowing migration, until the directory names a new one.
     bool migrating=false;
     Time migrationDeadline;
+    // plans/plan_apple_m4.md AM4-200: a client's app data for a new host whose connection is not yet
+    // admitted, in order, until that host's welcome; ENet refuses a send on a connecting peer.
+    std::vector<std::pair<std::vector<unsigned char>,SendDataOptions>> pendingUpstream;
+    std::size_t pendingUpstreamBytes=0;
     std::deque<std::shared_ptr<Adding>> adds;
 
     Impl(std::unique_ptr<PreparedOnlineSession> prepared,std::vector<std::string> names,ServiceENetDependencies providers)
@@ -180,6 +184,7 @@ struct ServiceENetSession::Impl {
     }
     void fail(const std::string& code) {
         if(stopped)return;stopped=true;ready=false;control->cancel();
+        pendingUpstream.clear();pendingUpstreamBytes=0;
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Failed;event.failure=code;emit(std::move(event));
     }
     bool transmit(ENetPeer* peer,const std::vector<unsigned char>& bytes,SendDataOptions options=SendDataOptions::Reliable) {
@@ -413,6 +418,7 @@ struct ServiceENetSession::Impl {
                 for(const auto& [other,value]:peers)if(other!=peer&&value.admitted)transmit(other,encoded);
             }else if(auto* welcome=std::get_if<ServerWelcomeMessage>(&message)) {
                 found->second.admitted=true;const bool initial=!ready;ready=true;recoverRoster=false;
+                if(found->first==upstream)flushPendingUpstream();
                 add(welcome->ExistingRoster,initial);
                 if(initial){ServiceENetObservation event;event.type=ServiceENetObservation::Type::Ready;event.ids=localIds;
                     event.gamers=welcome->ExistingRoster;event.snapshot=current;emit(std::move(event));}
@@ -545,7 +551,28 @@ struct ServiceENetSession::Impl {
         ENetPeer* destination=upstream;
         if(host){const auto machine=machineFor(target);destination=nullptr;for(const auto& [peer,value]:peers)if(value.admitted&&value.machine==machine){destination=peer;break;}}
         if(!destination)throw ServiceOperationError("INVALID_STATE");
+        // AM4-200: after a host migration the client is ready and the gamers known, but its link to
+        // the new host is still connecting: hold the message for that host's welcome rather than let
+        // ENet refuse it (which the binding cannot tell from a dying transport, so it was lost).
+        if(!host) {
+            const auto link=peers.find(destination);
+            if(destination->state!=ENET_PEER_STATE_CONNECTED||link==peers.end()||!link->second.admitted) {
+                if(pendingUpstream.size()>=128||pendingUpstreamBytes+payload.size()>MaxRelayWaitingBytes)
+                    throw ServiceOperationError("LIMIT_EXCEEDED");
+                auto encoded=NetPacketCodec::Encode(message);
+                pendingUpstreamBytes+=encoded.size();
+                pendingUpstream.emplace_back(std::move(encoded),options);
+                return;
+            }
+        }
         if(!transmit(destination,NetPacketCodec::Encode(message),options))throw ServiceOperationError("LIMIT_EXCEEDED");
+        transport().Flush();
+    }
+    // AM4-200: the held app data, in the order it was sent, once the new host has admitted this client.
+    void flushPendingUpstream() {
+        if(!upstream||pendingUpstream.empty())return;
+        for(auto& [bytes,options]:pendingUpstream)if(!transmit(upstream,bytes,options))++rejected;
+        pendingUpstream.clear();pendingUpstreamBytes=0;
         transport().Flush();
     }
 };
