@@ -1475,9 +1475,14 @@ CNA_GL_PUNCTUAL_DECL
 // through every term after it. A zero normal comes from a singular World (a node scaled flat), a
 // zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
 // perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
-"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+// plans/plan_apple_m4.md AM4-125: vNormal is the inverse-transpose of World applied to the normal,
+// 1/scale long, so an absolute length threshold took a World scaled by 1e4 or more for a singular
+// one. The normal is divided by its largest component first, which only an exactly zero vector
+// fails; the tangent residual is judged relative to the tangent it came from.
+"    float cnaNormalScale=max(max(abs(vNormal.x),abs(vNormal.y)),abs(vNormal.z));\n"
+"    vec3 N=cnaNormalScale>0.0?normalize(vNormal/cnaNormalScale):vec3(0.0,0.0,1.0);\n"
 "    vec3 T=vTangent-N*dot(N,vTangent);\n"
-"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
+"    T=dot(T,T)>1e-8*dot(vTangent,vTangent)?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 // glTF doubleSided (living-room-simulator R-3), the Sample Viewer's rule: a back face is shaded
 // with its whole basis reversed. uDoubleSided is -1 under a mirroring World, where gl_FrontFacing
@@ -1600,9 +1605,10 @@ CNA_GL_SKIN_NORMAL_DECL
 // the zero vector is undefined, and on macOS's GL what it produced slipped past the fragment
 // stage's own length guard below, so the surface lost every light. A zero normal is passed on as
 // zero instead, which that guard replaces -- what the rigid program, which does not normalize
-// here, always did.
+// here, always did. Only an exactly zero vector is that case (AM4-125): the length is 1/scale.
 "    vec3 worldNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
-"    vNormal=dot(worldNormal,worldNormal)>1e-8?normalize(worldNormal):vec3(0.0);\n"
+"    float worldNormalScale=max(max(abs(worldNormal.x),abs(worldNormal.y)),abs(worldNormal.z));\n"
+"    vNormal=worldNormalScale>0.0?normalize(worldNormal/worldNormalScale):vec3(0.0);\n"
 "    mat3 worldDirectionMat=mat3(uWorld);\n"
 "    vTangent=worldDirectionMat*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
 "    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
@@ -1733,9 +1739,14 @@ CNA_GL_PUNCTUAL_DECL
 // through every term after it. A zero normal comes from a singular World (a node scaled flat), a
 // zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
 // perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
-"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+// plans/plan_apple_m4.md AM4-125: vNormal is the inverse-transpose of World applied to the normal,
+// 1/scale long, so an absolute length threshold took a World scaled by 1e4 or more for a singular
+// one. The normal is divided by its largest component first, which only an exactly zero vector
+// fails; the tangent residual is judged relative to the tangent it came from.
+"    float cnaNormalScale=max(max(abs(vNormal.x),abs(vNormal.y)),abs(vNormal.z));\n"
+"    vec3 N=cnaNormalScale>0.0?normalize(vNormal/cnaNormalScale):vec3(0.0,0.0,1.0);\n"
 "    vec3 T=vTangent-N*dot(N,vTangent);\n"
-"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
+"    T=dot(T,T)>1e-8*dot(vTangent,vTangent)?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 // glTF doubleSided (living-room-simulator R-3), the Sample Viewer's rule: a back face is shaded
 // with its whole basis reversed. uDoubleSided is -1 under a mirroring World, where gl_FrontFacing

@@ -7,6 +7,12 @@
 // convolution then spreads across the frame. Each degenerate case draws into a Vector4 target,
 // where NaN survives readback, and must be finite and lit like the control, on the rigid and the
 // skinned program.
+//
+// plans/plan_apple_m4.md AM4-125: the guards that catch those zero vectors compared squared lengths
+// with an absolute 1e-8, and the rigid program's interpolated normal is not unit length -- it is
+// the inverse-transpose of World applied to it, 1/scale long. Under a World scaled by 1e4 or more
+// a perfectly good normal was taken for a zero one and replaced by +Z. A second control with a
+// tilted normal (where +Z is visibly wrong) is drawn plainly and under a World scaled by 1e5.
 
 #include "common/PixelTestGame.hpp"
 
@@ -54,11 +60,11 @@ namespace
     };
     static_assert(sizeof(SkinnedPbrVertex) == 68);
 
-    /** @brief A full-viewport quad facing +Z whose every vertex carries @p tangent. */
-    std::vector<PbrVertex> Quad(const Vector3& tangent)
+    /** @brief A full-viewport quad facing +Z whose every vertex carries @p normal and @p tangent. */
+    std::vector<PbrVertex> Quad(const Vector3& tangent, const Vector3& normal)
     {
         const auto at = [&](float x, float y, float u, float v) {
-            return PbrVertex{x, y, 0.0f, 0.0f, 0.0f, 1.0f,
+            return PbrVertex{x, y, 0.0f, normal.X, normal.Y, normal.Z,
                              tangent.X, tangent.Y, tangent.Z, 1.0f, u, v};
         };
         const PbrVertex tl = at(-1.0f, 1.0f, 0.0f, 0.0f);
@@ -105,28 +111,44 @@ protected:
         {
             const char* name;
             Vector3 tangent;
+            Vector3 normal;
             Matrix world;
         };
-        const Case cases[] = {
-            {"control", Vector3(1.0f, 0.0f, 0.0f), Matrix::getIdentityProperty()},
-            {"zero tangent", Vector3::Zero, Matrix::getIdentityProperty()},
-            {"tangent parallel to the normal", Vector3(0.0f, 0.0f, 1.0f),
-             Matrix::getIdentityProperty()},
-            {"singular World (flattened along Z)", Vector3(1.0f, 0.0f, 0.0f),
-             Matrix::CreateScale(1.0f, 1.0f, 0.0f)},
+        const Vector3 facing(0.0f, 0.0f, 1.0f);
+        const Vector3 tilted(0.6f, 0.0f, 0.8f);
+        // Each group's first case is its control.
+        const std::vector<std::vector<Case>> groups = {
+            {
+                {"control", Vector3(1.0f, 0.0f, 0.0f), facing, Matrix::getIdentityProperty()},
+                {"zero tangent", Vector3::Zero, facing, Matrix::getIdentityProperty()},
+                {"tangent parallel to the normal", Vector3(0.0f, 0.0f, 1.0f), facing,
+                 Matrix::getIdentityProperty()},
+                {"singular World (flattened along Z)", Vector3(1.0f, 0.0f, 0.0f), facing,
+                 Matrix::CreateScale(1.0f, 1.0f, 0.0f)},
+            },
+            {
+                {"tilted-normal control", Vector3(0.0f, 1.0f, 0.0f), tilted,
+                 Matrix::getIdentityProperty()},
+                {"tilted normal under a World scaled by 1e5", Vector3(0.0f, 1.0f, 0.0f), tilted,
+                 Matrix::CreateScale(1.0e5f)},
+            },
         };
 
         for (int program = 0; program < 2; ++program)
         {
             const char* name = program == 0 ? "PbrEffect" : "SkinnedPbrEffect";
-            std::vector<Vector4> control;
-            for (const Case& testCase : cases)
+            for (const std::vector<Case>& group : groups)
             {
-                const std::vector<Vector4> pixels =
-                    program == 0 ? DrawRigid(device, target, testCase.tangent, testCase.world)
-                                 : DrawSkinned(device, target, testCase.tangent, testCase.world);
-                if (control.empty()) { control = pixels; }
-                Check(pixels, control, std::string(name) + ", " + testCase.name);
+                std::vector<Vector4> control;
+                for (const Case& testCase : group)
+                {
+                    const std::vector<Vector4> pixels =
+                        program == 0
+                            ? DrawRigid(device, target, testCase.tangent, testCase.normal, testCase.world)
+                            : DrawSkinned(device, target, testCase.tangent, testCase.normal, testCase.world);
+                    if (control.empty()) { control = pixels; }
+                    Check(pixels, control, std::string(name) + ", " + testCase.name);
+                }
             }
         }
         device.SetVertexBuffer(nullptr);
@@ -134,9 +156,9 @@ protected:
 
 private:
     std::vector<Vector4> DrawRigid(GraphicsDevice& device, RenderTarget2D& target,
-                                   const Vector3& tangent, const Matrix& world)
+                                   const Vector3& tangent, const Vector3& normal, const Matrix& world)
     {
-        const std::vector<PbrVertex> vertices = Quad(tangent);
+        const std::vector<PbrVertex> vertices = Quad(tangent, normal);
         VertexBuffer buffer(device, static_cast<int>(vertices.size()));
         buffer.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
                           static_cast<int>(sizeof(PbrVertex)));
@@ -146,10 +168,10 @@ private:
     }
 
     std::vector<Vector4> DrawSkinned(GraphicsDevice& device, RenderTarget2D& target,
-                                     const Vector3& tangent, const Matrix& world)
+                                     const Vector3& tangent, const Vector3& normal, const Matrix& world)
     {
         std::vector<SkinnedPbrVertex> vertices;
-        for (const PbrVertex& vertex : Quad(tangent))
+        for (const PbrVertex& vertex : Quad(tangent, normal))
             vertices.push_back({vertex, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0});
         VertexBuffer buffer(device, static_cast<int>(vertices.size()));
         buffer.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
