@@ -51,11 +51,16 @@ namespace CNA::Internal::Renderers::Metal
         float fogColorEnabled[4], fogVector[4];
     };
 
-    // Plain C++ mirrors of kMetalShaderSource's `SkinnedTransform`/`SkinnedUniforms` -- unlike
-    // LitTransform/EnvTransform/PbrTransform, the skinned shader has no world-normal-matrix step at
-    // all (see cna_skin_common's own comment), so SkinnedTransform has no normalCol0/1/2 fields.
-    /** @brief CPU mirror of the skinned shader's transform and skinning constants. */
-    struct MetalSkinnedTransform { float wvp[16]; float world[16]; float skinParams[4]; };
+    // Plain C++ mirrors of kMetalShaderSource's `SkinnedTransform`/`SkinnedUniforms`.
+    // plans/plan_apple_m4.md AM4-145: XNA's SkinnedEffect.fx lights the bone-skinned normal through
+    // WorldInverseTranspose (ComputeCommonVSOutputWithLighting), so the transform carries the same
+    // normal matrix the lit and environment-map transforms do.
+    /** @brief CPU mirror of the skinned shader's transform, skinning and world-normal constants. */
+    struct MetalSkinnedTransform
+    {
+        float wvp[16]; float world[16]; float skinParams[4];
+        float normalCol0[4]; float normalCol1[4]; float normalCol2[4];
+    };
     /** @brief CPU mirror of the skinned shader's material and lighting constants. */
     struct MetalSkinnedUniforms {
         float diffuseColor[4], emissiveColor[4];
@@ -193,10 +198,8 @@ namespace CNA::Internal::Renderers::Metal
     }
 
     // plans/plan_metal.md METAL-73/74/76-78: fills SkinnedTransform/SkinnedUniforms, field-for-field
-    // matching EasyGLRenderer::BindDrawParams()'s real SkinnedEffect-specific mapping. Note:
-    // unlike FillMetalLitUniforms/FillMetalEnvUniforms, this deliberately does NOT call
-    // ComputeMetalNormalMatrixCols -- the skinned shader has no world-normal-matrix step at all (see
-    // cna_skin_common's own comment), so MetalSkinnedTransform has no normalCol0/1/2 fields to fill.
+    // matching EasyGLRenderer::BindDrawParams()'s real SkinnedEffect-specific mapping, the world
+    // normal matrix included (AM4-145; EasyGL's REMED-GFX-006).
     /**
      * @brief Fills the skinned shader's CPU-side constants from normalized draw state.
      *
@@ -213,6 +216,7 @@ namespace CNA::Internal::Renderers::Metal
         auto& t = transform;
         auto& su = uniforms;
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+        ComputeMetalNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
         t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
 

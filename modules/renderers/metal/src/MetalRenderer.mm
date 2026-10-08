@@ -515,12 +515,14 @@ fragment CnaFragOut cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex
 // UChar4, unnormalized -- read as an integer type in-shader, not auto-converted to float like a
 // Normalized format would be) = 52 bytes; +color(4, packed UChar4Normalized) = 56 -- confirmed
 // against WebGPURenderer::GetOrCreatePipelineSkinned3D's own `hasVertexColor=(stride==56)`.
-// Real, load-bearing finding from reading the reference shader closely: unlike BasicEffect's lit
-// path, the skinned vertex shader does NOT apply a separate world-space inverse-transpose normal
-// matrix at all -- the normal is only ever transformed by `mat3(skinMat)` (the bone blend's own
-// upper-left 3x3), then normalized, and used as-is. Ported that way here, not "corrected" to also
-// apply a world normal matrix -- CNA's own established skinned behavior, confirmed not assumed.
-struct SkinnedTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+// The normal is transformed by `mat3(skinMat)` (the bone blend's own upper-left 3x3, XNA's
+// direct-bone transform), normalized, and then -- plans/plan_apple_m4.md AM4-145 -- taken to world
+// space through World's inverse transpose, as XNA's SkinnedEffect.fx does in
+// ComputeCommonVSOutputWithLighting and EasyGL has since REMED-GFX-006. The port this replaced
+// stopped after the bone transform, so a rotated or non-uniformly scaled model was lit as if World
+// were the identity (Metal_SkinnedEffect_WorldNormal).
+// skinParams.x = weightsPerVertex; normalCol0..2 = World's inverse transpose (AM4-145).
+struct SkinnedTransform { float4x4 wvp; float4x4 world; float4 skinParams; float4 normalCol0; float4 normalCol1; float4 normalCol2; };
 struct SkinnedUniforms {
     float4 diffuseColor, emissiveColor;
     float4 light0Dir, light0Diffuse, light0Specular;
@@ -557,8 +559,11 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     float3 skinnedNormal = skinMat3 * normal;
     float skinnedNormalLen = length(skinnedNormal);
-    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
-    if (cnaInstanced) o.normal = float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * o.normal;
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    if (cnaInstanced) boneNormal = float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * boneNormal;
+    // AM4-145: XNA's SkinnedEffect.fx then takes the normal to world space through
+    // WorldInverseTranspose (EasyGL's REMED-GFX-006); the fragment renormalizes.
+    o.normal = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz) * boneNormal;
     o.uv = uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.color = vcolor;
@@ -619,8 +624,10 @@ inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 no
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     float3 skinnedNormal = skinMat3 * normal;
     float skinnedNormalLen = length(skinnedNormal);
-    float3 N = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
-    if (cnaInstanced) N = normalize(float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * N);
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    if (cnaInstanced) boneNormal = float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * boneNormal;
+    // AM4-145: WorldInverseTranspose, as in cna_skin_common.
+    float3 N = normalize(float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz) * boneNormal);
     o.uv = uv;
     o.color = vcolor;
     float3 worldPos = (t.world * skinnedPos).xyz;

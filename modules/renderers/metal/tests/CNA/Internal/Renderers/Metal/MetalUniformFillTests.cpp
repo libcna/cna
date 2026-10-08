@@ -235,9 +235,9 @@ TEST(MetalUniformFill, SkinnedUniformsMapEveryFieldCorrectly)
     FillMetalSkinnedUniforms(t, su, wvp, p);
 
     ExpectWvpAndWorldCopiedVerbatim(t.wvp, t.world, wvp, p);
-    // SkinnedTransform deliberately has no normalCol0/1/2 -- the skinned shader has no
-    // world-normal-matrix step at all, so only skinParams is checked here.
     ExpectVec4Eq(t.skinParams, 2,0,0,0);
+    // plans/plan_apple_m4.md AM4-145: World's inverse transpose, as XNA's SkinnedEffect.fx applies.
+    ExpectNormalColsMatchDirectComputation(t.normalCol0, t.normalCol1, t.normalCol2, p);
 
     ExpectVec4Eq(su.diffuseColor, 1,2,3,4);
     ExpectVec4Eq(su.emissiveColor, 30,31,32,0);

@@ -253,6 +253,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
     cna_register_renderer_test(NAME Metal_DepthBias COMMAND cna_test_metal_depth_bias
         TIMEOUT 120 LABELS "Metal")
+    # plans/plan_apple_m4.md AM4-145: SkinnedEffect lights the bone-skinned normal through World's
+    # inverse transpose, as XNA's SkinnedEffect.fx does; every other skinned test keeps World at the
+    # identity, where a dropped World factor is invisible. The renderer-neutral REMED-GFX-006 source.
+    cna_metal_test(cna_test_metal_skinnedeffect_world_normal
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_world_normal_test.cpp)
+    cna_register_renderer_test(NAME Metal_SkinnedEffect_WorldNormal
+        COMMAND cna_test_metal_skinnedeffect_world_normal TIMEOUT 120 LABELS "Metal")
     # plans/plan_apple_m4.md AM4-142: the three packed 16-bit formats sampled in a real draw -- a
     # readback is served from Texture2D's CPU copy and cannot see a wrong channel order, and the
     # 4444 one is rotated into ABGR4Unorm on upload. Each leg is gated on the renderer's own
