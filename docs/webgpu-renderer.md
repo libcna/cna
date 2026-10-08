@@ -1397,6 +1397,15 @@ visible draw reads 1 there -- `PixelCountIsPreciseEXT()` reports false on a Meta
 (`plans/plan_apple_m4.md` `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. A query
 whose draws span more than one render-pass segment records only its first segment.
 
+**`BlendState.MultiSampleMask`** is pipeline state (`WGPUMultisampleState.mask`), and wgpu-native's
+Metal backend does not apply it -- Metal has no pipeline sample mask. So the renderer judges the mask
+against the bound target when a draw is recorded (`plans/plan_apple_m4.md` `AM4-131`): a
+single-sample target ignores it, as in XNA; a mask that keeps every sample draws normally; one that
+keeps none is not recorded at all, which is exact on every adapter; and one that keeps some samples
+and drops others is applied by the Vulkan backend but refused with `NotSupportedException` on a Metal
+adapter, rather than silently written to every sample. `SupportsPartialMultiSampleMaskEXT()` answers
+which.
+
 **Stock-effect fog is at full parity** (`WEBGPU-145`–`148`, plus the pre-existing
 `EnvironmentMapEffect` fog): every FNA stock 3D effect that exposes `FogEnabled`/`FogStart`/`FogEnd`/
 `FogColor` -- `BasicEffect` (colored/textured/vertex-colour-textured/lit per-pixel + per-vertex),

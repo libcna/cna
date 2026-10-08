@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -504,11 +505,32 @@ protected:
             oneSample.setMultiSampleMaskProperty(0x1);
             device.SetRenderTarget(&msaaTarget);
             device.Clear(Color::Black);
-            DrawSprite(device, Rectangle(8, 8, 48, 48), msaaSource, oneSample);
+            // plans/plan_apple_m4.md AM4-131: wgpu-native's Metal backend has no pipeline sample
+            // mask, so a partial mask is refused there rather than written to every sample.
+            const bool partialMasks = renderer.SupportsPartialMultiSampleMaskEXT();
+            bool refused = false;
+            try
+            {
+                DrawSprite(device, Rectangle(8, 8, 48, 48), msaaSource, oneSample);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                refused = true;
+            }
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            CheckLinear(At(ReadTarget(msaaTarget), 32, 32),
-                        Unit(196) * 0.25f, Unit(80) * 0.25f, Unit(40) * 0.25f, 1.0f,
-                        "4x MultiSampleMask bit 0 preserves three destination samples", 8);
+            if (partialMasks)
+            {
+                Check(!refused, "4x MultiSampleMask bit 0 is applied where the adapter supports it");
+                CheckLinear(At(ReadTarget(msaaTarget), 32, 32),
+                            Unit(196) * 0.25f, Unit(80) * 0.25f, Unit(40) * 0.25f, 1.0f,
+                            "4x MultiSampleMask bit 0 preserves three destination samples", 8);
+            }
+            else
+            {
+                Check(refused, "4x MultiSampleMask bit 0 is refused where the adapter cannot apply it");
+                CheckLinear(At(ReadTarget(msaaTarget), 32, 32), 0.0f, 0.0f, 0.0f, 1.0f,
+                            "a refused partial-mask draw writes nothing");
+            }
 
             BlendState noSamples = BlendState::Opaque;
             noSamples.setMultiSampleMaskProperty(0);
@@ -519,8 +541,9 @@ protected:
             CheckLinear(At(ReadTarget(msaaTarget), 32, 32),
                         0.0f, 0.0f, 0.0f, 1.0f,
                         "4x MultiSampleMask zero preserves every destination sample");
-            Check(renderer.GetSpritePipelineCacheSizeEXT() == 3,
-                  "4x sample-mask static states create exactly three cache entries");
+            // A mask that keeps no sample is not drawn at all (AM4-131), so it creates no entry.
+            Check(renderer.GetSpritePipelineCacheSizeEXT() == (partialMasks ? 2u : 1u),
+                  "4x sample-mask static states create one cache entry per drawn mask");
             std::printf("[INFO] 4x SpriteBatch pipeline-cache cardinality: %zu\n",
                         renderer.GetSpritePipelineCacheSizeEXT());
         }

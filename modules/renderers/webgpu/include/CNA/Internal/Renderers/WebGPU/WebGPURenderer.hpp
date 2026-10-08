@@ -1454,6 +1454,19 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return coloredPipelines_.size();
         }
+        /**
+         * @brief Whether a BlendState.MultiSampleMask that keeps some of a multisampled target's
+         *        samples and drops others is applied on this adapter.
+         *
+         * plans/plan_apple_m4.md AM4-131: wgpu-native's Metal backend does not apply
+         * WGPUMultisampleState.mask (Metal has no pipeline sample mask), so such a draw is refused
+         * with NotSupportedException there instead of silently writing every sample. A mask that
+         * keeps every sample, or none -- the draw is then skipped, which writes exactly nothing --
+         * is exact on every adapter, and a single-sample target ignores the mask, as in XNA.
+         *
+         * @return False on a Metal adapter, true elsewhere.
+         */
+        [[nodiscard]] bool SupportsPartialMultiSampleMaskEXT() const noexcept;
         /// Native validation callback count since device creation. The GFX-102 regression checks
         /// this after all render-target/backbuffer/MSAA transitions and logs the exact total.
         [[nodiscard]] std::size_t GetUncapturedErrorCountEXT() const noexcept
@@ -2975,6 +2988,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /** @brief Appends @p index of @p family to the ordered stream at its public call. */
         void RecordDrawOrder(DrawFamily family, std::size_t index);
+        /// AM4-131: the bound target's sample count (backbuffer, RenderTarget2D, cube face or MRT
+        /// slot 0, whose set shares one count).
+        [[nodiscard]] std::uint32_t BoundTargetSampleCountEXT() const noexcept;
 
         /**
          * @brief Replays one pass segment's queued draws into @p pass in public call order.

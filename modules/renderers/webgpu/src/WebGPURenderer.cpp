@@ -8674,8 +8674,41 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         return enabled;
     }
 
+    bool WebGPURenderer::SupportsPartialMultiSampleMaskEXT() const noexcept
+    {
+        return adapterBackendType_ != WGPUBackendType_Metal;
+    }
+
+    std::uint32_t WebGPURenderer::BoundTargetSampleCountEXT() const noexcept
+    {
+        if (currentRenderTarget_ != nullptr)
+            return static_cast<std::uint32_t>(std::max(1, currentRenderTarget_->GetMultiSampleCount()));
+        if (currentRenderTargetCubeFace_ != nullptr)
+            return static_cast<std::uint32_t>(std::max(1, currentRenderTargetCubeFace_->GetMultiSampleCount()));
+        return static_cast<std::uint32_t>(std::max(1, sampleCount_));
+    }
+
     void WebGPURenderer::RecordDrawOrder(DrawFamily family, std::size_t index)
     {
+        // plans/plan_apple_m4.md AM4-131: BlendState.MultiSampleMask, judged on the target this
+        // draw was recorded for. A single-sample target ignores it (D3D9: "no effect when rendering
+        // to a single sample buffer"); a mask that keeps no sample writes nothing, so the draw is
+        // not recorded at all -- exact on every adapter, including Metal, whose wgpu backend drops
+        // the pipeline mask; and a partial mask is refused where that backend would silently
+        // write every sample instead. The family's own command stays unreferenced until the flush.
+        const std::uint32_t samples = BoundTargetSampleCountEXT();
+        if (samples > 1)
+        {
+            const std::uint32_t every = samples >= 32 ? 0xFFFFFFFFu : ((1u << samples) - 1u);
+            const std::uint32_t kept = sampleMask_ & every;
+            if (kept == 0)
+                return;
+            if (kept != every && !SupportsPartialMultiSampleMaskEXT())
+                throw System::NotSupportedException(
+                    "CNA WebGPU: a BlendState.MultiSampleMask that keeps some samples of a " +
+                    std::to_string(samples) + "x target and drops others is not applied by this "
+                    "adapter's backend (wgpu-native's Metal backend has no pipeline sample mask)");
+        }
         if (TraceDrawOrder())
         {
             std::fprintf(stderr, "[wgpu-order] enqueue #%zu family=%s slot=%zu\n",
