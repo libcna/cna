@@ -13930,11 +13930,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // negative baseVertex keeps behaving exactly as it did.
         command.baseVertex = params.baseVertex;
 
-        // [0..15]=View*Projection (not a full MVP -- world comes from the per-instance stream),
+        // [0..15]=World*View*Projection, applied after the per-instance matrix -- XNA's
+        // `position * InstanceWorld * Effect.World * View * Projection`, the composition the stock
+        // route and every other renderer use. plans/plan_apple_m4.md AM4-095: this used to be
+        // View*Projection alone, so Effect.World was ignored on this route.
         // [16..31]=diffuseColor+the same unused-here tail fields as colored3d.wgsl. FillExtUniforms()
         // is reused verbatim: it only cares that its first argument is SOME matrix to dump
         // column-major into [0..15], not specifically a WVP.
-        const Matrix vp = view * projection * XnaPixelCenterCorrectionEXT(primitive);
+        const Matrix vp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillExtUniforms(command.uniforms, vp, params);
         // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
         command.uniforms[40] = slotSamplers_[0].lodBias;
