@@ -825,6 +825,16 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool IsComplete() const override;
         /** @brief The number of samples that passed for the tagged draws (0 until resolved). */
         [[nodiscard]] int PixelCount() const override;
+        /**
+         * @brief Whether PixelCount() is a real tally rather than an any-sample flag.
+         *
+         * WebGPU defines only whether an occlusion result is zero. wgpu-native's Metal backend
+         * records it in Metal's boolean visibility mode, so a fully covered 800x480 back buffer
+         * reads 1 there; every other backend keeps the previous answer.
+         *
+         * @return False on a Metal adapter, true otherwise.
+         */
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
 
     private:
         WebGPURenderer* owner_ = nullptr;
@@ -3783,6 +3793,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPULimits deviceLimits_ = WGPU_LIMITS_INIT;
         /// WMG-0003: "<device> (<description>), <backend>, <adapter type>", logged once.
         std::string adapterDescription_;
+        /// plans/plan_apple_m4.md AM4-091: the native API under the adapter, for the few answers
+        /// that depend on it (WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT).
+        WGPUBackendType adapterBackendType_ = WGPUBackendType_Undefined;
         /// WMG-0003: whether the device was created with `WGPUFeatureName_TimestampQuery`.
         bool timestampQuerySupported_ = false;
         /// WMG-0003: whether the device was created with `WGPUFeatureName_IndirectFirstInstance`.

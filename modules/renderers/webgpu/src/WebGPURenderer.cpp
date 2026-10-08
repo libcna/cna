@@ -4497,6 +4497,12 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuAdapterHasFeature(adapter_, WGPUFeatureName_IndirectFirstInstance) != 0;
         adapterDescription_ = DescribeAdapterEXT(adapter_);
         std::clog << "[WebGPU] Adapter: " << adapterDescription_ << '\n';
+        WGPUAdapterInfo adapterInfo = WGPU_ADAPTER_INFO_INIT;
+        if (wgpuAdapterGetInfo(adapter_, &adapterInfo) == WGPUStatus_Success)
+        {
+            adapterBackendType_ = adapterInfo.backendType;
+            wgpuAdapterInfoFreeMembers(adapterInfo);
+        }
 
         RequestDeviceOnlyEXT();
     }
@@ -9102,6 +9108,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         const_cast<WebGPURenderer*>(owner_)->ReadbackOcclusionResults();
         return pixelCount_;
+    }
+
+    bool WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
+    {
+        // plans/plan_apple_m4.md AM4-091: measured on an Apple M4 -- a full-viewport quad reads 1.
+        return owner_ == nullptr || owner_->adapterBackendType_ != WGPUBackendType_Metal;
     }
 
     // ===================================================================================
