@@ -210,8 +210,15 @@ struct U3D { float4x4 wvp; };
 // `1.0 < 0.0` is false and nothing discards) so folding this check into every fragment shader
 // unconditionally is provably a no-op for draws that never touch AlphaTestEffect, exactly
 // mirroring EasyGLRenderer::EnsureDualTextured3DProgram()'s own fsrc, which does the same.
-struct UMaterialParams { float4 diffuseColor; float4 alphaTest; float4 flags; }; // flags.x = vertexColorEnabled (0/1)
-struct V3Out { float4 position [[position]]; float4 color; float2 uv; };
+struct UMaterialParams { float4 diffuseColor; float4 alphaTest; float4 flags; float4 fogColor; }; // flags.x = vertexColorEnabled (0/1)
+// plans/plan_apple_m4.md AM4-137: the unlit BasicEffect, AlphaTestEffect and DualTextureEffect
+// functions fog too. fogVector (vertex buffer 2) is GpuDrawParams.fogVector, zero when fog is off,
+// so the keep factor is 1 and nothing changes; the fragment applies XNA's Common.fxh ApplyFog,
+// lerp(colour, FogColor * alpha, fogFactor), as EasyGL does.
+struct V3Out { float4 position [[position]]; float4 color; float2 uv; float fogFactor; };
+inline float cna_fog_keep(float3 position, float4 fogVector) {
+    return 1.0 - clamp(dot(float4(position, 1.0), fogVector), 0.0, 1.0);
+}
 struct V3ColorIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; };
 struct V3TexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; };
 struct V3ColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; };
@@ -219,14 +226,14 @@ struct V3NormalTexIn { float3 position [[attribute(0)]]; float3 normal [[attribu
 // plans/plan_apple_m4.md AM4-081: the lit BasicEffect functions also read COLOR0. A draw whose effect
 // permutation does not use vertex colour gets opaque white from the constant block (AM4-080).
 struct V3NormalTexColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 color [[attribute(3)]]; };
-vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=float2(0.0); return o;
+vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
+    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=float2(0.0); o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
-vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; return o;
+vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
+    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
-vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; return o;
+vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
+    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
 // Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
 // non-textured colored path) just pass the already-known alpha straight through.
@@ -242,12 +249,14 @@ fragment float4 cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 c = saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     return c;
 }
 fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 c = tex.sample(smp, in.uv) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     return c;
 }
 // DualTextureEffect (plans/plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
@@ -257,14 +266,14 @@ fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[te
 // plans/plan_apple_m4.md AM4-035: the second texture is sampled with TEXCOORD1, as XNA's
 // DualTextureEffect does and Vulkan's has since VULKAN-150; a record without a second set feeds
 // TEXCOORD0 to both (MetalDeclaredVertexInput.hpp), which is what one shared UV used to mean.
-struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; };
+struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; float fogFactor; };
 struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]]; };
 struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]]; };
-vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; return o;
+vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
+    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
-vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; return o;
+vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
+    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
 }
 fragment float4 cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
@@ -272,6 +281,7 @@ fragment float4 cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0
     base.rgb *= 2.0;
     float4 c = base * tex1.sample(smp1, in.uv1) * saturate(vcolor * m.diffuseColor);
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     return c;
 }
 
@@ -335,7 +345,7 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     float4 c = tex.sample(smp, in.uv) * float4(litRGB * in.color.rgb, lu.diffuseColor.w * in.color.a);
     c.rgb += specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
-    c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    c.rgb = mix(lu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
     return c;
 }
 
@@ -375,7 +385,7 @@ fragment float4 cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2
     float4 c = tex.sample(smp, in.uv) * float4(in.litRGB, in.alpha);
     c.rgb += in.specularRGB * c.a;
     if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
-    c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    c.rgb = mix(lu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
     return c;
 }
 
@@ -439,7 +449,7 @@ fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[t
     float3 rgb = mix(baseColor, envSample.rgb*combinedAlpha, blendFactor) + eu.envMapSpecular.xyz*envSample.a*combinedAlpha;
     float4 c = float4(rgb, combinedAlpha);
     if (cna_alpha_test_fails(c.a, eu.alphaTest)) discard_fragment();
-    c.rgb = mix(eu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    c.rgb = mix(eu.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
     return c;
 }
 
@@ -524,7 +534,7 @@ fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> te
     // pixel (matches EasyGL's own real ordering, not an arbitrary choice).
     c.rgb *= vc.rgb;
     if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
-    c.rgb = mix(su.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    c.rgb = mix(su.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
     return c;
 }
 
@@ -580,7 +590,7 @@ fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], 
     c.rgb += in.specularRGB * c.a;
     c.rgb *= vc.rgb;
     if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
-    c.rgb = mix(su.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    c.rgb = mix(su.fogColorEnabled.xyz * c.a, c.rgb, in.fogFactor);   // AM4-137: XNA ApplyFog
     return c;
 }
 
@@ -1054,7 +1064,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // float4 alphaTest; float4 flags; };` -- three consecutive float4s, 48 bytes, no padding
     // ambiguity either side (unlike a float3-containing struct, which would need manual padding
     // to match MSL's `constant` address-space layout rules).
-    struct UMaterialParams { float diffuseColor[4]; float alphaTest[4]; float flags[4]; };
+    struct UMaterialParams { float diffuseColor[4]; float alphaTest[4]; float flags[4]; float fogColor[4]; };
 
     // plans/plan_metal.md METAL-34-style extraction: this row-major 4x4 matrix helper set's real logic
     // now lives in the plain-C++ MetalMat4.hpp (no Objective-C, buildable and unit-tested on any
@@ -4414,12 +4424,19 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
             mp.alphaTest[0]=params->alphaTest[0]; mp.alphaTest[1]=params->alphaTest[1];
             mp.alphaTest[2]=params->alphaTest[2]; mp.alphaTest[3]=params->alphaTest[3];
             mp.flags[0]=params->vertexColorEnabled?1.0f:0.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+            mp.fogColor[0]=params->fogColor[0]; mp.fogColor[1]=params->fogColor[1];
+            mp.fogColor[2]=params->fogColor[2]; mp.fogColor[3]=0.0f;
         } else {
             mp.diffuseColor[0]=mp.diffuseColor[1]=mp.diffuseColor[2]=mp.diffuseColor[3]=1.0f;
             mp.alphaTest[0]=0.0f; mp.alphaTest[1]=0.0f; mp.alphaTest[2]=1.0f; mp.alphaTest[3]=1.0f;
             mp.flags[0]=1.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+            mp.fogColor[0]=mp.fogColor[1]=mp.fogColor[2]=mp.fogColor[3]=0.0f;
         }
+        // AM4-137: zero when fog is off (GpuDrawParams.fogVector), so the keep factor is 1.
+        float fogVector[4]={0.0f,0.0f,0.0f,0.0f};
+        if (params) std::memcpy(fogVector, params->fogVector, sizeof(fogVector));
         [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1];
+        [p.encoder setVertexBytes:fogVector length:sizeof(fogVector) atIndex:2];
         [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
         if(kind!=PipelineKind::Colored16){
             [p.encoder setFragmentTexture:texture0 atIndex:0];

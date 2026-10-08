@@ -162,6 +162,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         backbuffer_headless_reject_test
         backbuffer_pass_order_test
         backbuffer_readback_dimension_test
+        basic_effect_lighting_contract_test
         basic_effect_test
         bound_target_lifetime_test
         colorspace_midtone_contract_test
@@ -224,6 +225,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         spritebatch_sort_mode_semantics_test
         spritebatch_subpixel_contract_test
         spritebatch_viewport_switch_test
+        stock_effect_fog_contract_test
         stock_effect_sampler_contract_test
         texture2d_getdata_contract_test
         texture2d_getdata_transfer_range_test
