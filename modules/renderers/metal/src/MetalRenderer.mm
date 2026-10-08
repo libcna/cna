@@ -3317,20 +3317,25 @@ class MetalSpriteBatch final : public ISpriteBatchRenderer
 public:
     explicit MetalSpriteBatch(MetalRenderer& b):b_(b){}
 #if defined(CNA_METAL_COMPILED_EFFECTS)
-    ~MetalSpriteBatch() override { clearPendingCompiled(); }
+    ~MetalSpriteBatch() override { clearPendingStock(); clearPendingCompiled(); }
     void Begin() override { begun_=true; compiledStockApplied_=false; }
     // AM4-144: the compiled route draws each same-texture run once per pass, so End() submits the last.
-    void End() override { flushCompiled(); begun_=false; }
+    void End() override { flushStock(); flushCompiled(); begun_=false; }
 #else
+    ~MetalSpriteBatch() override { clearPendingStock(); }
     void Begin() override { begun_=true; }
-    void End() override { begun_=false; }
+    void End() override { flushStock(); begun_=false; }
 #endif
-    void SetSamplerFilter(int f) override { filter_=f; }
-    void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
+    // plans/plan_apple_m4.md AM4-157: an Immediate batch draws each sprite as it comes, so device state
+    // changed between two Draw calls applies to the second; every other sort mode hands the sprites
+    // over back to back from End, and consecutive ones sharing a texture become one draw.
+    void SetImmediateMode(bool immediate) override { if (begun_) flushStock(); immediate_=immediate; }
+    void SetSamplerFilter(int f) override { flushStock(); filter_=f; }
+    void SetSamplerAddressMode(int addressU,int addressV) override { flushStock(); addressU_=addressU; addressV_=addressV; }
     // plans/plan_apple_m4.md AM4-034: the rest of Begin's SamplerState, which the sprite sampler
     // used to replace with anisotropy 1, MaxMipLevel 0 and no LOD bias.
-    void SetSamplerMaxAnisotropy(int maxAnisotropy) override { maxAnisotropy_=maxAnisotropy; }
-    void SetSamplerMipState(int maxMipLevel,float lodBias) override { maxMipLevel_=maxMipLevel; lodBias_=lodBias; }
+    void SetSamplerMaxAnisotropy(int maxAnisotropy) override { flushStock(); maxAnisotropy_=maxAnisotropy; }
+    void SetSamplerMipState(int maxMipLevel,float lodBias) override { flushStock(); maxMipLevel_=maxMipLevel; lodBias_=lodBias; }
     // plans/plan_metal.md METAL-182/183: previously entirely unimplemented (base no-op) -- `cna_v2d` had
     // no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` had zero effect on Metal.
     // Applied as a 2D point transform (z=0) on the already-screen-space quad corners, matching the
@@ -3441,7 +3446,7 @@ private:
 #endif
         // The stock function's homogeneous vertex; a custom MSL effect keeps its documented
         // float2 position (docs/metal-shader-effect-contract.md), divided by W.
-        struct VH{float x,y,z,w,r,g,b,a,u,v,pad0,pad1;};
+        using VH=StockSpriteVertex;
         const VH vh[6]={{a[0],a[1],a[2],a[3],cr,cg,cb,ca,u0,v0,0,0},{bb[0],bb[1],bb[2],bb[3],cr,cg,cb,ca,u1,v0,0,0},
                         {cc[0],cc[1],cc[2],cc[3],cr,cg,cb,ca,u1,v1,0,0},{a[0],a[1],a[2],a[3],cr,cg,cb,ca,u0,v0,0,0},
                         {cc[0],cc[1],cc[2],cc[3],cr,cg,cb,ca,u1,v1,0,0},{dd[0],dd[1],dd[2],dd[3],cr,cg,cb,ca,u0,v1,0,0}};
@@ -3456,11 +3461,14 @@ private:
             st.scaleX=2.0f/static_cast<float>(projectionWidth_); st.offsetX=-1.0f;
             st.scaleY=-2.0f/static_cast<float>(projectionHeight_); st.offsetY=1.0f;
         }
-        struct U{float sx,sy,ox,oy;} u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
+        const SpriteClipTransform u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
         // plans/plan_metal.md Phase 14 (METAL-145/148): resolved fresh every Draw() call, not cached
         // across the Begin/End block -- see MetalEffectRenderer::pipelineFor()'s own comment for why
         // this (deliberately) makes a SetUniformXxx() call between two Draw()s take effect on the
         // very next sprite, unlike the D3D11/Vulkan once-per-flush precedent.
+        // AM4-157: a stock sprite joins the pending run; a custom effect draws per sprite after it.
+        if (!customEffect_) { queueStock(nativeTex,vh,u); return; }
+        flushStock();
         MetalEffectRenderer* ceb=nullptr;
         if (customEffect_) {
             customEffect_->Apply();
@@ -3493,6 +3501,54 @@ private:
         }
         [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
+    struct StockSpriteVertex { float x,y,z,w,r,g,b,a,u,v,pad0,pad1; };
+    struct SpriteClipTransform { float sx,sy,ox,oy; };
+
+    void clearPendingStock()
+    {
+        pendingStock_.clear();
+        [pendingStockTexture_ release]; pendingStockTexture_=nil;
+    }
+
+    void queueStock(id<MTLTexture> texture, const StockSpriteVertex (&quad)[6], const SpriteClipTransform& clip)
+    {
+        const bool sameRun=pendingStockTexture_==texture && clip.sx==pendingStockClip_.sx &&
+            clip.sy==pendingStockClip_.sy && clip.ox==pendingStockClip_.ox && clip.oy==pendingStockClip_.oy;
+        if (!sameRun) {
+            flushStock();
+            pendingStockTexture_=[texture retain];
+            pendingStockClip_=clip;
+        }
+        pendingStock_.insert(pendingStock_.end(),std::begin(quad),std::end(quad));
+        if (immediate_) flushStock();
+    }
+
+    // One draw for the run: its vertices as bytes when they fit setVertexBytes' 4 KB, else in a
+    // buffer the encoder keeps alive until the command buffer completes.
+    void flushStock()
+    {
+        if (pendingStock_.empty()) return;
+        auto& p=b_.impl();
+        if (!p.ensureFrame()) { clearPendingStock(); return; }
+        [p.encoder setRenderPipelineState:p.getOrCreatePipeline(PipelineKind::Sprite2D)];
+        const NSUInteger bytes=(NSUInteger)(pendingStock_.size()*sizeof(StockSpriteVertex));
+        if (bytes<=4096) {
+            [p.encoder setVertexBytes:pendingStock_.data() length:bytes atIndex:0];
+        } else {
+            MetalObjectOwner bufferOwner(retainMetalObject,releaseMetalObject);
+            bufferOwner.Adopt([p.device newBufferWithBytes:pendingStock_.data() length:bytes
+                                                   options:MTLResourceStorageModeShared]);
+            if (!bufferOwner.HasValue()) throw std::runtime_error("Metal: failed to allocate a SpriteBatch vertex buffer");
+            [p.encoder setVertexBuffer:(id<MTLBuffer>)bufferOwner.Get() offset:0 atIndex:0];
+        }
+        [p.encoder setVertexBytes:&pendingStockClip_ length:sizeof(pendingStockClip_) atIndex:1];
+        p.bindSampleMask();   // AM4-141
+        [p.encoder setFragmentTexture:pendingStockTexture_ atIndex:0];
+        [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_) atIndex:0];
+        [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:(NSUInteger)pendingStock_.size()];
+        clearPendingStock();
+    }
+
 #if defined(CNA_METAL_COMPILED_EFFECTS)
     struct CompiledSpriteVertex { float x,y,z,u,v,r,g,b,a; };
 
@@ -3592,6 +3648,11 @@ private:
     bool compiledStockApplied_=false;
 #endif
     MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
+    // AM4-157: the stock run being accumulated -- vertices, their texture and clip transform.
+    bool immediate_=false;
+    std::vector<StockSpriteVertex> pendingStock_;
+    id<MTLTexture> pendingStockTexture_=nil;
+    SpriteClipTransform pendingStockClip_{};
     int projectionWidth_=0; int projectionHeight_=0;
     int maxAnisotropy_=1; int maxMipLevel_=0; float lodBias_=0.0f;
 };

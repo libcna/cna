@@ -128,6 +128,12 @@ The following boundaries are deterministic rather than silent degradation:
   custom MSL effect keeps its documented `float2` position, divided by W. A source rectangle with no
   width or height draws nothing, and its far edge is summed in float, so an `int`-limit source does
   not overflow;
+- outside `SpriteSortMode.Immediate`, consecutive stock sprites sharing a texture are one draw
+  (`AM4-157`; their vertices as bytes up to 4 KB, else a buffer); a texture or sampler change, a
+  custom effect and `End` close the run, and an Immediate batch still draws each sprite as it
+  comes, so device state changed between two `Draw` calls applies to the second.
+  `cna_bench_graphics_renderer` (Release, M4, 500 sprites): SpriteBatch CPU submission 1.26 ->
+  0.91 ms/frame;
 - malformed stream metadata throws `std::invalid_argument`; a stream layout the stock vertex
   functions cannot read (an integer instance-matrix element, an undeclared per-instance stream)
   throws `System::NotSupportedException` naming it;
