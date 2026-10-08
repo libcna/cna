@@ -185,6 +185,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <stdexcept>
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <mutex>
 #include <cstdio>
 #include <iomanip>
 #include <memory>
@@ -2466,7 +2467,18 @@ namespace CNA::Internal::Renderers::EasyGL
         // The query GL holds active on the occlusion target, when CNA began it. GL refuses a second
         // Begin while one is active, and any End ends whichever query is active, so this mirrors
         // the target exactly rather than each object's own Begin/End calls.
-        const EasyGLOcclusionQueryRenderer* g_occlusionTargetOwner = nullptr;
+        // plans/plan_apple_m4.md AM4-115: the target belongs to a GL context, so the owner is kept per
+        // context (keyed by its resource registry) and guarded: one process-wide pointer let two
+        // devices -- possibly on two threads -- clear or race each other's owner.
+        std::mutex g_occlusionTargetOwnersMutex;
+        std::unordered_map<const void*, const EasyGLOcclusionQueryRenderer*> g_occlusionTargetOwners;
+
+        [[nodiscard]] bool OcclusionTargetOwnedBy(const void* context, const EasyGLOcclusionQueryRenderer* query)
+        {
+            const std::lock_guard<std::mutex> lock(g_occlusionTargetOwnersMutex);
+            const auto it = g_occlusionTargetOwners.find(context);
+            return it != g_occlusionTargetOwners.end() && it->second == query;
+        }
     }
 
     EasyGLOcclusionQueryRenderer::~EasyGLOcclusionQueryRenderer()
@@ -2477,11 +2489,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // -- macOS does exactly that, where Mesa ends it implicitly -- so every later Begin on the
         // target failed and no query ever completed again. End it here; ending it is this
         // object's business, not the next query's.
-        if (g_occlusionTargetOwner == this)
+        if (OcclusionTargetOwnedBy(contextKey_, this))
         {
             if (!metagl::IsContextLost() && query_.is_created())
                 query_.end(OcclusionTarget());
-            g_occlusionTargetOwner = nullptr;
+            const std::lock_guard<std::mutex> lock(g_occlusionTargetOwnersMutex);
+            g_occlusionTargetOwners.erase(contextKey_);
         }
     }
 
@@ -2491,15 +2504,17 @@ namespace CNA::Internal::Renderers::EasyGL
         if (g_preciseOcclusionTarget < 0)
             g_preciseOcclusionTarget = ResolvePreciseTarget(query_) ? 1 : 0;
         query_.begin(OcclusionTarget());
-        if (g_occlusionTargetOwner == nullptr)
-            g_occlusionTargetOwner = this;
+        if (auto reg = registry_.lock()) contextKey_ = reg.get();
+        const std::lock_guard<std::mutex> lock(g_occlusionTargetOwnersMutex);
+        g_occlusionTargetOwners.try_emplace(contextKey_, this);
     }
 
     void EasyGLOcclusionQueryRenderer::End()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
         query_.end(OcclusionTarget());
-        g_occlusionTargetOwner = nullptr;
+        const std::lock_guard<std::mutex> lock(g_occlusionTargetOwnersMutex);
+        g_occlusionTargetOwners.erase(contextKey_);
     }
 
     bool EasyGLOcclusionQueryRenderer::IsComplete() const
@@ -2525,8 +2540,10 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLOcclusionQueryRenderer::release_gl_handle_only()
     {
         query_.reset_handle_no_gl();
-        if (g_occlusionTargetOwner == this)
-            g_occlusionTargetOwner = nullptr;
+        const std::lock_guard<std::mutex> lock(g_occlusionTargetOwnersMutex);
+        const auto it = g_occlusionTargetOwners.find(contextKey_);
+        if (it != g_occlusionTargetOwners.end() && it->second == this)
+            g_occlusionTargetOwners.erase(it);
     }
 
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()

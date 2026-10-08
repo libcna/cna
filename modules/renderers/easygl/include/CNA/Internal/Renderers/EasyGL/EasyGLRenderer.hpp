@@ -888,6 +888,10 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         ::easygl::Query query_;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
+        /// plans/plan_apple_m4.md AM4-115: identifies the GL context (its resource registry) this
+        /// query last began on, so its occlusion-target ownership is per context and can be given up
+        /// even after that registry is gone. Never dereferenced.
+        const void* contextKey_ = nullptr;
     };
 
     /// plans/plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
