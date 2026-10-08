@@ -2,6 +2,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <random>
+#include <string>
 #include <gtest/gtest.h>
 #include "CNA/Internal/Media/SavedPictureStore.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
@@ -13,10 +15,17 @@ namespace
     class SavedPictureStoreTest : public ::testing::Test
     {
     protected:
-        std::string root = "tests/assets/media/.saved_picture_store_test_fixture";
+        std::string root;
 
         void SetUp() override
         {
+            // plans/plan_apple_m4.md AM4-162: a directory of this case's own. The one fixed in-tree
+            // path used before was removed by every case's SetUp and TearDown -- including those of
+            // cases CTest was running at the same moment in other processes.
+            std::random_device entropy;
+            root = (std::filesystem::temp_directory_path() /
+                    ("cna-saved-picture-store-" + std::to_string(entropy()) + "-" +
+                     std::to_string(entropy()))).string();
             std::error_code ec;
             std::filesystem::remove_all(root, ec);
         }

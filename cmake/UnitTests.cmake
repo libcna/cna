@@ -52,9 +52,12 @@ if(CNA_BUILD_TESTS)
     # non-interactive SDL assertion policy, while a focused executable such as CnaRendererTests
     # can block indefinitely in SDL's zenity assertion dialog.
     set(CNA_TEST_HARNESS_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessAssertionPolicy.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessAssertionPolicy.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessUserDataIsolation.cpp")
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
         ".*/tests/HarnessAssertionPolicy\\.cpp$")
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+        ".*/tests/HarnessUserDataIsolation\\.cpp$")
 
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
     # standalone executables with their own main(), not GTest translation units.
