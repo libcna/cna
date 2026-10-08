@@ -71,10 +71,12 @@ Xna::Color faded(Xna::Color color,float alpha)
 // ---- Input -------------------------------------------------------------------------------
 class InputReader {
 public:
-    // One read per frame. Directions repeat while held; everything else fires on the press. A
-    // reader that was idle takes whatever is held as already held, so the press that opened a
-    // screen (A in a game menu, Enter confirming a prompt) cannot also answer it.
-    // Whatever is held when something new appears on top is already held for it.
+    // One read per frame. Directions repeat while held; everything else fires on the press.
+    // Whatever is held when something new appears on top is already held for it, so the press
+    // that opened a screen (A in a game menu, Enter confirming a prompt) cannot also answer it.
+    // That is decided by what is shown, never by how long a frame took: a reader that measured
+    // idleness in wall-clock time ignored every press on a renderer drawing the Guide slower than
+    // two frames a second (plans/plan_apple_m4.md AM4-086).
     void prime(){primed_=true;}
     InputFrame poll(double now)
     {
@@ -124,8 +126,7 @@ public:
         frame.mouseDown=left;
         const bool right=mouse.getRightButtonProperty()==In::ButtonState::Pressed;
         const int wheel=mouse.getScrollWheelValueProperty();
-        const bool idle=now-lastPoll_>0.5||primed_;
-        lastPoll_=now;
+        const bool idle=primed_;
         primed_=false;
         if(idle) {
             keyHeld_=keyDown;padHeld_=padDown;leftHeld_=left;rightHeld_=right;wheel_=wheel;mouse_=frame.mouse;
@@ -160,7 +161,6 @@ private:
     bool leftHeld_=false,rightHeld_=false;
     int wheel_=0;
     Xna::Vector2 mouse_;
-    double lastPoll_=-10;
     bool primed_=false;
     Device device_=Device::Keyboard;
 };
@@ -836,7 +836,8 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     releaseTouchSuppression();
     const auto toast=currentGuideToast();
     const bool dialogs=pendingMessageBox()||pendingKeyboard();
-    if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();return;}
+    // Nothing shown: whatever appears next is new, even a screen allocated where the last one was.
+    if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();s.shownTop.clear();return;}
     const TitleRenderStates titleStates(device);
     const auto viewport=device.getViewportProperty();
     const int width=viewport.getWidthProperty(),height=viewport.getHeightProperty();
