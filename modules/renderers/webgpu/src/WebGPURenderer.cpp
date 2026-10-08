@@ -5117,7 +5117,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = WGPUCullMode_None;
         pipeline.multisample.count = snapshot.sampleCount;
-        pipeline.multisample.mask = snapshot.multiSampleMask;
+        pipeline.multisample.mask = SampleMaskForTargetEXT(snapshot.multiSampleMask, snapshot.sampleCount);
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -6039,7 +6039,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pipeline.multisample.count = replaySampleCount_ != 0
                                          ? replaySampleCount_
                                          : static_cast<std::uint32_t>(std::max(1, sampleCount_));
-        pipeline.multisample.mask = d.blendParams.sampleMask;
+        pipeline.multisample.mask = SampleMaskForTargetEXT(d.blendParams.sampleMask, pipeline.multisample.count);
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -8367,7 +8367,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
             pipeline.primitive.cullMode = WGPUCullMode_None;
             pipeline.multisample.count = targetSampleCount;
-            pipeline.multisample.mask = command.blend.multiSampleMask;
+            pipeline.multisample.mask = SampleMaskForTargetEXT(command.blend.multiSampleMask, targetSampleCount);
             pipeline.multisample.alphaToCoverageEnabled = false;
             pipeline.fragment = &fragment;
 
@@ -8672,6 +8672,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         static const bool enabled = std::getenv("CNA_WEBGPU_TRACE_DRAW_ORDER") != nullptr;
         return enabled;
+    }
+
+    std::uint32_t WebGPURenderer::SampleMaskForTargetEXT(std::uint32_t mask, std::uint32_t sampleCount) noexcept
+    {
+        // AM4-131: a WebGPU pipeline applies its mask's bit 0 even at one sample, where D3D9's
+        // MULTISAMPLEMASK "has no effect"; a single-sample pipeline therefore keeps every sample.
+        return sampleCount <= 1 ? 0xFFFFFFFFu : mask;
     }
 
     bool WebGPURenderer::SupportsPartialMultiSampleMaskEXT() const noexcept
@@ -10275,7 +10282,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
             pipeline.primitive.cullMode = WGPUCullMode_None;
             pipeline.multisample.count = targetSampleCount;
-            pipeline.multisample.mask = command.blend.multiSampleMask;
+            pipeline.multisample.mask = SampleMaskForTargetEXT(command.blend.multiSampleMask, targetSampleCount);
             pipeline.multisample.alphaToCoverageEnabled = false;
             pipeline.fragment = &fragment;
 

@@ -468,6 +468,22 @@ protected:
                         before, afterFirstTarget, afterBackbuffer, afterReturn, afterSecondTarget);
         }
 
+        {
+            // plans/plan_apple_m4.md AM4-131: D3D9's MULTISAMPLEMASK "has no effect when rendering
+            // to a single sample buffer", while a WebGPU pipeline applies bit 0 of its mask even
+            // at one sample. A single-sample target must therefore draw under a mask of 0.
+            RenderTarget2D single(device, kRtW, kRtH, false, SurfaceFormat::Color, DepthFormat::None);
+            const Color singleSource(196, 80, 40, 255);
+            BlendState noSamples = BlendState::Opaque;
+            noSamples.setMultiSampleMaskProperty(0);
+            device.SetRenderTarget(&single);
+            device.Clear(Color::Black);
+            DrawSprite(device, Rectangle(8, 8, 48, 48), singleSource, noSamples);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            CheckLinear(At(ReadTarget(single), 32, 32), Unit(196), Unit(80), Unit(40), 1.0f,
+                        "1x MultiSampleMask zero has no effect on a single-sample target");
+        }
+
         // The preceding checks are the ordinary 1x control. Engage the renderer's supported 4x
         // route once; Supports4xMsaa performs the renderer's existing WGPU validation error-scope
         // round trip. No GFX-102 production submission/wait/frame/Present workaround is added.

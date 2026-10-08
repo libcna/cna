@@ -2991,6 +2991,9 @@ namespace CNA::Internal::Renderers::WebGPU
         /// AM4-131: the bound target's sample count (backbuffer, RenderTarget2D, cube face or MRT
         /// slot 0, whose set shares one count).
         [[nodiscard]] std::uint32_t BoundTargetSampleCountEXT() const noexcept;
+        /// AM4-131: the mask a pipeline of @p sampleCount samples is built with.
+        [[nodiscard]] static std::uint32_t SampleMaskForTargetEXT(std::uint32_t mask,
+                                                                  std::uint32_t sampleCount) noexcept;
 
         /**
          * @brief Replays one pass segment's queued draws into @p pass in public call order.
