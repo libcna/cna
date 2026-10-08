@@ -47,3 +47,17 @@ TEST(MetalCommandFailure, MultipleCompletionsCoalesceWithoutLosingTheFailure)
     EXPECT_TRUE(latch.ConsumeFailure());
     EXPECT_FALSE(latch.ConsumeFailure());
 }
+
+// plans/plan_apple_m4.md AM4-138: the native error travels with the failure, and the first one wins.
+TEST(MetalCommandFailure, TheFirstFailuresDescriptionIsReportedOnce)
+{
+    MetalCommandFailureLatch latch;
+    latch.RecordFailure("MTLCommandBufferError 2: Caused GPU Timeout Error");
+    latch.RecordFailure("MTLCommandBufferError 4: a consequence of the first");
+    EXPECT_TRUE(latch.ConsumeFailure());
+    EXPECT_EQ(latch.TakeFailureDetail(), "MTLCommandBufferError 2: Caused GPU Timeout Error");
+    EXPECT_EQ(latch.TakeFailureDetail(), "");
+    latch.RecordFailure();
+    EXPECT_TRUE(latch.ConsumeFailure());
+    EXPECT_EQ(latch.TakeFailureDetail(), "") << "a failure recorded without a description has none";
+}

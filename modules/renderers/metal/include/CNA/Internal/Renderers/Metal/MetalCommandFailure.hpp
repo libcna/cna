@@ -3,7 +3,10 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace CNA::Internal::Renderers::Metal
@@ -71,6 +74,41 @@ namespace CNA::Internal::Renderers::Metal
         }
 
         /**
+         * @brief Records a failure together with the native error that describes it.
+         *
+         * plans/plan_apple_m4.md AM4-138: only the first description since the last consume is
+         * kept -- later failures are usually consequences of the first.
+         *
+         * @param detail The command buffer's error code and description.
+         */
+        void RecordFailure(std::string_view detail) noexcept
+        {
+            try
+            {
+                const std::lock_guard<std::mutex> lock(detailMutex_);
+                if (detail_.empty()) detail_.assign(detail);
+            }
+            catch (...)
+            {
+                // Losing the description never loses the failure itself.
+            }
+            failed_.store(true, std::memory_order_release);
+        }
+
+        /**
+         * @brief Takes the description recorded with the pending failure, if any.
+         *
+         * @return The first recorded description, or an empty string.
+         */
+        [[nodiscard]] std::string TakeFailureDetail()
+        {
+            const std::lock_guard<std::mutex> lock(detailMutex_);
+            std::string detail;
+            detail.swap(detail_);
+            return detail;
+        }
+
+        /**
          * @brief Reports a pending failure without consuming its required renderer teardown.
          *
          * @return True after a failed completion and before the owning renderer consumes it.
@@ -92,6 +130,8 @@ namespace CNA::Internal::Renderers::Metal
 
     private:
         std::atomic<bool> failed_{false};
+        std::mutex detailMutex_;
+        std::string detail_;
     };
 
     /** @brief Observable lifetime and command-health state for retained Metal resources. */

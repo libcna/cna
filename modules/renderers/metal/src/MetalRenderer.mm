@@ -70,6 +70,20 @@ namespace {
 // across calls are retained explicitly (MetalObjectOwner::Reset, [x retain]); none of the scoped
 // entry points returns an Objective-C object, and the pools nest strictly with any the
 // application holds.
+// plans/plan_apple_m4.md AM4-138: a failed command buffer's own NSError, for the exception that
+// reports it -- code and description, rather than only the fact that something failed.
+std::string describeMetalCommandBufferError(NSError* error)
+{
+    if (error == nil) return std::string("no error object attached");
+    std::string text = "MTLCommandBufferError " + std::to_string(static_cast<long>(error.code));
+    if (NSString* description = error.localizedDescription)
+    {
+        const char* utf8 = [description UTF8String];
+        if (utf8 != nullptr && *utf8 != '\0') { text += ": "; text += utf8; }
+    }
+    return text;
+}
+
 class MetalAutoreleaseScope
 {
 public:
@@ -1185,7 +1199,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 [cmd commit];
                 [cmd waitUntilCompleted];
                 if (cmd.status!=MTLCommandBufferStatusCompleted)
-                    throw std::runtime_error("Metal: mip-preservation blit failed");
+                    throw std::runtime_error("Metal: mip-preservation blit failed: "+describeMetalCommandBufferError(cmd.error));
                 ownerHealthCheck_();
             }
             MTLRegion r=MTLRegionMake2D(0,0,(NSUInteger)levelW,(NSUInteger)levelH);
@@ -1340,7 +1354,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 }
             }
             [blit endEncoding]; [command commit]; [command waitUntilCompleted];
-            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: cube preservation blit failed");
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: cube preservation blit failed: "+describeMetalCommandBufferError(command.error));
             ownerHealthCheck_();
             MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
             [replacement replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face
@@ -1460,7 +1474,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                     destinationOrigin:MTLOriginMake(0,0,0)];
             }
             [blit endEncoding]; [command commit]; [command waitUntilCompleted];
-            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: 3D preservation blit failed");
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: 3D preservation blit failed: "+describeMetalCommandBufferError(command.error));
             ownerHealthCheck_();
             MTLRegion region=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,
                                              (NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
@@ -1917,7 +1931,7 @@ struct MetalRenderer::Impl
             auto failureLatch=commandFailureLatch;
             [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {
                 if (completed.status==MTLCommandBufferStatusError)
-                    failureLatch->RecordFailure();
+                    failureLatch->RecordFailure(describeMetalCommandBufferError(completed.error));
             }];
             [command commit];
             [command release]; command=nil;
@@ -1948,7 +1962,12 @@ struct MetalRenderer::Impl
     void throwPendingCommandFailure()
     {
         if(!commandFailureLatch->ConsumeFailure()) return;
-        abandonCommandStateAndThrow("Metal: a previously submitted command buffer failed");
+        // AM4-138: the native error is part of the report, not just the fact that one occurred.
+        const std::string detail=commandFailureLatch->TakeFailureDetail();
+        const std::string message=detail.empty()
+            ? std::string("Metal: a previously submitted command buffer failed")
+            : "Metal: a previously submitted command buffer failed: "+detail;
+        abandonCommandStateAndThrow(message.c_str());
     }
 
     void finishActiveCommandSynchronously(const char* failureMessage)
@@ -1968,12 +1987,16 @@ struct MetalRenderer::Impl
         [command release]; command=nil;
         [submitted waitUntilCompleted];
         const bool completed=submitted.status==MTLCommandBufferStatusCompleted;
+        const std::string exactDetail=completed?std::string():describeMetalCommandBufferError(submitted.error);
         [submitted release];
         switch(DescribeMetalSynchronousCommandResult(
             completed,commandFailureLatch->HasFailure()))
         {
             case MetalSynchronousCommandResult::ExactSubmissionFailed:
-                abandonCommandStateAndThrow(failureMessage);
+            {
+                const std::string message=std::string(failureMessage)+": "+exactDetail;   // AM4-138
+                abandonCommandStateAndThrow(message.c_str());
+            }
             case MetalSynchronousCommandResult::OlderSubmissionFailed:
                 // A separately committed older command can finish while this exact command is
                 // awaited. It remains an older asynchronous failure and gets the common diagnostic.
@@ -2829,7 +2852,7 @@ static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> 
     [blit endEncoding];
     [cmd commit];
     [cmd waitUntilCompleted]; // plans/plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
-    if(cmd.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: GetData blit command failed");
+    if(cmd.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: GetData blit command failed: "+describeMetalCommandBufferError(cmd.error));
     commandHealthCheck();
     const auto* stagingBytes=static_cast<const std::uint8_t*>([staging contents]);
     if(!CopyMetalTextureReadbackToTightRgba(
@@ -3113,7 +3136,7 @@ private:
                     destinationOrigin:MTLOriginMake(0,0,0)];
             }
             [blit endEncoding];[command commit];[command waitUntilCompleted];
-            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTarget2D preservation blit failed");
+            if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTarget2D preservation blit failed: "+describeMetalCommandBufferError(command.error));
             owner->throwPendingCommandFailure();
         }
         std::vector<std::uint8_t> bgra(layout.tightTotalBytes);
