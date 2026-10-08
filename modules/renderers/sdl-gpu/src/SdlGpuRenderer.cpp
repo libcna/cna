@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
@@ -2452,8 +2453,26 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.device = SDL_CreateGPUDevice(
             requestedShaderFormats, resources.debugModeEnabled, /*name=*/nullptr);
         if (resources.device == nullptr)
+        {
+            // plans/plan_apple_m4.md AM4-176: SDL's Metal GPU driver will not create a device
+            // until SDL's video subsystem is up -- a platform without SDL video (HEADLESS,
+            // TERMINAL) never starts it -- nor under the dummy and offscreen video drivers, which
+            // have no Metal layer to give it. Vulkan's headless device needs neither. Those
+            // pairings are the platform declining what this renderer needs, which GraphicsDevice
+            // reports as XNA does (NoSuitableGraphicsDeviceException around the platform's
+            // refusal), not an SDL_GPU failure.
+            const bool videoAbsent = resources.headless && SDL_WasInit(SDL_INIT_VIDEO) == 0;
+            if (videoAbsent || IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
+                throw CNA::Platform::PlatformException(
+                    "SDL_GPU device",
+                    std::string(videoAbsent
+                        ? "this SDL GPU driver needs SDL's video subsystem, which the selected "
+                          "platform does not start: "
+                        : "the SDL video driver in use offers this SDL GPU driver no device: ") +
+                    SDL_GetError());
             throw std::runtime_error(
                 std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
+        }
         NotifyResource(testHooks, SdlGpuResourceKindEXT::Device,
                        SdlGpuResourceEventEXT::Acquired);
 
