@@ -5,6 +5,7 @@
 #include "GuideUi.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -47,6 +48,9 @@ struct MessageBoxView {
     int focus=0;
     /** @brief Icon. */
     Microsoft::Xna::Framework::GamerServices::MessageBoxIcon icon=Microsoft::Xna::Framework::GamerServices::MessageBoxIcon::None;
+    /** @brief The request's creation number, unique in the process: two boxes with the same text
+     * are still two boxes. */
+    std::uint64_t serial=0;
 };
 /** @brief The pending message box, if any. @return View. */
 std::optional<MessageBoxView> pendingMessageBox();
@@ -63,6 +67,8 @@ struct KeyboardView {
     std::string description;
     /** @brief Text as shown (masked in password mode). */
     std::string text;
+    /** @brief The request's creation number, unique in the process. */
+    std::uint64_t serial=0;
 };
 /** @brief Lifts the touch withhold once the click that answered a message box is released. */
 void releaseTouchSuppression();

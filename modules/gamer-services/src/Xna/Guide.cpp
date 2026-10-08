@@ -43,8 +43,10 @@
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
 #include <functional>
+#include <cstdint>
 #include <cstdlib>
 #include <array>
+#include <atomic>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include <cctype>
 
@@ -80,10 +82,19 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
 
             const System::AsyncCallback Callback;
+            // plans/plan_apple_m4.md AM4-090: identifies this request to the Guide's input reader,
+            // which primes when something new appears on top; text or an address could repeat.
+            const std::uint64_t Serial = NextSerial();
             // Reference XOverlappedAsyncResult.endHasBeenCalled.
             bool EndCalled{false};
 
         private:
+            static std::uint64_t NextSerial()
+            {
+                static std::atomic<std::uint64_t> next{0};
+                return ++next;
+            }
+
             std::any asyncState_;
             bool isCompleted_{false};
 
@@ -1141,7 +1152,7 @@ std::optional<MessageBoxView> pendingMessageBox() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
     const auto* box=Xna::pendingMessageBox_;
     if(!box)return std::nullopt;
-    return MessageBoxView{box->Title,box->Text,box->Buttons,box->FocusButton,box->Icon};
+    return MessageBoxView{box->Title,box->Text,box->Buttons,box->FocusButton,box->Icon,box->Serial};
 }
 void focusMessageBox(int button) {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
@@ -1159,7 +1170,7 @@ std::optional<KeyboardView> pendingKeyboard() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
     const auto* keys=Xna::pendingKeyboardInput_;
     if(!keys)return std::nullopt;
-    return KeyboardView{keys->Title,keys->Description,Xna::ComputeDisplayText(keys)};
+    return KeyboardView{keys->Title,keys->Description,Xna::ComputeDisplayText(keys),keys->Serial};
 }
 void typeKeyboard(char16_t character){Microsoft::Xna::Framework::GamerServices::HandleKeyboardCharacter(character);}
 void cancelKeyboard() {

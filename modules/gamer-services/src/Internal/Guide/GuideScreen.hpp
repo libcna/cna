@@ -8,6 +8,8 @@
 #include "GuideSystem.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <type_traits>
@@ -116,8 +118,15 @@ public:
     /** @brief Whether the screen is still waiting for something it will show (tests and captures).
      * @return Busy. */
     [[nodiscard]] virtual bool busy() const { return false; }
+    /** @brief This screen's creation number, unique in the process -- what "something new on top"
+     * compares, since a screen allocated where an old one was has the old one's address.
+     * @return Serial. */
+    [[nodiscard]] std::uint64_t serial() const { return serial_; }
     /** @brief Player the screen belongs to. */
     Xna::PlayerIndex player=Xna::PlayerIndex::One;
+private:
+    static std::uint64_t nextSerial() { static std::atomic<std::uint64_t> next{0}; return ++next; }
+    std::uint64_t serial_=nextSerial();
 };
 
 /** @brief Pushes a screen above the top one. @param screen Screen. */

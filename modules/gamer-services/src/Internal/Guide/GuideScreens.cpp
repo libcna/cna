@@ -823,9 +823,11 @@ void primeOnNewTop()
 {
     auto& s=state();
     std::string top;
-    if(auto box=pendingMessageBox())top="box:"+box->title+"\n"+box->text;
-    else if(auto keys=pendingKeyboard())top="keys:"+keys->title+"\n"+keys->description;
-    else if(!s.stack.empty())top="screen:"+std::to_string(reinterpret_cast<std::uintptr_t>(s.stack.back().get()));
+    // plans/plan_apple_m4.md AM4-090: by creation number -- the same text, or a new screen at an old
+    // one's address, is still something new.
+    if(auto box=pendingMessageBox())top="box:"+std::to_string(box->serial);
+    else if(auto keys=pendingKeyboard())top="keys:"+std::to_string(keys->serial);
+    else if(!s.stack.empty())top="screen:"+std::to_string(s.stack.back()->serial());
     if(top!=s.shownTop){s.shownTop=top;s.input.prime();}
 }
 }
@@ -836,8 +838,7 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     releaseTouchSuppression();
     const auto toast=currentGuideToast();
     const bool dialogs=pendingMessageBox()||pendingKeyboard();
-    // Nothing shown: whatever appears next is new, even a screen allocated where the last one was.
-    if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();s.shownTop.clear();return;}
+    if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();return;}
     const TitleRenderStates titleStates(device);
     const auto viewport=device.getViewportProperty();
     const int width=viewport.getWidthProperty(),height=viewport.getHeightProperty();
