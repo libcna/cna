@@ -693,14 +693,15 @@ TEST(BackBufferDepthStencilContractTest, StockEffectUsesXnaClipDepthConvention)
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchLayerDepthParticipatesInDepthTesting)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    // plans/plan_apple_m4.md AM4-153: Metal's sprites became XNA's homogeneous vertices.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderSpriteDepthWinner(), Color::Red);
 }
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchTransformsLayerDepthBeforeDepthTesting)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderSpriteTransformedDepthProbe(), Color::Black)
         << "SpriteBatch must transform POSITION.Z before the depth test";
@@ -708,7 +709,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchTransformsLayerDepthBeforeDe
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchPreservesHomogeneousTransformW)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const auto [inside, outside] = RenderSpriteHomogeneousWProbe();
     EXPECT_EQ(inside, Color::Red);
@@ -718,7 +719,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchPreservesHomogeneousTransfor
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchClipsTransformedDepthAtXnaNearPlane)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const auto [clipped, visible] = RenderSpriteTransformedNearClipProbe();
     EXPECT_EQ(clipped, Color::Black);
@@ -727,7 +728,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchClipsTransformedDepthAtXnaNe
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchInterpolatesThroughVaryingTransformW)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     const auto [perspectiveCorrect, outside] = RenderSpriteVaryingWProbe();
     EXPECT_EQ(perspectiveCorrect, Color::Green);
@@ -736,7 +737,7 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchInterpolatesThroughVaryingTr
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchUsesViewportDepthRange)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderSpriteViewportDepthRangeProbe(), Color::Black)
         << "layer depth 0.5 must map to 0.6 through viewport depth range [0.4, 0.8]";
@@ -762,14 +763,14 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchRectangleDrawPreservesNegati
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchZeroWidthSourceDoesNotInventGeometry)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderSpriteZeroWidthSourceProbe(), Color::Black);
 }
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchSourceEndpointsUseFloatDomainWithoutOverflow)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
 
     EXPECT_EQ(RenderSpriteOverflowingSourceEndpointProbe(), Color::Yellow);
 }

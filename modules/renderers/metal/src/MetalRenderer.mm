@@ -883,10 +883,16 @@ struct V2In { float2 position; float2 uv; float4 color; };
 // degrade to this struct's exact prior formula when no virtual resolution is set.
 struct U2D { float2 scale; float2 offset; };
 struct V2Out { float4 position [[position]]; float2 uv; float4 color; };
-vertex V2Out cna_v2d(uint vid [[vertex_id]], const device V2In* v [[buffer(0)]], constant U2D& u [[buffer(1)]]) {
-    V2In i=v[vid]; V2Out o;
-    float2 ndc = i.position * u.scale + u.offset;
-    o.position=float4(ndc,0.0,1.0); o.uv=i.uv; o.color=i.color; return o;
+// plans/plan_apple_m4.md AM4-153: the stock sprite vertex is XNA's (x, y, layerDepth, 1) times the
+// batch's transformMatrix, kept homogeneous -- XNA's SpriteEffect multiplies by the whole matrix,
+// so layerDepth reaches the depth test, M14/M24/M44 divide the sprite by W and its texture is
+// interpolated perspective-correctly, and the near plane clips. scale/offset are the projection to
+// clip space, applied with W.
+struct V2HIn { float4 position; float4 color; float2 uv; float2 pad; };
+vertex V2Out cna_v2d(uint vid [[vertex_id]], const device V2HIn* v [[buffer(0)]], constant U2D& u [[buffer(1)]]) {
+    V2HIn i=v[vid]; V2Out o;
+    o.position=float4(i.position.xy * u.scale + u.offset * i.position.w, i.position.z, i.position.w);
+    o.uv=i.uv; o.color=i.color; return o;
 }
 fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     { CnaFragOut cnaOut; cnaOut.color = (tex.sample(smp, in.uv) * in.color); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
@@ -3350,9 +3356,10 @@ public:
 private:
     void drawQuad(const ITextureRenderer& t,float dx,float dy,float dw,float dh,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float layerDepth)
     {
-        (void)layerDepth;
         const MetalAutoreleaseScope autoreleaseScope;
         if(!begun_) throw std::runtime_error("Metal SpriteBatch.Draw called outside Begin/End");
+        // AM4-153: a source rectangle with no width or height names no texel; nothing is drawn.
+        if(s.Width==0||s.Height==0) return;
         // plans/plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
         // drawing a previously-rendered-to RenderTarget2D as a sprite works, not just a plain Texture2D.
         id<MTLTexture> nativeTex=nativeTextureFor(&t); if(!nativeTex) throw std::runtime_error("Metal: foreign texture renderer");
@@ -3367,8 +3374,10 @@ private:
         // the first time ever on real Apple hardware -- Clang's own "no member named
         // 'getXProperty'" error.
         float x0=dx, y0=dy, x1=x0+dw, y1=y0+dh;
+        // AM4-153: the far edge is summed as float -- X+Width overflows int for a source near
+        // int's limit, which XNA's float sprite math does not.
         float u0=(float)s.X/t.GetWidth(), v0=(float)s.Y/t.GetHeight();
-        float u1=(float)(s.X+s.Width)/t.GetWidth(), v1=(float)(s.Y+s.Height)/t.GetHeight();
+        float u1=((float)s.X+(float)s.Width)/t.GetWidth(), v1=((float)s.Y+(float)s.Height)/t.GetHeight();
         if((int)effects & 1) std::swap(u0,u1); if((int)effects & 2) std::swap(v0,v1);
         const float cr=c.getRProperty()/255.f,cg=c.getGProperty()/255.f,cb=c.getBProperty()/255.f,ca=c.getAProperty()/255.f;
         // plans/plan_apple_m4.md AM4-033: `origin` is in SOURCE texels (ISpriteBatchRenderer), and
@@ -3381,22 +3390,39 @@ private:
         const float originX=origin.X*originScaleX, originY=origin.Y*originScaleY;
         const float cs=std::cos(rotation), sn=std::sin(rotation);
         auto xf=[&](float x,float y){ const float px=x-x0-originX, py=y-y0-originY; return std::array<float,2>{x0+px*cs-py*sn,y0+px*sn+py*cs};};
-        auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
-        auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
+        // AM4-153: XNA's sprite vertex (x, y, layerDepth, 1) times the whole transformMatrix.
+        const Matrix& m=transform_;
+        auto hp=[&](std::array<float,2> q){
+            const float x=q[0],y=q[1],z=layerDepth;
+            return std::array<float,4>{x*m.M11+y*m.M21+z*m.M31+m.M41, x*m.M12+y*m.M22+z*m.M32+m.M42,
+                                       x*m.M13+y*m.M23+z*m.M33+m.M43, x*m.M14+y*m.M24+z*m.M34+m.M44};
+        };
+        const auto ra=xf(x0,y0),rb=xf(x1,y0),rc=xf(x1,y1),rd=xf(x0,y1);
+        const auto a=hp(ra),bb=hp(rb),cc=hp(rc),dd=hp(rd);
 #if defined(CNA_METAL_COMPILED_EFFECTS)
         // AM4-144: a compiled effect owns the whole sprite, the transform to clip space included,
         // so it receives these sprite-space points (and the layer depth) rather than NDC.
+        // AM4-153: untransformed, as XNA's SpriteBatch hands them over; transformMatrix travels in
+        // SpriteEffect's MatrixTransform (applyCompiledStockVertexStage).
         if (compiledEffect_) {
             if (pendingTexture_!=nativeTex) { flushCompiled(); pendingTexture_=[nativeTex retain]; }
             const CompiledSpriteVertex quad[6]={
-                {a[0],a[1],layerDepth,u0,v0,cr,cg,cb,ca},{bb[0],bb[1],layerDepth,u1,v0,cr,cg,cb,ca},
-                {cc[0],cc[1],layerDepth,u1,v1,cr,cg,cb,ca},{a[0],a[1],layerDepth,u0,v0,cr,cg,cb,ca},
-                {cc[0],cc[1],layerDepth,u1,v1,cr,cg,cb,ca},{dd[0],dd[1],layerDepth,u0,v1,cr,cg,cb,ca}};
+                {ra[0],ra[1],layerDepth,u0,v0,cr,cg,cb,ca},{rb[0],rb[1],layerDepth,u1,v0,cr,cg,cb,ca},
+                {rc[0],rc[1],layerDepth,u1,v1,cr,cg,cb,ca},{ra[0],ra[1],layerDepth,u0,v0,cr,cg,cb,ca},
+                {rc[0],rc[1],layerDepth,u1,v1,cr,cg,cb,ca},{rd[0],rd[1],layerDepth,u0,v1,cr,cg,cb,ca}};
             pendingCompiled_.insert(pendingCompiled_.end(),std::begin(quad),std::end(quad));
             return;
         }
 #endif
-        V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
+        // The stock function's homogeneous vertex; a custom MSL effect keeps its documented
+        // float2 position (docs/metal-shader-effect-contract.md), divided by W.
+        struct VH{float x,y,z,w,r,g,b,a,u,v,pad0,pad1;};
+        const VH vh[6]={{a[0],a[1],a[2],a[3],cr,cg,cb,ca,u0,v0,0,0},{bb[0],bb[1],bb[2],bb[3],cr,cg,cb,ca,u1,v0,0,0},
+                        {cc[0],cc[1],cc[2],cc[3],cr,cg,cb,ca,u1,v1,0,0},{a[0],a[1],a[2],a[3],cr,cg,cb,ca,u0,v0,0,0},
+                        {cc[0],cc[1],cc[2],cc[3],cr,cg,cb,ca,u1,v1,0,0},{dd[0],dd[1],dd[2],dd[3],cr,cg,cb,ca,u0,v1,0,0}};
+        auto divided=[](const std::array<float,4>& h){ return std::array<float,2>{h[0]/h[3],h[1]/h[3]}; };
+        const auto da=divided(a),db=divided(bb),dc=divided(cc),dd2=divided(dd);
+        V vs[6]={{da[0],da[1],u0,v0,cr,cg,cb,ca},{db[0],db[1],u1,v0,cr,cg,cb,ca},{dc[0],dc[1],u1,v1,cr,cg,cb,ca},{da[0],da[1],u0,v0,cr,cg,cb,ca},{dc[0],dc[1],u1,v1,cr,cg,cb,ca},{dd2[0],dd2[1],u0,v1,cr,cg,cb,ca}};
         // plans/plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
         // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
         auto st=p.computeSpriteTransform();
@@ -3430,7 +3456,10 @@ private:
         } else {
             pipe=p.getOrCreatePipeline(PipelineKind::Sprite2D);
         }
-        [p.encoder setRenderPipelineState:pipe]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
+        [p.encoder setRenderPipelineState:pipe];
+        if (ceb) [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0];
+        else [p.encoder setVertexBytes:vh length:sizeof(vh) atIndex:0];   // AM4-153
+        [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
         p.bindSampleMask();   // AM4-141
         if (ceb) {
             const float* m=ceb->GetMatrix(); const float* col=ceb->GetColor(); float f0=ceb->GetFloat0();
@@ -3471,7 +3500,8 @@ private:
         const Matrix projection=Matrix::CreateOrthographicOffCenter(0.0f,width,height,0.0f,0.0f,-1.0f);
         float values[16];
         // Effect Framework storage is the transposed layout EffectParameter::SetValue(Matrix) writes.
-        Matrix::Transpose(projection).ToColumnMajor(values);
+        // AM4-153: XNA's MatrixTransform is transformMatrix * projection; the vertices are untransformed.
+        Matrix::Transpose(transform_*projection).ToColumnMajor(values);
         spriteEffect_->SetParameterValue(spriteMatrixParameterIndex_,values,sizeof(values));
         spriteEffect_->SetTechnique(0);
         auto& device=compiledEffect_->getGraphicsDeviceInternal();

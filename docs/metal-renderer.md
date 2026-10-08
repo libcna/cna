@@ -120,6 +120,14 @@ The following boundaries are deterministic rather than silent degradation:
   descriptor, or an MRT set of up to eight (`AM4-097`); array slices are refused;
 - a non-null `GpuDrawParams::customEffectRenderer` (a 3D draw with a custom effect) throws; custom
   effects are a SpriteBatch facility;
+- a SpriteBatch sprite is XNA's vertex, `(x, y, layerDepth, 1)` times the whole `Begin`
+  `transformMatrix`, kept homogeneous (`AM4-153`): layerDepth reaches the depth test through the
+  viewport's depth range, `M14`/`M24`/`M44` divide the sprite by W with perspective-correct
+  texturing, and the near plane clips. A compiled effect receives the untransformed vertices and
+  `transformMatrix * projection` as SpriteEffect's `MatrixTransform`, as XNA hands them over; a
+  custom MSL effect keeps its documented `float2` position, divided by W. A source rectangle with no
+  width or height draws nothing, and its far edge is summed in float, so an `int`-limit source does
+  not overflow;
 - malformed stream metadata throws `std::invalid_argument`; a stream layout the stock vertex
   functions cannot read (an integer instance-matrix element, an undeclared per-instance stream)
   throws `System::NotSupportedException` naming it;

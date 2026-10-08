@@ -30,7 +30,7 @@ library's single function name instead of requiring one.
 
 | Binding | Contents | Set by |
 |---|---|---|
-| vertex `buffer(0)` | the sprite's six vertices: `float2 position; float2 uv; float4 color` (32 bytes) | SpriteBatch |
+| vertex `buffer(0)` | the sprite's six vertices: `float2 position; float2 uv; float4 color` (32 bytes); the position is the transformed sprite vertex divided by its W (`AM4-153`), so a custom effect draws no layerDepth and interpolates affinely under a perspective `transformMatrix` | SpriteBatch |
 | vertex `buffer(1)` | `float2 scale; float2 offset` mapping sprite positions to clip space, letterbox included | SpriteBatch |
 | `buffer(2)`, both stages | `float4x4` (column-major) | `SetUniformMat4` |
 | `buffer(3)`, both stages | `float4` | `SetUniformVec4` / `Vec3` / `Vec2` |
