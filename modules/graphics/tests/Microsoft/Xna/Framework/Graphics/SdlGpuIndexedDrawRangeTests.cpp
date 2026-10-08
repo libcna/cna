@@ -1045,7 +1045,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, ForwardsIndexedRangesAsXnaDoes)
     ApplyVertexColorEffect(effect);
 
     using System::ArgumentOutOfRangeException;
-    // Index windows SDL_gpu cannot issue: no exception, and nothing drawn (checked below).
+    // Index windows the renderer cannot issue: no exception, and nothing drawn (checked below).
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, -1, 1))
         << "negative startIndex";
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 7, 1))
