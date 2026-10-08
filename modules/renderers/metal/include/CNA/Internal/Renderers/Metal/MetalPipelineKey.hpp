@@ -82,6 +82,11 @@ namespace CNA::Internal::Renderers::Metal
          */
         uint8_t writeMask=15;
         /**
+         * @brief XNA ColorWriteChannels1..3, for the attachments a compiled pixel shader writes
+         *        (plans/plan_apple_m4.md AM4-146); the built-in pipelines mask those attachments out.
+         */
+        uint8_t writeMask1=15, writeMask2=15, writeMask3=15;
+        /**
          * @brief Compares every baked blend-state field.
          *
          * @param other Blend key to compare.
@@ -92,7 +97,9 @@ namespace CNA::Internal::Renderers::Metal
             return colorSrc==other.colorSrc && colorDst==other.colorDst &&
                    alphaSrc==other.alphaSrc && alphaDst==other.alphaDst &&
                    colorFunc==other.colorFunc && alphaFunc==other.alphaFunc &&
-                   enabled==other.enabled && writeMask==other.writeMask;
+                   enabled==other.enabled && writeMask==other.writeMask &&
+                   writeMask1==other.writeMask1 && writeMask2==other.writeMask2 &&
+                   writeMask3==other.writeMask3;
         }
     };
 
@@ -217,6 +224,9 @@ namespace CNA::Internal::Renderers::Metal
             hh ^= std::hash<uint8_t>()(key.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint64_t>()(key.vertexLayout) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<uint8_t>()(key.blend.writeMask) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            const uint32_t laterMasks = (uint32_t)key.blend.writeMask1 | ((uint32_t)key.blend.writeMask2 << 4) |
+                                        ((uint32_t)key.blend.writeMask3 << 8);
+            hh ^= std::hash<uint32_t>()(laterMasks) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             hh ^= std::hash<bool>()(key.sampleMaskOutput) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
             for (const uint16_t format : key.colorFormats)
                 hh ^= std::hash<uint16_t>()(format) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);

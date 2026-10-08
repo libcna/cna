@@ -27,6 +27,9 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include "System/NotSupportedException.hpp"
@@ -34,6 +37,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -399,6 +403,98 @@ TEST(MetalCompiledEffectDrawTest, ADeviceTextureSlotReplacedAfterApplyIsTheOneSa
     target.GetData(0, &centre, &pixel, 0, 1);
     EXPECT_NEAR(pixel.getRProperty(), 0, 3);
     EXPECT_NEAR(pixel.getBProperty(), 255, 3) << "the device's slot, replaced after Apply, wins";
+}
+
+// AM4-144/146: an ordinary compiled Effect writing oC0 = Tint and oC1 = Tint.yxzw (the fixture's own
+// swizzles, CompiledEffectFixtures.hpp `writesMrt`) into an MRT set -- the shape of SDL_GPU's
+// SDLGPU-75 legs on Metal. Each attachment the pixel shader writes takes XNA's ColorWriteChannels for
+// its own slot (ColorWriteChannels1 for slot 1) and the one BlendState; a {Color, Single} set (XNA
+// requires equal bit depths) keeps slot 1's float output exact; and returning to the first state
+// reuses the first pipeline.
+TEST(MetalCompiledEffectDrawTest, AnMrtPassWritesEachSlotUnderItsOwnWriteMask)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Vector4;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (RendererOf(device) == nullptr || !CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "this build did not select the Metal renderer with compiled effects";
+
+    constexpr int kSize = 8;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticMrtDrawableEffect());
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+    EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
+    struct ClipVertex { float x, y, z; };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const ClipVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+    };
+    const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+    const auto draw = [&](RenderTarget2D& a, RenderTarget2D& b, const Vector4& tint,
+                          const BlendState& blend, const Color& clear) {
+        device.SetRenderTargets({RenderTargetBinding(&a), RenderTargetBinding(&b)});
+        device.Clear(clear);
+        device.setBlendStateProperty(blend);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        parameters["Tint"]->SetValue(tint);
+        pass.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                  declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    };
+    const auto near = [](const Color& got, const Color& want) {
+        return std::abs(got.getRProperty() - want.getRProperty()) <= 3 &&
+               std::abs(got.getGProperty() - want.getGProperty()) <= 3 &&
+               std::abs(got.getBProperty() - want.getBProperty()) <= 3 &&
+               std::abs(got.getAProperty() - want.getAProperty()) <= 3;
+    };
+    const auto text = [](const Color& c) {
+        return "(" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) + "," +
+               std::to_string(c.getBProperty()) + "," + std::to_string(c.getAProperty()) + ")";
+    };
+
+    RenderTarget2D a0(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+    RenderTarget2D a1(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+    Color first, second;
+    draw(a0, a1, Vector4(0.2f, 0.4f, 0.8f, 1.0f), BlendState::Opaque, Color::Black);
+    a0.GetData(0, &centre, &first, 0, 1);
+    a1.GetData(0, &centre, &second, 0, 1);
+    EXPECT_TRUE(near(first, Color(51, 102, 204, 255))) << "oC0 = Tint, got " << text(first);
+    EXPECT_TRUE(near(second, Color(102, 51, 204, 255))) << "oC1 = Tint.yxzw, got " << text(second);
+
+    RenderTarget2D mixed0(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+    RenderTarget2D mixed1(device, kSize, kSize, false, SurfaceFormat::Single, DepthFormat::None);
+    draw(mixed0, mixed1, Vector4(0.25f, 0.5f, 0.75f, 1.0f), BlendState::Opaque, Color::Black);
+    Color mixedFirst;
+    float mixedSecond = -1.0f;
+    mixed0.GetData(0, &centre, &mixedFirst, 0, 1);
+    mixed1.GetData(0, &centre, &mixedSecond, 0, 1);
+    EXPECT_TRUE(near(mixedFirst, Color(64, 128, 191, 255))) << text(mixedFirst);
+    EXPECT_FLOAT_EQ(mixedSecond, 0.5f) << "a Single slot 1 keeps oC1.x = Tint.y exactly";
+
+    BlendState maskedAdditive = BlendState::Additive;
+    maskedAdditive.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+    maskedAdditive.setColorWriteChannels1Property(ColorWriteChannels::Green);
+    draw(a0, a1, Vector4(0.2f, 0.4f, 0.8f, 0.5f), maskedAdditive, Color(10, 20, 30, 40));
+    a0.GetData(0, &centre, &first, 0, 1);
+    a1.GetData(0, &centre, &second, 0, 1);
+    EXPECT_TRUE(near(first, Color(36, 20, 30, 40))) << "slot 0 Red mask with Additive, got " << text(first);
+    // Additive is SourceAlpha/One: green gets oC1.y = Tint.x = 0.2 times alpha 0.5, over 20.
+    EXPECT_TRUE(near(second, Color(10, 46, 30, 40))) << "slot 1 Green mask with Additive, got " << text(second);
+
+    draw(a0, a1, Vector4(0.6f, 0.3f, 0.1f, 1.0f), BlendState::Opaque, Color::Black);
+    a0.GetData(0, &centre, &first, 0, 1);
+    a1.GetData(0, &centre, &second, 0, 1);
+    EXPECT_TRUE(near(first, Color(153, 77, 26, 255))) << text(first);
+    EXPECT_TRUE(near(second, Color(77, 153, 26, 255))) << text(second);
 }
 
 TEST(MetalCompiledEffectTest, SharedBackendConformanceContract)

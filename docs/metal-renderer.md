@@ -136,7 +136,9 @@ The following boundaries are deterministic rather than silent degradation:
   shadow maps keep their range; any other preference becomes Color, as XNA's
   `QueryRenderTargetFormat` does. Pipelines are keyed on the bound targets' pixel formats;
 - TextureCube and Texture3D accept only `SurfaceFormat::Color`; unsupported formats throw;
-- render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`). Sampler `MaxMipLevel` is the sampler's
+- render target 0's `ColorWriteChannels` is honoured (a pipeline property, `AM4-079`), and
+  `ColorWriteChannels1..3` for the MRT attachments a compiled pixel shader writes (`AM4-146`; the
+  built-in effects write COLOR0 only and leave the other attachments untouched). Sampler `MaxMipLevel` is the sampler's
   `lodMinClamp` and `MipMapLevelOfDetailBias` its `lodBias` (`AM4-034`), for 3D draws and
   SpriteBatch alike; `lodBias` exists from macOS/iOS 26, and below that a non-zero bias still
   throws.

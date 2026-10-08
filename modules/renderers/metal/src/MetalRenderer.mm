@@ -4594,6 +4594,9 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
     p.currentBlend.colorFunc=(uint8_t)colorBlendFunc; p.currentBlend.alphaFunc=(uint8_t)alphaBlendFunc;
     p.currentBlend.enabled = !(colorSrcBlend==0 && colorDstBlend==1 && alphaSrcBlend==0 && alphaDstBlend==1);
     p.currentBlend.writeMask=(uint8_t)writeState.colorWriteChannels[0];   // AM4-079
+    p.currentBlend.writeMask1=(uint8_t)writeState.colorWriteChannels[1];  // AM4-146
+    p.currentBlend.writeMask2=(uint8_t)writeState.colorWriteChannels[2];
+    p.currentBlend.writeMask3=(uint8_t)writeState.colorWriteChannels[3];
     p.sampleMask=writeState.multiSampleMask;                               // AM4-141
 }
 void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnable,int depthFunc,
@@ -5313,7 +5316,10 @@ namespace
             // A pixel shader writes the targets it declares (COLOR0..COLOR3); the others keep their
             // contents. XNA's one BlendState blends every target it writes.
             if ((linked.pixelColorOutputs & (1u<<i))==0) { d.colorAttachments[i].writeMask=MTLColorWriteMaskNone; continue; }
-            d.colorAttachments[i].writeMask=i==0 ? (MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask) : MTLColorWriteMaskAll;
+            // XNA's ColorWriteChannels0..3; a fifth to eighth target (CNA's larger MRT sets) is unmasked.
+            const uint8_t channels=i==0 ? blend.writeMask : i==1 ? blend.writeMask1
+                                 : i==2 ? blend.writeMask2 : i==3 ? blend.writeMask3 : (uint8_t)15;
+            d.colorAttachments[i].writeMask=(MTLColorWriteMask)MetalColorWriteMaskBits(channels);
             d.colorAttachments[i].blendingEnabled=blend.enabled?YES:NO;
             if (blend.enabled) {
                 d.colorAttachments[i].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
