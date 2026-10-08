@@ -1317,18 +1317,30 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             switch (format)
             {
+                case SurfaceFormat::Alpha8:
+                    return 1;
                 case SurfaceFormat::Bgr565:
                 case SurfaceFormat::Bgra5551:
                 case SurfaceFormat::Bgra4444:
                 case SurfaceFormat::NormalizedByte2:
+                case SurfaceFormat::HalfSingle:
                     return 2;
                 case SurfaceFormat::Dxt1:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                case SurfaceFormat::Rgba64:
                     return 8;
                 case SurfaceFormat::Dxt3:
                 case SurfaceFormat::Dxt5:
+                case SurfaceFormat::Vector4:
                     return 16;
                 case SurfaceFormat::Color:
                 case SurfaceFormat::NormalizedByte4:
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba1010102:
                     return 4;
                 default:
                     return 0;
@@ -1352,7 +1364,61 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // a format-dependent shader variant.
                 case SurfaceFormat::NormalizedByte2: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
                 case SurfaceFormat::NormalizedByte4: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
+                // plans/plan_apple_m4.md AM4-184: the same rule for the classic float and wide
+                // formats. Those with fewer than four channels are stored in four, with D3D9's
+                // fill materialized at upload -- one for an absent R/G/B/A, and (0, 0, 0, A) for
+                // Alpha8 -- so every route (stock, custom, sprite) samples what XNA samples.
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:         return SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:    return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba64:          return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM;
+                case SurfaceFormat::Rgba1010102:     return SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM;
+                case SurfaceFormat::Alpha8:          return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
                 default:                             return SDL_GPU_TEXTUREFORMAT_INVALID;
+            }
+        }
+
+        // AM4-184: the formats whose logical texels are widened to four stored channels.
+        [[nodiscard]] constexpr bool TextureStorageExpandsChannels(SurfaceFormat format) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Alpha8:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // AM4-184: the formats that have no lossless RGBA8 stand-in, so a device without their
+        // native storage refuses them rather than substituting.
+        [[nodiscard]] constexpr bool TextureFormatNeedsExactStorage(SurfaceFormat format) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba64:
+                case SurfaceFormat::Rgba1010102:
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -1541,6 +1607,42 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
 
             const std::size_t texelCount = static_cast<std::size_t>(width) * height;
+            // AM4-184: widen a one- or two-channel float/wide texel to four, filling as D3D9 does.
+            const auto widen = [&](std::size_t channelBytes, std::size_t presentChannels,
+                                   std::uint32_t one) {
+                std::vector<std::uint8_t> wide(texelCount * channelBytes * 4u);
+                const std::size_t sourceTexel = channelBytes * presentChannels;
+                const std::size_t wideTexel = channelBytes * 4u;
+                for (std::size_t i = 0; i < texelCount; ++i)
+                {
+                    std::uint8_t* texel = wide.data() + i * wideTexel;
+                    std::memcpy(texel, source + i * sourceTexel, sourceTexel);
+                    for (std::size_t c = presentChannels; c < 4u; ++c)
+                        std::memcpy(texel + c * channelBytes, &one, channelBytes);
+                }
+                return wide;
+            };
+            constexpr std::uint32_t floatOne = 0x3F800000u;  // 1.0f
+            constexpr std::uint32_t halfOne = 0x3C00u;       // 1.0 in IEEE half
+            constexpr std::uint32_t unorm16One = 0xFFFFu;
+            switch (format)
+            {
+                case SurfaceFormat::Single:      return widen(4u, 1u, floatOne);
+                case SurfaceFormat::Vector2:     return widen(4u, 2u, floatOne);
+                case SurfaceFormat::HalfSingle:  return widen(2u, 1u, halfOne);
+                case SurfaceFormat::HalfVector2: return widen(2u, 2u, halfOne);
+                case SurfaceFormat::Rg32:        return widen(2u, 2u, unorm16One);
+                case SurfaceFormat::Alpha8:
+                {
+                    std::vector<std::uint8_t> rgba(texelCount * 4u, 0u);
+                    for (std::size_t i = 0; i < texelCount; ++i)
+                        rgba[i * 4u + 3u] = source[i];
+                    return rgba;
+                }
+                default:
+                    break;
+            }
+
             std::vector<std::uint8_t> result(texelCount * 4u);
             if (format == SurfaceFormat::NormalizedByte2)
             {
@@ -4436,14 +4538,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             case SurfaceFormat::NormalizedByte4:
                 return RendererFormatVerdict::Supported;
 
-            // Truthful current boundary for the remaining classic XNA 4.0 Texture2D formats.
-            // SDL_gpu has candidate storage for many of these, but SDL GPU has not yet supplied
-            // their channel-expansion/filtering/sample verification. Advertising them before that
-            // would repeat the old RGBA8 substitution bug rather than improve parity.
+            // plans/plan_apple_m4.md AM4-184: the remaining classic XNA 4.0 Texture2D formats, in
+            // their exact native storage (widened to four channels with D3D9's fill where they
+            // have fewer, see PreferredTextureFormat), when this device can sample that storage.
+            // There is no RGBA8 substitution: without it the format is refused.
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Supported;
             case SurfaceFormat::Rgba1010102:
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
-            case SurfaceFormat::Alpha8:
             case SurfaceFormat::Single:
             case SurfaceFormat::Vector2:
             case SurfaceFormat::Vector4:
@@ -4451,7 +4554,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             case SurfaceFormat::HalfVector2:
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:
-                return RendererFormatVerdict::Unsupported;
+                return device_ != nullptr &&
+                       SDL_GPUTextureSupportsFormat(
+                           device_, PreferredTextureFormat(static_cast<SurfaceFormat>(surfaceFormat)),
+                           SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER)
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
 
             // Newer CNAEXT formats are owned by the modern plan. Preserve the common gate.
             default:
@@ -11384,6 +11492,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // upload makes the rule hold for every shader route without format-specific shader state.
         // Packed and DXT storage fall back to RGBA8 only when the concrete driver lacks their
         // exact native representation.
+        if (!preferredSupported && TextureFormatNeedsExactStorage(format))
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: this device has no " + std::to_string(static_cast<int>(preferredFormat)) +
+                " sampled-texture storage for SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat_) + ", and it has no lossless RGBA8 stand-in");
         nativeFormat_ = preferredSupported
             ? preferredFormat
             : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -11534,7 +11647,8 @@ namespace CNA::Internal::Renderers::SdlGpu
              format == SurfaceFormat::Bgra4444) &&
             nativeFormat_ == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         const bool conversionNeeded = (!compressedNative_ && compressed_) ||
-            format == SurfaceFormat::NormalizedByte2 || packedFallback;
+            format == SurfaceFormat::NormalizedByte2 || packedFallback ||
+            TextureStorageExpandsChannels(format);
         std::vector<std::uint8_t> converted;
         const std::uint8_t* uploadPixels = logicalPixels;
         std::size_t uploadBytes = logicalBytes;

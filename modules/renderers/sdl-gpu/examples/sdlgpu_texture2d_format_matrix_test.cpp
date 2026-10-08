@@ -86,7 +86,10 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         Check(supportedExact,
               "the exact nine-format EasyGL Texture2D set is explicitly Supported");
 
-        const std::array unsupported{
+        // plans/plan_apple_m4.md AM4-184: the remaining classic formats are stored natively (widened
+        // to four channels with D3D9's fill where they have fewer) when the device can sample that
+        // storage, and refused otherwise -- an explicit verdict either way, never RGBA8.
+        const std::array remaining{
             SurfaceFormat::Rgba1010102,
             SurfaceFormat::Rg32,
             SurfaceFormat::Rgba64,
@@ -99,14 +102,16 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
             SurfaceFormat::HalfVector4,
             SurfaceFormat::HdrBlendable,
         };
-        bool unsupportedExact = true;
-        for (const SurfaceFormat format : unsupported)
+        bool remainingExplicit = true;
+        for (const SurfaceFormat format : remaining)
         {
-            unsupportedExact &= renderer.ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
-                RendererFormatVerdict::Unsupported;
+            const RendererFormatVerdict verdict =
+                renderer.ClassifySurfaceFormatEXT(static_cast<int>(format));
+            remainingExplicit &= verdict == RendererFormatVerdict::Supported ||
+                                 verdict == RendererFormatVerdict::Unsupported;
         }
-        Check(unsupportedExact,
-              "every remaining classic format is explicitly Unsupported, never silently RGBA8");
+        Check(remainingExplicit,
+              "every remaining classic format has an explicit verdict, never a deferred RGBA8");
 
         const bool compressionExact =
             renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) &&
@@ -126,7 +131,7 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
                 colorTransferExact &= renderer.ClassifyColorTransferFormatEXT(
                     static_cast<int>(format)) == RendererFormatVerdict::Unsupported;
         }
-        for (const SurfaceFormat format : unsupported)
+        for (const SurfaceFormat format : remaining)
         {
             colorTransferExact &= renderer.ClassifyColorTransferFormatEXT(
                 static_cast<int>(format)) == RendererFormatVerdict::Unsupported;
@@ -159,6 +164,82 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         Check(pixel.getRProperty() <= 8 && pixel.getGProperty() <= 8 &&
                   pixel.getBProperty() >= 247 && pixel.getAProperty() >= 247,
               "NormalizedByte2 sampling expands missing B/A to one (blue), not zero (black)");
+    }
+
+    /// AM4-184: a format the renderer calls Supported constructs, and one it refuses throws.
+    void CheckRemainingFormatsAgreeWithTheirVerdicts(GraphicsDevice& device, SdlGpuRenderer& renderer)
+    {
+        bool agree = true;
+        for (const SurfaceFormat format :
+             {SurfaceFormat::Rgba1010102, SurfaceFormat::Rg32, SurfaceFormat::Rgba64,
+              SurfaceFormat::Alpha8, SurfaceFormat::Single, SurfaceFormat::Vector2,
+              SurfaceFormat::Vector4, SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
+              SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
+        {
+            const bool supported = renderer.ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                RendererFormatVerdict::Supported;
+            bool constructed = false;
+            try
+            {
+                Texture2D texture(device, 2, 2, false, format);
+                constructed = true;
+            }
+            catch (const std::exception&)
+            {
+            }
+            if (constructed != supported)
+            {
+                std::printf("[INFO] SurfaceFormat %d: verdict %s, construction %s\n",
+                            static_cast<int>(format), supported ? "Supported" : "Unsupported",
+                            constructed ? "succeeded" : "failed");
+                agree = false;
+            }
+        }
+        Check(agree, "each remaining format constructs exactly when it is classified Supported");
+    }
+
+    /// Draws a 1x1 texture with Opaque blending into a cleared Color target and reads it back.
+    template <typename Texel>
+    Color SampleThroughSprite(GraphicsDevice& device, SurfaceFormat format, const Texel& texel)
+    {
+        Texture2D texture(device, 1, 1, false, format);
+        texture.SetData(&texel, 1);
+        RenderTarget2D target(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::PreserveContents);
+        const SamplerState pointClamp = SamplerState::PointClamp;
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Red);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(texture, Rectangle(0, 0, 1, 1), Color::White);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color pixel;
+        target.GetData(&pixel, 1);
+        return pixel;
+    }
+
+    /// AM4-184: the stored fill, observed through SpriteBatch's identity channel expansion for
+    /// these two formats, so only the storage itself can supply it.
+    void CheckWidenedStorageSampling(GraphicsDevice& device, SdlGpuRenderer& renderer)
+    {
+        if (renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Rg32)) ==
+            RendererFormatVerdict::Supported)
+        {
+            const std::uint32_t rg = 0u;  // R = G = 0
+            const Color pixel = SampleThroughSprite(device, SurfaceFormat::Rg32, rg);
+            Check(pixel.getRProperty() <= 2 && pixel.getGProperty() <= 2 &&
+                      pixel.getBProperty() >= 253 && pixel.getAProperty() >= 253,
+                  "Rg32 sampling fills missing B/A with one (blue), not zero (black)");
+        }
+        const std::uint8_t alpha = 0x80u;
+        const Color pixel = SampleThroughSprite(device, SurfaceFormat::Alpha8, alpha);
+        Check(pixel.getRProperty() == 0 && pixel.getGProperty() == 0 &&
+                  pixel.getBProperty() == 0 && pixel.getAProperty() >= 0x7Fu &&
+                  pixel.getAProperty() <= 0x81u,
+              "Alpha8 samples as (0, 0, 0, A), as Direct3D 9's A8 does");
     }
 
     void CheckCompressedNpotPartialAndMips(GraphicsDevice& device)
@@ -283,6 +364,8 @@ protected:
         auto& renderer = dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
         CheckClassifiers(renderer);
         CheckNormalizedByte2Sampling(device);
+        CheckRemainingFormatsAgreeWithTheirVerdicts(device, renderer);
+        CheckWidenedStorageSampling(device, renderer);
         CheckCompressedNpotPartialAndMips(device);
 
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
