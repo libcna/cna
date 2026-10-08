@@ -13,6 +13,9 @@ tool's predecessor (Git history, commit 6ca06d069), v2 by this tool at commit d1
 import argparse
 import hashlib
 import json
+import math
+import platform
+import struct
 import sys
 from pathlib import Path
 
@@ -63,6 +66,87 @@ def build():
     return files
 
 
+# plans/plan_apple_m4.md AM4-166: the one part of the released catalog v3 another C library cannot
+# reproduce. FemaleShocked places both hands at face(+-0.13, -0.13), a point the head's Newton
+# solve (cna_avatar.head._solve) has no solution for: its residual wanders between 0.06 and 0.26 for
+# all twelve iterations, and a one-ulp change in the starting guess moves the answer by 11 radians.
+# What v3 froze for those six arm rotations is therefore whatever glibc's libm last bits produced
+# (catalog v3 is released and frozen, docs/avatars.md, so it is not regenerated); every other byte
+# of every file is reproducible anywhere. On another C library the check still requires all of
+# that byte for byte, and of these channels exactly what can be required of them: the same
+# accessors, holding finite values and unit quaternions. The solver itself belongs to a future
+# catalog.
+LIBM_SENSITIVE_CLIP = "FemaleShocked"
+LIBM_SENSITIVE_JOINTS = frozenset(("ShoulderLeft", "ShoulderRight", "ElbowLeft", "ElbowRight",
+                                   "WristLeft", "WristRight"))
+
+
+def _glb_parts(data):
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    return json.loads(data[20:20 + json_length]), data[20:20 + json_length], data[20 + json_length + 8:]
+
+
+def _libm_sensitive_word_ranges(document):
+    ranges = []
+    for animation in document.get("animations", []):
+        if animation.get("name") != LIBM_SENSITIVE_CLIP:
+            continue
+        for channel in animation["channels"]:
+            node = document["nodes"][channel["target"]["node"]].get("name")
+            if node not in LIBM_SENSITIVE_JOINTS or channel["target"]["path"] != "rotation":
+                continue
+            sampler = animation["samplers"][channel["sampler"]]
+            accessor = document["accessors"][sampler["output"]]
+            view = document["bufferViews"][accessor["bufferView"]]
+            start = (view.get("byteOffset", 0) + accessor.get("byteOffset", 0)) // 4
+            # A CUBICSPLINE sampler stores (in-tangent, value, out-tangent) per key frame; only the
+            # value is a rotation.
+            stride = 3 if sampler.get("interpolation") == "CUBICSPLINE" else 1
+            ranges.append((start, start + 4 * accessor["count"], stride))
+    return ranges
+
+
+def _differs_only_by_libm(released, generated):
+    """Whether two animations.glb files differ only inside the libm-sensitive channels, and those
+    still hold finite unit quaternions. Returns the number of differing words, or None."""
+    if len(released) != len(generated):
+        return None
+    document, released_json, released_bin = _glb_parts(released)
+    _, generated_json, generated_bin = _glb_parts(generated)
+    if released_json != generated_json or released[:20] != generated[:20]:
+        return None
+    ranges = _libm_sensitive_word_ranges(document)
+    if len(ranges) != len(LIBM_SENSITIVE_JOINTS):
+        return None
+    inside = set()
+    for start, end, stride in ranges:
+        inside.update(range(start, end))
+        for element, quad in enumerate(range(start, end, 4)):
+            q = struct.unpack_from("<4f", generated_bin, quad * 4)
+            if not all(math.isfinite(c) for c in q):
+                return None
+            is_value = stride == 1 or element % stride == 1
+            if is_value and abs(math.sqrt(sum(c * c for c in q)) - 1.0) > 1e-3:
+                return None
+    differing = 0
+    for word in range(len(released_bin) // 4):
+        if released_bin[word * 4:word * 4 + 4] != generated_bin[word * 4:word * 4 + 4]:
+            if word not in inside:
+                return None
+            differing += 1
+    return differing
+
+
+def _manifest_differs_only_in(released, generated, name):
+    """Whether two catalog.json manifests are equal apart from asset `name`'s SHA-256."""
+    a, b = json.loads(released), json.loads(generated)
+    for manifest in (a, b):
+        for asset in manifest.get("assets", []):
+            if asset["name"] == name:
+                asset["sha256"] = None
+    return a == b
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
@@ -73,6 +157,17 @@ def main():
         stale = [name for name, data in files.items()
                  if not (args.out / name).is_file() or (args.out / name).read_bytes() != data]
         extra = sorted(p.name for p in args.out.iterdir() if p.name not in files) if args.out.is_dir() else []
+        if (stale and not extra and platform.libc_ver()[0] != "glibc"
+                and set(stale) <= {"animations.glb", "catalog.json"} and "animations.glb" in stale):
+            differing = _differs_only_by_libm((args.out / "animations.glb").read_bytes(),
+                                              files["animations.glb"])
+            if differing is not None and _manifest_differs_only_in(
+                    (args.out / "catalog.json").read_bytes(), files["catalog.json"], "animations.glb"):
+                print("avatar catalog v%d up to date (%d files, %d bytes); on this C library %d words of "
+                      "%s's %d libm-sensitive arm rotations differ from glibc's, as documented"
+                      % (CATALOG_VERSION, len(files), sum(len(d) for d in files.values()), differing,
+                         LIBM_SENSITIVE_CLIP, len(LIBM_SENSITIVE_JOINTS)))
+                return 0
         if stale or extra:
             print("avatar catalog is stale: %s%s" % (", ".join(sorted(stale)), (" extra: " + ", ".join(extra)) if extra else ""))
             return 1

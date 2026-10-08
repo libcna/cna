@@ -215,7 +215,9 @@ rotations, out-of-range indices or weights, and oversized data. Catalogs v2 and 
 the format 1 reader accepts (normals and texture coordinates are normalized 16-bit accessors), so
 CNA builds from before catalog packs, which fetched a missing catalog's items one by one, can draw
 them; they ignore facial hair, face controls and hat variants. `GamerServices_AvatarCatalogUpToDate`
-regenerates the newest catalog and compares it byte for byte; `AvatarCatalogTest.CatalogV1IsFrozen`,
+regenerates the newest catalog and compares it byte for byte (on a C library other than glibc, every
+byte except catalog v3's six `FemaleShocked` arm rotations, which a non-convergent head solve froze
+from glibc's libm and are checked structurally there; plans/plan_apple_m4.md AM4-166); `AvatarCatalogTest.CatalogV1IsFrozen`,
 `V1DescriptionsAssembleExactlyAsReleased`, `CatalogV2IsFrozen` and `CatalogV3IsFrozen` pin the
 released ones, and `EmbeddedAssetsResolveByContentNotByName` and
 `AnUnavailableCatalogNeverReadsItsIdsAgainstAnotherVersion` keep each version's files and ids its own. A v2
