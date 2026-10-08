@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -351,6 +352,10 @@ TEST(DrawRouteValidation, EveryVertexElementFormatIsBoundOrRefusedByName)
     using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
     GraphicsDevice device;
+    // plans/plan_apple_m4.md AM4-195: a vertex declaration only reaches a 3D draw; a 2D-only
+    // renderer refuses the vertex buffer itself, before any element format is looked at.
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     BasicEffect effect(device);
 
     const struct { VertexElementFormat format; int bytes; const char* name; } kFormats[] = {

@@ -491,8 +491,17 @@ namespace CNA::Internal::Renderers::SdlRenderer
 
     void SdlRenderer::Clear(float r, float g, float b, float a)
     {
-        if (!SDL_SetRenderDrawColor(renderer, (Uint8)(r * 255.0f), (Uint8)(g * 255.0f), (Uint8)(b * 255.0f),
-                                    (Uint8)(a * 255.0f)))
+        // plans/plan_apple_m4.md AM4-195: packed as XNA packs a Color from a Vector4 -- clamped to
+        // [0,1], then rounded. Casting r * 255 straight to Uint8 was undefined for a value past
+        // one (an HDR clear of 4.0 read back as 252 on arm64) and truncated the rest.
+        const auto unorm8 = [](float value) -> Uint8 {
+            if (!(value > 0.0f))
+                return 0;
+            if (value >= 1.0f)
+                return 255;
+            return static_cast<Uint8>(value * 255.0f + 0.5f);
+        };
+        if (!SDL_SetRenderDrawColor(renderer, unorm8(r), unorm8(g), unorm8(b), unorm8(a)))
         {
             throw std::runtime_error(std::string("SDL_SetRenderDrawColor failed: ") + SDL_GetError());
         }

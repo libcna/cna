@@ -474,8 +474,10 @@ TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackEx
     }
 
     // AM4-189: FNA3D's declared boundary, as in ASixteenBitFloatTargetsContentIsSamplableBack.
-    if (measured == 0 && CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d))
-        GTEST_SKIP() << "FNA3D promotes no classic numeric render target (declared boundary)";
+    // AM4-195: and SDL_RENDERER's, whose render targets are Color only by design (Task 176).
+    if (measured == 0 && CNA::Testing::ActiveRendererIsAnyOf({CNA::GraphicsRendererType::Fna3d,
+                                                              CNA::GraphicsRendererType::SdlRenderer}))
+        GTEST_SKIP() << "this renderer has no classic numeric render target (declared boundary)";
     EXPECT_GT(measured, 0) << RendererName() << " exposes no classic numeric render target";
 }
 

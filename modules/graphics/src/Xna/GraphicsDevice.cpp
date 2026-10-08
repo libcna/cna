@@ -523,6 +523,14 @@ namespace Microsoft::Xna::Framework::Graphics
             // GraphicsDeviceManager reset supplies Depth24.
             if (renderer_->SupportsCapability(CNA::GraphicsCapability::ThreeD))
                 setDepthStencilStateProperty(DepthStencilState::Default);
+            else
+            {
+                // plans/plan_apple_m4.md AM4-195: but the public state is XNA's on every device --
+                // the DepthStencilState.Default preset is bound to it and is its current state,
+                // exactly as the setter leaves them -- even where there is nothing native to apply.
+                DepthStencilState::Default.BindForUse(this);
+                depthStencilState_ = DepthStencilState::Default;
+            }
             setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
             restoreCallerGlBinding();
         }
