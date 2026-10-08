@@ -102,6 +102,12 @@ namespace CNA::Internal::Renderers::Metal
          * effect permutation does not use (see StockEffectUsesVertexSemantic).
          */
         bool constant = false;
+        /**
+         * @brief Vertex-buffer argument index of the stream it reads (MetalVertexStreamBufferIndex).
+         *
+         * plans/plan_apple_m4.md AM4-143: 0 for a single-stream draw; ignored when `constant`.
+         */
+        int bufferIndex = 0;
 
         /**
          * @brief Compares every field.
@@ -112,9 +118,56 @@ namespace CNA::Internal::Renderers::Metal
         [[nodiscard]] bool operator==(const MetalDeclaredAttribute& other) const noexcept
         {
             return location == other.location && kind == other.kind && offset == other.offset &&
-                   constant == other.constant;
+                   constant == other.constant && bufferIndex == other.bufferIndex;
         }
     };
+
+    /** @brief One vertex-buffer layout of a multi-stream input (plans/plan_apple_m4.md AM4-143). */
+    struct MetalDeclaredLayout
+    {
+        /** @brief Vertex-buffer argument index the stream binds at. */
+        int bufferIndex = 0;
+        /** @brief The stream's own record stride in bytes. */
+        int stride = 0;
+        /** @brief 0 for a per-vertex stream; otherwise its InstanceFrequency (the per-instance step rate). */
+        int stepRate = 0;
+
+        /**
+         * @brief Compares every field.
+         *
+         * @param other Layout to compare.
+         * @return True when both describe the same layout.
+         */
+        [[nodiscard]] bool operator==(const MetalDeclaredLayout& other) const noexcept
+        {
+            return bufferIndex == other.bufferIndex && stride == other.stride && stepRate == other.stepRate;
+        }
+    };
+
+    /**
+     * @brief First `[[attribute]]` of the stock vertex functions' optional per-instance world matrix.
+     *
+     * plans/plan_apple_m4.md AM4-143: attributes 12..15 hold its four columns, EasyGL's locations
+     * (REMED-GFX-122) and above every input a stock function reads.
+     */
+    inline constexpr int kMetalInstanceMatrixLocation = 12;
+
+    /** @brief Buffer index of public stream slot 1; slot `s > 0` binds at this plus `s - 1`. */
+    inline constexpr int kMetalVertexStreamBufferBase = 14;
+
+    /**
+     * @brief The vertex-buffer argument index a public vertex stream slot binds at.
+     *
+     * Slot 0 keeps index 0, where every single-stream draw has always bound, so that path is
+     * unchanged; slots 1..15 take 14..28, clear of the uniforms (1-3) and the constant block (30).
+     *
+     * @param slot Public `SetVertexBuffers` slot, 0..15.
+     * @return The Metal vertex-buffer argument index.
+     */
+    [[nodiscard]] constexpr int MetalVertexStreamBufferIndex(int slot) noexcept
+    {
+        return slot == 0 ? 0 : kMetalVertexStreamBufferBase + slot - 1;
+    }
 
     /** @brief Vertex buffer index the constant block is bound at; above every built-in MSL slot. */
     inline constexpr int kMetalConstantAttributeBufferIndex = 30;
@@ -125,8 +178,14 @@ namespace CNA::Internal::Renderers::Metal
     /** @brief Byte offset of the all-one vector (opaque white) inside the constant block. */
     inline constexpr int kMetalConstantAttributeOneOffset = 16;
 
-    /** @brief The constant block: a float4 of zeros, then a float4 of ones. */
-    inline constexpr float kMetalConstantAttributeBlock[8] = {0, 0, 0, 0, 1, 1, 1, 1};
+    /**
+     * @brief Byte offset of (0, 0, 0, 1) inside the constant block -- what a GL attribute location
+     *        without an array reads, and so an instance-matrix column no declaration supplies.
+     */
+    inline constexpr int kMetalConstantAttributeUnitWOffset = 32;
+
+    /** @brief The constant block: a float4 of zeros, a float4 of ones, then (0, 0, 0, 1). */
+    inline constexpr float kMetalConstantAttributeBlock[12] = {0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1};
 
     /** @brief A complete vertex input for one pipeline kind, or the reason there is none. */
     struct MetalDeclaredVertexInput
@@ -135,6 +194,13 @@ namespace CNA::Internal::Renderers::Metal
         std::vector<MetalDeclaredAttribute> attributes;
         /** @brief Record stride in bytes. */
         int stride = 0;
+        /**
+         * @brief Every stream's layout; empty for a single-stream draw, whose one layout is
+         *        buffer 0 at `stride` (plans/plan_apple_m4.md AM4-143).
+         */
+        std::vector<MetalDeclaredLayout> layouts;
+        /** @brief The draw supplies the per-instance world matrix (attributes 12..15). */
+        bool instanceMatrix = false;
         /** @brief Why the declaration cannot feed the pipeline; empty when it can. */
         std::string refusal;
 
@@ -180,7 +246,15 @@ namespace CNA::Internal::Renderers::Metal
                 mix(static_cast<std::uint64_t>(a.kind));
                 mix(static_cast<std::uint64_t>(a.offset));
                 mix(a.constant ? 1u : 0u);
+                mix(static_cast<std::uint64_t>(a.bufferIndex));
             }
+            for (const auto& l : layouts)
+            {
+                mix(static_cast<std::uint64_t>(l.bufferIndex));
+                mix(static_cast<std::uint64_t>(l.stride));
+                mix(static_cast<std::uint64_t>(l.stepRate));
+            }
+            mix(instanceMatrix ? 1u : 0u);
             return h == 0 ? 1 : h;
         }
     };
@@ -565,5 +639,181 @@ namespace CNA::Internal::Renderers::Metal
             if (inputs.semantics[i] == MetalVertexSemantic::Color) return {};
         return "VertexColorEnabled with a Color0 channel on a lit BasicEffect: Metal's lit vertex "
                "functions read no vertex colour";
+    }
+
+    /** @brief Each public stream's declaration elements, by index into `GpuDrawParams::vertexStreams`. */
+    using MetalStreamDeclarations =
+        std::array<const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>*,
+                   CNA::Internal::Renderers::kMaxVertexStreams>;
+
+    namespace MetalDeclaredVertexInputDetail
+    {
+        [[nodiscard]] constexpr int AttribByteSize(MetalVertexAttribKind kind) noexcept
+        {
+            switch (kind)
+            {
+                case MetalVertexAttribKind::Float1:           return 4;
+                case MetalVertexAttribKind::Float2:           return 8;
+                case MetalVertexAttribKind::Float3:           return 12;
+                case MetalVertexAttribKind::Float4:           return 16;
+                case MetalVertexAttribKind::UChar4Normalized: return 4;
+                case MetalVertexAttribKind::UChar4:           return 4;
+                case MetalVertexAttribKind::Short2:           return 4;
+                case MetalVertexAttribKind::Short4:           return 8;
+                case MetalVertexAttribKind::Short2Normalized: return 4;
+                case MetalVertexAttribKind::Short4Normalized: return 8;
+                case MetalVertexAttribKind::Half2:            return 4;
+                case MetalVertexAttribKind::Half4:            return 8;
+            }
+            return 16;
+        }
+    }
+
+    /**
+     * @brief The one declaration a draw's per-vertex streams make together.
+     *
+     * plans/plan_apple_m4.md AM4-143: each per-vertex stream's elements, moved to its place in the
+     * combined vertex (`combinedByteBase`) and carrying its binding-time usage index (XNA's
+     * collision remap, SOFTWARE-320), in public slot order -- what the stock pipeline selection and
+     * semantic lookup read, as they read a single stream's declaration.
+     *
+     * @param params The draw.
+     * @param declarations Each stream's declaration elements; null for a stream without one.
+     * @return The combined elements.
+     */
+    [[nodiscard]] inline std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>
+    MetalCombinedPerVertexElements(const CNA::Internal::Renderers::GpuDrawParams& params,
+                                   const MetalStreamDeclarations& declarations)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        std::vector<VertexElement> combined;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+            const auto* elements = declarations[static_cast<std::size_t>(i)];
+            if (stream.instanceFrequency != 0 || elements == nullptr)
+                continue;
+            for (std::size_t j = 0; j < elements->size(); ++j)
+            {
+                const VertexElement& e = (*elements)[j];
+                combined.emplace_back(stream.combinedByteBase + e.getOffsetProperty(),
+                                      e.getVertexElementFormatProperty(),
+                                      e.getVertexElementUsageProperty(),
+                                      stream.EffectiveUsageIndex(j, e.getUsageIndexProperty()));
+            }
+        }
+        return combined;
+    }
+
+    /**
+     * @brief The vertex input of a draw with several streams, per-vertex or per-instance.
+     *
+     * plans/plan_apple_m4.md AM4-143. The per-vertex streams feed the stock function's semantics
+     * exactly as one stream would: the lookup runs on their combined declaration
+     * (MetalCombinedPerVertexElements), and each attribute found is then bound to the stream that
+     * holds it, at its offset inside that stream. Only a stream that supplies an attribute gets a
+     * layout, as XNA fetches only what the shader declares.
+     *
+     * The per-instance streams supply the stock effects' per-instance world matrix, CNA's
+     * instancing contract on every renderer (EasyGL's REMED-GFX-122): their declarations,
+     * concatenated in slot order, give the matrix its columns from their first four elements,
+     * whatever their usages -- EasyGL's attribute locations 12..15. A column no element supplies
+     * reads (0, 0, 0, 1), as a GL location without an array does. Each such stream steps once per
+     * `InstanceFrequency` instances.
+     *
+     * @param kind Pipeline kind the draw selected.
+     * @param params The draw; its stream list must have passed DescribeMetalDrawStreamPolicy.
+     * @param declarations Each stream's declaration elements, by stream index.
+     * @return The complete input, or one carrying the refusal reason.
+     */
+    [[nodiscard]] inline MetalDeclaredVertexInput BuildMetalStreamVertexInput(
+        MetalPipelineKind kind,
+        const CNA::Internal::Renderers::GpuDrawParams& params,
+        const MetalStreamDeclarations& declarations)
+    {
+        using namespace MetalDeclaredVertexInputDetail;
+        using CNA::Internal::Renderers::kMaxVertexStreams;
+        MetalDeclaredVertexInput input = BuildMetalDeclaredVertexInput(
+            kind, MetalCombinedPerVertexElements(params, declarations), params.combinedVertexStride,
+            &params);
+        if (!input.IsComplete())
+            return input;
+
+        std::array<bool, kMaxVertexStreams> used{};
+        for (MetalDeclaredAttribute& attribute : input.attributes)
+        {
+            if (attribute.constant)
+                continue;
+            const auto slot = CNA::Internal::Renderers::MapCombinedOffsetToStream(params, attribute.offset);
+            const auto& stream = params.vertexStreams[static_cast<std::size_t>(slot.streamIndex)];
+            if (slot.byteOffsetInStream + AttribByteSize(attribute.kind) > stream.strideInBytes)
+            {
+                input.refusal = "an element of vertex stream " + std::to_string(stream.slot) +
+                                " reaches past that stream's " + std::to_string(stream.strideInBytes) +
+                                "-byte record";
+                return input;
+            }
+            attribute.offset = slot.byteOffsetInStream;
+            attribute.bufferIndex = MetalVertexStreamBufferIndex(stream.slot);
+            used[static_cast<std::size_t>(slot.streamIndex)] = true;
+        }
+
+        int column = 0;
+        for (int i = 0; i < params.vertexStreamCount && column < 4; ++i)
+        {
+            const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+            const auto* elements = declarations[static_cast<std::size_t>(i)];
+            if (stream.instanceFrequency <= 0)
+                continue;
+            if (elements == nullptr || elements->empty())
+            {
+                input.refusal = "per-instance vertex stream " + std::to_string(stream.slot) +
+                                " has no VertexDeclaration";
+                return input;
+            }
+            for (std::size_t j = 0; j < elements->size() && column < 4; ++j, ++column)
+            {
+                const auto& e = (*elements)[j];
+                const auto format = e.getVertexElementFormatProperty();
+                if (!MetalSemanticAcceptsFormat(MetalVertexSemantic::Position, format))
+                {
+                    input.refusal = "per-instance vertex stream " + std::to_string(stream.slot) +
+                                    " has an integer element Metal cannot convert to the instance "
+                                    "matrix's float4 column";
+                    return input;
+                }
+                const int offset = e.getOffsetProperty();
+                if (offset < 0 || offset + MetalVertexElementByteSize(format) > stream.strideInBytes)
+                {
+                    input.refusal = "an element of per-instance vertex stream " +
+                                    std::to_string(stream.slot) + " lies outside its " +
+                                    std::to_string(stream.strideInBytes) + "-byte record";
+                    return input;
+                }
+                input.attributes.push_back(MetalDeclaredAttribute{
+                    kMetalInstanceMatrixLocation + column, DescribeMetalVertexElementFormat(format).kind,
+                    offset, false, MetalVertexStreamBufferIndex(stream.slot)});
+                used[static_cast<std::size_t>(i)] = true;
+            }
+        }
+        if (CNA::Internal::Renderers::InstanceStreamCount(params) > 0)
+        {
+            input.instanceMatrix = true;
+            for (; column < 4; ++column)
+                input.attributes.push_back(MetalDeclaredAttribute{
+                    kMetalInstanceMatrixLocation + column, MetalVertexAttribKind::Float4,
+                    kMetalConstantAttributeUnitWOffset, true});
+        }
+
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            if (!used[static_cast<std::size_t>(i)])
+                continue;
+            const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+            input.layouts.push_back(MetalDeclaredLayout{
+                MetalVertexStreamBufferIndex(stream.slot), stream.strideInBytes,
+                stream.instanceFrequency > 0 ? stream.instanceFrequency : 0});
+        }
+        return input;
     }
 }

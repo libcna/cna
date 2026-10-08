@@ -671,7 +671,9 @@ namespace
          "Mat4 wvp=multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr))",
          "fillPbrUniforms(t, pu, wvp, *params)",
          "std::memcpy(t.world, params.worldColMajor, sizeof(t.world))",
-         "o.position = t.wvp * float4(in.position, 1.0)",
+         // plans/plan_apple_m4.md AM4-143: `p` is the position after the optional per-instance
+         // matrix, as EasyGL's cnaPos is.
+         "o.position = t.wvp * p",
          "o.position = t.wvp * skinnedPos"},
         // plans/plan_street_sdlgpu.md STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
         // the same way now (VULKAN-232 below); same evidence, current spelling.
@@ -1775,7 +1777,7 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
         {"directx9", "CnaSkinNormal(skinNormalMat, vin.Normal)"},
         {"directx11", "CnaSkinNormal(skinNormalMat, input.Normal)"},
         {"easygl", "cnaSkinNormal(skinDirectionMat,aNormal)"},
-        {"metal", "normalMat * boneNormal"},
+        {"metal", "normalMat * CNA_INSTANCE_DIRECTION(in, boneNormal)"},   // AM4-143
         {"sdl-gpu", "cnaSkinNormal(skinNormalMat, inNormal)"},
         {"vulkan", "cnaSkinNormal(skinNormalMat, aNormal)"},
         {"webgpu", "normalMatrix * pbrSkinNormal(skinMat3, input.normal)"},

@@ -604,6 +604,23 @@ namespace CNA::Internal::Renderers::Metal
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
         /**
+         * @brief Draws indexed, instanced primitives with the stock effects (plans/plan_apple_m4.md AM4-143).
+         *
+         * @param vb Vertex-buffer renderer of stream 0.
+         * @param ib Index-buffer renderer containing the draw indices.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Requested primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances.
+         * @param params Normalized GPU draw parameters, every vertex stream included.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
+        /**
          * @brief Inserts a Metal encoder debug signpost.
          *
          * @param marker Null-terminated marker text.

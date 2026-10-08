@@ -156,7 +156,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                           SdlGpu, Software);
+                           SdlGpu, Software, Metal);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -176,7 +176,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, SdlGpu,
-                           Software);
+                           Software, Metal);
 }
 
 namespace

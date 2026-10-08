@@ -53,8 +53,9 @@ protected:
         // The renderer's contract, asked of the renderer: the device's answer also folds in the
         // graphics profile (BINDFIX-037), and Reach -- the default here -- has no volume textures.
         check(dev.GetRenderer().SupportsCapability(GraphicsCapability::Texture3D), "Texture3D supported");
-        check(!dev.SupportsCapability(GraphicsCapability::MultiStreamVertexInput), "MultiStreamVertexInput unsupported");
-        check(!dev.SupportsCapability(GraphicsCapability::Instancing), "Instancing unsupported");
+        // plans/plan_apple_m4.md AM4-143: several vertex streams and the stock effects' instancing.
+        check(dev.SupportsCapability(GraphicsCapability::MultiStreamVertexInput), "MultiStreamVertexInput supported");
+        check(dev.SupportsCapability(GraphicsCapability::Instancing), "Instancing supported");
         check(dev.SupportsCapability(GraphicsCapability::StencilBuffer), "StencilBuffer supported");
         check(dev.SupportsCapability(GraphicsCapability::AdditiveBlending), "AdditiveBlending supported");
 

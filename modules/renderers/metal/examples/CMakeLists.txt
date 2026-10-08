@@ -139,8 +139,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     # renderer table, so a feature Metal reports unsupported (MSAA and RenderTargetCube upload; MRT
     # and custom effects were refusals until AM4-097 and AM4-077) is asserted as a refusal, not
     # assumed. Not registered: the two
-    # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL) and the instancing
-    # fixture, whose feature Metal reports false (docs/metal-renderer.md).
+    # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL). The instancing fixture
+    # joined with Metal's instancing (AM4-143).
     macro(cna_metal_test target src)
         add_executable(${target} ${src})
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
@@ -185,6 +185,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         graphicsdevice_default_state_occlusion_test
         graphicsdevice_depth_contract_test
         graphicsdevice_ordered_clear_test
+        instanced_textured_draw_test
         msaa_fragment_contract_test
         occlusion_query_test
         point_sampling_contract_test

@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 [[nodiscard]] inline bool OrdinaryBindingOffset()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                            Software, SdlGpu);
+                            Software, SdlGpu, Metal);
 }
 
 // REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
@@ -143,7 +143,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 [[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                            Software);
+                            Software, Metal);
 }
 
 // REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry;
@@ -153,7 +153,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedTransition()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                           Software);
+                           Software, Metal);
 }
 
 // The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset; Software joins
@@ -162,7 +162,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedOffset()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Software, Metal);
 }
 
 namespace

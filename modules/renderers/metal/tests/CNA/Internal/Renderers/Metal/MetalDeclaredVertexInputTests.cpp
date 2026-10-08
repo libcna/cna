@@ -352,3 +352,206 @@ TEST(MetalDeclaredVertexInput, ThePbrFunctionsReadTheRecordsSecondCoordinateSet)
         EXPECT_EQ(skinned.attributes.at(7), (MetalDeclaredAttribute{7, A::Float2, 68})) << stride;
     }
 }
+
+// plans/plan_apple_m4.md AM4-143: several vertex streams and the per-instance world matrix.
+namespace
+{
+    void AddStream(GpuDrawParams& params, int stride, int instanceFrequency = 0)
+    {
+        const int i = params.vertexStreamCount++;
+        auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+        stream.slot = i;
+        stream.strideInBytes = stride;
+        stream.instanceFrequency = instanceFrequency;
+        if (instanceFrequency == 0)
+        {
+            stream.combinedByteBase = params.combinedVertexStride;
+            params.combinedVertexStride += stride;
+        }
+    }
+
+    MetalStreamDeclarations Declarations(std::initializer_list<const std::vector<VertexElement>*> list)
+    {
+        MetalStreamDeclarations declarations{};
+        std::size_t i = 0;
+        for (const auto* elements : list)
+            declarations[i++] = elements;
+        return declarations;
+    }
+
+    const std::vector<VertexElement> kMatrixColumns = {
+        VertexElement(0, F::Vector4, U::TextureCoordinate, 1),
+        VertexElement(16, F::Vector4, U::TextureCoordinate, 2),
+        VertexElement(32, F::Vector4, U::TextureCoordinate, 3),
+        VertexElement(48, F::Vector4, U::TextureCoordinate, 4),
+    };
+}
+
+// Position in stream 0 and colour in stream 1: each attribute reads its own stream, at its offset
+// inside that stream, and each stream has its own per-vertex layout.
+TEST(MetalDeclaredVertexInput, EachPerVertexStreamFeedsItsOwnAttributes)
+{
+    const std::vector<VertexElement> positions = {VertexElement(0, F::Vector3, U::Position, 0)};
+    const std::vector<VertexElement> colours = {VertexElement(0, F::Color, U::Color, 0)};
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    AddStream(params, 12);
+    AddStream(params, 4);
+    const auto declarations = Declarations({&positions, &colours});
+
+    const auto combined = MetalCombinedPerVertexElements(params, declarations);
+    ASSERT_EQ(combined.size(), 2u);
+    EXPECT_EQ(combined[1].getOffsetProperty(), 12);
+    EXPECT_EQ(MetalSelectionStrideForDeclaration(combined, &params), 16u);
+
+    const auto input = BuildMetalStreamVertexInput(K::Colored16, params, declarations);
+    ASSERT_TRUE(input.IsComplete()) << input.refusal;
+    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0, false, 0},
+                                       {1, A::UChar4Normalized, 0, false, MetalVertexStreamBufferIndex(1)}}));
+    ASSERT_EQ(input.layouts.size(), 2u);
+    EXPECT_EQ(input.layouts[0], (MetalDeclaredLayout{0, 12, 0}));
+    EXPECT_EQ(input.layouts[1], (MetalDeclaredLayout{MetalVertexStreamBufferIndex(1), 4, 0}));
+    EXPECT_FALSE(input.instanceMatrix);
+}
+
+// A stream the stock function reads nothing from is not fetched, as XNA fetches only declared inputs.
+TEST(MetalDeclaredVertexInput, AStreamThatSuppliesNothingGetsNoLayout)
+{
+    const std::vector<VertexElement> positions = {VertexElement(0, F::Vector3, U::Position, 0),
+                                                  VertexElement(12, F::Color, U::Color, 0)};
+    const std::vector<VertexElement> unused = {VertexElement(0, F::Vector4, U::Binormal, 0)};
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    AddStream(params, 16);
+    AddStream(params, 16);
+    const auto input = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&positions, &unused}));
+    ASSERT_TRUE(input.IsComplete()) << input.refusal;
+    ASSERT_EQ(input.layouts.size(), 1u);
+    EXPECT_EQ(input.layouts[0].bufferIndex, 0);
+}
+
+// The same usage in two streams takes XNA's binding-time remap (SOFTWARE-320): a second stream's
+// TextureCoordinate0 binds as TextureCoordinate1, which is DualTextureEffect's second set. Without
+// the remap the lookup would alias TEXCOORD0 of stream 0 instead.
+TEST(MetalDeclaredVertexInput, TheEffectiveUsageIndexDecidesWhichStreamSuppliesASemantic)
+{
+    const std::vector<VertexElement> first = {VertexElement(0, F::Vector3, U::Position, 0),
+                                              VertexElement(12, F::Vector2, U::TextureCoordinate, 0)};
+    const std::vector<VertexElement> second = {VertexElement(0, F::Vector2, U::TextureCoordinate, 0)};
+    GpuDrawParams params{};
+    params.dualTexture = true;
+    AddStream(params, 20);
+    AddStream(params, 8);
+    const auto declarations = Declarations({&first, &second});
+    const auto aliased = BuildMetalStreamVertexInput(K::DualTex20, params, declarations);
+    ASSERT_TRUE(aliased.IsComplete()) << aliased.refusal;
+    EXPECT_EQ(aliased.attributes.at(2), (MetalDeclaredAttribute{2, A::Float2, 12, false, 0}));
+
+    params.vertexStreams[1].effectiveUsageIndices[0] = 1;
+    params.vertexStreams[1].effectiveUsageIndexCount = 1;
+    const auto remapped = BuildMetalStreamVertexInput(K::DualTex20, params, declarations);
+    ASSERT_TRUE(remapped.IsComplete()) << remapped.refusal;
+    EXPECT_EQ(remapped.attributes.at(2),
+              (MetalDeclaredAttribute{2, A::Float2, 0, false, MetalVertexStreamBufferIndex(1)}));
+}
+
+// The per-instance stream's four Vector4 elements are the world matrix's columns, at attributes
+// 12..15, whatever their usages; the stream steps once per InstanceFrequency instances.
+TEST(MetalDeclaredVertexInput, ThePerInstanceStreamSuppliesTheInstanceMatrixColumns)
+{
+    const std::vector<VertexElement> geometry = {VertexElement(0, F::Vector3, U::Position, 0),
+                                                 VertexElement(12, F::Color, U::Color, 0)};
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    params.instanceCount = 4;
+    AddStream(params, 16);
+    AddStream(params, 64, 2);
+    const auto input = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &kMatrixColumns}));
+    ASSERT_TRUE(input.IsComplete()) << input.refusal;
+    EXPECT_TRUE(input.instanceMatrix);
+    const int instanceBuffer = MetalVertexStreamBufferIndex(1);
+    EXPECT_EQ(input.attributes, Attrs({{0, A::Float3, 0, false, 0},
+                                       {1, A::UChar4Normalized, 12, false, 0},
+                                       {12, A::Float4, 0, false, instanceBuffer},
+                                       {13, A::Float4, 16, false, instanceBuffer},
+                                       {14, A::Float4, 32, false, instanceBuffer},
+                                       {15, A::Float4, 48, false, instanceBuffer}}));
+    ASSERT_EQ(input.layouts.size(), 2u);
+    EXPECT_EQ(input.layouts[1], (MetalDeclaredLayout{instanceBuffer, 64, 2}));
+}
+
+// The columns are the per-instance declarations concatenated in slot order (EasyGL's locations
+// 12..15), so a matrix split across two streams assembles; a column nothing supplies is (0,0,0,1).
+TEST(MetalDeclaredVertexInput, TheInstanceMatrixSpansStreamsAndAMissingColumnIsUnitW)
+{
+    const std::vector<VertexElement> geometry = {VertexElement(0, F::Vector3, U::Position, 0),
+                                                 VertexElement(12, F::Color, U::Color, 0)};
+    const std::vector<VertexElement> threeColumns(kMatrixColumns.begin(), kMatrixColumns.begin() + 3);
+    const std::vector<VertexElement> oneColumn = {VertexElement(0, F::Vector4, U::TextureCoordinate, 4)};
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    AddStream(params, 16);
+    AddStream(params, 48, 1);
+    AddStream(params, 16, 1);
+    const auto split = BuildMetalStreamVertexInput(
+        K::Colored16, params, Declarations({&geometry, &threeColumns, &oneColumn}));
+    ASSERT_TRUE(split.IsComplete()) << split.refusal;
+    EXPECT_EQ(split.attributes.at(5), (MetalDeclaredAttribute{15, A::Float4, 0, false, MetalVertexStreamBufferIndex(2)}));
+    EXPECT_EQ(split.layouts.size(), 3u);
+
+    params.vertexStreamCount = 2;
+    const auto short3 = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &threeColumns}));
+    ASSERT_TRUE(short3.IsComplete()) << short3.refusal;
+    EXPECT_EQ(short3.attributes.at(5),
+              (MetalDeclaredAttribute{15, A::Float4, kMetalConstantAttributeUnitWOffset, true}));
+    EXPECT_TRUE(short3.UsesConstantAttributes());
+    EXPECT_FLOAT_EQ(kMetalConstantAttributeBlock[kMetalConstantAttributeUnitWOffset / 4 + 3], 1.0f);
+    EXPECT_FLOAT_EQ(kMetalConstantAttributeBlock[kMetalConstantAttributeUnitWOffset / 4], 0.0f);
+}
+
+// An integer element cannot become a float4 column, and a per-instance stream with no declaration
+// supplies nothing at all; both refuse by name rather than draw from a subset.
+TEST(MetalDeclaredVertexInput, AnInstanceStreamMetalCannotReadRefuses)
+{
+    const std::vector<VertexElement> geometry = {VertexElement(0, F::Vector3, U::Position, 0),
+                                                 VertexElement(12, F::Color, U::Color, 0)};
+    const std::vector<VertexElement> integers = {VertexElement(0, F::Short4, U::TextureCoordinate, 1)};
+    const std::vector<VertexElement> none;
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    AddStream(params, 16);
+    AddStream(params, 8, 1);
+    EXPECT_FALSE(BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &integers})).IsComplete());
+    EXPECT_FALSE(BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &none})).IsComplete());
+}
+
+// A different stream layout or the instance matrix is a different pipeline.
+TEST(MetalDeclaredVertexInput, StreamLayoutsAndTheInstanceMatrixArePartOfTheLayoutKey)
+{
+    const std::vector<VertexElement> geometry = {VertexElement(0, F::Vector3, U::Position, 0),
+                                                 VertexElement(12, F::Color, U::Color, 0)};
+    GpuDrawParams params{};
+    params.vertexColorEnabled = true;
+    AddStream(params, 16);
+    const auto single = BuildMetalDeclaredVertexInput(K::Colored16, geometry, 16, &params);
+    const auto oneStream = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry}));
+    AddStream(params, 64, 1);
+    const auto everyInstance = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &kMatrixColumns}));
+    params.vertexStreams[1].instanceFrequency = 3;
+    const auto everyThird = BuildMetalStreamVertexInput(K::Colored16, params, Declarations({&geometry, &kMatrixColumns}));
+    EXPECT_NE(single.LayoutKey(), oneStream.LayoutKey());
+    EXPECT_NE(oneStream.LayoutKey(), everyInstance.LayoutKey());
+    EXPECT_NE(everyInstance.LayoutKey(), everyThird.LayoutKey());
+}
+
+// Slot 0 keeps buffer 0; the others sit between the uniforms and the constant block.
+TEST(MetalDeclaredVertexInput, StreamSlotsMapClearOfTheUniformAndConstantBuffers)
+{
+    EXPECT_EQ(MetalVertexStreamBufferIndex(0), 0);
+    for (int slot = 1; slot < CNA::Internal::Renderers::kMaxVertexStreams; ++slot)
+    {
+        const int index = MetalVertexStreamBufferIndex(slot);
+        EXPECT_GT(index, 3) << slot;
+        EXPECT_LT(index, kMetalConstantAttributeBufferIndex) << slot;
+    }
+}

@@ -133,7 +133,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedDiffuse()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                           SdlGpu, Software);
+                           SdlGpu, Software, Metal);
 }
 
 // The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
@@ -148,7 +148,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11, SdlGpu,
-                           Software);
+                           Software, Metal);
 }
 
 

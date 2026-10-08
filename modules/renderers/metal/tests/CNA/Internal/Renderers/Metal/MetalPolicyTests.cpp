@@ -17,8 +17,8 @@ TEST(MetalPolicy, CapabilitiesAreExhaustiveAndConservative)
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::OcclusionQuery));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::CustomEffects));  // AM4-077
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::Texture3D));
-    EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
-    EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::Instancing));
+    EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
+    EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::Instancing));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::StencilBuffer));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::AdditiveBlending));
     EXPECT_FALSE(MetalSupportsCapability(static_cast<CNA::GraphicsCapability>(999)));
@@ -141,7 +141,9 @@ TEST(MetalPolicy, DrawStreamsAcceptLegacyEmptyAndOnePerVertexBinding)
     EXPECT_EQ(DescribeMetalDrawStreamPolicy(one),MetalDrawStreamPolicy::InvalidBinding);
 }
 
-TEST(MetalPolicy, DrawStreamsRejectMultiStreamAndInstancing)
+// plans/plan_apple_m4.md AM4-143: multi-stream and instanced draws are accepted; the metadata
+// must still describe per-vertex streams that tile the combined vertex.
+TEST(MetalPolicy, DrawStreamsAcceptMultiStreamAndInstancingWithConsistentMetadata)
 {
     struct DummyVertexBuffer final : IVertexBufferRenderer
     {
@@ -161,17 +163,36 @@ TEST(MetalPolicy, DrawStreamsRejectMultiStreamAndInstancing)
     multi.vertexStreams[1].strideInBytes=16;
     multi.vertexStreams[1].combinedByteBase=16;
     multi.vertexStreams[1].vertexCount=3;
-    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::MultiStreamUnsupported);
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::Supported);
+    multi.vertexStreams[1].combinedByteBase=12;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::InvalidBinding);
+    multi.vertexStreams[1].combinedByteBase=16;
+    multi.combinedVertexStride=16;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::InvalidBinding);
 
+    // Stream 1 per instance: the combined vertex is stream 0 alone.
     multi.vertexStreams[1].instanceFrequency=1;
-    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::InstancingUnsupported);
+    multi.vertexStreams[1].combinedByteBase=0;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::Supported);
+    multi.instanceCount=3;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::Supported);
+    multi.vertexStreams[1].instanceFrequency=-1;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::InvalidBinding);
+
+    // A zero stride is a buffer without a declaration, whose stride Metal resolves from its upload.
+    multi.vertexStreams[1].instanceFrequency=1;
+    multi.vertexStreams[0].strideInBytes=0;
+    multi.combinedVertexStride=0;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(multi),MetalDrawStreamPolicy::Supported);
 
     GpuDrawParams count{};
     count.instanceCount=2;
-    EXPECT_EQ(DescribeMetalDrawStreamPolicy(count),MetalDrawStreamPolicy::InstancingUnsupported);
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(count),MetalDrawStreamPolicy::Supported);
+    count.instanceCount=0;
+    EXPECT_EQ(DescribeMetalDrawStreamPolicy(count),MetalDrawStreamPolicy::InvalidBinding);
 }
 
-TEST(MetalPolicy, SingleStreamMustMatchTheUploadedBufferAndStride)
+TEST(MetalPolicy, StreamZeroMustMatchTheUploadedBufferAndStride)
 {
     struct DummyVertexBuffer final : IVertexBufferRenderer
     {
@@ -181,18 +202,23 @@ TEST(MetalPolicy, SingleStreamMustMatchTheUploadedBufferAndStride)
     } uploaded, foreign;
 
     GpuDrawParams params{};
-    EXPECT_TRUE(MetalSingleStreamMatchesUploadedBuffer(params, uploaded, 24));
+    EXPECT_TRUE(MetalStreamZeroMatchesUploadedBuffer(params, uploaded, 24));
 
     params.vertexStreamCount=1;
     params.vertexStreams[0].buffer=&uploaded;
     params.vertexStreams[0].strideInBytes=24;
-    EXPECT_TRUE(MetalSingleStreamMatchesUploadedBuffer(params, uploaded, 24));
+    EXPECT_TRUE(MetalStreamZeroMatchesUploadedBuffer(params, uploaded, 24));
 
     params.vertexStreams[0].strideInBytes=20;
-    EXPECT_FALSE(MetalSingleStreamMatchesUploadedBuffer(params, uploaded, 24));
+    EXPECT_FALSE(MetalStreamZeroMatchesUploadedBuffer(params, uploaded, 24));
     params.vertexStreams[0].strideInBytes=24;
     params.vertexStreams[0].buffer=&foreign;
-    EXPECT_FALSE(MetalSingleStreamMatchesUploadedBuffer(params, uploaded, 24));
+    EXPECT_FALSE(MetalStreamZeroMatchesUploadedBuffer(params, uploaded, 24));
+
+    // AM4-143: a buffer without a declaration is described with a zero stride, resolved from the upload.
+    params.vertexStreams[0].buffer=&uploaded;
+    params.vertexStreams[0].strideInBytes=0;
+    EXPECT_TRUE(MetalStreamZeroMatchesUploadedBuffer(params, uploaded, 24));
 }
 
 // plans/plan_apple_m4.md AM4-134: XNA's DepthBias is normalized depth; Metal counts the

@@ -10,17 +10,16 @@
 
 namespace CNA::Internal::Renderers::Metal
 {
-    /** @brief Result of validating the stream shape accepted by Metal's ordinary draw path. */
+    /** @brief Result of validating the stream shape of a Metal draw. */
     enum class MetalDrawStreamPolicy
     {
-        /** @brief Zero streams (legacy/internal) or one valid per-vertex stream. */
+        /**
+         * @brief Zero streams (legacy/internal), or a consistent list of per-vertex and per-instance
+         *        streams (plans/plan_apple_m4.md AM4-143).
+         */
         Supported,
         /** @brief The binding count or one binding's metadata is internally inconsistent. */
         InvalidBinding,
-        /** @brief More than one per-vertex stream was supplied. */
-        MultiStreamUnsupported,
-        /** @brief An instance stream or instance count above one was supplied. */
-        InstancingUnsupported,
     };
 
     /** @brief Result of validating a Texture2D ImageData allocation/upload request. */
@@ -107,40 +106,35 @@ namespace CNA::Internal::Renderers::Metal
     {
         if (params.vertexStreamCount < 0 || params.vertexStreamCount > kMaxVertexStreams)
             return MetalDrawStreamPolicy::InvalidBinding;
-        if (params.instanceCount != 1)
-            return MetalDrawStreamPolicy::InstancingUnsupported;
+        if (params.instanceCount < 1 || params.firstInstance < 0)
+            return MetalDrawStreamPolicy::InvalidBinding;
 
+        // plans/plan_apple_m4.md AM4-143: every stream is accepted; what is checked is that the
+        // per-vertex ones tile the combined vertex in slot order, which the input builder relies on.
+        int perVertexBytes=0;
         int perVertexCount=0;
         for (int i=0; i<params.vertexStreamCount; ++i)
         {
             const auto& stream=params.vertexStreams[i];
-            if (!stream.buffer || stream.slot!=i || stream.strideInBytes<=0 ||
-                stream.vertexOffset<0 || stream.vertexCount<0)
+            // A zero stride is a buffer without a declaration, whose stride the renderer resolves
+            // from its upload (GpuVertexStreamBinding::strideInBytes).
+            if (!stream.buffer || stream.slot!=i || stream.strideInBytes<0 ||
+                stream.vertexOffset<0 || stream.vertexCount<0 || stream.instanceFrequency<0)
                 return MetalDrawStreamPolicy::InvalidBinding;
             if (stream.instanceFrequency>0)
-                return MetalDrawStreamPolicy::InstancingUnsupported;
-            if (stream.instanceFrequency<0)
+                continue;
+            if (stream.combinedByteBase!=perVertexBytes)
                 return MetalDrawStreamPolicy::InvalidBinding;
+            perVertexBytes+=stream.strideInBytes;
             ++perVertexCount;
         }
-
-        if (perVertexCount>1)
-            return MetalDrawStreamPolicy::MultiStreamUnsupported;
-        if (perVertexCount==1)
-        {
-            const auto& stream=params.vertexStreams[0];
-            if (stream.combinedByteBase!=0 || params.combinedVertexStride!=stream.strideInBytes)
-                return MetalDrawStreamPolicy::InvalidBinding;
-        }
-        else if (params.combinedVertexStride!=0)
-        {
+        if (params.combinedVertexStride!=(perVertexCount>0 ? perVertexBytes : 0))
             return MetalDrawStreamPolicy::InvalidBinding;
-        }
         return MetalDrawStreamPolicy::Supported;
     }
 
     /**
-     * @brief Checks that a captured single stream names and advances the uploaded Metal buffer.
+     * @brief Checks that a draw's stream 0 names and advances the uploaded Metal buffer.
      *
      * @param params Renderer draw parameters whose stream metadata was captured for this draw.
      * @param uploadedBuffer Vertex buffer passed to the draw route.
@@ -148,18 +142,17 @@ namespace CNA::Internal::Renderers::Metal
      * @return True for the legacy zero-stream shape, or when the one stream names the same buffer
      *         and uses exactly its uploaded stride.
      */
-    [[nodiscard]] inline bool MetalSingleStreamMatchesUploadedBuffer(
+    [[nodiscard]] inline bool MetalStreamZeroMatchesUploadedBuffer(
         const GpuDrawParams& params,
         const IVertexBufferRenderer& uploadedBuffer,
         std::size_t uploadedStride) noexcept
     {
         if (params.vertexStreamCount == 0)
             return true;
-        if (params.vertexStreamCount != 1)
-            return false;
         const auto& stream = params.vertexStreams[0];
-        return stream.buffer == &uploadedBuffer && stream.strideInBytes > 0 &&
-               static_cast<std::size_t>(stream.strideInBytes) == uploadedStride;
+        return stream.buffer == &uploadedBuffer &&
+               (stream.strideInBytes == 0 ||
+                static_cast<std::size_t>(stream.strideInBytes) == uploadedStride);
     }
 
     /**
@@ -181,8 +174,8 @@ namespace CNA::Internal::Renderers::Metal
             case CNA::GraphicsCapability::OcclusionQuery:           return true;  // AM4-038
             case CNA::GraphicsCapability::CustomEffects:            return true;   // AM4-077, SpriteBatch-scoped MSL
             case CNA::GraphicsCapability::Texture3D:                return true;
-            case CNA::GraphicsCapability::MultiStreamVertexInput:   return false;
-            case CNA::GraphicsCapability::Instancing:               return false;
+            case CNA::GraphicsCapability::MultiStreamVertexInput:   return true;   // AM4-143
+            case CNA::GraphicsCapability::Instancing:               return true;   // AM4-143
             case CNA::GraphicsCapability::StencilBuffer:            return true;
             case CNA::GraphicsCapability::AdditiveBlending:         return true;
         }

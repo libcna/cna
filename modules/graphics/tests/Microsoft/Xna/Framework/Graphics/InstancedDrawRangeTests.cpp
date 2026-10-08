@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, Software, Metal);
 }
 
 namespace
@@ -1994,7 +1994,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // decoy range 4..6, while applying it twice underflows the vertex buffer.
 TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Metal);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();

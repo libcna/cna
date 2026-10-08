@@ -104,8 +104,8 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
 | `CustomEffects` | true | `AM4-077`: SpriteBatch-scoped MSL (`docs/metal-shader-effect-contract.md`); a 3D draw with a custom effect throws. |
 | `Texture3D` | true | Color-format native 3D textures. |
-| `MultiStreamVertexInput` | false | More than one per-vertex stream is rejected. |
-| `Instancing` | false | Instance streams and instance counts other than one are rejected. |
+| `MultiStreamVertexInput` | true | `AM4-143`: up to sixteen streams, each bound at its own vertex-buffer index and `VertexOffset`; the stock functions' semantics are looked up in the per-vertex streams' combined declaration, with XNA's binding-time usage-index remap, and each attribute reads the stream that holds it. A stream that supplies nothing is not fetched. |
+| `Instancing` | true | `AM4-143`: `DrawInstancedPrimitives` with every stock effect. The first four elements of the per-instance streams (concatenated in slot order, whatever their usages) are CNA's per-instance world matrix, as on EasyGL (`REMED-GFX-122`), applied before the effect's World -- after skinning, and to normals and PBR tangents -- in a vertex-function variant specialized on a function constant, so ordinary pipelines are unchanged; a missing column reads (0, 0, 0, 1). Each per-instance stream steps once per `InstanceFrequency` instances; `baseVertex` advances the per-vertex streams only. A per-instance stream, or one of several per-vertex streams, needs a VertexDeclaration. Evidence: the shared `Instanced*`/`*MultiStream*`/`*BindingOffset*` CnaTests (103) and `instanced_textured_draw_test` (37 legs: texture, World, alpha test, lighting, DualTexture, skinned, PBR, env-map), under the validation layers; each of four deliberate breakages (step rate, stream offset, instance matrix, stream index) fails 14-27 of them. |
 | `StencilBuffer` | true | Native stencil plane and state mapping. |
 | `AdditiveBlending` | true | Native blend factors and operations. |
 
@@ -119,8 +119,9 @@ The following boundaries are deterministic rather than silent degradation:
   descriptor, or an MRT set of up to eight (`AM4-097`); array slices are refused;
 - a non-null `GpuDrawParams::customEffectRenderer` (a 3D draw with a custom effect) throws; custom
   effects are a SpriteBatch facility;
-- malformed stream metadata throws `std::invalid_argument`; multistream and instancing throw
-  `System::NotSupportedException`;
+- malformed stream metadata throws `std::invalid_argument`; a stream layout the stock vertex
+  functions cannot read (an integer instance-matrix element, an undeclared per-instance stream)
+  throws `System::NotSupportedException` naming it;
 - Texture2D stores every uncompressed XNA format natively (`AM4-142`): the float, half, 10:10:10:2,
   16-bit-unorm, signed-normalized and Alpha8 formats in their own Metal pixel formats, and the packed
   Bgr565/Bgra5551/Bgra4444 as `B5G6R5Unorm`/`BGR5A1Unorm`/`ABGR4Unorm` (the 4444 texel's nibbles

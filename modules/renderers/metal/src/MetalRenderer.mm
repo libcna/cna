@@ -221,6 +221,21 @@ using namespace metal;
 // so an ordinary draw neither carries the output nor binds buffer 28.
 constant bool cnaSampleMaskOut [[function_constant(0)]];
 struct CnaFragOut { float4 color [[color(0)]]; uint mask [[sample_mask, function_constant(cnaSampleMaskOut)]]; };
+// plans/plan_apple_m4.md AM4-143: CNA's per-instance world matrix (EasyGL's REMED-GFX-122), the
+// first four elements of an instanced draw's per-instance streams at attributes 12..15, applied
+// before the effect's World: XNA's `position * InstanceWorld * World * View * Projection`. Only the
+// pipeline variant specialized with cnaInstanced declares the attributes, so an ordinary draw's
+// vertex function is the one it always was.
+constant bool cnaInstanced [[function_constant(1)]];
+#define CNA_INSTANCE_INPUTS \
+    float4 cnaInst0 [[attribute(12), function_constant(cnaInstanced)]]; \
+    float4 cnaInst1 [[attribute(13), function_constant(cnaInstanced)]]; \
+    float4 cnaInst2 [[attribute(14), function_constant(cnaInstanced)]]; \
+    float4 cnaInst3 [[attribute(15), function_constant(cnaInstanced)]];
+#define CNA_INSTANCE_MATRIX(in) float4x4(in.cnaInst0, in.cnaInst1, in.cnaInst2, in.cnaInst3)
+#define CNA_INSTANCE_POSITION(in, p) (cnaInstanced ? CNA_INSTANCE_MATRIX(in) * (p) : (p))
+#define CNA_INSTANCE_DIRECTION(in, d) \
+    (cnaInstanced ? float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz) * (d) : (d))
 
 struct U3D { float4x4 wvp; };
 // plans/plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest/DualTexture
@@ -236,24 +251,24 @@ struct UMaterialParams { float4 diffuseColor; float4 alphaTest; float4 flags; fl
 // so the keep factor is 1 and nothing changes; the fragment applies XNA's Common.fxh ApplyFog,
 // lerp(colour, FogColor * alpha, fogFactor), as EasyGL does.
 struct V3Out { float4 position [[position]]; float4 color; float2 uv; float fogFactor; };
-inline float cna_fog_keep(float3 position, float4 fogVector) {
-    return 1.0 - clamp(dot(float4(position, 1.0), fogVector), 0.0, 1.0);
+inline float cna_fog_keep(float4 position, float4 fogVector) {
+    return 1.0 - clamp(dot(position, fogVector), 0.0, 1.0);
 }
-struct V3ColorIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; };
-struct V3TexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; };
-struct V3ColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; };
-struct V3NormalTexIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; };
+struct V3ColorIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]];  CNA_INSTANCE_INPUTS };
+struct V3TexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]];  CNA_INSTANCE_INPUTS };
+struct V3ColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]];  CNA_INSTANCE_INPUTS };
+struct V3NormalTexIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]];  CNA_INSTANCE_INPUTS };
 // plans/plan_apple_m4.md AM4-081: the lit BasicEffect functions also read COLOR0. A draw whose effect
 // permutation does not use vertex colour gets opaque white from the constant block (AM4-080).
-struct V3NormalTexColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 color [[attribute(3)]]; };
+struct V3NormalTexColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 color [[attribute(3)]];  CNA_INSTANCE_INPUTS };
 vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=float2(0.0); o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=float2(0.0); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=float4(1.0); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 // Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
 // non-textured colored path) just pass the already-known alpha straight through.
@@ -287,13 +302,13 @@ fragment CnaFragOut cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex 
 // DualTextureEffect does and Vulkan's has since VULKAN-150; a record without a second set feeds
 // TEXCOORD0 to both (MetalDeclaredVertexInput.hpp), which is what one shared UV used to mean.
 struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; float fogFactor; };
-struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]]; };
-struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]]; };
+struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]];  CNA_INSTANCE_INPUTS };
+struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]];  CNA_INSTANCE_INPUTS };
 vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3DualOut o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(in.position,fogVector); return o;
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 fragment CnaFragOut cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
@@ -340,13 +355,14 @@ struct LitUniforms {
 struct VLitOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
 vertex VLitOut cna_v3d_lit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitOut o;
-    o.position = t.wvp * float4(in.position, 1.0);
+    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    o.position = t.wvp * p;
     o.color = in.color;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    o.normal = normalMat * in.normal;
+    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, in.normal);
     o.uv = in.uv;
-    o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), lu.fogVector), 0.0, 1.0);
-    o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    o.fogFactor = 1.0 - clamp(dot(p, lu.fogVector), 0.0, 1.0);
+    o.worldPos = (t.world * p).xyz;
     return o;
 }
 fragment CnaFragOut cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
@@ -380,11 +396,12 @@ fragment CnaFragOut cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[
 struct VLitVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float alpha; };
 vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexColorIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
     VLitVertexLitOut o;
-    o.position = t.wvp * float4(in.position, 1.0);
+    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    o.position = t.wvp * p;
     o.uv = in.uv;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    float3 N = normalize(normalMat * in.normal);
-    float3 worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    float3 N = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, in.normal));
+    float3 worldPos = (t.world * p).xyz;
     float3 E = normalize(lu.eyePosition.xyz - worldPos);
     float dotL0 = dot(N, -lu.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
     float dotL1 = dot(N, -lu.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
@@ -437,10 +454,11 @@ struct EnvUniforms {
 struct VEnvOut { float4 position [[position]]; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
 vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
     VEnvOut o;
-    o.position = t.wvp * float4(in.position, 1.0);
-    float3 worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    o.position = t.wvp * p;
+    float3 worldPos = (t.world * p).xyz;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    float3 worldNormal = normalize(normalMat * in.normal);
+    float3 worldNormal = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, in.normal));
     float3 eyeVector = normalize(eu.eyePosition.xyz - worldPos);
     o.worldNormal = worldNormal;
     o.eyeDir = eyeVector;
@@ -452,7 +470,7 @@ vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransfo
     o.fresnel = saturate((eu.envParams.y > 0.5)
         ? pow(max(1.0 - abs(viewAngle), 0.0), eu.envParams.z) * eu.envParams.x
         : eu.envParams.x);
-    o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), eu.fogVector), 0.0, 1.0);
+    o.fogFactor = 1.0 - clamp(dot(p, eu.fogVector), 0.0, 1.0);
     return o;
 }
 fragment CnaFragOut cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], texturecube<float> envMap [[texture(1)]], sampler envSmp [[sampler(1)]], constant EnvUniforms& eu [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
@@ -500,12 +518,12 @@ struct SkinnedUniforms {
     float4 fogVector;
     float4 vertexColorEnabled; // x = 0/1
 };
-struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; };
-struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; float4 color [[attribute(5)]]; };
+struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]];  CNA_INSTANCE_INPUTS };
+struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; float4 color [[attribute(5)]];  CNA_INSTANCE_INPUTS };
 struct VSkinnedOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
 inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
                                     constant SkinnedTransform& t, constant float4x4* bones,
-                                    float4 fogVector) {
+                                    float4 fogVector, float4x4 instance) {
     VSkinnedOut o;
     int weightsPerVertex = int(t.skinParams.x);
     // Task 895: real XNA Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
@@ -514,6 +532,7 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * boneWeights.y;
     if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * boneWeights.z + bones[boneIndices.w] * boneWeights.w;
     float4 skinnedPos = skinMat * float4(position, 1.0);
+    if (cnaInstanced) skinnedPos = instance * skinnedPos;   // AM4-143
     o.position = t.wvp * skinnedPos;
     // Safe-normalize guard (ported, not invented): a vertex blended near-evenly between two bones
     // whose relative rotation is near 180 degrees can make the linearly-blended skinMat's
@@ -524,6 +543,7 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     float3 skinnedNormal = skinMat3 * normal;
     float skinnedNormalLen = length(skinnedNormal);
     o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    if (cnaInstanced) o.normal = float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * o.normal;
     o.uv = uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.color = vcolor;
@@ -531,10 +551,10 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     return o;
 }
 vertex VSkinnedOut cna_v3d_skinned(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, bones, su.fogVector);
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedOut cna_v3d_skinned_color(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, bones, su.fogVector);
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.normal);
@@ -571,18 +591,21 @@ fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float
 // C++ effect layer), so SkinnedUniforms/fillSkinnedUniforms() need no changes.
 struct VSkinnedVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float4 color; };
 inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
-                                    constant SkinnedTransform& t, constant SkinnedUniforms& su, constant float4x4* bones) {
+                                    constant SkinnedTransform& t, constant SkinnedUniforms& su, constant float4x4* bones,
+                                    float4x4 instance) {
     VSkinnedVertexLitOut o;
     int weightsPerVertex = int(t.skinParams.x);
     float4x4 skinMat = bones[boneIndices.x] * boneWeights.x;
     if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * boneWeights.y;
     if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * boneWeights.z + bones[boneIndices.w] * boneWeights.w;
     float4 skinnedPos = skinMat * float4(position, 1.0);
+    if (cnaInstanced) skinnedPos = instance * skinnedPos;   // AM4-143
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     float3 skinnedNormal = skinMat3 * normal;
     float skinnedNormalLen = length(skinnedNormal);
     float3 N = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    if (cnaInstanced) N = normalize(float3x3(instance[0].xyz, instance[1].xyz, instance[2].xyz) * N);
     o.uv = uv;
     o.color = vcolor;
     float3 worldPos = (t.world * skinnedPos).xyz;
@@ -601,10 +624,10 @@ inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 no
     return o;
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_vertexlit(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, su, bones);
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_color_vertexlit(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, su, bones);
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 texColor = tex.sample(smp, in.uv);
@@ -645,23 +668,26 @@ struct PbrUniforms {
 };
 // plans/plan_apple_m4.md AM4-084: `color` is glTF's COLOR_0 when the effect enables it and the record
 // carries one, else constant opaque white (BuildMetalDeclaredVertexInput).
-struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; float2 uv1 [[attribute(5)]]; };
+struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; float2 uv1 [[attribute(5)]];  CNA_INSTANCE_INPUTS };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; float2 uv1; };
 float cna_direction_handedness(float3x3 m) {
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
     VPbrOut o;
-    o.position = t.wvp * float4(in.position, 1.0);
+    float4 p = CNA_INSTANCE_POSITION(in, float4(in.position, 1.0));
+    o.position = t.wvp * p;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    o.normal = normalMat * in.normal;
+    o.normal = normalMat * CNA_INSTANCE_DIRECTION(in, in.normal);
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
-    o.tangent = world3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3);
+    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, in.tangent.xyz);
+    const float instanceHandedness = cnaInstanced
+        ? cna_direction_handedness(float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz)) : 1.0;
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3) * instanceHandedness;
     o.uv = in.uv;
     o.uv1 = in.uv1;
-    o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
-    o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
+    o.worldPos = (t.world * p).xyz;
+    o.fogFactor = 1.0 - clamp(dot(p, pu.fogVector), 0.0, 1.0);
     o.color = in.color;
     return o;
 }
@@ -767,7 +793,7 @@ fragment CnaFragOut cna_f3d_pbr(VPbrOut in [[stage_in]],
 // interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
 // tangents remain ordinary directions.
 struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
-struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; float2 uv1 [[attribute(7)]]; };
+struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; float2 uv1 [[attribute(7)]];  CNA_INSTANCE_INPUTS };
 float3 cna_skin_normal(float3x3 m, float3 n) {
     float3 c0=m[0], c1=m[1], c2=m[2];
     float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
@@ -781,20 +807,22 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     float4x4 skinMat = bones[in.boneIndices.x] * in.boneWeights.x;
     if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y;
     if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z + bones[in.boneIndices.w] * in.boneWeights.w;
-    float4 skinnedPos = skinMat * float4(in.position, 1.0);
+    float4 skinnedPos = CNA_INSTANCE_POSITION(in, skinMat * float4(in.position, 1.0));
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     float3 skinnedNormal = cna_skin_normal(skinMat3, in.normal);
     float skinnedNormalLen = length(skinnedNormal);
     float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
     float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
-    o.normal = normalize(normalMat * boneNormal);
+    o.normal = normalize(normalMat * CNA_INSTANCE_DIRECTION(in, boneNormal));
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
-    o.tangent = world3 * (skinMat3 * in.tangent.xyz);
-    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3)
+    o.tangent = world3 * CNA_INSTANCE_DIRECTION(in, skinMat3 * in.tangent.xyz);
+    const float instanceHandedness = cnaInstanced
+        ? cna_direction_handedness(float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz)) : 1.0;
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3) * instanceHandedness
                                    * cna_direction_handedness(skinMat3);
     o.uv = in.uv;
     o.uv1 = in.uv1;
@@ -1003,9 +1031,21 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
             vd.attributes[attr.location].format = metalVertexFormat(attr.kind);
             vd.attributes[attr.location].offset = (NSUInteger)attr.offset;
             vd.attributes[attr.location].bufferIndex =
-                attr.constant ? (NSUInteger)kMetalConstantAttributeBufferIndex : 0;
+                attr.constant ? (NSUInteger)kMetalConstantAttributeBufferIndex : (NSUInteger)attr.bufferIndex;
         }
-        vd.layouts[0].stride = (NSUInteger)input.stride;
+        if (input.layouts.empty()) {
+            vd.layouts[0].stride = (NSUInteger)input.stride;
+        } else {
+            // plans/plan_apple_m4.md AM4-143: one layout per stream that supplies an attribute; a
+            // per-instance one steps once every InstanceFrequency instances, as D3D9's divisor does.
+            for (const auto& layout : input.layouts) {
+                vd.layouts[(NSUInteger)layout.bufferIndex].stride = (NSUInteger)layout.stride;
+                if (layout.stepRate > 0) {
+                    vd.layouts[(NSUInteger)layout.bufferIndex].stepFunction = MTLVertexStepFunctionPerInstance;
+                    vd.layouts[(NSUInteger)layout.bufferIndex].stepRate = (NSUInteger)layout.stepRate;
+                }
+            }
+        }
         // plans/plan_apple_m4.md AM4-080: inputs the effect permutation does not use, from a constant.
         if (input.UsesConstantAttributes()) {
             vd.layouts[kMetalConstantAttributeBufferIndex].stepFunction = MTLVertexStepFunctionConstant;
@@ -1050,16 +1090,19 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
                                                     NSString* vs, NSString* fs,
                                                     MTLVertexDescriptor* vd, const BlendKey& blend,
         int colorCount=1, int sampleCount=1, bool sampleMaskOutput=false,
-        const std::array<MTLPixelFormat,8>* colorFormats=nullptr)
+        const std::array<MTLPixelFormat,8>* colorFormats=nullptr, bool instanceMatrix=false)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
-        d.vertexFunction=[lib newFunctionWithName:vs];
-        // AM4-141: every stock fragment function is specialized on cnaSampleMaskOut.
+        // AM4-141: every stock fragment function is specialized on cnaSampleMaskOut; AM4-143: every
+        // stock vertex function on cnaInstanced. A function ignores a constant it does not declare.
         MTLFunctionConstantValues* constants=[[MTLFunctionConstantValues alloc] init];
         const bool maskOutput=sampleMaskOutput;
+        const bool instanced=instanceMatrix;
         [constants setConstantValue:&maskOutput type:MTLDataTypeBool atIndex:0];
+        [constants setConstantValue:&instanced type:MTLDataTypeBool atIndex:1];
         NSError* functionError=nil;
+        d.vertexFunction=[lib newFunctionWithName:vs constantValues:constants error:&functionError];
         d.fragmentFunction=[lib newFunctionWithName:fs constantValues:constants error:&functionError];
         [constants release];
         if(!d.vertexFunction||!d.fragmentFunction){
@@ -2409,7 +2452,8 @@ struct MetalRenderer::Impl
         MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorFromInput(*vertexInput);
         MetalObjectOwner pipelineOwner(retainMetalObject,releaseMetalObject);
         pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
-                                         sampleCountKey, sampleMaskOutput, &activeColorFormats));
+                                         sampleCountKey, sampleMaskOutput, &activeColorFormats,
+                                         vertexInput && vertexInput->instanceMatrix));   // AM4-143
         const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
         return inserted->second;
     }
@@ -4560,7 +4604,8 @@ static Matrix xnaPixelCenterCorrection(const MetalRenderer::Impl& p,PrimitiveTyp
         0.0f);
 }
 
-static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
+static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params,
+                       bool instancedRoute=false)
 {
     // plans/plan_apple_m4.md AM4-028: uploaded in XNA's own M11..M44 order, like `world`
     // (GpuDrawParams::worldColMajor). MSL reads a float4x4 column by column, so the shader's
@@ -4574,27 +4619,86 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     // carries and binds them where it declared them; an undeclared one is the canonical XNA vertex
     // type its stride names, as before. This replaces the declaration-fidelity refusal (METAL-263),
     // which existed because only the canonical layouts could be bound.
+    // plans/plan_apple_m4.md AM4-143: several per-vertex streams, or any per-instance one, read
+    // every stream's own declaration (BuildMetalStreamVertexInput); one stream keeps its route.
+    // The instanced route folds no VertexOffset into baseVertex, so even its one stream binds at
+    // its own offset.
+    const bool streamRoute = params && params->vertexStreamCount > 0 &&
+        (instancedRoute || HasMultipleVertexStreams(*params) || InstanceStreamCount(*params) > 0);
+    // The stream route reads its own copy of the stream list: the shared layer describes a buffer
+    // without a declaration as a zero-stride stream, whose stride only its upload knows.
+    std::optional<GpuDrawParams> streamParams;
+    MetalStreamDeclarations streamDeclarations{};
+    std::array<const MetalVertexBuffer*, kMaxVertexStreams> streamBuffers{};
+    std::vector<VertexElement> canonicalStreamElements;
+    std::vector<VertexElement> combinedElements;
+    int undeclaredStream=-1;
+    std::size_t selectionStride=0;
+    if (streamRoute) {
+        GpuDrawParams& sp=streamParams.emplace(*params);
+        int combinedBase=0;
+        for (int i=0; i<sp.vertexStreamCount; ++i) {
+            auto& stream=sp.vertexStreams[(std::size_t)i];
+            const auto* buffer=dynamic_cast<const MetalVertexBuffer*>(stream.buffer);
+            if (!buffer) throw std::runtime_error("Metal: foreign vertex buffer in a vertex stream");
+            streamBuffers[(std::size_t)i]=buffer;
+            if (stream.strideInBytes==0) stream.strideInBytes=static_cast<int>(buffer->stride());
+            if (stream.instanceFrequency==0) {
+                stream.combinedByteBase=combinedBase;
+                combinedBase+=stream.strideInBytes;
+            }
+            if (!buffer->declaration().IsEmpty()) {
+                streamDeclarations[(std::size_t)i]=&buffer->declaration().GetElements();
+                continue;
+            }
+            // A buffer with no declaration is the canonical vertex its upload stride names, as it
+            // is on the one-stream route; nothing names its channels to tell them apart from
+            // another stream's, or to lay them out as instance data.
+            if (stream.instanceFrequency>0 || PerVertexStreamCount(sp)>1)
+                throw System::NotSupportedException(
+                    "Metal: every per-instance vertex stream, and every stream of a multi-stream draw, "
+                    "needs a VertexDeclaration.");
+            undeclaredStream=i;
+        }
+        sp.combinedVertexStride=combinedBase;
+        if (undeclaredStream>=0) {
+            selectionStride=static_cast<std::size_t>(combinedBase);
+            if (!sp.pbr) sp.vertexColorEnabled=false;   // AM4-081, as canonicalParams below
+        }
+    }
     const auto& declared=vb.declaration();
-    const std::size_t selectionStride=declared.IsEmpty() ? drawStride
-        : MetalSelectionStrideForDeclaration(declared.GetElements(), params);
+    if (streamRoute && undeclaredStream<0) {
+        combinedElements=MetalCombinedPerVertexElements(*streamParams, streamDeclarations);
+        selectionStride=MetalSelectionStrideForDeclaration(combinedElements, params);
+    } else if (!streamRoute) {
+        selectionStride = declared.IsEmpty() ? drawStride
+            : MetalSelectionStrideForDeclaration(declared.GetElements(), params);
+    }
     const PipelineKind kind = selectPipelineKind(selectionStride, params);
+    if (streamRoute && undeclaredStream>=0) {
+        canonicalStreamElements=MetalCanonicalElementsFor(kind, selectionStride);
+        streamDeclarations[(std::size_t)undeclaredStream]=&canonicalStreamElements;
+    }
     // plans/plan_apple_m4.md AM4-081: a buffer with no declaration is the canonical XNA type its stride
     // names, none of which a lit draw takes colour from, so its colour is the constant white, as the
     // lit functions read none before. The PBR records are the exception (AM4-084): stride 60 and 80
     // carry glTF's COLOR_0, which the effect's own switch gates.
     std::optional<GpuDrawParams> canonicalParams;
-    if (declared.IsEmpty() && params && !params->pbr) {
+    if (!streamRoute && declared.IsEmpty() && params && !params->pbr) {
         canonicalParams.emplace(*params);
         canonicalParams->vertexColorEnabled=false;
     }
-    const MetalDeclaredVertexInput vertexInput = BuildMetalDeclaredVertexInput(
-        kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind, drawStride) : declared.GetElements(),
-        static_cast<int>(drawStride), canonicalParams ? &*canonicalParams : params);
+    const MetalDeclaredVertexInput vertexInput = streamRoute
+        ? BuildMetalStreamVertexInput(kind, *streamParams, streamDeclarations)
+        : BuildMetalDeclaredVertexInput(
+            kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind, drawStride) : declared.GetElements(),
+            static_cast<int>(drawStride), canonicalParams ? &*canonicalParams : params);
     if(!vertexInput.IsComplete())
         throw System::NotSupportedException("Metal: this VertexDeclaration cannot feed the selected stock effect: " +
                                             vertexInput.refusal + ".");
-    if(!declared.IsEmpty()){
-        const std::string dropped=MetalDroppedVertexColorRefusal(kind, declared.GetElements(), params);
+    if(streamRoute ? undeclaredStream<0 : !declared.IsEmpty()){
+        const std::string dropped=MetalDroppedVertexColorRefusal(
+            kind, streamRoute ? combinedElements : declared.GetElements(), params);
         if(!dropped.empty()) throw System::NotSupportedException("Metal: " + dropped + ".");
     }
 
@@ -4664,7 +4768,24 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     // After ensureFrame(): the correction depends on the pass's sample count.
     wvp=multiply(wvp,fromXna(xnaPixelCenterCorrection(p,pt)));
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind, &vertexInput);
-    [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
+    [p.encoder setRenderPipelineState:pipeline];
+    if (!streamRoute) {
+        [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
+    } else {
+        // AM4-143: each stream that supplies an attribute, at its whole VertexOffset -- the shared
+        // layer folds only a common base into vertexStart/baseVertex, which advance the per-vertex
+        // streams alone; a per-instance stream is addressed by instance index.
+        for (int i=0; i<streamParams->vertexStreamCount; ++i) {
+            const auto& stream=streamParams->vertexStreams[(std::size_t)i];
+            const int bufferIndex=MetalVertexStreamBufferIndex(stream.slot);
+            bool bound=false;
+            for (const auto& layout : vertexInput.layouts) bound = bound || layout.bufferIndex==bufferIndex;
+            if (!bound) continue;
+            [p.encoder setVertexBuffer:streamBuffers[(std::size_t)i]->native()
+                                offset:(NSUInteger)stream.vertexOffset*(NSUInteger)stream.strideInBytes
+                               atIndex:(NSUInteger)bufferIndex];
+        }
+    }
     p.bindSampleMask();   // AM4-141
     if (vertexInput.UsesConstantAttributes())
         [p.encoder setVertexBytes:kMetalConstantAttributeBlock length:sizeof(kMetalConstantAttributeBlock)
@@ -4812,6 +4933,9 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         }
     }
     int n=primitiveVertexCount(pt,pc);
+    // AM4-143: DrawInstancedPrimitives' count (1 for every other draw).
+    const NSUInteger instanceCount=static_cast<NSUInteger>(params?params->instanceCount:1);
+    const NSUInteger firstInstance=static_cast<NSUInteger>(params?params->firstInstance:0);
     // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- every other renderer (EasyGL/Vulkan/
     // Bgfx/native GPU/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
     // this function silently hardcoded 0/0 for all three, so any draw with a nonzero offset into a
@@ -4825,10 +4949,11 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
             indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
             indexBuffer:ib->native() indexBufferOffset:startIndex*indexSize
-            instanceCount:1 baseVertex:baseVertex baseInstance:0];
+            instanceCount:instanceCount baseVertex:baseVertex baseInstance:firstInstance];
     } else {
         const NSUInteger vertexStart=static_cast<NSUInteger>(params?params->vertexStart:0);
-        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n];
+        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n
+                    instanceCount:instanceCount baseInstance:firstInstance];
     }
 }
 void MetalRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& v,const Matrix& w,
@@ -4858,14 +4983,8 @@ static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuf
         case MetalDrawStreamPolicy::Supported: break;
         case MetalDrawStreamPolicy::InvalidBinding:
             throw std::invalid_argument("Metal: invalid or internally inconsistent vertex stream metadata");
-        case MetalDrawStreamPolicy::MultiStreamUnsupported:
-            throw System::NotSupportedException(
-                "Metal multi-stream vertex input is disabled until it has adapted macOS proof.");
-        case MetalDrawStreamPolicy::InstancingUnsupported:
-            throw System::NotSupportedException(
-                "Metal instancing is disabled until it has adapted macOS proof.");
     }
-    if (!MetalSingleStreamMatchesUploadedBuffer(gp,vb,vb.stride()))
+    if (!MetalStreamZeroMatchesUploadedBuffer(gp,vb,vb.stride()))
         throw std::invalid_argument(
             "Metal: GpuDrawParams stream 0 must name the draw vertex buffer and match its uploaded stride");
     if (gp.customEffectRenderer)
@@ -4896,6 +5015,24 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
     ValidateMetalDrawParams(gp,*vb);
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);
+}
+// plans/plan_apple_m4.md AM4-143: the stock effects' instanced draw -- every stream bound at its own
+// VertexOffset, the per-instance ones stepping per InstanceFrequency instances and supplying the
+// per-instance world matrix (BuildMetalStreamVertexInput).
+void MetalRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& v,
+                                                      const IIndexBufferRenderer& i,
+                                                      const Matrix& w,const Matrix& vi,
+                                                      const Matrix& p,PrimitiveType pt,int pc,
+                                                      int instanceCount,const GpuDrawParams& gp)
+{
+    const MetalAutoreleaseScope autoreleaseScope;
+    const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
+    const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
+    if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
+    if(instanceCount!=gp.instanceCount)
+        throw std::invalid_argument("Metal: the instance count disagrees with GpuDrawParams.instanceCount");
+    ValidateMetalDrawParams(gp,*vb);
+    drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp,true);
 }
 void MetalRenderer::SetStringMarkerEXT(const char* m)
 {
