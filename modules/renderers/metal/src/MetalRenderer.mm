@@ -47,6 +47,19 @@
 #endif
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+// plans/plan_apple_m4.md AM4-099: MTLSamplerDescriptor.lodBias is declared only by the macOS/iOS 26
+// SDKs. @available is a run-time check, so with an older SDK the property does not exist and the
+// renderer must not name it at all; a non-zero bias is then refused like on an older OS.
+#ifndef CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS
+#if (defined(__MAC_26_0) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
+     __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_26_0) ||                  \
+    (defined(__IPHONE_26_0) && defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && \
+     __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0)
+#define CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS 1
+#else
+#define CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS 0
+#endif
+#endif
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -2155,10 +2168,13 @@ struct MetalRenderer::Impl
         // plans/plan_apple_m4.md AM4-034: MipMapLevelOfDetailBias is a sampler property only from
         // macOS/iOS 26 (MTLSamplerDescriptor.lodBias). Below that it is refused, never dropped.
         bool lodBiasAvailable=false;
+#if CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS
         if (@available(macOS 26.0, iOS 26.0, *)) lodBiasAvailable=true;
+#endif
         if(lodBias!=0.0f && !lodBiasAvailable)
             throw System::NotSupportedException(
-                "Metal SamplerState.MipMapLevelOfDetailBias needs macOS/iOS 26 (MTLSamplerDescriptor.lodBias).");
+                "Metal SamplerState.MipMapLevelOfDetailBias needs macOS/iOS 26 and a build against their "
+                "SDK (MTLSamplerDescriptor.lodBias).");
         MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc] init];
         if(!sd) throw std::runtime_error("Metal: failed to allocate sampler descriptor");
         sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
@@ -2169,9 +2185,11 @@ struct MetalRenderer::Impl
         // stores it unsigned, so a negative value is a huge index and selects the last level
         // (Metal clamps the level of detail to the texture's own chain).
         sd.lodMinClamp=static_cast<float>(static_cast<std::uint32_t>(maxMipLevel));
+#if CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS
         if(lodBias!=0.0f){
             if (@available(macOS 26.0, iOS 26.0, *)) sd.lodBias=lodBias;
         }
+#endif
         MetalObjectOwner samplerOwner(retainMetalObject,releaseMetalObject);
         samplerOwner.Adopt([device newSamplerStateWithDescriptor:sd]); [sd release];
         if(!samplerOwner.HasValue()) throw std::runtime_error("Metal: failed to create sampler state");
