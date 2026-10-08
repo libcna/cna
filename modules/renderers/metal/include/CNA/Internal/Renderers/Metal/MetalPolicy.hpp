@@ -497,6 +497,26 @@ namespace CNA::Internal::Renderers::Metal
         }
     }
 
+    /**
+     * @brief Whether Metal can issue a buffered draw's vertex or index window as XNA forwards it.
+     *
+     * plans/plan_apple_m4.md AM4-150: XNA validates only the counts and hands offsets to Direct3D 9
+     * unchecked. Metal's draw takes unsigned offsets and its buffers are not bounds-checked, so a
+     * window that starts below zero or runs past the buffer is not issued at all -- the draw
+     * completes and changes nothing, one of the outcomes of the undefined native draw.
+     *
+     * @param first First vertex (non-indexed) or index (indexed) the draw reads.
+     * @param count Vertices or indices the draw reads.
+     * @param available Vertices in the vertex buffer, or indices in the index buffer.
+     * @return True when [first, first + count) lies inside [0, available).
+     */
+    [[nodiscard]] constexpr bool MetalBufferedDrawRangeIsServable(long long first, long long count,
+                                                                  long long available) noexcept
+    {
+        return first >= 0 && count >= 0 && available >= 0 && first <= available &&
+               count <= available - first;
+    }
+
     /** @brief Bit for a sample count in a supported-count mask (2, 4 and 8 are the counts asked about). */
     [[nodiscard]] constexpr unsigned MetalSampleCountBit(int samples) noexcept
     {

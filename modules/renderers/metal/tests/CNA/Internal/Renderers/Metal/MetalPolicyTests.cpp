@@ -335,3 +335,16 @@ TEST(MetalPolicy, TextureStorageCoversEveryUncompressedXnaFormat)
     // XNA A4R4G4B4 0xA123 (A=A, R=1, G=2, B=3) -> Metal R4G4B4A4 0x123A.
     EXPECT_EQ(MetalBgra4444ToAbgr4(0xA123u), 0x123Au);
 }
+
+// plans/plan_apple_m4.md AM4-150
+TEST(MetalPolicy, BufferedDrawWindowsMetalCannotIssueAreNotServable)
+{
+    EXPECT_TRUE(MetalBufferedDrawRangeIsServable(0, 6, 6));
+    EXPECT_TRUE(MetalBufferedDrawRangeIsServable(3, 3, 6));
+    EXPECT_TRUE(MetalBufferedDrawRangeIsServable(6, 0, 6));
+    EXPECT_FALSE(MetalBufferedDrawRangeIsServable(-1, 3, 6));    // a negative vertexStart/startIndex
+    EXPECT_FALSE(MetalBufferedDrawRangeIsServable(7, 3, 6));     // starts past the buffer
+    EXPECT_FALSE(MetalBufferedDrawRangeIsServable(4, 3, 6));     // runs past its end
+    EXPECT_FALSE(MetalBufferedDrawRangeIsServable(0, 3, -1));
+    EXPECT_FALSE(MetalBufferedDrawRangeIsServable(1, 0x7fffffffLL, 0x7fffffffLL));
+}

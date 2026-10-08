@@ -5622,6 +5622,10 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     // shared vertex/index buffer rendered the wrong vertex range. Never caught until
     // Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden (METAL-89) became the first Metal test
     // to ever exercise multiple draws from nonzero offsets within one shared buffer.
+    // AM4-150: a window XNA would forward but Metal cannot issue draws nothing.
+    if(ib ? !MetalBufferedDrawRangeIsServable(params?params->startIndex:0,n,ib->GetIndexCount())
+          : !MetalBufferedDrawRangeIsServable(params?params->vertexStart:0,n,vb.GetVertexCount()))
+        return;
     if(ib){
         const NSUInteger startIndex=static_cast<NSUInteger>(params?params->startIndex:0);
         const NSInteger baseVertex=static_cast<NSInteger>(params?params->baseVertex:0);
@@ -5949,6 +5953,12 @@ static void drawMetalCompiled(MetalRenderer::Impl& p, const MetalVertexBuffer& v
     }
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise];
     [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
+
+    // AM4-150: as drawMetal3D, a window Metal cannot issue draws nothing.
+    const int windowCount=primitiveVertexCount(pt,pc);
+    if (ib ? !MetalBufferedDrawRangeIsServable(params.startIndex,windowCount,ib->GetIndexCount())
+           : !MetalBufferedDrawRangeIsServable(params.vertexStart,windowCount,vb.GetVertexCount()))
+        return;
 
     // XNA's Direct3D 9 pixel centres. The stock route folds this translation into its matrix; a
     // compiled shader computes its own position, so the viewport moves instead -- by the same

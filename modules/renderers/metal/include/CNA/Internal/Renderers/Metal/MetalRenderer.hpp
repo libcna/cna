@@ -251,6 +251,20 @@ namespace CNA::Internal::Renderers::Metal
          * @return Supported for Color, Rgba1010102, Rg32, Rgba64 and the float formats; otherwise
          *         Unsupported, which the shared layer answers by substituting Color.
          */
+        /**
+         * @brief Whether GraphicsDevice must range-check buffered draws for this renderer.
+         *
+         * plans/plan_apple_m4.md AM4-150: no -- XNA forwards vertexStart, startIndex, baseVertex and
+         * the range hints to the native draw, and Metal reads them from GPU buffers, never through a
+         * CPU copy. A range Metal cannot issue (a negative or out-of-buffer vertex or index window)
+         * draws nothing (MetalBufferedDrawRangeIsServable), as an undefined native draw may.
+         *
+         * @return False.
+         */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        {
+            return false;
+        }
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         /**
          * @brief Reports whether a Texture2D is stored natively in a surface format (AM4-142).

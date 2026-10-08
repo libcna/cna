@@ -4,7 +4,9 @@
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include <cstddef>
-#include <stdexcept>
+#include <string>
+
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_metal.md METAL-34-style extraction: this is the real shader-variant dispatch logic --
 // arguably the single most safety-critical function in the whole renderer, since it decides which
@@ -52,11 +54,11 @@ namespace CNA::Internal::Renderers::Metal
             // and 80 add a packed COLOR_0 the shader multiplies in, 76 a TEXCOORD_1 it does not read.
             if (skinned) {
                 if (stride != 68 && stride != 76 && stride != 80)
-                    throw std::runtime_error("Metal: SkinnedPbrEffect requires stride 68, 76 or 80 (position+normal+tangent+uv+boneWeights+boneIndices, then TEXCOORD_1 and COLOR_0)");
+                    throw System::NotSupportedException(std::string("Metal: SkinnedPbrEffect requires stride 68, 76 or 80 (position+normal+tangent+uv+boneWeights+boneIndices, then TEXCOORD_1 and COLOR_0); this undeclared vertex buffer's stride is ") + std::to_string(stride));
                 return PipelineKind::SkinnedPbr68;
             }
             if (stride != 48 && stride != 60)
-                throw std::runtime_error("Metal: PbrEffect requires stride 48 or 60 (position+normal+tangent+uv, then TEXCOORD_1 and COLOR_0)");
+                throw System::NotSupportedException(std::string("Metal: PbrEffect requires stride 48 or 60 (position+normal+tangent+uv, then TEXCOORD_1 and COLOR_0); this undeclared vertex buffer's stride is ") + std::to_string(stride));
             return PipelineKind::Pbr48;
         }
         if (skinned) {
@@ -68,16 +70,16 @@ namespace CNA::Internal::Renderers::Metal
             const bool vertexLit = params && params->lightingEnabled && !params->preferPerPixelLighting;
             if (stride == 56) return vertexLit ? PipelineKind::Skinned56VertexLit : PipelineKind::Skinned56;
             if (stride == 52) return vertexLit ? PipelineKind::Skinned52VertexLit : PipelineKind::Skinned52;
-            throw std::runtime_error("Metal: SkinnedEffect requires stride 52 or 56");
+            throw System::NotSupportedException(std::string("Metal: SkinnedEffect requires stride 52 or 56; this undeclared vertex buffer's stride is ") + std::to_string(stride));
         }
         if (envMapping) {
-            if (stride != 32) throw std::runtime_error("Metal: EnvironmentMapEffect requires VertexPositionNormalTexture (stride 32)");
+            if (stride != 32) throw System::NotSupportedException(std::string("Metal: EnvironmentMapEffect requires VertexPositionNormalTexture (stride 32); this undeclared vertex buffer's stride is ") + std::to_string(stride));
             return PipelineKind::EnvMap32;
         }
         if (dual) {
             if (stride == 24) return PipelineKind::DualTex24Colored;
             if (stride == 20) return PipelineKind::DualTex20;
-            throw std::runtime_error("Metal: DualTextureEffect requires stride 20 or 24");
+            throw System::NotSupportedException(std::string("Metal: DualTextureEffect requires stride 20 or 24; this undeclared vertex buffer's stride is ") + std::to_string(stride));
         }
         // METAL-271: pipeline shape comes from the captured effect flags and canonical vertex
         // stride, never from whether a texture pointer happens to be null. Every stock 2D sample
@@ -97,10 +99,10 @@ namespace CNA::Internal::Renderers::Metal
                         return PipelineKind::LitTex32VertexLit;
                     return PipelineKind::LitTex32;
                 case 16: return PipelineKind::Colored16;
-                default: throw std::runtime_error("Metal: stock 3D requires stride 16, 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
+                default: throw System::NotSupportedException(std::string("Metal: an undeclared vertex buffer must have the stride of an XNA vertex type the stock effect reads (16, 20, 24 or 32); this undeclared vertex buffer's stride is ") + std::to_string(stride));
             }
         }
-        if (stride != 16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
+        if (stride != 16) throw System::NotSupportedException(std::string("Metal: colored 3D currently requires VertexPositionColor stride 16; this undeclared vertex buffer's stride is ") + std::to_string(stride));
         return PipelineKind::Colored16;
     }
 }

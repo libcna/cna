@@ -305,6 +305,154 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
             ENVIRONMENT "CNA_METAL_FORCE_DXT_FALLBACK=1")
     endforeach()
     unset(_cna_metal_dxt)
+    # plans/plan_apple_m4.md AM4-150: the renderer-neutral EasyGL oracle corpus SDL_GPU, Vulkan and
+    # WebGPU already reuse unchanged (state, buffers, effects and their goldens, SpriteBatch and
+    # SpriteFont, texture/cube/volume transfers, models, presentation). Those that read GL state
+    # stay EasyGL's. Run from the source root, where the goldens and content live. Two join with the
+    # work they need: rendertargetcube_properties with native Depth16 targets (AM4-151) and
+    # skinnedeffect_vector4_bone_indices with float BLENDINDICES (AM4-152).
+    set(CNA_METAL_EASYGL_ORACLES
+        alphatest_modes
+        alphatest_vertexcolor_diffuse
+        alphatesteffect_golden
+        backbuffer_resize
+        basiceffect_combinations
+        basiceffect_default_lighting
+        basiceffect_golden
+        basiceffect_lit_vertex_color
+        basiceffect_position_normal
+        basiceffect_preferperpixellighting
+        basiceffect_vertex_color_clamp
+        basiceffect_world_scale_precision
+        blendstate_additive
+        blendstate_additive_golden
+        blendstate_alphablend
+        blendstate_blendfactor
+        blendstate_nonpremultiplied
+        blendstate_opaque
+        blendstate_separate_factors
+        blendstate_separate_functions
+        bound_resource_dispose
+        clear_overloads
+        depthstencilstate_compare_function
+        depthstencilstate_stencil_enable
+        depthstencilstate_stencil_mask
+        depthstencilstate_stencil_ops
+        depthstencilstate_write_enable
+        depthstencilstate_write_enable_golden
+        device_dispose_order
+        device_reset_events
+        device_validation
+        disposed_buffer
+        disposed_resource
+        double_dispose
+        draw_noindexbuffer
+        draw_novertexbuffer
+        draw_range_validation
+        draw_user_indexed_primitives_32
+        draw_user_indexed_primitives_vpc
+        draw_user_primitives_custom
+        draw_user_primitives_vpc
+        dualtextureeffect_golden
+        dualtextureeffect_independent_uv
+        dxt_format
+        dynamic_buffer_stress
+        effect_clone
+        effect_current_technique
+        emissive_ambient_composition
+        environmentmapeffect_fresnel_gradient
+        environmentmapeffect_golden
+        fullscreen_field
+        gltf_alpha_blend
+        gltf_basecolor_factor_texture
+        gltf_mirrored_tangent
+        gltf_sampler_wrap
+        gltf_skinned_pbr_nonuniform_joint
+        gltf_tangent_handedness
+        gltf_texture_transform_per_map
+        gltf_transmission_ordering
+        goldenimage_smoke
+        graphicsdevice_clear_stencil
+        graphicsdevice_reference_stencil
+        handle_release
+        model_draw
+        model_hierarchy_child_mesh
+        model_json_reader
+        model_json_reader_32bit_indices
+        model_json_reader_bone_hierarchy
+        model_json_reader_skeleton
+        model_json_reader_texture
+        model_skinned_animation_playback
+        model_two_meshes_effects
+        move_semantics
+        npot_texture
+        occlusion_query_occluded_quad
+        pbr_fresnel_factors
+        pbr_srgb_transfer
+        pixeltestgame_smoke
+        primitivetype_validation
+        rasterizerstate_cullmode
+        rasterizerstate_cullmode_golden
+        real_window_resize
+        resource_events
+        resource_leak
+        sample_dualtexture_swap
+        sample_keyboard_cube3d
+        sample_layered_blend
+        sample_moving_quad3d
+        sampler_state_effect
+        scissor
+        skinned_effect_bones
+        skinnedeffect_golden
+        skinnedeffect_preferperpixellighting
+        skinnedeffect_weightspervertex
+        sprite_effects
+        spritebatch_blendstate_leak
+        spritebatch_layerdepth
+        spritebatch_rotation
+        spritebatch_rotation_golden
+        spritebatch_scale
+        spritebatch_sourcerect
+        spritefont_default_char
+        spritefont_effects_flip
+        spritefont_effects_rotation_scale
+        spritefont_multiglyph_spacing
+        spritefont_newline
+        spritefont_single_glyph
+        texture2d_mip
+        texture2d_partial_rect
+        texture3d_mip
+        texture3d_partial_box
+        texture3d_partial_box_readback
+        texture3d_slices
+        texture_address_mode_clamp_effect
+        texture_address_mode_mirror
+        texture_address_mode_mirror_effect
+        texture_anisotropic_effect
+        texture_filter_linear_golden
+        texture_filter_point_vs_linear
+        texturecube_content_load
+        texturecube_faces
+        texturecube_mip
+        texturecube_partial_rect
+        transform_matrix
+        unknown_stride_rejection
+        vertexbuffer_indexbuffer_getdata
+        vertexbuffer_setdata
+        viewport_state
+        viewport_subregion
+    )
+    foreach(_cna_metal_oracle IN LISTS CNA_METAL_EASYGL_ORACLES)
+        cna_metal_test(cna_test_metal_easygl_oracle_${_cna_metal_oracle}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${_cna_metal_oracle}_test.cpp)
+        cna_register_renderer_test(NAME Metal_EasyGLOracle_${_cna_metal_oracle}
+            COMMAND cna_test_metal_easygl_oracle_${_cna_metal_oracle}
+            TIMEOUT 120 LABELS "Metal;MetalOracle" WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+    endforeach()
+    unset(_cna_metal_oracle)
+    # The scene drives itself through the platform module's shared canned-keyboard decorator.
+    target_include_directories(cna_test_metal_easygl_oracle_sample_keyboard_cube3d PRIVATE
+        "${CMAKE_SOURCE_DIR}/modules/platform/tests")
     cna_register_renderer_test(NAME Metal_DxtDecodedFallback_SharedTests
         COMMAND CnaTests "--gtest_filter=UnsupportedFormatConstructionTest.Dxt*:UnsupportedFormatConstructionTest.Compressed*:UnsupportedFormatConstructionTest.EverySurfaceFormat*:TextureCubeTest.*Compressed*:ClassicTextureFormat.Dxt*:ClassicTextureFormat.PlainCube*:SaveAsPngTest.*Dxt*:Texture2DContentTypeReaderTest.*Compressed*:Texture3DTextureCubeContentTypeReaderTest.TextureCube*:TextureCubeCompressedFormatAgreement.*:Texture2DFromStreamFormatTest.Dds*:ContentManagerSpriteFontXnbTest.*"
         TIMEOUT 300 LABELS "Metal" WORKING_DIRECTORY "${CNA_SOURCE_DIR}"

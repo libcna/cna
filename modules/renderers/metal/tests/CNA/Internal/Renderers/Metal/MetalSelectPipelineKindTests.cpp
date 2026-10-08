@@ -12,6 +12,8 @@
 // MULTIPLE flags at once specifically to prove the precedence order is actually enforced, not just
 // that each flag works in isolation.
 #include <gtest/gtest.h>
+
+#include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalSelectPipelineKind.hpp"
 
 using namespace CNA::Internal::Renderers::Metal;
@@ -32,14 +34,14 @@ TEST(MetalSelectPipelineKind, NullParamsFallsBackToColored16AtStride16)
 
 TEST(MetalSelectPipelineKind, NullParamsThrowsForAnyOtherStride)
 {
-    EXPECT_THROW((void)SelectMetalPipelineKind(20, nullptr), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, nullptr), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, ColoredRequiresExactlyStride16)
 {
     GpuDrawParams p;
     EXPECT_EQ(SelectMetalPipelineKind(16, &p), MetalPipelineKind::Colored16);
-    EXPECT_THROW((void)SelectMetalPipelineKind(17, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(17, &p), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, CanonicalStockPipelineSelectsByStrideNotTexturePointer)
@@ -48,7 +50,7 @@ TEST(MetalSelectPipelineKind, CanonicalStockPipelineSelectsByStrideNotTexturePoi
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::Textured20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::ColorTex24);
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::LitTex32);
-    EXPECT_THROW((void)SelectMetalPipelineKind(28, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(28, &p), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, Stride32SelectsVertexLitOnlyWhenLightingOnAndNotPreferPerPixel)
@@ -75,7 +77,7 @@ TEST(MetalSelectPipelineKind, DualTextureSelectsByFlagAndStrideWithNeutralTextur
     GpuDrawParams p; p.dualTexture = true;
     EXPECT_EQ(SelectMetalPipelineKind(20, &p), MetalPipelineKind::DualTex20);
     EXPECT_EQ(SelectMetalPipelineKind(24, &p), MetalPipelineKind::DualTex24Colored);
-    EXPECT_THROW((void)SelectMetalPipelineKind(16, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(16, &p), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, DualTextureWithoutTexturesStillSelectsItsPipeline)
@@ -98,7 +100,7 @@ TEST(MetalSelectPipelineKind, EnvironmentMapRequiresStride32)
 {
     GpuDrawParams p; p.envMapping = true;
     EXPECT_EQ(SelectMetalPipelineKind(32, &p), MetalPipelineKind::EnvMap32);
-    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, UntexturedLitBasicEffectUsesLitPipeline)
@@ -124,7 +126,7 @@ TEST(MetalSelectPipelineKind, SkinnedSelectsByStrideAndVertexLitGate)
     GpuDrawParams p; p.skinned = true;
     EXPECT_EQ(SelectMetalPipelineKind(52, &p), MetalPipelineKind::Skinned52);
     EXPECT_EQ(SelectMetalPipelineKind(56, &p), MetalPipelineKind::Skinned56);
-    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(20, &p), System::NotSupportedException);
 
     p.lightingEnabled = true; p.preferPerPixelLighting = false;
     EXPECT_EQ(SelectMetalPipelineKind(52, &p), MetalPipelineKind::Skinned52VertexLit);
@@ -144,8 +146,8 @@ TEST(MetalSelectPipelineKind, PbrUnskinnedRequiresStride48Or60)
     GpuDrawParams p; p.pbr = true;
     EXPECT_EQ(SelectMetalPipelineKind(48, &p), MetalPipelineKind::Pbr48);
     EXPECT_EQ(SelectMetalPipelineKind(60, &p), MetalPipelineKind::Pbr48);
-    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
-    EXPECT_THROW((void)SelectMetalPipelineKind(56, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), System::NotSupportedException);
+    EXPECT_THROW((void)SelectMetalPipelineKind(56, &p), System::NotSupportedException);
 }
 
 // Stride 76 adds TEXCOORD_1 to the skinned record and stride 80 COLOR_0 as well.
@@ -155,8 +157,8 @@ TEST(MetalSelectPipelineKind, PbrSkinnedRequiresStride68Or76Or80)
     EXPECT_EQ(SelectMetalPipelineKind(68, &p), MetalPipelineKind::SkinnedPbr68);
     EXPECT_EQ(SelectMetalPipelineKind(76, &p), MetalPipelineKind::SkinnedPbr68);
     EXPECT_EQ(SelectMetalPipelineKind(80, &p), MetalPipelineKind::SkinnedPbr68);
-    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
-    EXPECT_THROW((void)SelectMetalPipelineKind(72, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), System::NotSupportedException);
+    EXPECT_THROW((void)SelectMetalPipelineKind(72, &p), System::NotSupportedException);
 }
 
 TEST(MetalSelectPipelineKind, PbrTakesPrecedenceOverEverythingElseIncludingSkinnedAloneCheck)
