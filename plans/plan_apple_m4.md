@@ -148,3 +148,14 @@ Linux makes v6-only -- the Linux gate would have failed), `AM4-101` (the kqueue 
 the process's descriptors with one per entry, reported a failed listing as mass deletion and an atomic replace as
 `Renamed` plus `Deleted`), `AM4-103` (Darwin `Ping` sized packets by the 28-byte `struct icmp` instead of the 8-byte
 wire header) and `AM4-104` (the libc++ brace rule turned `\p{...}` into a literal on libstdc++).
+
+Later repairs: `AM4-112` (`PortableFromChars`' Apple fallback parsed through `strtod`, which follows `LC_NUMERIC`;
+it now uses `strtod_l` with the C locale), `AM4-113` (`Console.hpp` kept the `using SharpRuntime::Single;` that
+`AM4-009` removed from `Convert.hpp`, so including both was ambiguous under Clang), `AM4-114`
+(`scripts/run_component_tests.sh` failed on macOS's by-design skips; `SHARP_RUNTIME_ALLOW_SKIPS=1` lets a host whose
+skips are documented finish) and `AM4-126` (audit finding S-M3: the behavioural watcher tests ran only on Linux. On
+macOS they found two defects -- `readdir` is not a snapshot, so a rename landing mid-listing was reported as
+`Deleted` + `Created` in 53 of 300 runs, and `LastAccess` was left out of `NOTE_ATTRIB` although the attribute
+event serves every content filter on both platforms. A listing is now kept only when the directory's timestamps did
+not move while it was taken: 0 of 600. 32 of the 33 behavioural tests now run on macOS, all passing, 30 shuffled
+repeats clean; only the `IN_ACCESS` read test stays Linux-only, as kqueue reports no reads).
