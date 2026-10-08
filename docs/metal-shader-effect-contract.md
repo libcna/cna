@@ -45,7 +45,10 @@ implemented.
 
 The pipeline is built for the active blend state and attachment layout (BGRA8 colour,
 `Depth32Float_Stencil8`); a valid effect whose pipeline cannot be built throws from the draw rather
-than being replaced by the stock shader. An effect that is not valid draws with the stock sprite
+than being replaced by the stock shader. With several render targets bound (`AM4-097`) only the
+first receives the effect's output: attachments 1 and up are declared with an empty write mask, so a
+fragment function's `[[color(1)]]` and higher outputs are discarded. No Metal draw can write those
+attachments yet, although `SetRenderTargets` binds and clears them. An effect that is not valid draws with the stock sprite
 pipeline, as Direct3D 11's SpriteBatch does.
 
 ## History

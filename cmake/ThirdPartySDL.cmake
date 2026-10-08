@@ -454,7 +454,21 @@ function(_cna_ensure_sdl_dep)
         "-DCMAKE_INSTALL_PREFIX=${_prefix}"
     )
     if(CMAKE_TOOLCHAIN_FILE)
-        list(APPEND _base_args "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+        # plans/plan_apple_m4.md AM4-105: a relative toolchain path (the documented
+        # -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake) reaches this variable resolved on a
+        # first configure but as spelled on a re-configure, and the sub-build runs in its own
+        # directory, where that spelling names nothing -- so any re-configure that had to rebuild
+        # SDL failed ("Could not find toolchain file"). Resolve it the way CMake does: against the
+        # top-level build directory, then the source directory.
+        set(_cna_sdl_toolchain "${CMAKE_TOOLCHAIN_FILE}")
+        if(NOT IS_ABSOLUTE "${_cna_sdl_toolchain}")
+            if(EXISTS "${CMAKE_BINARY_DIR}/${_cna_sdl_toolchain}")
+                set(_cna_sdl_toolchain "${CMAKE_BINARY_DIR}/${_cna_sdl_toolchain}")
+            else()
+                set(_cna_sdl_toolchain "${CMAKE_SOURCE_DIR}/${_cna_sdl_toolchain}")
+            endif()
+        endif()
+        list(APPEND _base_args "-DCMAKE_TOOLCHAIN_FILE=${_cna_sdl_toolchain}")
     endif()
     if(EMSCRIPTEN AND CNA_ENABLE_EMSCRIPTEN_THREADS)
         # These are independent configure/build invocations and inherit no directory options

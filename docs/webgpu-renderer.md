@@ -1389,10 +1389,13 @@ an interim honest refusal, **not** a platform limitation: a BC cube is a six-lay
 `WEBGPU-206` is the parity implementation.
 
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
-`CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is
-exact -- a fully occluded draw reads back 0 and a visible one a full target of samples
-(`WebGPU_OcclusionQuery`). A query whose draws span more than one render-pass segment records only its
-first segment.
+`CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`. The WebGPU specification
+guarantees only zero versus non-zero for an occlusion result, and the count is the backend's: wgpu's
+Vulkan backend counts samples (a fully occluded draw reads back 0 and a visible one a full target of
+samples, `WebGPU_OcclusionQuery`), while its Metal backend records Metal's boolean visibility, so a
+visible draw reads 1 there -- `PixelCountIsPreciseEXT()` reports false on a Metal adapter
+(`plans/plan_apple_m4.md` `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. A query
+whose draws span more than one render-pass segment records only its first segment.
 
 **Stock-effect fog is at full parity** (`WEBGPU-145`–`148`, plus the pre-existing
 `EnvironmentMapEffect` fog): every FNA stock 3D effect that exposes `FogEnabled`/`FogStart`/`FogEnd`/
