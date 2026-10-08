@@ -67,4 +67,20 @@ namespace CNA::Internal::Renderers::Metal
                 return MetalSamplerFilterPlan{false, false, false};
         }
     }
+
+    /**
+     * @brief The anisotropy a Metal sampler gets for an XNA `SamplerState.MaxAnisotropy`.
+     *
+     * plans/plan_apple_m4.md AM4-149: Metal samples 1x to 16x. XNA hands the value to Direct3D 9 as
+     * an unsigned DWORD, so a negative request is a huge one and clamps to the ceiling, not the
+     * floor; zero clamps to 1x (`anisotropic_filter_contract_test`).
+     *
+     * @param maxAnisotropy The requested XNA MaxAnisotropy.
+     * @return The applied anisotropy, 1 to 16.
+     */
+    [[nodiscard]] constexpr int MetalAppliedAnisotropy(int maxAnisotropy) noexcept
+    {
+        if (maxAnisotropy < 0) return 16;
+        return maxAnisotropy < 1 ? 1 : (maxAnisotropy > 16 ? 16 : maxAnisotropy);
+    }
 }

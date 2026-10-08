@@ -89,3 +89,15 @@ TEST(MetalSamplerFilter, EveryMinLinearMagPointOrMinPointMagLinearNameIsInternal
     EXPECT_TRUE(DescribeMetalSamplerFilter(8).minIsPoint);
     EXPECT_FALSE(DescribeMetalSamplerFilter(8).magIsPoint);
 }
+
+// plans/plan_apple_m4.md AM4-149
+TEST(MetalSamplerFilter, AnisotropyClampsAsXnasUnsignedValue)
+{
+    EXPECT_EQ(MetalAppliedAnisotropy(0), 1);
+    EXPECT_EQ(MetalAppliedAnisotropy(1), 1);
+    EXPECT_EQ(MetalAppliedAnisotropy(4), 4);
+    EXPECT_EQ(MetalAppliedAnisotropy(16), 16);
+    EXPECT_EQ(MetalAppliedAnisotropy(9999), 16);
+    EXPECT_EQ(MetalAppliedAnisotropy(-1), 16);
+    EXPECT_EQ(MetalAppliedAnisotropy(-2147483647 - 1), 16);
+}

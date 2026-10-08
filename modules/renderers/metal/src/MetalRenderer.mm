@@ -279,14 +279,22 @@ struct V3NormalTexIn { float3 position [[attribute(0)]]; float3 normal [[attribu
 // plans/plan_apple_m4.md AM4-081: the lit BasicEffect functions also read COLOR0. A draw whose effect
 // permutation does not use vertex colour gets opaque white from the constant block (AM4-080).
 struct V3NormalTexColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 color [[attribute(3)]];  CNA_INSTANCE_INPUTS };
-vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=float2(0.0); o.fogFactor=cna_fog_keep(p,fogVector); return o;
+// plans/plan_apple_m4.md AM4-106/AM4-149: XNA's unlit vertex shaders hand DiffuseColor (times the vertex
+// colour in their Vc variants) to COLOR0, which Direct3D 9 saturates per VERTEX -- before
+// interpolation and texturing (EasyGL's SOFTWARE-153/155, WebGPU's AM4-096). The product is formed
+// here, in the vertex stage, so a gradient between an over-bright and a dark vertex interpolates
+// the clamped values; the material block is vertex buffer 3 as well as fragment buffer 2.
+inline float4 cna_unlit_color0(float4 vertexColor, constant UMaterialParams& m) {
+    return saturate(((m.flags.x > 0.5) ? vertexColor : float4(1.0)) * m.diffuseColor);
 }
-vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=float4(1.0); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+vertex V3Out cna_v3d_color(V3ColorIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=float2(0.0); o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
-vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+}
+vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
+    V3Out o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=in.uv; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 // Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
 // non-textured colored path) just pass the already-known alpha straight through.
@@ -295,19 +303,15 @@ inline bool cna_alpha_test_fails(float a, float4 at) {
     float w = pass ? at.z : at.w;
     return w < 0.0;
 }
-// plans/plan_apple_m4.md AM4-106: XNA's unlit vertex shaders hand DiffuseColor (times the vertex colour
-// in their Vc variants) to COLOR0, which Direct3D 9 saturates before interpolation and texturing --
-// EasyGL's SOFTWARE-153/155 and WebGPU's AM4-096 rule. The product with a texel is not clamped.
+// The interpolated COLOR0 (cna_unlit_color0); its product with a texel is not clamped.
 fragment CnaFragOut cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
-    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
-    float4 c = saturate(vcolor * m.diffuseColor);
+    float4 c = in.color;
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
 }
 fragment CnaFragOut cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
-    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
-    float4 c = tex.sample(smp, in.uv) * saturate(vcolor * m.diffuseColor);
+    float4 c = tex.sample(smp, in.uv) * in.color;
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
@@ -322,17 +326,16 @@ fragment CnaFragOut cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex 
 struct V3DualOut { float4 position [[position]]; float4 color; float2 uv; float2 uv1; float fogFactor; };
 struct V3DualTexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; float2 uv1 [[attribute(2)]];  CNA_INSTANCE_INPUTS };
 struct V3DualColorTexIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; float2 uv [[attribute(2)]]; float2 uv1 [[attribute(3)]];  CNA_INSTANCE_INPUTS };
-vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=float4(1.0); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+vertex V3DualOut cna_v3d_dualtex(V3DualTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=saturate(m.diffuseColor); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
-vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]]) {
-    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=in.color; o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
+vertex V3DualOut cna_v3d_dualtex_color(V3DualColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]], constant float4& fogVector [[buffer(2)]], constant UMaterialParams& m [[buffer(3)]]) {
+    V3DualOut o; float4 p=CNA_INSTANCE_POSITION(in, float4(in.position,1.0)); o.position=u.wvp*p; o.color=cna_unlit_color0(in.color,m); o.uv=in.uv; o.uv1=in.uv1; o.fogFactor=cna_fog_keep(p,fogVector); return o;
 }
 fragment CnaFragOut cna_f3d_dualtex(V3DualOut in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
-    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
     float4 base = tex0.sample(smp0, in.uv);
     base.rgb *= 2.0;
-    float4 c = base * tex1.sample(smp1, in.uv1) * saturate(vcolor * m.diffuseColor);
+    float4 c = base * tex1.sample(smp1, in.uv1) * in.color;
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     c.rgb = mix(m.fogColor.rgb * c.a, c.rgb, in.fogFactor);
     { CnaFragOut cnaOut; cnaOut.color = (c); if (cnaSampleMaskOut) cnaOut.mask = cnaSampleMask; return cnaOut; }
@@ -2864,7 +2867,7 @@ struct MetalRenderer::Impl
     id<MTLSamplerState> samplerFor(int filter,int addressU,int addressV,int maxAnisotropy,
                                    int maxMipLevel=0,float lodBias=0.0f,int addressW=-1)
     {
-        const uint32_t aniso=(uint32_t)std::clamp(maxAnisotropy,1,16);
+        const uint32_t aniso=(uint32_t)MetalAppliedAnisotropy(maxAnisotropy);   // AM4-149
         const auto key=std::make_tuple(filter,addressU,addressV,(int)aniso,maxMipLevel,std::bit_cast<std::uint32_t>(lodBias),addressW);
         auto it=samplerCache.find(key);
         if(it!=samplerCache.end()) return it->second;
@@ -5250,9 +5253,14 @@ static void fillSkinnedPbrUniforms(SkinnedPbrTransform& t, PbrUniforms& pu, cons
 // VulkanRenderer::XnaPixelCenterCorrectionEXT. The pixel is the XNA backbuffer's: on a HiDPI
 // drawable the backbuffer is presented at several physical pixels per logical one, and shifting
 // by half a PHYSICAL pixel would leave the logical pixel's centre uncovered.
+// plans/plan_apple_m4.md AM4-149: lines move too, as on EasyGL. A line has no fill edge; moved by
+// (just under) half a pixel, the diamond-exit rule picks Direct3D 9's row. Unmoved, a horizontal
+// line through NDC y = 0 lay exactly on a row boundary and Metal drew the row above XNA's
+// (stencil_matrix_contract_test's line stamps missed the probed pixel).
 static Matrix xnaPixelCenterCorrection(const MetalRenderer::Impl& p,PrimitiveType pt)
 {
-    if(pt!=PrimitiveType::TriangleList&&pt!=PrimitiveType::TriangleStrip) return Matrix::getIdentityProperty();
+    if(pt!=PrimitiveType::TriangleList&&pt!=PrimitiveType::TriangleStrip&&
+       pt!=PrimitiveType::LineList&&pt!=PrimitiveType::LineStrip) return Matrix::getIdentityProperty();
     const bool targetBound=p.currentRenderTarget||p.currentRenderTargetCube||!p.currentMRT.empty();
     if(targetBound&&p.activeSampleCount>1) return Matrix::getIdentityProperty();
     const MetalViewportState viewport=p.rasterState.EffectiveViewport();
@@ -5593,6 +5601,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         if (params) std::memcpy(fogVector, params->fogVector, sizeof(fogVector));
         [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1];
         [p.encoder setVertexBytes:fogVector length:sizeof(fogVector) atIndex:2];
+        [p.encoder setVertexBytes:&mp length:sizeof(mp) atIndex:3];   // AM4-149: COLOR0 per vertex
         [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
         if(kind!=PipelineKind::Colored16){
             [p.encoder setFragmentTexture:texture0 atIndex:0];

@@ -158,14 +158,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     endmacro()
     set(CNA_METAL_SHARED_GRAPHICS_TESTS
         additive_blend_contract_test
+        alpha_test_effect_contract_test
         alpha_test_effect_test
         alpha_test_integration_test
+        anisotropic_filter_contract_test
         backbuffer_first_read_test
         backbuffer_headless_reject_test
         backbuffer_pass_order_test
         backbuffer_readback_dimension_test
         basic_effect_lighting_contract_test
         basic_effect_test
+        basic_effect_unlit_contract_test
+        blend_state_matrix_contract_test
         bound_target_lifetime_test
         colorspace_midtone_contract_test
         deferred_scissor_capture_test
@@ -173,6 +177,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         deferred_viewport_capture_test
         depth_bias_magnitude_contract_test
         descriptor_capacity_contract_test
+        draw_line_topology_test
         dualtexture_slot_sampler_contract_test
         dualtextureeffect_vertexcolor_test
         dxt1_texture_test
@@ -197,6 +202,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         rasterizerstate_cullmode_indexed_basiceffect_test
         rendertarget2d_depth_test
         rendertarget2d_golden_test
+        rendertarget_active_msaa_readback_test
         rendertarget_backbuffer_consumer_test
         rendertarget_depthstencil_usage_test
         rendertarget_effect_source_test
@@ -214,8 +220,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         rendertargetcube_getdata_contract_test
         rendertargetcube_msaa_face_test
         rendertargetcube_plural_binding_test
+        rendertargetcube_sample_test
         rendertargetcube_usage_test
         sampler_component_isolation_contract_test
+        skinned_effect_contract_test
         skinned_effect_integration_test
         skinned_effect_test
         skinnedeffect_lighting_conformance_test
@@ -226,11 +234,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         spritebatch_custom_viewport_rt_test
         spritebatch_custom_viewport_test
         spritebatch_depthstencil_state_test
+        spritebatch_immediate_submission_contract_test
+        spritebatch_large_batch_contract_test
         spritebatch_presentation_test
         spritebatch_sampler0_publication_test
         spritebatch_sort_mode_semantics_test
         spritebatch_subpixel_contract_test
         spritebatch_viewport_switch_test
+        stencil_matrix_contract_test
         stock_effect_fog_contract_test
         stock_effect_sampler_contract_test
         texture2d_getdata_contract_test
@@ -240,6 +251,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         texture_filter_ordinal_contract_test
         texturecube_texture3d_getdata_contract_test
         texturecube_texture3d_setdata_contract_test
+        top_left_fill_contract_test
         triangle_strip_winding_test
         viewport_reset_after_resize_test
         xna_pixel_center_contract_test
