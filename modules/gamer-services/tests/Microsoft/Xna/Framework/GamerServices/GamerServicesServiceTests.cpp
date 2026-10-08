@@ -951,12 +951,20 @@ TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
 
     // The box sizes itself to its own text, so find a button by clicking rather than by
     // reproducing that arithmetic here. Each attempt releases first, because the overlay answers
-    // on the press edge.
+    // on the press edge. Columns go from the middle outward: the box is centred, so the first
+    // column normally answers, and a whole-viewport sweep (two renders per probe) took a Debug
+    // SOFTWARE build past the test timeout (plans/plan_apple_m4.md AM4-180).
     const int width = device.getViewportProperty().getWidthProperty();
     const int height = device.getViewportProperty().getHeightProperty();
-    for (int y = 0; y < height && Guide::getHasPendingMessageBoxEXTProperty(); y += 4)
+    std::vector<int> columns;
+    for (int offset = 0; offset < width; offset += 4)
     {
-        for (int x = 0; x < width && Guide::getHasPendingMessageBoxEXTProperty(); x += 4)
+        if (width / 2 + offset < width) columns.push_back(width / 2 + offset);
+        if (offset > 0 && width / 2 - offset >= 0) columns.push_back(width / 2 - offset);
+    }
+    for (const int x : columns)
+    {
+        for (int y = 0; y < height && Guide::getHasPendingMessageBoxEXTProperty(); y += 4)
         {
             platform.Press(x, y, false);
             render();
