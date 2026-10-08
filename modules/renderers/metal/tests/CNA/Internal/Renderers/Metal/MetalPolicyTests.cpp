@@ -11,7 +11,7 @@ TEST(MetalPolicy, CapabilitiesAreExhaustiveAndConservative)
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::ThreeD));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer));
     EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing));
-    EXPECT_FALSE(MetalSupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets));
+    EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets));  // AM4-097
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::WireFrame));
     EXPECT_TRUE(MetalSupportsCapability(CNA::GraphicsCapability::OcclusionQuery));

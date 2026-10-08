@@ -98,7 +98,7 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `ThreeD` | true | Built-in fixed-layout Metal pipelines only. |
 | `DepthStencilBuffer` | true | Native combined depth/stencil attachments. |
 | `MultiSampleAntiAliasing` | false | Every requested public sample count is clamped to zero. |
-| `MultipleRenderTargets` | false | More than one descriptor is rejected before binding state changes. |
+| `MultipleRenderTargets` | true | `AM4-097`: up to eight RenderTarget2D or RenderTargetCube-face members; slot 0 owns depth; stock pipelines write COLOR0 only and mask the other attachments out; each member's mip chain is regenerated at unbind; a destroyed member leaves the set. Evidence: the shared `mrt_stock_effect_contract_test` as `Metal_MRT_StockEffectContract`, 19/19 with the validation layers (its multisampled scenarios compiled out, see MSAA). |
 | `AnisotropicFiltering` | true | Native sampler-state mapping. |
 | `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
 | `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
@@ -116,8 +116,8 @@ The following boundaries are deterministic rather than silent degradation:
   (Retina scale and letterbox offset included). The pending pass completes first; a frame with no
   drawable reads zero. It throws while a render target is bound.
 - backbuffer and render-target MSAA report zero and allocate single-sample attachments;
-- `SetRenderTargets` accepts zero descriptors (restore backbuffer) or one normalized 2D/cube-face
-  descriptor and throws for MRT;
+- `SetRenderTargets` accepts zero descriptors (restore backbuffer), one normalized 2D/cube-face
+  descriptor, or an MRT set of up to eight (`AM4-097`); array slices are refused;
 - a non-null `GpuDrawParams::customEffectRenderer` (a 3D draw with a custom effect) throws; custom
   effects are a SpriteBatch facility;
 - malformed stream metadata throws `std::invalid_argument`; multistream and instancing throw
@@ -201,9 +201,10 @@ cross-renderer fix.
 MSL is embedded in `MetalRenderer.mm` and compiled at runtime with
 `newLibraryWithSource:`. The CPU-side matrix, uniform, enum, vertex-layout, capability, format,
 sample, and stream-policy helpers remain plain C++ so they can be compiled and tested off Apple
-platforms. Historical MRT and MSAA implementation scaffolding is not reachable through the
-supported contract and must not be re-enabled merely by changing a capability bit; the custom-effect
-scaffolding was re-enabled by `AM4-077` only with the evidence its contract document lists.
+platforms. Historical MSAA implementation scaffolding is not reachable through the supported
+contract and must not be re-enabled merely by changing a capability bit; the custom-effect
+scaffolding was re-enabled by `AM4-077` and MRT by `AM4-097`, each only with the evidence listed for
+it above.
 
 ## Validation
 

@@ -111,6 +111,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         TIMEOUT 60 LABELS "Metal"
         ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
 
+    # plans/plan_apple_m4.md AM4-097: the shared MRT contract (SOFTWARE-120), its multisampled scenarios
+    # compiled out because Metal reports no MSAA -- the test then asserts that report.
+    add_executable(cna_test_metal_mrt_stock_effect_contract
+        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/mrt_stock_effect_contract_test.cpp)
+    target_link_libraries(cna_test_metal_mrt_stock_effect_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_mrt_stock_effect_contract PRIVATE SDL3::SDL3main)
+    endif()
+    target_compile_definitions(cna_test_metal_mrt_stock_effect_contract PRIVATE MRT_CONTRACT_WITHOUT_MSAA)
+    cna_register_renderer_test(NAME Metal_MRT_StockEffectContract
+        COMMAND cna_test_metal_mrt_stock_effect_contract
+        TIMEOUT 60 LABELS "Metal"
+        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+
     # plans/plan_apple_m4.md AM4-026: the shared, renderer-neutral pixel and contract tests from
     # modules/graphics/examples now run against Metal too; until backbuffer readback worked
     # (AM4-025) none of them could observe a pixel. Each declares Metal's contract in its own

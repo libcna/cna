@@ -175,7 +175,7 @@ namespace CNA::Internal::Renderers::Metal
             case CNA::GraphicsCapability::ThreeD:                    return true;
             case CNA::GraphicsCapability::DepthStencilBuffer:       return true;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:  return false;
-            case CNA::GraphicsCapability::MultipleRenderTargets:    return false;
+            case CNA::GraphicsCapability::MultipleRenderTargets:    return true;   // AM4-097
             case CNA::GraphicsCapability::AnisotropicFiltering:     return true;
             case CNA::GraphicsCapability::WireFrame:                return true;
             case CNA::GraphicsCapability::OcclusionQuery:           return true;  // AM4-038
@@ -262,8 +262,9 @@ namespace CNA::Internal::Renderers::Metal
      * @brief Reports whether output-write state can be applied without silent degradation.
      *
      * plans/plan_apple_m4.md AM4-079: render target 0's ColorWriteChannels is baked into the
-     * pipeline (`MetalBlendKey::writeMask`). Targets 1..3 cannot be bound -- MultipleRenderTargets
-     * is refused at SetRenderTargets -- so their masks govern nothing. A coverage mask other than
+     * pipeline (`MetalBlendKey::writeMask`). Targets 1..3 can be bound since AM4-097, but the
+     * built-in functions write COLOR0 only and mask the other attachments out, so their masks
+     * govern nothing. A coverage mask other than
      * the default still refuses: there is no multisampling to apply it to, and no per-draw sample
      * mask in Metal.
      *

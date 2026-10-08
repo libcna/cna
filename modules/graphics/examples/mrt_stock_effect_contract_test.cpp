@@ -5,6 +5,10 @@
 // receives fragment output while higher attachments retain their explicit clear colour. Clear,
 // resolve, mip generation and target transitions still apply to every bound attachment. This is
 // intentionally independent of CNAEXT ShaderEffect and does not fabricate extra CPU outputs.
+//
+// plans/plan_apple_m4.md AM4-097: a renderer without MultiSampleAntiAliasing (Metal) is registered with
+// MRT_CONTRACT_WITHOUT_MSAA, which compiles out the multisampled scenarios only -- and then the test
+// asserts that the renderer really reports no MSAA, so the definition cannot hide a regression.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -246,6 +250,7 @@ class MrtStockEffectContractTest final : public Game
     void TestMsaaAndMips()
     {
         auto& device = getGraphicsDeviceProperty();
+#if !defined(MRT_CONTRACT_WITHOUT_MSAA)
         auto msaa0 = MakeTarget(DepthFormat::None, 4);
         auto msaa1 = MakeTarget(DepthFormat::None, 4);
         device.SetRenderTargets(Bindings({msaa0.get(), msaa1.get()}));
@@ -263,6 +268,7 @@ class MrtStockEffectContractTest final : public Game
               "each active MRT target keeps a real 4x plane and slot 0 resolves one sample");
         Check(Near(ReadCenter(*msaa1), transparent),
               "the unwritten 4x attachment resolves its explicit clear colour");
+#endif
 
         auto mip0 = MakeTarget(DepthFormat::None, 0, true);
         auto mip1 = MakeTarget(DepthFormat::None, 0, true);
@@ -318,6 +324,7 @@ class MrtStockEffectContractTest final : public Game
                   Near(ReadCenter(*first), secondClear),
               "a cube face in slot zero receives COLOR0 and owns the set ordering");
 
+#if !defined(MRT_CONTRACT_WITHOUT_MSAA)
         auto msaaSecond = MakeTarget(DepthFormat::None, 4);
         RenderTargetCube msaaCube(
             device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 4,
@@ -337,6 +344,7 @@ class MrtStockEffectContractTest final : public Game
               "a multisampled cube MRT slot resolves its selected face");
         Check(Near(ReadCenter(*msaaSecond), Color(0, 0, 0, 0)),
               "an unwritten multisampled 2D peer resolves independently of the cube face");
+#endif
 
         auto mipSecond = MakeTarget(DepthFormat::None, 0, true);
         RenderTargetCube mipCube(
@@ -400,6 +408,10 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         Check(device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
               "MultipleRenderTargets capability is backed by the public bind path");
+#if defined(MRT_CONTRACT_WITHOUT_MSAA)
+        Check(!device.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
+              "this renderer reports no MSAA, so the multisampled scenarios are not run");
+#endif
         TestFourTargetsAndStockOutput();
         TestWriteMasksAndDiscardClear();
         TestDepthOwnership();

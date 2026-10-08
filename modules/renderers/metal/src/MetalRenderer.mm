@@ -991,6 +991,9 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         d.rasterSampleCount=(NSUInteger)sampleCount; // sampleCount: deprecated since macOS 13 / iOS 16
         for (int i=0;i<colorCount;++i) {
             d.colorAttachments[i].pixelFormat=MTLPixelFormatBGRA8Unorm;
+            // plans/plan_apple_m4.md AM4-097: the built-in functions return COLOR0 only, so attachments
+            // 1..N-1 of an MRT set are masked out and keep their contents.
+            if (i>0) { d.colorAttachments[i].writeMask=MTLColorWriteMaskNone; continue; }
             // plans/plan_apple_m4.md AM4-079: render target 0's ColorWriteChannels.
             d.colorAttachments[i].writeMask=(MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask);
             d.colorAttachments[i].blendingEnabled = blend.enabled ? YES : NO;
@@ -1702,9 +1705,18 @@ struct MetalRenderer::Impl
     // consistent; unbindCurrentMRT() (defined out-of-line after MetalRenderTargetRenderer, same
     // reason as resolveActiveAttachments()/computeSpriteTransform() above) is the single chokepoint
     // that tears either down correctly, including per-target mip regeneration.
-    std::vector<MetalRenderTargetRenderer*> currentMRT;
+    // plans/plan_apple_m4.md AM4-097: a member is a RenderTarget2D or one face of a RenderTargetCube,
+    // the two kinds XNA's RenderTargetBinding names; slot 0's kind is the one mirrored above.
+    struct MrtMember {
+        MetalRenderTargetRenderer* target=nullptr;
+        MetalRenderTargetCubeRenderer* cube=nullptr;
+        NSUInteger face=0;
+    };
+    std::vector<MrtMember> currentMRT;
     int activeColorAttachmentCount=1;
     void unbindCurrentMRT();
+    // AM4-097: a destroyed member leaves the set; the live peers stay, to be finalized at unbind.
+    void detachMrtMember(const void* resource);
 
     // plans/plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
     // metallicRoughnessMap/emissiveMap/occlusionMap) when left unbound, mirroring
@@ -1805,7 +1817,7 @@ struct MetalRenderer::Impl
     // anti-aliasing feature; deferred/G-buffer-style MRT rendering practically never also wants
     // MSAA on the G-buffer itself). `resolvesOut` is parallel to `colorsOut`, always all-nil
     // during real MRT.
-    bool resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut);
+    bool resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, std::vector<NSUInteger>& slicesOut, id<MTLTexture>& depthOut, int& sampleCountOut);
 
     // Ends whatever encoder/command-buffer is currently active -- shared by endFrame() and
     // MetalRenderTargetRenderer's own Bind/UnbindAsRenderTarget() (Metal render passes are
@@ -1907,9 +1919,9 @@ struct MetalRenderer::Impl
         throwPendingCommandFailure();
         if (encoder) return true;
         try {
-            std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
+            std::vector<id<MTLTexture>> colors, resolves; std::vector<NSUInteger> slices; id<MTLTexture> depthTex=nil; int sampleCount=1;
             if(DescribeMetalFrameEntryPolicy(resolveActiveColorAttachments(
-                   colors,resolves,depthTex,slice,sampleCount))==
+                   colors,resolves,slices,depthTex,sampleCount))==
                MetalFrameEntryPolicy::SkipUnavailableBackbuffer)
                 return false;
             command=[queue commandBuffer];
@@ -1927,7 +1939,7 @@ struct MetalRenderer::Impl
             // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
             // RT's single-sample texture) every time this encoder ends.
             for (NSUInteger i=0;i<colors.size();++i) {
-                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice;
+                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slices[i];
                 rp.colorAttachments[i].loadAction=MTLLoadActionLoad;
                 if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
                 else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
@@ -1972,8 +1984,8 @@ struct MetalRenderer::Impl
         throwPendingCommandFailure();
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
         try {
-            std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
-            if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) return;
+            std::vector<id<MTLTexture>> colors, resolves; std::vector<NSUInteger> slices; id<MTLTexture> depthTex=nil; int sampleCount=1;
+            if (!resolveActiveColorAttachments(colors, resolves, slices, depthTex, sampleCount)) return;
             command=[queue commandBuffer];
             if(!command) throw std::runtime_error("Metal: failed to create clear command buffer");
             [command retain];
@@ -1985,7 +1997,7 @@ struct MetalRenderer::Impl
             //
             // plans/plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
             for (NSUInteger i=0;i<colors.size();++i) {
-                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+                rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slices[i]; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
                 if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
                 else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
             }
@@ -2370,13 +2382,21 @@ public:
     // built-in PipelineKind already gets via getOrCreatePipeline()'s own MetalPipelineCacheKey.
     id<MTLRenderPipelineState> pipelineFor(const BlendKey& blend)
     {
-        if (pipeline_ && blend == lastBlend_ && owner_.activeSampleCount == lastSampleCount_) return pipeline_;
+        if (pipeline_ && blend == lastBlend_ && owner_.activeSampleCount == lastSampleCount_ &&
+            owner_.activeColorAttachmentCount == lastColorCount_) return pipeline_;
         if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
         MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
         d.vertexFunction = vertFn_;
         d.fragmentFunction = fragFn_;
         d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         d.colorAttachments[0].writeMask = (MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask);
+        // plans/plan_apple_m4.md AM4-097: a pipeline must declare every attachment of the pass; the
+        // effect's single output reaches attachment 0 only.
+        const int colorCount = std::clamp(owner_.activeColorAttachmentCount, 1, 8);
+        for (int i = 1; i < colorCount; ++i) {
+            d.colorAttachments[i].pixelFormat = MTLPixelFormatBGRA8Unorm;
+            d.colorAttachments[i].writeMask = MTLColorWriteMaskNone;
+        }
         d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.rasterSampleCount = (NSUInteger)owner_.activeSampleCount;
@@ -2400,6 +2420,7 @@ public:
         }
         lastBlend_ = blend;
         lastSampleCount_ = owner_.activeSampleCount;
+        lastColorCount_ = owner_.activeColorAttachmentCount;
         return pipeline_;
     }
 
@@ -2443,6 +2464,7 @@ private:
     id<MTLRenderPipelineState> pipeline_ = nil;
     BlendKey lastBlend_{};
     int lastSampleCount_=1; // plans/plan_metal.md METAL-104
+    int lastColorCount_=1; // plans/plan_apple_m4.md AM4-097
     bool valid_ = false;
     std::string compileError_;
     // Defaults match the identity matrix / transparent-black color / zero scalar a fresh custom
@@ -2796,15 +2818,7 @@ public:
         // whole set rather than leave the other targets' own destructors with no way to detect a
         // now-dangling entry (matches this file's own established "the game forgot to unbind, but
         // it must not corrupt Impl's own state" convention, just applied to N pointers not one).
-            if (!owner->currentMRT.empty()) {
-                auto it = std::find(owner->currentMRT.begin(), owner->currentMRT.end(), this);
-                if (it != owner->currentMRT.end()) {
-                    owner->endActiveEncoding(false);
-                    owner->currentMRT.clear();
-                    owner->currentRenderTarget=nullptr;
-                    owner->activeColorAttachmentCount=1;
-                }
-            }
+            owner->detachMrtMember(this);
         }
         [depthTexture_ release]; [colorTexture_ release]; [msaaColorTexture_ release];
     }
@@ -3054,6 +3068,7 @@ public:
                 owner->endActiveEncoding(false);
                 owner->currentRenderTargetCube=nullptr;
             }
+            owner->detachMrtMember(this);  // plans/plan_apple_m4.md AM4-097
         }
         [depthTexture_ release]; [colorTexture_ release];
     }
@@ -3079,32 +3094,36 @@ public:
     {
         auto owner=lockOwner();
         if (owner->currentRenderTargetCube==this) {
-            // plans/plan_metal.md METAL-103 (cube analog): same unconditional mip-regeneration-on-unbind
-            // policy as MetalRenderTargetRenderer's own, applied to the whole cube map at once (all
-            // 6 faces' mip chains regenerate together in one generateMipmapsForTexture: call --
-            // Metal's own documented behavior for a cube texture, matching
-            // EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget's own single glGenerateMipmap
-            // call over the whole cube map, not a separate call per face).
-            if (mipMap_ && levelCount_>1) { // AM4-031: a one-level chain has nothing to generate
-                if (owner->encoder) { [owner->encoder endEncoding]; [owner->encoder release]; owner->encoder=nil; }
-                try {
-                    if (!owner->command) {
-                        owner->command=[owner->queue commandBuffer];
-                        if(!owner->command) throw std::runtime_error("Metal: failed to create cube mip-generation command buffer");
-                        [owner->command retain];
-                    }
-                    id<MTLBlitCommandEncoder> blit=[owner->command blitCommandEncoder];
-                    if(!blit) throw std::runtime_error("Metal: failed to create cube mip-generation blit encoder");
-                    [blit generateMipmapsForTexture:colorTexture_];
-                    [blit endEncoding];
-                    owner->finishActiveCommandSynchronously("Metal: RenderTargetCube mip generation failed");
-                } catch (...) {
-                    owner->endActiveEncoding(false);
-                    throw;
-                }
-            }
+            regenerateMipsIfNeeded();
             owner->endActiveEncoding(false);
             owner->currentRenderTargetCube=nullptr;
+        }
+    }
+    // plans/plan_metal.md METAL-103 (cube analog): same unconditional mip-regeneration-on-unbind
+    // policy as MetalRenderTargetRenderer's own, applied to the whole cube map at once (all 6 faces'
+    // mip chains regenerate together in one generateMipmapsForTexture: call -- Metal's own documented
+    // behavior for a cube texture, matching EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget's
+    // own single glGenerateMipmap call over the whole cube map, not a separate call per face).
+    // plans/plan_apple_m4.md AM4-097: factored out so an MRT teardown can finalize a cube member.
+    void regenerateMipsIfNeeded()
+    {
+        if (!mipMap_ || levelCount_<=1) return; // AM4-031: a one-level chain has nothing to generate
+        auto owner=lockOwner();
+        if (owner->encoder) { [owner->encoder endEncoding]; [owner->encoder release]; owner->encoder=nil; }
+        try {
+            if (!owner->command) {
+                owner->command=[owner->queue commandBuffer];
+                if(!owner->command) throw std::runtime_error("Metal: failed to create cube mip-generation command buffer");
+                [owner->command retain];
+            }
+            id<MTLBlitCommandEncoder> blit=[owner->command blitCommandEncoder];
+            if(!blit) throw std::runtime_error("Metal: failed to create cube mip-generation blit encoder");
+            [blit generateMipmapsForTexture:colorTexture_];
+            [blit endEncoding];
+            owner->finishActiveCommandSynchronously("Metal: RenderTargetCube mip generation failed");
+        } catch (...) {
+            owner->endActiveEncoding(false);
+            throw;
         }
     }
     bool SetData(int face,int level,int x,int y,int w,int h,
@@ -3234,15 +3253,20 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
     return true;
 }
 
-bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut)
+bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, std::vector<NSUInteger>& slicesOut, id<MTLTexture>& depthOut, int& sampleCountOut)
 {
     if (currentMRT.size() >= 2) {
-        colorsOut.clear(); resolvesOut.clear();
+        colorsOut.clear(); resolvesOut.clear(); slicesOut.clear();
         // plans/plan_metal.md METAL-104: true MRT and MSAA are deliberately never combined in this pass
         // (see this method's own declaration comment for the full reasoning) -- every MRT target
         // contributes its plain, always-single-sampled colorTexture(), never
         // colorTextureForRenderPass(), and every resolvesOut entry stays nil.
-        for (auto* rt : currentMRT) { colorsOut.push_back(rt->colorTexture()); resolvesOut.push_back(nil); }
+        // plans/plan_apple_m4.md AM4-097: a cube member contributes its cube texture at its own face.
+        for (const MrtMember& m : currentMRT) {
+            colorsOut.push_back(m.target ? m.target->colorTexture() : m.cube->colorTexture());
+            resolvesOut.push_back(nil);
+            slicesOut.push_back(m.target ? 0 : m.face);
+        }
         // plans/plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
         // MRT render pass rather than allocating a dedicated shared one (unlike VulkanMRTProxy,
         // which must -- Vulkan's explicit VkFramebuffer object needs one concrete depth
@@ -3250,14 +3274,17 @@ bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTextur
         // every MetalRenderTargetRenderer already unconditionally owns its own real
         // Depth32Float_Stencil8 texture, so borrowing target 0's avoids a second depth allocation
         // for every MRT session).
-        depthOut = currentMRT[0]->depthTextureNative();
-        sliceOut = 0; sampleCountOut = 1;
+        // AM4-097: slot 0 owns depth, whichever kind it is.
+        depthOut = currentMRT[0].target ? currentMRT[0].target->depthTextureNative()
+                                        : currentMRT[0].cube->depthTextureNative();
+        sampleCountOut = 1;
         return true;
     }
-    id<MTLTexture> c=nil, r=nil;
-    if (!resolveActiveAttachments(c, r, depthOut, sliceOut, sampleCountOut)) return false;
+    id<MTLTexture> c=nil, r=nil; NSUInteger slice=0;
+    if (!resolveActiveAttachments(c, r, depthOut, slice, sampleCountOut)) return false;
     colorsOut.assign(1, c);
     resolvesOut.assign(1, r);
+    slicesOut.assign(1, slice);
     return true;
 }
 
@@ -3274,9 +3301,33 @@ void MetalRenderer::Impl::unbindCurrentMRT()
     auto old = currentMRT;
     currentMRT.clear();
     currentRenderTarget = nullptr;
+    currentRenderTargetCube = nullptr;  // AM4-097: slot 0 may have been a cube face
     activeColorAttachmentCount = 1;
     endActiveEncoding(false);
-    for (auto* rt : old) rt->regenerateMipsIfNeeded();
+    for (const MrtMember& m : old) {
+        if (m.target) m.target->regenerateMipsIfNeeded();
+        else m.cube->regenerateMipsIfNeeded();
+    }
+}
+
+// plans/plan_apple_m4.md AM4-097: XNA leaves destroying a bound target undefined; CNA's rule is that
+// the destroyed member leaves the set and the live peers stay bound, so the unbind that follows
+// still finalizes them (their mip chains). A set left with one member keeps it as a set of one.
+void MetalRenderer::Impl::detachMrtMember(const void* resource)
+{
+    const auto dead = [resource](const MrtMember& m) {
+        return static_cast<const void*>(m.target) == resource || static_cast<const void*>(m.cube) == resource;
+    };
+    if (std::none_of(currentMRT.begin(), currentMRT.end(), dead)) return;
+    endActiveEncoding(false);
+    currentMRT.erase(std::remove_if(currentMRT.begin(), currentMRT.end(), dead), currentMRT.end());
+    currentRenderTarget = nullptr;
+    currentRenderTargetCube = nullptr;
+    if (!currentMRT.empty()) {
+        if (currentMRT[0].target) currentRenderTarget = currentMRT[0].target;
+        else { currentRenderTargetCube = currentMRT[0].cube; currentRenderTargetCubeFace = currentMRT[0].face; }
+    }
+    activeColorAttachmentCount = std::max<int>(1, static_cast<int>(currentMRT.size()));
 }
 
 MetalRenderer::Impl::Sprite2DTransform MetalRenderer::Impl::computeSpriteTransform() const
@@ -3738,10 +3789,46 @@ void MetalRenderer::SetRenderTargets(const RenderTargetBindingDescriptor* render
     if (count<0) throw std::invalid_argument("Metal: render-target count cannot be negative");
     if (count==0) { SetRenderTarget2D(nullptr); return; }
     if (!renderTargets) throw std::invalid_argument("Metal: render-target descriptors cannot be null");
-    if (count>1)
-        throw System::NotSupportedException(
-            "Metal multiple render targets are disabled until the adapted renderer has passing "
-            "macOS pixel evidence.");
+    if (count>1) {
+        // plans/plan_apple_m4.md AM4-097: METAL-112's MRT, re-enabled with macOS evidence and widened
+        // to RenderTargetCube faces. Stock shaders write COLOR0 only; attachments 1..N-1 keep what
+        // they hold (their pipelines mask them out), as XNA's stock effects leave them.
+        if (count>8)
+            throw System::NotSupportedException("Metal binds at most eight render targets at once.");
+        std::vector<Impl::MrtMember> members;
+        members.reserve(static_cast<std::size_t>(count));
+        for (int i=0;i<count;++i) {
+            const auto& binding=renderTargets[i];
+            Impl::MrtMember member;
+            if (binding.IsRenderTarget2D()) {
+                if (binding.GetArraySlice()!=0)
+                    throw System::NotSupportedException("Metal RenderTarget2D array slices are not supported.");
+                if (!binding.GetRenderTarget2D())
+                    throw std::invalid_argument("Metal: RenderTarget2D descriptor has no target");
+                member.target=dynamic_cast<MetalRenderTargetRenderer*>(binding.GetRenderTarget2D());
+                if (!member.target) throw std::runtime_error("Metal: foreign RenderTarget2D renderer");
+            } else if (binding.IsRenderTargetCubeFace()) {
+                if (!binding.GetRenderTargetCube())
+                    throw std::invalid_argument("Metal: RenderTargetCube descriptor has no target");
+                member.cube=dynamic_cast<MetalRenderTargetCubeRenderer*>(binding.GetRenderTargetCube());
+                if (!member.cube) throw std::runtime_error("Metal: foreign RenderTargetCube renderer");
+                const int face=binding.GetCubeFace();
+                if (face<0 || face>=6) throw std::out_of_range("Metal: RenderTargetCube face must be in [0, 5]");
+                member.face=static_cast<NSUInteger>(face);
+            } else {
+                throw std::invalid_argument("Metal: unknown render-target descriptor type");
+            }
+            members.push_back(member);
+        }
+        auto& p=*impl_;
+        SetRenderTarget2D(nullptr);  // finalizes whatever was bound: a single target, a face or a set
+        p.currentMRT=std::move(members);
+        if (p.currentMRT[0].target) p.currentRenderTarget=p.currentMRT[0].target;
+        else { p.currentRenderTargetCube=p.currentMRT[0].cube; p.currentRenderTargetCubeFace=p.currentMRT[0].face; }
+        p.activeColorAttachmentCount=count;
+        p.endActiveEncoding(false);
+        return;
+    }
 
     const auto& target=renderTargets[0];
     if (target.IsRenderTarget2D()) {

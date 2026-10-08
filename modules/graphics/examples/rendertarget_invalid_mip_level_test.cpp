@@ -187,11 +187,8 @@ namespace
     constexpr bool kMrtSupported =
 #if defined(CNA_RENDERER_HEADLESS)
         false;
-#elif defined(CNA_RENDERER_METAL)
-        // plans/plan_apple_m4.md AM4-026: Metal reports MultipleRenderTargets false and refuses
-        // more than one descriptor (docs/metal-renderer.md).
-        false;
 #else
+        // plans/plan_apple_m4.md AM4-097: Metal included (it refused more than one descriptor before).
         true;
 #endif
 

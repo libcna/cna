@@ -41,7 +41,9 @@ protected:
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing unsupported");
-        check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets unsupported");
+        // plans/plan_apple_m4.md AM4-097: asked of the renderer, like Texture3D below -- the device's
+        // answer folds in the profile (RLGL-040), and Reach, the default here, has one render target.
+        check(dev.GetRenderer().SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets supported");
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
         check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery supported");
