@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlslVersionDirective.hpp"
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
 #endif
@@ -677,40 +678,14 @@ namespace CNA::Internal::Renderers::EasyGL
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
     // need a second copy of every shader, just a header rewrite performed here at first-use time.
-    /// Replaces a GLSL ES "#version ... es" line with a desktop core one. A source without that
-    /// line is returned untouched rather than corrupted.
-    static std::string RewriteGlslEsHeaderToDesktop(std::string src, const std::string& esVersionLine,
-                                                    const std::string& desktopVersionLine)
-    {
-        const auto versionPos = src.find(esVersionLine);
-        if (versionPos == std::string::npos)
-            return src;
-        src.replace(versionPos, esVersionLine.size(), desktopVersionLine);
-
-        // Desktop GLSL 3.30 core does not accept "precision ... float;" (that syntax is only
-        // valid GLSL ES / with GL_ARB_ES2_compatibility) -- blank the line immediately following
-        // the version pragma if it is a precision qualifier. Its newline stays: a compiler
-        // diagnostic must name the line the author wrote, and removing the line moved every
-        // later one up by one -- visible wherever this rewrite reaches a custom ShaderEffect's
-        // source, as it does on macOS (AdaptCustomGlslForContext).
-        const auto afterVersion = versionPos + desktopVersionLine.size();
-        if (src.compare(afterVersion, 10, "precision ") == 0)
-        {
-            const auto lineEnd = src.find('\n', afterVersion);
-            if (lineEnd != std::string::npos)
-            {
-                src.erase(afterVersion, lineEnd - afterVersion);
-            }
-        }
-        return src;
-    }
-
     static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source)
     {
         // OPENGLES3 / WEBGL2: the stored source is already GLSL ES 3.00.
         if (!ProfileIsDesktopCore())
             return std::string(es300Source);
-        return RewriteGlslEsHeaderToDesktop(es300Source, "#version 300 es\n", "#version 330 core\n");
+        // plans/plan_apple_m4.md AM4-116: the directive is parsed, not matched as exact text, so CRLF
+        // sources and blanks inside it are rewritten too; the line count and terminators are kept.
+        return RewriteGlslEsVersionToDesktop(es300Source, "300", "#version 330 core");
     }
 
     // plans/plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
@@ -1940,15 +1915,13 @@ namespace CNA::Internal::Renderers::EasyGL
         // uses an ES feature the context's GLSL lacks is refused by the compiler, naming it.
         struct GlslEsDesktopEquivalent
         {
-            const char* esVersionLine;
+            const char* esNumber;
             const char* compatibilityExtension;
             int desktopVersion;
         };
 
-        constexpr GlslEsDesktopEquivalent kGlslEs31{
-            "#version 310 es\n", "GL_ARB_ES3_1_compatibility", 430};
-        constexpr GlslEsDesktopEquivalent kGlslEs32{
-            "#version 320 es\n", "GL_ARB_ES3_2_compatibility", 450};
+        constexpr GlslEsDesktopEquivalent kGlslEs31{"310", "GL_ARB_ES3_1_compatibility", 430};
+        constexpr GlslEsDesktopEquivalent kGlslEs32{"320", "GL_ARB_ES3_2_compatibility", 450};
 
         /// The highest desktop GLSL version the current context compiles, in #version form
         /// ("4.10" -> 410); 330, the OPENGL33 profile's floor, when the string is unreadable.
@@ -1967,7 +1940,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             if (!ProfileIsDesktopCore())
                 return source;
-            if (source.find("#version 300 es\n") != std::string::npos)
+            if (FindGlslEsVersionLine(source, "300").Found())
             {
                 if (::metagl::HasExtension("GL_ARB_ES3_compatibility"))
                     return source;
@@ -1975,14 +1948,13 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             for (const auto& equivalent : {kGlslEs31, kGlslEs32})
             {
-                if (source.find(equivalent.esVersionLine) == std::string::npos)
+                if (!FindGlslEsVersionLine(source, equivalent.esNumber).Found())
                     continue;
                 if (::metagl::HasExtension(equivalent.compatibilityExtension))
                     return source;
                 const int desktop = std::min(equivalent.desktopVersion, ContextDesktopGlslVersion());
-                return RewriteGlslEsHeaderToDesktop(
-                    source, equivalent.esVersionLine,
-                    "#version " + std::to_string(desktop) + " core\n");
+                return RewriteGlslEsVersionToDesktop(
+                    source, equivalent.esNumber, "#version " + std::to_string(desktop) + " core");
             }
             return source;
         }
