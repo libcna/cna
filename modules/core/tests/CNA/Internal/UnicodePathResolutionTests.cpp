@@ -16,9 +16,16 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
 #include <system_error>
 #include <vector>
+
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathContainment.hpp"
@@ -51,10 +58,18 @@ namespace
         void SetUp() override
         {
             std::error_code ec;
+            // plans/plan_apple_m4.md AM4-092: ctest runs each case in its own process, where the
+            // seed and the counter are both 0, so concurrent cases shared -- and deleted -- one
+            // directory. The process id and a random part keep every fixture's tree its own.
+            std::random_device entropy;
+#if defined(_WIN32)
+            const long long processId = ::_getpid();
+#else
+            const long long processId = ::getpid();
+#endif
             root_ = fs::temp_directory_path()
-                    / ("cna-unicode-tree-" + std::to_string(::testing::UnitTest::GetInstance()
-                                                                ->random_seed())
-                       + "-" + std::to_string(counter_++));
+                    / ("cna-unicode-tree-" + std::to_string(processId) + "-"
+                       + std::to_string(entropy()) + "-" + std::to_string(counter_++));
             fs::remove_all(root_, ec);
             ASSERT_TRUE(fs::create_directories(root_, ec)) << ec.message();
         }

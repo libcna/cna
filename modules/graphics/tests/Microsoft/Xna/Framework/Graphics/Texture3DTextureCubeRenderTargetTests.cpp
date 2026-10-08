@@ -223,7 +223,9 @@ namespace
         // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
         // plans/plan_vulkan_parity.md VKPAR-0027: Vulkan uploads into the face through the same
         // per-face flush its readback uses; the exact round trip is asserted below.
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan);
+        // plans/plan_apple_m4.md AM4-092: SDL_GPU's RenderTargetCube uploads the face too
+        // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan, SdlGpu);
     }
 }
 

@@ -179,7 +179,10 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// and the layout is part of the pipeline key; measured on an M4.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, DirectX11, Metal);
+    // plans/plan_apple_m4.md AM4-092: SDL_GPU builds its vertex input from the declaration since
+    // SDLGPU-59; the arm predates it.
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, DirectX11, Metal,
+                           SdlGpu);
 }
 
 
