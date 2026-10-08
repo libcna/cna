@@ -1149,6 +1149,18 @@ if(CNA_BUILD_TESTS)
     cna_append_vulkan_validation_gate_pattern(_cna_unit_tests_output_gate CnaTests)
     # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
     string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
+    # plans/plan_apple_m4.md AM4-179: SDL_RENDERER is a 2D renderer by design -- no vertex or index
+    # buffers, no 3D, no mip chains, no cube or volume textures, no 32-bit indices -- and refuses
+    # each of those by name. CnaTests is written for a 3D renderer (CI runs it on OPENGLES3), so on
+    # this renderer 187 of its cases stopped at one of those refusals, uncaught, and failed: not a
+    # defect of either, just a case this renderer cannot run. Their output names the refusal, so
+    # CTest reports exactly those as skipped. The pattern matches only an exception's description,
+    # which a passing case never prints, and only SDL_RENDERER's own refusal wording.
+    set(_cna_unit_tests_2d_only_skip)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set(_cna_unit_tests_2d_only_skip SKIP_REGULAR_EXPRESSION
+            "with description \"[^\"]*(does not support 3D|does not support mip-level texture uploads|creates no cube-map texture resource|does not support real volume \\(3D\\) texture storage|32-bit index buffers are not supported by this renderer|does not support RenderTargetCube)")
+    endif()
     # plans/plan_apple_m4.md AM4-163: the suites that open real sockets share the machine with each
     # other. SystemLink discovery answers on one well-known UDP port for the whole machine (as
     # XNA's does), so a case asserting that a search finds nothing heard a host another case was
@@ -1163,22 +1175,25 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             TEST_FILTER "-${_cna_unit_tests_network_filter}"
             PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
+                       ${_cna_unit_tests_2d_only_skip}
                        ${_cna_unit_tests_audio_environment})
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             TEST_FILTER "${_cna_unit_tests_network_filter}"
             PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
                        RESOURCE_LOCK cna-network
+                       ${_cna_unit_tests_2d_only_skip}
                        ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             TEST_FILTER "-${_cna_unit_tests_network_filter}"
-            ${_cna_unit_tests_audio_properties})
+            PROPERTIES ${_cna_unit_tests_2d_only_skip} ${_cna_unit_tests_audio_environment})
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             TEST_FILTER "${_cna_unit_tests_network_filter}"
-            PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_audio_environment})
+            PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_2d_only_skip}
+                       ${_cna_unit_tests_audio_environment})
     endif()
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
@@ -1245,9 +1260,13 @@ if(CNA_BUILD_TESTS)
         string(SUBSTRING "${_gltf_rung}" 0 ${_gltf_sep} _gltf_layer)
         math(EXPR _gltf_filter_start "${_gltf_sep} + 1")
         string(SUBSTRING "${_gltf_rung}" ${_gltf_filter_start} -1 _gltf_filter)
+        # plans/plan_apple_m4.md AM4-179: a rung re-runs cases the discovery above already registers
+        # one by one, so on SDL_RENDERER it takes the same 2D-only skip; any other failure in the
+        # rung still fails its own discovered case.
         cna_register_renderer_test(NAME CnaGltfConformance${_gltf_layer}
             COMMAND CnaTests --gtest_filter=${_gltf_filter}
-            TIMEOUT 300 LABELS "gltf-conformance" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            TIMEOUT 300 LABELS "gltf-conformance" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ${_cna_unit_tests_2d_only_skip})
     endforeach()
 
     # plans/plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather

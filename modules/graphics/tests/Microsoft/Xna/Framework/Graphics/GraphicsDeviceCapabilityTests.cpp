@@ -98,6 +98,12 @@ struct CapabilityExpectation
         // Apple, Windows and the browser no driver takes it (modules/renderers/sdl-gpu/CMakeLists.txt
         // leaves the capability off there); elsewhere it needs libshaderc at build time, which
         // this table does not see, so that arm keeps the default.
+        // plans/plan_apple_m4.md AM4-179: SDL_RENDERER is 2D-only by design (SDL's 2D render API has
+        // no vertex buffers, attachments beyond one, queries or shaders); it answers false to
+        // everything but AdditiveBlending.
+        case GraphicsRendererType::SdlRenderer:
+            return {false, false, false};
+
         case GraphicsRendererType::SdlGpu:
 #if defined(__APPLE__) || defined(_WIN32) || defined(__EMSCRIPTEN__)
             return {true, false, false};
@@ -141,7 +147,8 @@ constexpr bool kExpectCompiledEffects = false;
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
+    // plans/plan_apple_m4.md AM4-179: the one 2D-only renderer says so.
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::ThreeD), !CNA_RENDERER_IS(SdlRenderer));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
@@ -163,7 +170,9 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
         EXPECT_TRUE(withDepth.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
         return;
     }
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
+    // plans/plan_apple_m4.md AM4-179: SDL_RENDERER keeps no depth or stencil plane at all.
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer),
+              !CNA_RENDERER_IS(SdlRenderer));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
@@ -295,10 +304,13 @@ TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingAgreesWithWhatARenderT
     const int applied = target.getMultiSampleCountProperty();
 
     EXPECT_LE(applied, 4) << "the applied sample count may never exceed the requested one";
-    EXPECT_GE(applied, 1);
+    EXPECT_GE(applied, 0);
     if (!capability)
     {
-        EXPECT_EQ(applied, 1)
+        // plans/plan_apple_m4.md AM4-179: single-sampled is 0 in XNA's RenderTarget2D
+        // .MultiSampleCount, and some renderers report their native single sample as 1; either
+        // way not multisampled.
+        EXPECT_LE(applied, 1)
             << "a renderer that reports no MSAA support must not hand back a multisampled target";
     }
     if (applied > 1)
@@ -419,6 +431,9 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_TRUE(reported)
         << "WebGPU under-reports WireFrame again -- WEBGPU-153's edge-expansion implementation is "
            "still in place while the capability claims the renderer cannot do it";
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    // plans/plan_apple_m4.md AM4-179: a 2D renderer draws no polygons to outline.
+    EXPECT_FALSE(reported) << "SDL_RENDERER claims WireFrame support but draws no 3D primitives";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could
