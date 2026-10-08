@@ -23,7 +23,10 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -90,6 +93,18 @@ struct CapabilityExpectation
         case GraphicsRendererType::Software:
             return {true, true, false};
 
+        // plans/plan_apple_m4.md AM4-175: SDL3's GPU API has no occlusion query at all, so the false
+        // is structural on every platform. Its ShaderEffect route hands SPIR-V to the driver: on
+        // Apple, Windows and the browser no driver takes it (modules/renderers/sdl-gpu/CMakeLists.txt
+        // leaves the capability off there); elsewhere it needs libshaderc at build time, which
+        // this table does not see, so that arm keeps the default.
+        case GraphicsRendererType::SdlGpu:
+#if defined(__APPLE__) || defined(_WIN32) || defined(__EMSCRIPTEN__)
+            return {true, false, false};
+#else
+            return {true, false, true};
+#endif
+
         default:
             return {true, true, true};
     }
@@ -132,6 +147,22 @@ TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
+    if (CNA_RENDERER_IS(SdlGpu))
+    {
+        // plans/plan_apple_m4.md AM4-175: SDL_GPU answers the capability as GraphicsCapability.hpp
+        // documents it -- "a complete real depth/stencil attachment on the active target"
+        // (SDLGPU-132) -- and a default device's back buffer has none, as in XNA, whose
+        // PresentationParameters.DepthStencilFormat defaults to None. Ask both ways.
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
+        Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+        parameters.setDepthStencilFormatProperty(
+            Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        GraphicsDevice withDepth(
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach, parameters);
+        EXPECT_TRUE(withDepth.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
+        return;
+    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
 
