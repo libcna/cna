@@ -3,6 +3,12 @@
 
 #include <algorithm>
 
+// plans/plan_apple_m4.md AM4-161: Effect must be complete where getCurrentProperty() boxes an
+// Effect* into std::any. With only the header's forward declaration, typeid(Effect*) here is the
+// pointer-to-incomplete type_info, which has internal linkage; on Apple arm64 it never equals the
+// typeid(Effect*) a caller's std::any_cast<Effect*> names, so the cast threw bad_any_cast.
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NullReferenceException.hpp"
