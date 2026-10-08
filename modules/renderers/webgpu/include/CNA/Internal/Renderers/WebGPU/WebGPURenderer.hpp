@@ -4263,6 +4263,13 @@ namespace CNA::Internal::Renderers::WebGPU
         // plans/plan_apple_m4.md AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
         // surface's, so Present() skips the surface present.
         bool acquiredOffscreenEXT_ = false;
+        // plans/plan_apple_m4.md AM4-109: the occluded-frame stand-in is kept and reused while its
+        // size, format and usage still match, instead of being created and destroyed every frame.
+        WGPUTexture occludedBackbufferEXT_ = nullptr;
+        int occludedBackbufferWidthEXT_ = 0;
+        int occludedBackbufferHeightEXT_ = 0;
+        WGPUTextureFormat occludedBackbufferFormatEXT_ = WGPUTextureFormat_Undefined;
+        WGPUTextureUsage occludedBackbufferUsageEXT_ = WGPUTextureUsage_None;
         // WEBGPU-133 (Emscripten): set when a readback's browser-yielding map has let the browser
         // invalidate the acquired surface texture; the next render discards and re-acquires, while a
         // same-frame re-read still reuses readbackBuffer_. Always false on native.

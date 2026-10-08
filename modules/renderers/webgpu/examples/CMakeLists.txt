@@ -800,6 +800,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_DroppedFrame COMMAND cna_test_webgpu_dropped_frame
         TIMEOUT 60 LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_WEBGPU_TEST_SURFACE_OCCLUDED=1")
+    # plans/plan_apple_m4.md AM4-109: the same scenario with every frame's surface Outdated, so the
+    # frame is dropped whole -- AM4-089 left that AM4-078 path without a test.
+    cna_register_renderer_test(NAME WebGPU_DroppedFrame_Outdated COMMAND cna_test_webgpu_dropped_frame
+        TIMEOUT 60 LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_WEBGPU_TEST_SURFACE_OUTDATED=1")
 
     cna_webgpu_test(cna_test_webgpu_draw_order_cardinality
                     webgpu_draw_order_cardinality_test.cpp)

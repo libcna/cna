@@ -11,11 +11,16 @@
 // AM4-089 then stopped dropping it: XNA's back buffer exists whether or not the window is shown, so
 // the frame renders into an offscreen stand-in and only the present is skipped.
 //
-// Registered with CNA_WEBGPU_TEST_SURFACE_OCCLUDED, so every backbuffer frame here is occluded:
-//   frame 1 -- render red into target A; draw a textured quad sampling A to the backbuffer and read
-//              the backbuffer back: red, the frame rendered although nothing could be presented.
-//   frame 2 -- render blue into A, unbind, read A back: blue, untouched by frame 1's draws, and the
-//              process alive to say so.
+// Registered twice:
+//   * WebGPU_DroppedFrame, with CNA_WEBGPU_TEST_SURFACE_OCCLUDED -- every backbuffer frame is occluded:
+//     frame 1 -- render red into target A; draw a textured quad sampling A to the backbuffer and read
+//                the backbuffer back: red, the frame rendered although nothing could be presented.
+//     frame 2 -- render blue into A, unbind, read A back: blue, untouched by frame 1's draws, and the
+//                process alive to say so.
+//   * WebGPU_DroppedFrame_Outdated, with CNA_WEBGPU_TEST_SURFACE_OUTDATED (AM4-109) -- every surface
+//     acquisition reports Outdated, so each backbuffer frame is DROPPED whole (AM4-078): frame 1's
+//     backbuffer read is not asserted, and frame 2 must still read blue from A, which a surviving
+//     queued draw replayed into A's next bind cycle would have broken (or aborted wgpu's validation).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -57,6 +62,7 @@ class WebGPUDroppedFrameTest final : public Game
     std::unique_ptr<GraphicsDeviceManager> manager_;
     std::unique_ptr<RenderTarget2D> target_;
     int frame_ = 0;
+    const bool outdated_ = std::getenv("CNA_WEBGPU_TEST_SURFACE_OUTDATED") != nullptr;
 
 protected:
     void Draw(const GameTime& gameTime) override
@@ -88,8 +94,9 @@ protected:
             Color shown(0, 0, 0, 0);
             const Rectangle centre(64, 64, 1, 1);
             device.GetBackBufferData(&centre, &shown, 0, 1);
-            check(shown.getRProperty() == 255 && shown.getGProperty() == 0 && shown.getBProperty() == 0,
-                  "an occluded backbuffer frame renders: the quad sampling the red target reads back red");
+            if (!outdated_)
+                check(shown.getRProperty() == 255 && shown.getGProperty() == 0 && shown.getBProperty() == 0,
+                      "an occluded backbuffer frame renders: the quad sampling the red target reads back red");
         }
         else if (frame_ == 2)
         {
@@ -119,9 +126,10 @@ public:
 
 int main()
 {
-    if (std::getenv("CNA_WEBGPU_TEST_SURFACE_OCCLUDED") == nullptr)
+    if (std::getenv("CNA_WEBGPU_TEST_SURFACE_OCCLUDED") == nullptr &&
+        std::getenv("CNA_WEBGPU_TEST_SURFACE_OUTDATED") == nullptr)
     {
-        std::printf("[FAIL] CNA_WEBGPU_TEST_SURFACE_OCCLUDED must be set for this test\n");
+        std::printf("[FAIL] CNA_WEBGPU_TEST_SURFACE_OCCLUDED or CNA_WEBGPU_TEST_SURFACE_OUTDATED must be set\n");
         return 1;
     }
     {

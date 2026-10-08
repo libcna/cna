@@ -1379,6 +1379,15 @@ namespace CNA::Internal::Renderers::WebGPU
             return forced;
         }
 
+        /// plans/plan_apple_m4.md AM4-109: the second test hook. With CNA_WEBGPU_TEST_SURFACE_OUTDATED
+        /// set, every surface acquisition reports Outdated -- the status a resize race produces -- so
+        /// the AM4-078 path that drops a frame whole stays tested now that an occluded frame renders.
+        [[nodiscard]] bool SurfaceOutdatedForTesting()
+        {
+            static const bool forced = std::getenv("CNA_WEBGPU_TEST_SURFACE_OUTDATED") != nullptr;
+            return forced;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -4243,6 +4252,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // shared_ptr to the texture it samples, and dropping the commands is what releases those
         // before the native handles underneath them go.
         DiscardQueuedCommands();
+        // AM4-109: the cached occluded-frame stand-in is device-owned too.
+        if (occludedBackbufferEXT_ != nullptr)
+        {
+            wgpuTextureRelease(occludedBackbufferEXT_);
+            occludedBackbufferEXT_ = nullptr;
+        }
         // WEBGPUPERF-0002/0003: the cached groups name layouts, samplers and arena chunks that are
         // all released below, so they go first.
         ReleaseBindingCacheEXT();
@@ -12368,6 +12383,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             if (SurfaceOccludedForTesting())
                 surfaceTexture.status =
                     static_cast<WGPUSurfaceGetCurrentTextureStatus>(kWgpuNativeSurfaceStatusOccluded);
+            else if (SurfaceOutdatedForTesting())
+                surfaceTexture.status = WGPUSurfaceGetCurrentTextureStatus_Outdated;
             else
                 wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
             if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
@@ -12732,6 +12749,21 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (physicalWidth_ <= 0 || physicalHeight_ <= 0 || surfaceFormat_ == WGPUTextureFormat_Undefined)
             return nullptr;
+        // plans/plan_apple_m4.md AM4-109: one stand-in serves every occluded frame of the same shape;
+        // the caller's reference is released at Present like a surface texture's, the cache keeps its
+        // own. A minimised or hidden game used to allocate and free a full back buffer each frame.
+        if (occludedBackbufferEXT_ != nullptr &&
+            (occludedBackbufferWidthEXT_ != physicalWidth_ || occludedBackbufferHeightEXT_ != physicalHeight_ ||
+             occludedBackbufferFormatEXT_ != surfaceFormat_ || occludedBackbufferUsageEXT_ != surfaceConfig_.usage))
+        {
+            wgpuTextureRelease(occludedBackbufferEXT_);
+            occludedBackbufferEXT_ = nullptr;
+        }
+        if (occludedBackbufferEXT_ != nullptr)
+        {
+            wgpuTextureAddRef(occludedBackbufferEXT_);
+            return occludedBackbufferEXT_;
+        }
         // Created directly in surfaceFormat_, the format every backbuffer view and the readback
         // already use, so no view reinterpretation is needed.
         WGPUTextureDescriptor descriptor{};
@@ -12743,7 +12775,15 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         descriptor.format = surfaceFormat_;
         descriptor.mipLevelCount = 1;
         descriptor.sampleCount = 1;
-        return wgpuDeviceCreateTexture(device_, &descriptor);
+        WGPUTexture created = wgpuDeviceCreateTexture(device_, &descriptor);
+        if (created == nullptr) return nullptr;
+        occludedBackbufferEXT_ = created;
+        occludedBackbufferWidthEXT_ = physicalWidth_;
+        occludedBackbufferHeightEXT_ = physicalHeight_;
+        occludedBackbufferFormatEXT_ = surfaceFormat_;
+        occludedBackbufferUsageEXT_ = surfaceConfig_.usage;
+        wgpuTextureAddRef(created);   // the frame's reference; the cache keeps the creation one
+        return created;
     }
 
     void WebGPURenderer::CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture)
