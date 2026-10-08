@@ -339,6 +339,20 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     set(RENDERER_TARGET "cna_renderer_metal")
     list(APPEND _cna_identity_defines CNA_RENDERER_METAL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_METAL")
+    # plans/plan_apple_m4.md AM4-144: compiled XNA Effect bytecode through MojoShader's portable
+    # SPIR-V profile, translated to MSL in process by SPIRV-Cross -- the pinned source the SDL_GPU
+    # renderer's SDL_shadercross already uses -- and compiled by Metal at runtime. Off by default and
+    # shaped like the other CNA_*_COMPILED_EFFECTS options, for the same reason: both are fetched
+    # dependencies this renderer does not otherwise need. No external tool runs at runtime.
+    option(CNA_METAL_COMPILED_EFFECTS
+           "Build Metal support for compiled XNA Effect bytecode (plans/plan_apple_m4.md AM4-144)" OFF)
+    if(CNA_METAL_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        include(cmake/ThirdPartySDLShaderCross.cmake)
+        cna_configure_spirv_cross()
+        add_compile_definitions(CNA_METAL_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/sdl-gpu")

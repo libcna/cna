@@ -27,6 +27,21 @@
 #include "CNA/Internal/Renderers/Metal/MetalDeclaredVertexInput.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalDepthPolicy.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPolicy.hpp"
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/Metal/MetalCompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "System/InvalidOperationException.hpp"
+#endif
 // plans/plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
 // IGraphicsRenderer.hpp's own forward declaration) to call Apply()/GetEffectRendererPtr() from
 // MetalSpriteBatch's custom-effect wiring below.
@@ -1781,7 +1796,7 @@ struct MetalRenderer::Impl
     id<MTLDepthStencilState> depthState=nil;
     id<MTLSamplerState> sampler=nil;
     // (filter, addressU, addressV, anisotropy, maxMipLevel, lodBias bits)
-    std::map<std::tuple<int,int,int,int,int,std::uint32_t>, id<MTLSamplerState>> samplerCache;
+    std::map<std::tuple<int,int,int,int,int,std::uint32_t,int>, id<MTLSamplerState>> samplerCache;
     id<MTLSamplerState> samplerSlots[16]={};
     // plans/plan_apple_m4.md AM4-034: what each slot was last asked for, so ApplySamplerState and
     // ApplySamplerMipState -- two calls for one XNA SamplerState -- each rebuild the whole sampler.
@@ -2021,6 +2036,15 @@ struct MetalRenderer::Impl
     // AM4-140: XNA's opaque black for an unbound classic stock texture (GSC-0004).
     id<MTLTexture> defaultBlackTexture=nil;
     id<MTLTexture> defaultBlackCubeTexture=nil;
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    // plans/plan_apple_m4.md AM4-144: compiled XNA effects -- the renderer-wide MojoShader context,
+    // the MSL functions by linked-SPIR-V hash, the pipelines by pass/layout/state, and the opaque
+    // black volume an unbound 3D sampler reads.
+    std::unique_ptr<MetalMojoShaderContextEXT> mojoShaderContext;
+    std::unordered_map<std::uint64_t, id<MTLFunction>> compiledFunctions;
+    std::unordered_map<MetalPipelineCacheKey, id<MTLRenderPipelineState>, MetalPipelineCacheKeyHash> compiledPipelines;
+    id<MTLTexture> defaultBlackVolumeTexture=nil;
+#endif
 
     // Re-applies every piece of encoder-scoped dynamic state this renderer tracks. Metal has no
     // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
@@ -2462,10 +2486,10 @@ struct MetalRenderer::Impl
     // TextureAddressMode/maxAnisotropy combination. Cache is owned by this Impl and released
     // once, in its destructor -- samplerSlots[] below only holds non-owning references into it.
     id<MTLSamplerState> samplerFor(int filter,int addressU,int addressV,int maxAnisotropy,
-                                   int maxMipLevel=0,float lodBias=0.0f)
+                                   int maxMipLevel=0,float lodBias=0.0f,int addressW=-1)
     {
         const uint32_t aniso=(uint32_t)std::clamp(maxAnisotropy,1,16);
-        const auto key=std::make_tuple(filter,addressU,addressV,(int)aniso,maxMipLevel,std::bit_cast<std::uint32_t>(lodBias));
+        const auto key=std::make_tuple(filter,addressU,addressV,(int)aniso,maxMipLevel,std::bit_cast<std::uint32_t>(lodBias),addressW);
         auto it=samplerCache.find(key);
         if(it!=samplerCache.end()) return it->second;
         // plans/plan_apple_m4.md AM4-034: MipMapLevelOfDetailBias is a sampler property only from
@@ -2482,6 +2506,8 @@ struct MetalRenderer::Impl
         if(!sd) throw std::runtime_error("Metal: failed to allocate sampler descriptor");
         sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
         sd.sAddressMode=metalAddressMode(addressU); sd.tAddressMode=metalAddressMode(addressV);
+        // AM4-144: a volume sampler's third coordinate (SamplerState.AddressW); -1 keeps Metal's default.
+        if(addressW>=0) sd.rAddressMode=metalAddressMode(addressW);
         if(filter==2) sd.maxAnisotropy=aniso;
         // XNA's MaxMipLevel is the index of the most detailed level the sampler may use -- FNA3D
         // sets it as GL_TEXTURE_BASE_LEVEL -- so it clamps the level of detail from below. XNA
@@ -2584,6 +2610,13 @@ MetalRenderer::Impl::~Impl()
     [defaultWhiteCubeTexture release]; defaultWhiteCubeTexture=nil;
     [defaultBlackCubeTexture release]; defaultBlackCubeTexture=nil;
     [defaultBlackTexture release]; defaultBlackTexture=nil;
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    for (auto& entry : compiledPipelines) [entry.second release];
+    compiledPipelines.clear();
+    for (auto& entry : compiledFunctions) [entry.second release];
+    compiledFunctions.clear();
+    [defaultBlackVolumeTexture release]; defaultBlackVolumeTexture=nil;
+#endif
     [defaultFlatNormalTexture release]; defaultFlatNormalTexture=nil;
     [defaultWhiteTexture release]; defaultWhiteTexture=nil;
     [visibilityBuffer release]; visibilityBuffer=nil;
@@ -2802,12 +2835,24 @@ private:
     float uFloat0_ = 0.0f;
 };
 
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+static void drawMetalCompiledSprites(MetalRenderer::Impl& p, const MetalVertexBuffer& vb, int vertexCount,
+                                     const GpuDrawParams& params, id<MTLTexture> texture, id<MTLSamplerState> sampler);
+#endif
+
 class MetalSpriteBatch final : public ISpriteBatchRenderer
 {
 public:
     explicit MetalSpriteBatch(MetalRenderer& b):b_(b){}
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    ~MetalSpriteBatch() override { clearPendingCompiled(); }
+    void Begin() override { begun_=true; compiledStockApplied_=false; }
+    // AM4-144: the compiled route draws each same-texture run once per pass, so End() submits the last.
+    void End() override { flushCompiled(); begun_=false; }
+#else
     void Begin() override { begun_=true; }
     void End() override { begun_=false; }
+#endif
     void SetSamplerFilter(int f) override { filter_=f; }
     void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
     // plans/plan_apple_m4.md AM4-034: the rest of Begin's SamplerState, which the sprite sampler
@@ -2834,7 +2879,20 @@ public:
     // Effect::Clone()/reassignment can't leave this pointing at a stale renderer).
     // plans/plan_apple_m4.md AM4-077: enabled again on the evidence docs/metal-shader-effect-contract.md
     // asked for (Metal_SpriteBatch_CustomEffect, under Metal API and shader validation).
-    void SetCustomEffect(Effect* effect) override { customEffect_=effect; }
+    void SetCustomEffect(Effect* effect) override
+    {
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+        // plans/plan_apple_m4.md AM4-144: a compiled Effect-Framework effect gets its own route --
+        // SpriteBatch.Begin(..., effect) with one is what Microsoft's SpriteEffects sample does.
+        if (effect && effect->GetCompiledRuntimePtr()) {
+            if (compiledEffect_!=effect) flushCompiled();
+            compiledEffect_=effect; customEffect_=nullptr;
+            return;
+        }
+        flushCompiled(); compiledEffect_=nullptr;
+#endif
+        customEffect_=effect;
+    }
     void Draw(const ITextureRenderer& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float layerDepth) override
@@ -2849,8 +2907,9 @@ public:
         drawQuad(t,dx,dy,dw,dh,s,c,rotation,origin,effects,layerDepth);
     }
 private:
-    void drawQuad(const ITextureRenderer& t,float dx,float dy,float dw,float dh,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float)
+    void drawQuad(const ITextureRenderer& t,float dx,float dy,float dw,float dh,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float layerDepth)
     {
+        (void)layerDepth;
         const MetalAutoreleaseScope autoreleaseScope;
         if(!begun_) throw std::runtime_error("Metal SpriteBatch.Draw called outside Begin/End");
         // plans/plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
@@ -2883,6 +2942,19 @@ private:
         auto xf=[&](float x,float y){ const float px=x-x0-originX, py=y-y0-originY; return std::array<float,2>{x0+px*cs-py*sn,y0+px*sn+py*cs};};
         auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
         auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+        // AM4-144: a compiled effect owns the whole sprite, the transform to clip space included,
+        // so it receives these sprite-space points (and the layer depth) rather than NDC.
+        if (compiledEffect_) {
+            if (pendingTexture_!=nativeTex) { flushCompiled(); pendingTexture_=[nativeTex retain]; }
+            const CompiledSpriteVertex quad[6]={
+                {a[0],a[1],layerDepth,u0,v0,cr,cg,cb,ca},{bb[0],bb[1],layerDepth,u1,v0,cr,cg,cb,ca},
+                {cc[0],cc[1],layerDepth,u1,v1,cr,cg,cb,ca},{a[0],a[1],layerDepth,u0,v0,cr,cg,cb,ca},
+                {cc[0],cc[1],layerDepth,u1,v1,cr,cg,cb,ca},{dd[0],dd[1],layerDepth,u0,v1,cr,cg,cb,ca}};
+            pendingCompiled_.insert(pendingCompiled_.end(),std::begin(quad),std::end(quad));
+            return;
+        }
+#endif
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
         // plans/plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
         // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
@@ -2926,6 +2998,103 @@ private:
         }
         [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    struct CompiledSpriteVertex { float x,y,z,u,v,r,g,b,a; };
+
+    void clearPendingCompiled()
+    {
+        pendingCompiled_.clear();
+        [pendingTexture_ release]; pendingTexture_=nil;
+    }
+
+    // XNA's SpriteEffect supplies the vertex stage a pixel-only custom pass keeps (WebGPU's
+    // ApplyCompiledSpriteVertexShaderEXT): applied once per batch, before the custom passes.
+    void applyCompiledStockVertexStage()
+    {
+        if (compiledStockApplied_) return;
+        if (!spriteEffect_) {
+            const auto& bytes=CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+            spriteEffect_=b_.CreateCompiledEffect(bytes,sizeof(bytes));
+            const auto& parameters=spriteEffect_->GetDescription().parameters;
+            const auto matrix=std::find_if(parameters.begin(),parameters.end(),
+                [](const CompiledEffectParameterDescription& parameter){ return parameter.name=="MatrixTransform"; });
+            if (matrix==parameters.end())
+                throw std::runtime_error("Metal SpriteBatch: the embedded XNA SpriteEffect has no MatrixTransform parameter.");
+            spriteMatrixParameterIndex_=matrix->runtimeIndex;
+        }
+        float width=(float)projectionWidth_, height=(float)projectionHeight_;
+        if (width<=0.0f||height<=0.0f) {
+            const MetalViewportState viewport=b_.impl().rasterState.EffectiveViewport();
+            width=(float)viewport.width; height=(float)viewport.height;
+        }
+        const Matrix projection=Matrix::CreateOrthographicOffCenter(0.0f,width,height,0.0f,0.0f,-1.0f);
+        float values[16];
+        // Effect Framework storage is the transposed layout EffectParameter::SetValue(Matrix) writes.
+        Matrix::Transpose(projection).ToColumnMajor(values);
+        spriteEffect_->SetParameterValue(spriteMatrixParameterIndex_,values,sizeof(values));
+        spriteEffect_->SetTechnique(0);
+        auto& device=compiledEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend=&device.getBlendStateProperty();
+        state.depthStencil=&device.getDepthStencilStateProperty();
+        state.rasterizer=&device.getRasterizerStateProperty();
+        state.samplerStates=&device.getSamplerStatesProperty();
+        state.vertexSamplerStates=&device.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteEffect_->ApplyPass(0,state,ignored);
+        compiledStockApplied_=true;
+    }
+
+    // XNA draws a run once per pass of the effect's current technique (plans/plan_fx.md FX-102),
+    // pass-major over the run.
+    void flushCompiled()
+    {
+        if (pendingCompiled_.empty()||!compiledEffect_) { clearPendingCompiled(); return; }
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        static const VertexDeclaration kSpriteDeclaration((int)sizeof(CompiledSpriteVertex), {
+            VertexElement(0,VertexElementFormat::Vector3,VertexElementUsage::Position,0),
+            VertexElement(12,VertexElementFormat::Vector2,VertexElementUsage::TextureCoordinate,0),
+            VertexElement(20,VertexElementFormat::Vector4,VertexElementUsage::Color,0)});
+        const int count=(int)pendingCompiled_.size();
+        try {
+            if (!compiledVertexBuffer_||compiledVertexCapacity_<count) {
+                compiledVertexBuffer_=b_.CreateVertexBuffer(count);
+                compiledVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
+                compiledVertexCapacity_=count;
+            }
+            compiledVertexBuffer_->SetData(pendingCompiled_.data(),count,sizeof(CompiledSpriteVertex));
+            auto* technique=compiledEffect_->getCurrentTechniqueProperty();
+            const int passCount=technique ? technique->getPassesProperty().getCountProperty() : 0;
+            if (passCount==0)
+                throw System::InvalidOperationException(
+                    "Metal: a compiled Effect used with SpriteBatch must have a current technique with at least one pass.");
+            applyCompiledStockVertexStage();
+            auto& p=b_.impl();
+            id<MTLSamplerState> sampler=p.samplerFor(filter_,addressU_,addressV_,maxAnisotropy_,maxMipLevel_,lodBias_);
+            const auto& buffer=static_cast<const MetalVertexBuffer&>(*compiledVertexBuffer_);
+            for (int pass=0;pass<passCount;++pass) {
+                technique->getPassesProperty()[pass]->Apply();
+                GpuDrawParams params{};
+                compiledEffect_->FillGpuDrawParams(params);
+                drawMetalCompiledSprites(p,buffer,count,params,pendingTexture_,sampler);
+            }
+        } catch (...) {
+            clearPendingCompiled();
+            throw;
+        }
+        clearPendingCompiled();
+    }
+
+    Effect* compiledEffect_=nullptr;
+    std::unique_ptr<ICompiledEffectRuntime> spriteEffect_;
+    std::uint32_t spriteMatrixParameterIndex_=0;
+    std::vector<CompiledSpriteVertex> pendingCompiled_;
+    id<MTLTexture> pendingTexture_=nil;
+    std::unique_ptr<IVertexBufferRenderer> compiledVertexBuffer_;
+    int compiledVertexCapacity_=0;
+    bool compiledStockApplied_=false;
+#endif
     MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
     int projectionWidth_=0; int projectionHeight_=0;
     int maxAnisotropy_=1; int maxMipLevel_=0; float lodBias_=0.0f;
@@ -4977,6 +5146,359 @@ void MetalRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& v,
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,nullptr);
 }
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+// ---------------------------------------------------------------------------------------------
+// plans/plan_apple_m4.md AM4-144: compiled XNA effects. MetalCompiledEffect links the bound pass
+// against the draw's declarations and translates it to MSL; this is where it becomes a pipeline,
+// bound resources and a draw.
+// ---------------------------------------------------------------------------------------------
+namespace
+{
+    MTLVertexFormat compiledVertexFormat(VertexElementFormat format)
+    {
+        switch (format)
+        {
+            case VertexElementFormat::Single:           return MTLVertexFormatFloat;
+            case VertexElementFormat::Vector2:          return MTLVertexFormatFloat2;
+            case VertexElementFormat::Vector3:          return MTLVertexFormatFloat3;
+            case VertexElementFormat::Vector4:          return MTLVertexFormatFloat4;
+            // The linked SPIR-V reads COLOR as normalized bytes and swizzles them itself
+            // (MOJOSHADER_VERTEXELEMENTFORMAT_COLOR), as on WebGPU's Unorm8x4.
+            case VertexElementFormat::Color:            return MTLVertexFormatUChar4Normalized;
+            case VertexElementFormat::Byte4:            return MTLVertexFormatUChar4;
+            case VertexElementFormat::Short2:           return MTLVertexFormatShort2;
+            case VertexElementFormat::Short4:           return MTLVertexFormatShort4;
+            case VertexElementFormat::NormalizedShort2: return MTLVertexFormatShort2Normalized;
+            case VertexElementFormat::NormalizedShort4: return MTLVertexFormatShort4Normalized;
+            case VertexElementFormat::HalfVector2:      return MTLVertexFormatHalf2;
+            case VertexElementFormat::HalfVector4:      return MTLVertexFormatHalf4;
+        }
+        return MTLVertexFormatFloat4;
+    }
+
+    /// One stream a compiled draw binds: the buffer, its stride, where the draw's records begin,
+    /// and its instance step rate (0 per vertex).
+    struct MetalCompiledSource
+    {
+        const MetalVertexBuffer* buffer = nullptr;
+        std::uint32_t stride = 0;
+        std::size_t byteOffset = 0;
+        int instanceFrequency = 0;
+    };
+
+    /// The native texture of a public texture, if it is of the kind the shader declares.
+    id<MTLTexture> compiledNativeTexture(Microsoft::Xna::Framework::Graphics::Texture* texture,
+                                         MetalCompiledTextureKind kind)
+    {
+        using namespace Microsoft::Xna::Framework::Graphics;
+        if (texture == nullptr) return nil;
+        switch (kind)
+        {
+            case MetalCompiledTextureKind::TextureCube:
+                if (auto* cube = dynamic_cast<TextureCube*>(texture)) return nativeCubeTextureFor(&cube->GetRenderer());
+                return nil;
+            case MetalCompiledTextureKind::Texture3D:
+                if (auto* volume = dynamic_cast<Texture3D*>(texture))
+                    if (auto* metal = dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())) return metal->native();
+                return nil;
+            case MetalCompiledTextureKind::Texture2D:
+                if (dynamic_cast<TextureCube*>(texture) || dynamic_cast<Texture3D*>(texture)) return nil;
+                if (auto* flat = dynamic_cast<Texture2D*>(texture)) return nativeTextureFor(&flat->GetRenderer());
+                return nil;
+        }
+        return nil;
+    }
+
+    /// What an unbound compiled sampler reads: opaque black, XNA's measured unbound-texture value
+    /// (plans/plan_graphics_shared_cleanup.md GSC-0004), in the declared kind.
+    id<MTLTexture> compiledNeutralTexture(MetalRenderer::Impl& p, MetalCompiledTextureKind kind)
+    {
+        switch (kind)
+        {
+            case MetalCompiledTextureKind::TextureCube: return p.defaultBlackCubeTexture;
+            case MetalCompiledTextureKind::Texture2D:   return p.defaultBlackTexture;
+            case MetalCompiledTextureKind::Texture3D:
+                if (!p.defaultBlackVolumeTexture)
+                {
+                    MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
+                    d.textureType=MTLTextureType3D; d.pixelFormat=MTLPixelFormatRGBA8Unorm;
+                    d.width=1; d.height=1; d.depth=1; d.usage=MTLTextureUsageShaderRead;
+                    p.defaultBlackVolumeTexture=[p.device newTextureWithDescriptor:d];
+                    [d release];
+                    if (!p.defaultBlackVolumeTexture)
+                        throw std::runtime_error("Metal: failed to create the neutral black volume texture");
+                    const std::uint8_t black[4]={0,0,0,255};
+                    [p.defaultBlackVolumeTexture replaceRegion:MTLRegionMake3D(0,0,0,1,1,1) mipmapLevel:0 slice:0
+                                                      withBytes:black bytesPerRow:4 bytesPerImage:4];
+                }
+                return p.defaultBlackVolumeTexture;
+        }
+        return p.defaultBlackTexture;
+    }
+
+    /// One translated stage as a Metal function, compiled once per linked body.
+    id<MTLFunction> compiledFunction(MetalRenderer::Impl& p, const MetalCompiledStageEXT& stage)
+    {
+        if (const auto it=p.compiledFunctions.find(stage.hash); it!=p.compiledFunctions.end())
+            return it->second;
+        MTLCompileOptions* options=[[MTLCompileOptions alloc] init];
+        // XNA's shaders are IEEE arithmetic; fast math would reorder and flush what the reference
+        // pixels depend on.
+        if (@available(macOS 15.0, iOS 18.0, *)) options.mathMode=MTLMathModeSafe;
+        NSString* source=[[NSString alloc] initWithBytes:stage.msl.data() length:stage.msl.size()
+                                               encoding:NSUTF8StringEncoding];
+        NSError* error=nil;
+        id<MTLLibrary> library=[p.device newLibraryWithSource:source options:options error:&error];
+        [source release]; [options release];
+        if (!library)
+            throw std::runtime_error(std::string("Metal: a compiled effect's MSL did not compile: ")+
+                                     ([[error localizedDescription] UTF8String]?:"unknown"));
+        NSString* name=[NSString stringWithUTF8String:stage.entryPoint.c_str()];
+        id<MTLFunction> function=[library newFunctionWithName:name];
+        [library release];
+        if (!function) throw std::runtime_error("Metal: a compiled effect's MSL has no entry point "+stage.entryPoint);
+        p.compiledFunctions.emplace(stage.hash, function);
+        return function;
+    }
+
+    /// The pipeline of a linked pass for the active targets and blend state.
+    id<MTLRenderPipelineState> compiledPipeline(MetalRenderer::Impl& p,
+                                                const MetalCompiledEffect::LinkedPassEXT& linked,
+                                                const std::vector<MetalCompiledSource>& sources)
+    {
+        std::uint64_t layout=linked.pipelineKey;
+        for (const auto& source : sources) layout=layout*1099511628211ull ^ static_cast<std::uint64_t>(source.instanceFrequency);
+        const std::uint8_t colorCount=(std::uint8_t)std::clamp(p.activeColorAttachmentCount,1,8);
+        const std::uint8_t sampleCount=(std::uint8_t)std::clamp(p.activeSampleCount,1,8);
+        MetalPipelineCacheKey key{PipelineKind::Sprite2D, p.currentBlend, colorCount, sampleCount, layout, false};
+        for (std::size_t i=0;i<key.colorFormats.size();++i) key.colorFormats[i]=(uint16_t)p.activeColorFormats[i];
+        if (const auto it=p.compiledPipelines.find(key); it!=p.compiledPipelines.end()) return it->second;
+
+        MTLVertexDescriptor* vd=[MTLVertexDescriptor vertexDescriptor];
+        std::array<bool,kMaxVertexStreams> used{};
+        for (const auto& attribute : linked.attributes)
+        {
+            const NSUInteger buffer=(NSUInteger)MetalVertexStreamBufferIndex((int)attribute.streamIndex);
+            vd.attributes[attribute.location].format=compiledVertexFormat(attribute.format);
+            vd.attributes[attribute.location].offset=attribute.offset;
+            vd.attributes[attribute.location].bufferIndex=buffer;
+            used[attribute.streamIndex]=true;
+        }
+        for (std::size_t i=0;i<sources.size();++i)
+        {
+            if (!used[i]) continue;
+            const NSUInteger buffer=(NSUInteger)MetalVertexStreamBufferIndex((int)i);
+            vd.layouts[buffer].stride=sources[i].stride;
+            if (sources[i].instanceFrequency>0) {
+                vd.layouts[buffer].stepFunction=MTLVertexStepFunctionPerInstance;
+                vd.layouts[buffer].stepRate=(NSUInteger)sources[i].instanceFrequency;
+            }
+        }
+        MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
+        d.vertexFunction=compiledFunction(p,*linked.vertex);
+        d.fragmentFunction=compiledFunction(p,*linked.pixel);
+        d.vertexDescriptor=vd;
+        d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        d.rasterSampleCount=sampleCount;
+        const MetalBlendKey& blend=p.currentBlend;
+        for (int i=0;i<colorCount;++i) {
+            d.colorAttachments[i].pixelFormat=p.activeColorFormats[(std::size_t)i];
+            // A pixel shader writes the targets it declares (COLOR0..COLOR3); the others keep their
+            // contents. XNA's one BlendState blends every target it writes.
+            if ((linked.pixelColorOutputs & (1u<<i))==0) { d.colorAttachments[i].writeMask=MTLColorWriteMaskNone; continue; }
+            d.colorAttachments[i].writeMask=i==0 ? (MTLColorWriteMask)MetalColorWriteMaskBits(blend.writeMask) : MTLColorWriteMaskAll;
+            d.colorAttachments[i].blendingEnabled=blend.enabled?YES:NO;
+            if (blend.enabled) {
+                d.colorAttachments[i].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
+                d.colorAttachments[i].destinationRGBBlendFactor=metalBlendFactor(blend.colorDst);
+                d.colorAttachments[i].rgbBlendOperation=metalBlendOp(blend.colorFunc);
+                d.colorAttachments[i].sourceAlphaBlendFactor=metalBlendFactor(blend.alphaSrc);
+                d.colorAttachments[i].destinationAlphaBlendFactor=metalBlendFactor(blend.alphaDst);
+                d.colorAttachments[i].alphaBlendOperation=metalBlendOp(blend.alphaFunc);
+            }
+        }
+        NSError* error=nil;
+        id<MTLRenderPipelineState> pipeline=[p.device newRenderPipelineStateWithDescriptor:d error:&error];
+        [d release];
+        if (!pipeline)
+            throw std::runtime_error(std::string("Metal: a compiled effect's pipeline failed: ")+
+                                     ([[error localizedDescription] UTF8String]?:"unknown"));
+        p.compiledPipelines.emplace(key,pipeline);
+        return pipeline;
+    }
+
+    void bindCompiledUniforms(MetalRenderer::Impl& p, bool vertexStage, const std::vector<std::uint8_t>& bytes,
+                              std::uint32_t index)
+    {
+        static const std::uint8_t kEmpty[16]={};
+        const void* data=bytes.empty() ? kEmpty : bytes.data();
+        const NSUInteger length=bytes.empty() ? sizeof(kEmpty) : bytes.size();
+        if (length<=4096) {
+            if (vertexStage) [p.encoder setVertexBytes:data length:length atIndex:index];
+            else [p.encoder setFragmentBytes:data length:length atIndex:index];
+            return;
+        }
+        id<MTLBuffer> buffer=[p.device newBufferWithBytes:data length:length options:MTLResourceStorageModeShared];
+        if (!buffer) throw std::runtime_error("Metal: failed to allocate a compiled effect's uniform buffer");
+        if (vertexStage) [p.encoder setVertexBuffer:buffer offset:0 atIndex:index];
+        else [p.encoder setFragmentBuffer:buffer offset:0 atIndex:index];
+        [buffer release];
+    }
+}
+
+/// One draw through a compiled effect. @p spriteTexture0, when given, is SpriteBatch's texture: XNA
+/// assigns it to Textures[0] after the pass is applied, so it wins over the pass's own slot 0.
+static void drawMetalCompiled(MetalRenderer::Impl& p, const MetalVertexBuffer& vb, const MetalIndexBuffer* ib,
+                              PrimitiveType pt, int pc, const GpuDrawParams& params, bool instancedRoute,
+                              id<MTLTexture> spriteTexture0=nil, id<MTLSamplerState> spriteSampler0=nil)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+    auto* runtime=dynamic_cast<MetalCompiledEffect*>(params.compiledEffectRuntime);
+    if (!runtime) throw std::runtime_error("Metal: the compiled effect belongs to another renderer");
+
+    // Every stream the draw bound, at its whole VertexOffset (see drawMetal3D's stream route); the
+    // internal routes that bind no public buffer draw the named one.
+    std::vector<MetalCompiledSource> sources;
+    for (int i=0;i<params.vertexStreamCount;++i) {
+        const auto& stream=params.vertexStreams[(std::size_t)i];
+        const auto* buffer=dynamic_cast<const MetalVertexBuffer*>(stream.buffer);
+        if (!buffer) throw std::runtime_error("Metal: foreign vertex buffer in a vertex stream");
+        MetalCompiledSource source;
+        source.buffer=buffer;
+        source.stride=stream.strideInBytes>0 ? (std::uint32_t)stream.strideInBytes : (std::uint32_t)buffer->stride();
+        source.byteOffset=(std::size_t)std::max(stream.vertexOffset,0)*source.stride;
+        source.instanceFrequency=stream.instanceFrequency;
+        sources.push_back(source);
+    }
+    if (sources.empty()) sources.push_back(MetalCompiledSource{&vb,(std::uint32_t)vb.stride(),0,0});
+    std::vector<MetalCompiledEffect::CompiledVertexStreamEXT> declared;
+    declared.reserve(sources.size());
+    for (const auto& source : sources) {
+        if (source.buffer->declaration().IsEmpty())
+            throw System::NotSupportedException(
+                "Metal: a compiled effect draw needs every bound vertex buffer's VertexDeclaration, and one "
+                "of this draw's streams carries none.");
+        declared.push_back({&source.buffer->declaration().GetElements(), source.stride, source.instanceFrequency>0});
+    }
+    const MetalCompiledEffect::LinkedPassEXT linked=runtime->LinkAndGetShadersEXT(declared);
+    std::vector<std::uint8_t> vertexUniforms, pixelUniforms;
+    runtime->CaptureUniformSnapshotEXT(vertexUniforms, pixelUniforms);
+
+    // Each sampler the pixel shader declares. GraphicsDevice's texture and sampler slots are what
+    // it samples: EffectPass.Apply() published the pass's assignments there and the game may have
+    // replaced a slot since -- Direct3D 9 device state, which XNA keeps, and EasyGL's reading. The
+    // runtime's own record of the pass is used only where a draw carries no device slots.
+    struct BoundSampler { std::uint32_t slot; id<MTLTexture> texture; id<MTLSamplerState> sampler; };
+    std::vector<BoundSampler> samplers;
+    for (const auto& binding : linked.pixelSamplers) {
+        Texture* texture=nullptr; SamplerState state; bool assigned=false;
+        runtime->GetBoundSamplerEXT(binding.slot,false,texture,state,&assigned);
+        if (params.compiledDeviceTextures!=nullptr && binding.slot<16u)
+            texture=(*params.compiledDeviceTextures)[(int)binding.slot];
+        const bool deviceSampler=params.compiledDeviceSamplerStates!=nullptr && binding.slot<16u;
+        if (deviceSampler)
+            state=(*params.compiledDeviceSamplerStates)[(int)binding.slot];
+        id<MTLTexture> native=compiledNativeTexture(texture,binding.kind);
+        id<MTLSamplerState> sampler=nil;
+        if (binding.slot==0 && binding.kind==MetalCompiledTextureKind::Texture2D) {
+            if (spriteTexture0) native=spriteTexture0;
+            else if (params.compiledSpriteTexture0) native=nativeTextureFor(params.compiledSpriteTexture0);
+            if (spriteSampler0 && !deviceSampler && !assigned) sampler=spriteSampler0;
+        }
+        if (!native) native=compiledNeutralTexture(p,binding.kind);
+        if (!sampler)
+            sampler=p.samplerFor((int)state.getFilterProperty(),(int)state.getAddressUProperty(),
+                                 (int)state.getAddressVProperty(),state.getMaxAnisotropyProperty(),
+                                 state.getMaxMipLevelProperty(),state.getMipMapLevelOfDetailBiasProperty(),
+                                 (int)state.getAddressWProperty());
+        samplers.push_back({binding.slot,native,sampler});
+    }
+
+    if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()||!p.admitSampleMask()) return;
+    if (p.sampleMaskOutput)
+        throw System::NotSupportedException(
+            "Metal: a compiled effect's MSL is not given a [[sample_mask]] output, so a BlendState."
+            "MultiSampleMask that keeps only some samples of a multisampled target is refused for it (AM4-141).");
+    id<MTLRenderPipelineState> pipeline=compiledPipeline(p,linked,sources);
+    [p.encoder setRenderPipelineState:pipeline];
+    std::array<bool,kMaxVertexStreams> used{};
+    for (const auto& attribute : linked.attributes) used[attribute.streamIndex]=true;
+    for (std::size_t i=0;i<sources.size();++i)
+        if (used[i])
+            [p.encoder setVertexBuffer:sources[i].buffer->native() offset:sources[i].byteOffset
+                               atIndex:(NSUInteger)MetalVertexStreamBufferIndex((int)i)];
+    if (linked.vertexHasUniforms) bindCompiledUniforms(p,true,vertexUniforms,kMetalCompiledVertexUniformBuffer);
+    if (linked.pixelHasUniforms) bindCompiledUniforms(p,false,pixelUniforms,kMetalCompiledPixelUniformBuffer);
+    for (const auto& sampler : samplers) {
+        [p.encoder setFragmentTexture:sampler.texture atIndex:sampler.slot];
+        [p.encoder setFragmentSamplerState:sampler.sampler atIndex:sampler.slot];
+    }
+    [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise];
+    [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
+
+    // XNA's Direct3D 9 pixel centres. The stock route folds this translation into its matrix; a
+    // compiled shader computes its own position, so the viewport moves instead -- by the same
+    // 63/128 of a logical pixel, under the same conditions (xnaPixelCenterCorrection).
+    const Matrix centre=xnaPixelCenterCorrection(p,pt);
+    const MetalViewportState viewport=p.rasterState.EffectiveViewport();
+    const double shiftX=(double)centre.M41*viewport.width*0.5;
+    const double shiftY=-(double)centre.M42*viewport.height*0.5;
+    const bool shifted=shiftX!=0.0||shiftY!=0.0;
+    if (shifted) {
+        const MTLViewport moved={viewport.x+shiftX,viewport.y+shiftY,viewport.width,viewport.height,viewport.minDepth,viewport.maxDepth};
+        [p.encoder setViewport:moved];
+    }
+    const NSUInteger n=(NSUInteger)primitiveVertexCount(pt,pc);
+    const NSUInteger instances=(NSUInteger)(instancedRoute ? std::max(params.instanceCount,1) : 1);
+    if (ib) {
+        const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
+        [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
+            indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
+            indexBuffer:ib->native() indexBufferOffset:(NSUInteger)params.startIndex*indexSize
+            instanceCount:instances baseVertex:(NSInteger)params.baseVertex baseInstance:(NSUInteger)params.firstInstance];
+    } else {
+        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:(NSUInteger)params.vertexStart vertexCount:n
+                    instanceCount:instances baseInstance:(NSUInteger)params.firstInstance];
+    }
+    if (shifted) {
+        const MTLViewport restored={viewport.x,viewport.y,viewport.width,viewport.height,viewport.minDepth,viewport.maxDepth};
+        [p.encoder setViewport:restored];
+    }
+}
+
+/// SpriteBatch's compiled route (MetalSpriteBatch::flushCompiled): one same-texture run through
+/// every pass of the effect's current technique.
+static void drawMetalCompiledSprites(MetalRenderer::Impl& p, const MetalVertexBuffer& vb, int vertexCount,
+                                     const GpuDrawParams& params, id<MTLTexture> texture, id<MTLSamplerState> sampler)
+{
+    drawMetalCompiled(p,vb,nullptr,PrimitiveType::TriangleList,vertexCount/3,params,false,texture,sampler);
+}
+
+std::unique_ptr<ICompiledEffectRuntime> MetalRenderer::CreateCompiledEffect(
+    const std::uint8_t* effectCode, std::size_t effectCodeBytes)
+{
+    return std::make_unique<MetalCompiledEffect>(*this, effectCode, effectCodeBytes);
+}
+
+bool MetalRenderer::SupportsCompiledEffects() const { return true; }
+
+MetalMojoShaderContextEXT* MetalRenderer::GetMojoShaderContextEXT()
+{
+    if (!impl_->mojoShaderContext) impl_->mojoShaderContext=std::make_unique<MetalMojoShaderContextEXT>();
+    return impl_->mojoShaderContext.get();
+}
+
+bool MetalRenderer::OwnsSampleableTextureEXT(Microsoft::Xna::Framework::Graphics::Texture* texture) const
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+    if (texture==nullptr) return false;
+    if (auto* cube=dynamic_cast<TextureCube*>(texture)) return nativeCubeTextureFor(&cube->GetRenderer())!=nil;
+    if (auto* volume=dynamic_cast<Texture3D*>(texture)) return dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())!=nullptr;
+    if (auto* flat=dynamic_cast<Texture2D*>(texture)) return nativeTextureFor(&flat->GetRenderer())!=nil;
+    return false;
+}
+#endif  // CNA_METAL_COMPILED_EFFECTS
+
 static void ValidateMetalDrawParams(const GpuDrawParams& gp,const MetalVertexBuffer& vb)
 {
     switch (DescribeMetalDrawStreamPolicy(gp)) {
@@ -5000,6 +5522,9 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
     ValidateMetalDrawParams(gp,*vb);
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    if(gp.compiledEffectRuntime){ drawMetalCompiled(*impl_,*vb,nullptr,pt,pc,gp,false); return; }   // AM4-144
+#endif
     drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);
 }
 
@@ -5014,6 +5539,9 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
     ValidateMetalDrawParams(gp,*vb);
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    if(gp.compiledEffectRuntime){ drawMetalCompiled(*impl_,*vb,ib,pt,pc,gp,false); return; }   // AM4-144
+#endif
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);
 }
 // plans/plan_apple_m4.md AM4-143: the stock effects' instanced draw -- every stream bound at its own
@@ -5032,6 +5560,9 @@ void MetalRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& v,
     if(instanceCount!=gp.instanceCount)
         throw std::invalid_argument("Metal: the instance count disagrees with GpuDrawParams.instanceCount");
     ValidateMetalDrawParams(gp,*vb);
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+    if(gp.compiledEffectRuntime){ drawMetalCompiled(*impl_,*vb,ib,pt,pc,gp,true); return; }   // AM4-144
+#endif
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp,true);
 }
 void MetalRenderer::SetStringMarkerEXT(const char* m)

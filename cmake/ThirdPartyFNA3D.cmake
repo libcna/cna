@@ -167,7 +167,10 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler3d-precision.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler-precision.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-vertex-lod-bias.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-texture3d-proj.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-texture3d-proj.patch"
+        # plans/plan_apple_m4.md AM4-144: the SPIR-V profile ignored a TEXKILL predicate and
+        # killed unconditionally (Metal, Vulkan, WebGPU and SDL_GPU compiled effects alike).
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-predicated-texkill.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
     set(_cna_fna3d_source_patch

@@ -20,6 +20,9 @@ if(CNA_BUILD_TESTS)
     # process harnesses.
     file(GLOB CNA_METAL_PORTABLE_TEST_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/../tests/CNA/Internal/Renderers/Metal/*.cpp")
+    # plans/plan_apple_m4.md AM4-144: the compiled-effect suite draws through a real device, so it
+    # belongs to CnaTests only.
+    list(FILTER CNA_METAL_PORTABLE_TEST_SOURCES EXCLUDE REGEX "MetalCompiledEffectTests\\.cpp$")
     add_executable(cna_test_metal_portable ${CNA_METAL_PORTABLE_TEST_SOURCES})
     target_link_libraries(cna_test_metal_portable PRIVATE CNA SHARP_RUNTIME gtest_main)
     # plans/plan_x11.md X11-0090: this suite is the portable half of the Metal tests -- it

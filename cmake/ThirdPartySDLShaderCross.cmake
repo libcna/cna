@@ -13,17 +13,20 @@ set(CNA_SPIRV_CROSS_GIT_REPOSITORY "https://github.com/KhronosGroup/SPIRV-Cross.
 set(CNA_SPIRV_CROSS_GIT_TAG "vulkan-sdk-1.4.350.0"
     CACHE STRING "Pinned SPIRV-Cross revision used by SDL_shadercross")
 
-function(cna_configure_sdl_shadercross)
-    if(TARGET cna_sdl_shadercross)
+# plans/plan_apple_m4.md AM4-144: SPIRV-Cross alone, for the Metal renderer's compiled XNA effects
+# (MojoShader SPIR-V -> MSL in process) as well as for SDL_shadercross below. Idempotent, so a
+# multi-renderer build that selects both configures the one pinned source once.
+function(cna_configure_spirv_cross)
+    if(TARGET spirv-cross-c)
         return()
     endif()
 
     include(FetchContent)
 
     # SDL_shadercross's upstream vendored mode also requires complete DXC, SPIRV-Headers and
-    # SPIRV-Tools submodules even when DXC is disabled. CNA needs only the C API from SPIRV-Cross
-    # for SPIR-V -> MSL/HLSL translation, so provide that target explicitly and fetch no unrelated
-    # compiler/tool sources. The static closure also avoids a second runtime DLL/dylib beside SDL.
+    # SPIRV-Tools submodules even when DXC is disabled. CNA needs only SPIRV-Cross for SPIR-V ->
+    # MSL/HLSL translation, so provide that target explicitly and fetch no unrelated compiler/tool
+    # sources. The static closure also avoids a second runtime DLL/dylib beside SDL.
     set(SPIRV_CROSS_SHARED OFF CACHE BOOL "" FORCE)
     set(SPIRV_CROSS_STATIC ON CACHE BOOL "" FORCE)
     set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
@@ -51,6 +54,15 @@ function(cna_configure_sdl_shadercross)
     if(NOT TARGET spirv_cross_c)
         add_library(spirv_cross_c ALIAS spirv-cross-c)
     endif()
+endfunction()
+
+function(cna_configure_sdl_shadercross)
+    if(TARGET cna_sdl_shadercross)
+        return()
+    endif()
+
+    include(FetchContent)
+    cna_configure_spirv_cross()
 
     set(SDLSHADERCROSS_DXC OFF CACHE BOOL "" FORCE)
     set(SDLSHADERCROSS_SHARED OFF CACHE BOOL "" FORCE)

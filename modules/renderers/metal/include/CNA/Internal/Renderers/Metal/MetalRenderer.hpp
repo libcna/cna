@@ -2,11 +2,16 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+#include "CNA/CNAHelper.hpp"
+#endif
 
 #include <memory>
 
 namespace CNA::Internal::Renderers::Metal
 {
+    struct MetalMojoShaderContextEXT;
+
     /**
      * @brief Direct Objective-C++ Metal implementation of CNA's graphics renderer contract.
      */
@@ -634,6 +639,41 @@ namespace CNA::Internal::Renderers::Metal
          * @return True only when that capability belongs to the supported Metal contract.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+#if defined(CNA_METAL_COMPILED_EFFECTS)
+        /**
+         * @brief Creates the runtime of a compiled XNA effect (plans/plan_apple_m4.md AM4-144).
+         *
+         * @param effectCode Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes.
+         * @return The runtime.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief Reports that compiled XNA effects run on this renderer.
+         *
+         * @return True: this build translates them to MSL.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override;
+
+        /**
+         * @brief Returns the renderer-wide MojoShader effect context, created on first use.
+         *
+         * @return The context every compiled effect of this renderer binds through.
+         */
+        CNAEXT [[nodiscard]] MetalMojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /**
+         * @brief Reports whether a public texture's storage belongs to this renderer.
+         *
+         * @param texture Texture2D, RenderTarget2D, TextureCube, RenderTargetCube or Texture3D.
+         * @return True when a compiled effect can sample it here.
+         */
+        CNAEXT [[nodiscard]] bool OwnsSampleableTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
 
         /** @brief Opaque Objective-C++ implementation storage. */
         struct Impl;

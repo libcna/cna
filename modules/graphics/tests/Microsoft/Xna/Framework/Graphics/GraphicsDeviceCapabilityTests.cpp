@@ -100,8 +100,9 @@ struct CapabilityExpectation
 // EasyGL, Vulkan, WebGPU and DirectX 9/11 all pull MojoShader in only as an extra,
 // off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
 // CNA_EASYGL_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
-// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS) -- selecting the renderer alone
-// is not enough to expect the capability true for any of those six.
+// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS / CNA_METAL_COMPILED_EFFECTS,
+// plans/plan_apple_m4.md AM4-144) -- selecting the renderer alone
+// is not enough to expect the capability true for any of those seven.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
 // plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
@@ -115,7 +116,8 @@ struct CapabilityExpectation
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS))
+    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_METAL) && defined(CNA_METAL_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

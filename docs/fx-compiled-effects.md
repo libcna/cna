@@ -187,14 +187,14 @@ rejected by name.
 Publishing a pass's sampler state on `GraphicsDevice.SamplerStates` is only half the job; the other
 half is that the state actually filters the sampled texture. What each backend can express:
 
-| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 | Vulkan | DirectX 11 |
-|---|---|---|---|---|---|---|
-| `Filter` | yes | yes | yes | yes | yes | yes |
-| `AddressU` / `AddressV` | yes | yes | yes | yes | yes | yes |
-| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) | yes | yes |
-| `MaxAnisotropy` | yes | yes | yes | yes | yes | yes |
-| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`minLod`) | yes (`MinLOD`) |
-| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) | yes (`mipLodBias`) | yes (`MipLODBias`) |
+| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 | Vulkan | DirectX 11 | Metal |
+|---|---|---|---|---|---|---|---|
+| `Filter` | yes | yes | yes | yes | yes | yes | yes |
+| `AddressU` / `AddressV` | yes | yes | yes | yes | yes | yes | yes |
+| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) | yes | yes | yes (`rAddressMode`) |
+| `MaxAnisotropy` | yes | yes | yes | yes | yes | yes | yes |
+| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`minLod`) | yes (`MinLOD`) | yes (`lodMinClamp`) |
+| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) | yes (`mipLodBias`) | yes (`MipLODBias`) | macOS/iOS 26+ (`lodBias`); refused by name below |
 
 The sampling entries in that table are checked by drawing, not only by reading CNA's state objects back:
 `RunCompiledEffectSamplerPixelContract` binds a real texture, applies the pass, draws, reads the
@@ -259,6 +259,7 @@ shared.
 | EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `VULKAN` | **true** | `CNA_VULKAN_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding; passes every applicable shared section, with multi-stream input refused renderer-wide |
 | `DIRECTX11` | **true** | `CNA_DIRECTX11_COMPILED_EFFECTS` (off by default) | MojoShader's D3D11 adapter; all 18 shared/public-path tests pass, including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling |
+| `METAL` | **true** | `CNA_METAL_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to MSL in process by SPIRV-Cross (`plans/plan_apple_m4.md` AM4-144); passes every shared section Vulkan, SDL_GPU and WebGPU run, multi-stream and instancing included, plus the Shader Model 1-3 sections the SPIR-V route can express -- see below |
 | every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
@@ -304,6 +305,27 @@ DirectX 11 joined the supported set on 2026-09-09 through MojoShader's native D3
 opt-in route passes the shared public-path suite through Wine+DXVK on a private headless display,
 including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 9 and Metal
 are the remaining planned waves; each becomes true only after the same executed quality gate.
+
+Metal joined on 2026-10-08 (`plans/plan_apple_m4.md` AM4-144, `CNA_METAL_COMPILED_EFFECTS=ON`).
+MojoShader has no usable Metal adapter -- its own metal profile hard-fails constructs real XNA 4.0
+content contains -- so Metal takes Vulkan's and WebGPU's route, MojoShader's portable SPIR-V profile
+linked per draw against the bound declarations, and adds one step: SPIRV-Cross translates each
+linked stage to MSL in process (no external tool runs), which Metal compiles once per linked body
+with IEEE math. Uniform blocks bind at vertex buffer 1 and fragment buffer 0, a pixel sampler at
+texture/sampler index = its register, vertex streams at the AM4-143 indices. Four XNA rules the
+other SPIR-V backends do not apply are applied here: Direct3D 9 pixel centres (the viewport moves
+63/128 of a pixel, as the stock route's matrix does), `vPos` as the integer pixel (Metal's
+`[[position]]` is rebased half a pixel), `GraphicsDevice`'s texture and sampler slots as what a draw
+samples after `Apply()` (EasyGL's reading), and an unbound sampler as opaque black. Running EasyGL's
+Shader Model 1-3 sections on this route found three silent wrong-pixel defects shared by every
+SPIR-V backend: `vPos` (fixed on Metal as above), a predicated `TEXKILL` that killed unconditionally
+(fixed for all of them by `mojoshader-6333f74-spirv-predicated-texkill.patch`), and `TEXBEM`/
+`TEXBEML` reading zero bump matrices because no SPIR-V adapter fills the two float4s per sampler
+MojoShader appends to the uniform block (filled on Metal; Vulkan, WebGPU and SDL_GPU still leave
+them zero). What the SPIR-V profile cannot express -- `EXPP`'s attribute fixup, relative input
+addressing, predicated destinations, `TEXM3X2DEPTH`, `TEXREG2AR`/`TEXREG2RGB`, ps_1_4 `BEM`, a swizzled
+sample result -- is refused by name at Effect construction, and Metal's test
+`ConstructsTheSpirvProfileCannotExpressRefuseByName` keeps it that way.
 Fixed-function, 2D-only and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
 Phase G tracks the rollout, and its own section 10.3 -- not the one below, which belongs to this
 page -- classifies every renderer identity.
