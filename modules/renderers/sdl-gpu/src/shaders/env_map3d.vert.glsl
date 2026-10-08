@@ -44,6 +44,7 @@ layout(set = 1, binding = 2) uniform FogParams {
 
 void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
+    gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(ep.world))));
     fragNormal = normalize(normalMatrix * inNormal);

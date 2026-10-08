@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Compile GLSL shaders to SPIR-V and emit a C++ header with embedded byte arrays.
 
-Uses libshaderc.so.1 (already installed as libshaderc1 package) via ctypes.
+Uses libshaderc.so.1 (already installed as libshaderc1 package) via ctypes, or the library named by
+$CNA_SHADERC_LIBRARY (e.g. shaderc's own build, libshaderc_shared.1.dylib on macOS).
 Run from the shaders/ directory or pass --output <path>.
 
 Output: spirv_shaders.hpp  (next to this script unless --output given)
@@ -15,6 +16,7 @@ compiled SPIR-V here without re-checking its set numbers against this convention
 """
 
 import ctypes
+import os
 import struct
 import sys
 from pathlib import Path
@@ -26,7 +28,10 @@ _lib_candidates = [
     "libshaderc.so.1",
     "/usr/lib/x86_64-linux-gnu/libshaderc.so.1",
     "/usr/lib/x86_64-linux-gnu/libshaderc_shared.so.1",
+    "libshaderc_shared.1.dylib",
 ]
+if os.environ.get("CNA_SHADERC_LIBRARY"):
+    _lib_candidates.insert(0, os.environ["CNA_SHADERC_LIBRARY"])
 _shaderc = None
 for _candidate in _lib_candidates:
     try:
@@ -35,7 +40,8 @@ for _candidate in _lib_candidates:
     except OSError:
         pass
 if _shaderc is None:
-    raise RuntimeError("libshaderc.so.1 not found — install libshaderc1 or libshaderc-dev")
+    raise RuntimeError("libshaderc not found — install libshaderc1 or libshaderc-dev, or set "
+                       "CNA_SHADERC_LIBRARY to a libshaderc_shared library")
 
 # shaderc C API prototypes
 _shaderc.shaderc_compiler_initialize.restype = ctypes.c_void_p

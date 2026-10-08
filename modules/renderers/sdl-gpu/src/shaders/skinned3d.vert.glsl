@@ -87,6 +87,7 @@ void main() {
                                           + loadBone(inBoneIndices.w) * inBoneWeights.w;
     vec4 skinnedPos = CNA_INSTANCE_POSITION(skinMat * vec4(inPos, 1.0));
     gl_Position = pc.mvp * skinnedPos;
+    gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
     // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)). The world
