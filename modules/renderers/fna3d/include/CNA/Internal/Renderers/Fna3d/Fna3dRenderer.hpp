@@ -1407,6 +1407,18 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;
 
+        /**
+         * @brief Whether `SamplerState.MipMapLevelOfDetailBias` reaches the GPU. CNAEXT.
+         *
+         * plans/plan_apple_m4.md AM4-191: FNA3D hands the bias to its driver's native sampler. On
+         * Apple its SDL_GPU driver runs on SDL's Metal backend, which ignores `mip_lod_bias` (CNA's
+         * own SDL_GPU renderer carries the bias in its shaders instead, SDLGPU-121; FNA3D's
+         * MojoShader shaders have no such input), so there the bias has no effect.
+         *
+         * @return False on Apple with any driver but OpenGL, otherwise true.
+         */
+        [[nodiscard]] bool SamplerLodBiasReachesTheGpuEXT() const noexcept;
+
         /** @brief The largest single-axis texture dimension FNA3D guarantees. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
 

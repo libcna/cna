@@ -5,6 +5,7 @@
 #include "CNA/Internal/Json.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "CNA/TestSupport/CompiledEffectFormat.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dApi.hpp"
@@ -1713,6 +1714,10 @@ TEST(Fna3dCompiledEffectDrawTest, SharedSamplerPixelContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    if (const auto* fna3d =
+            dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
+        options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 

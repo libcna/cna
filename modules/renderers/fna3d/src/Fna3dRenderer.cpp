@@ -1080,6 +1080,15 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    bool Fna3dRenderer::SamplerLodBiasReachesTheGpuEXT() const noexcept
+    {
+#if defined(__APPLE__)
+        return driverDefaultsMissingVertexInputs_;   // AM4-190's driver probe: true only for OpenGL
+#else
+        return true;
+#endif
+    }
+
     int Fna3dRenderer::GetMaxTextureDimension() const
     {
         // FNA3D exposes no maximum-texture-size query; XNA 4.0 HiDef guarantees 4096 and every
