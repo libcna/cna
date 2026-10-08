@@ -176,8 +176,12 @@ effect's flags, and every input that pipeline's vertex function reads is bound a
 element's own offset and format, matched by usage and usage index; channels the effect does not
 read are ignored, and the layout is part of the pipeline key. A buffer with no declaration is the
 canonical XNA vertex type its stride names, with exactly the old fixed descriptor. Refused by name:
-a missing input, a raw integer format for a float input, `BLENDINDICES` other than `Byte4`, and an
-element outside the record. The lit `BasicEffect` functions read `COLOR0` (`AM4-081`) exactly when
+a missing input, a raw integer format (`Byte4`, `Short2`, `Short4`) for a float input, which Metal
+will not convert, and an element outside the record. `BLENDINDICES` takes any format, as Direct3D 9
+reads it (`AM4-152`): `Byte4` feeds the skinning shaders' `uchar4` input, every other format a
+`float4` one in a pipeline variant specialized on a function constant (`Short2`/`Short4` fetched
+normalized and scaled back), truncated to an index as HLSL's `int` conversion does --
+CustomModelAnimation's processor writes `Vector4` indices. The lit `BasicEffect` functions read `COLOR0` (`AM4-081`) exactly when
 `VertexColorEnabled` is on, as XNA's permutations do; with it off a declared colour is ignored
 (`AM4-098`). `DualTextureEffect` samples its second texture
 with `TEXCOORD1`; a record with one set feeds it to both, as `VULKAN-150` does.

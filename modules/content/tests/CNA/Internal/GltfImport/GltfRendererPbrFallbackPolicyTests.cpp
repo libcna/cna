@@ -789,11 +789,13 @@ namespace
          // around the index in EasyGL's own skinning GLSL. The rule is unchanged.
          "if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y",
          "if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z"},
+        // plans/plan_apple_m4.md AM4-152: BLENDINDICES in any format, read through CNA_BONE_INDICES
+        // into a uint4 first, as FX-127 did for EasyGL. The rule is unchanged.
         {"metal",
          "newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16",
          "t.skinParams[0]=(float)params.weightsPerVertex",
-         "if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y",
-         "if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z"},
+         "if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * in.boneWeights.y",
+         "if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * in.boneWeights.z"},
         {"sdl-gpu",
          "out[i] = p.boneTransforms[i]",
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",

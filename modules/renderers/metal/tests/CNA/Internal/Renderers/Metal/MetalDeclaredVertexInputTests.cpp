@@ -133,12 +133,39 @@ TEST(MetalDeclaredVertexInput, IntegerFormatsAreRefusedForFloatInputs)
     EXPECT_FALSE(BuildMetalDeclaredVertexInput(K::Colored16, shortPosition, 12).IsComplete());
 }
 
-TEST(MetalDeclaredVertexInput, BlendIndicesMustBeByte4)
+// plans/plan_apple_m4.md AM4-152: BLENDINDICES in any format, as Direct3D 9 reads it.
+TEST(MetalDeclaredVertexInput, BlendIndicesTakeAnyFormatThroughTheMatchingShaderInput)
 {
     auto elements = MetalCanonicalElementsFor(K::Skinned52);
-    EXPECT_TRUE(BuildMetalDeclaredVertexInput(K::Skinned52, elements, 52).IsComplete());
+    const MetalDeclaredVertexInput byte4 = BuildMetalDeclaredVertexInput(K::Skinned52, elements, 52);
+    ASSERT_TRUE(byte4.IsComplete());
+    EXPECT_FALSE(byte4.boneIndicesFloat);
+
+    elements[4] = VertexElement(48, F::Vector4, U::BlendIndices, 0);
+    const MetalDeclaredVertexInput vector4 = BuildMetalDeclaredVertexInput(K::Skinned52, elements, 64);
+    ASSERT_TRUE(vector4.IsComplete()) << vector4.refusal;
+    EXPECT_TRUE(vector4.boneIndicesFloat);
+    EXPECT_FLOAT_EQ(vector4.boneIndexScale, 1.0f);
+    EXPECT_NE(vector4.LayoutKey(), byte4.LayoutKey());
+
     elements[4] = VertexElement(48, F::Short4, U::BlendIndices, 0);
-    EXPECT_FALSE(BuildMetalDeclaredVertexInput(K::Skinned52, elements, 56).IsComplete());
+    const MetalDeclaredVertexInput short4 = BuildMetalDeclaredVertexInput(K::Skinned52, elements, 56);
+    ASSERT_TRUE(short4.IsComplete()) << short4.refusal;
+    EXPECT_TRUE(short4.boneIndicesFloat);
+    EXPECT_FLOAT_EQ(short4.boneIndexScale, 32767.0f);
+}
+
+TEST(MetalDeclaredVertexInput, BoneIndexInputFetchesEachFormatAsMetalCanConvertIt)
+{
+    EXPECT_EQ(MetalBoneIndexInputFor(F::Byte4).kind, MetalVertexAttribKind::UChar4);
+    EXPECT_FALSE(MetalBoneIndexInputFor(F::Byte4).floatInput);
+    EXPECT_EQ(MetalBoneIndexInputFor(F::Vector4).kind, MetalVertexAttribKind::Float4);
+    EXPECT_EQ(MetalBoneIndexInputFor(F::HalfVector4).kind, MetalVertexAttribKind::Half4);
+    EXPECT_EQ(MetalBoneIndexInputFor(F::Short2).kind, MetalVertexAttribKind::Short2Normalized);
+    EXPECT_EQ(MetalBoneIndexInputFor(F::Short4).kind, MetalVertexAttribKind::Short4Normalized);
+    for (const F format : {F::Vector4, F::Vector2, F::Single, F::HalfVector4, F::Short2, F::Short4,
+                           F::Color, F::NormalizedShort4})
+        EXPECT_TRUE(MetalBoneIndexInputFor(format).floatInput) << static_cast<int>(format);
 }
 
 TEST(MetalDeclaredVertexInput, AnElementPastTheRecordIsRefused)

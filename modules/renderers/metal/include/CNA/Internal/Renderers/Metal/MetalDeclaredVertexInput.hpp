@@ -201,6 +201,13 @@ namespace CNA::Internal::Renderers::Metal
         std::vector<MetalDeclaredLayout> layouts;
         /** @brief The draw supplies the per-instance world matrix (attributes 12..15). */
         bool instanceMatrix = false;
+        /**
+         * @brief BLENDINDICES is read through the shaders' float4 input, not the uchar4 one
+         *        (plans/plan_apple_m4.md AM4-152).
+         */
+        bool boneIndicesFloat = false;
+        /** @brief What the float4 bone-index input is multiplied by before its rounding. */
+        float boneIndexScale = 1.0f;
         /** @brief Why the declaration cannot feed the pipeline; empty when it can. */
         std::string refusal;
 
@@ -255,6 +262,8 @@ namespace CNA::Internal::Renderers::Metal
                 mix(static_cast<std::uint64_t>(l.stepRate));
             }
             mix(instanceMatrix ? 1u : 0u);
+            mix(boneIndicesFloat ? 1u : 0u);
+            mix(static_cast<std::uint64_t>(boneIndexScale));
             return h == 0 ? 1 : h;
         }
     };
@@ -313,12 +322,49 @@ namespace CNA::Internal::Renderers::Metal
         }
     }
 
+    /** @brief How a BLENDINDICES element reaches the skinning shaders (AM4-152). */
+    struct MetalBoneIndexInput
+    {
+        /** @brief The vertex format Metal fetches the element as. */
+        MetalVertexAttribKind kind = MetalVertexAttribKind::UChar4;
+        /** @brief Read through the float4 input rather than the uchar4 one. */
+        bool floatInput = false;
+        /** @brief Multiplier applied to the float4 input before rounding to an index. */
+        float scale = 1.0f;
+    };
+
+    /**
+     * @brief The bone-index input a BLENDINDICES element of a given format feeds.
+     *
+     * plans/plan_apple_m4.md AM4-152: Direct3D 9 hands every vertex input to the shader as float,
+     * so XNA draws BLENDINDICES in any format -- CustomModelAnimation's SkinnedModelProcessor
+     * writes Vector4. Byte4 stays the uchar4 input; a float, half or normalized format feeds the
+     * float4 input as its value; Short2/Short4, which Metal will not convert to float, are fetched
+     * normalized and scaled back by 32767 (exact for every non-negative index).
+     *
+     * @param format Element format.
+     * @return The fetch kind and the input it feeds.
+     */
+    [[nodiscard]] inline MetalBoneIndexInput MetalBoneIndexInputFor(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
+    {
+        using VEF = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        switch (format)
+        {
+            case VEF::Byte4:  return {MetalVertexAttribKind::UChar4, false, 1.0f};
+            case VEF::Short2: return {MetalVertexAttribKind::Short2Normalized, true, 32767.0f};
+            case VEF::Short4: return {MetalVertexAttribKind::Short4Normalized, true, 32767.0f};
+            default:          return {DescribeMetalVertexElementFormat(format).kind, true, 1.0f};
+        }
+    }
+
     /**
      * @brief Whether an element format can feed a semantic's shader type.
      *
      * Metal converts a float, half or normalized format to the shader's float vector, but not a
-     * raw integer format; the skinning shaders read BLENDINDICES as `uchar4`, which only Byte4
-     * supplies.
+     * raw integer format. BLENDINDICES takes any format, as Direct3D 9 does: Byte4 feeds the
+     * skinning shaders' `uchar4` input, every other format their float4 one (a pipeline variant,
+     * plans/plan_apple_m4.md AM4-152; MetalBoneIndexInputFor).
      *
      * @param semantic Shader input.
      * @param format Element format.
@@ -330,7 +376,7 @@ namespace CNA::Internal::Renderers::Metal
     {
         using VEF = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         if (semantic == MetalVertexSemantic::BlendIndices)
-            return format == VEF::Byte4;
+            return true;
         switch (format)
         {
             case VEF::Byte4:
@@ -470,8 +516,15 @@ namespace CNA::Internal::Renderers::Metal
                                 " lies outside the " + std::to_string(recordStride) + "-byte record";
                 return input;
             }
-            input.attributes.push_back(MetalDeclaredAttribute{
-                static_cast<int>(location), DescribeMetalVertexElementFormat(format).kind, offset});
+            MetalVertexAttribKind kind = DescribeMetalVertexElementFormat(format).kind;
+            if (semantic == MetalVertexSemantic::BlendIndices)
+            {
+                const MetalBoneIndexInput bones = MetalBoneIndexInputFor(format);
+                kind = bones.kind;
+                input.boneIndicesFloat = bones.floatInput;
+                input.boneIndexScale = bones.scale;
+            }
+            input.attributes.push_back(MetalDeclaredAttribute{static_cast<int>(location), kind, offset});
         }
         return input;
     }

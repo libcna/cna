@@ -252,6 +252,20 @@ constant bool cnaInstanced [[function_constant(1)]];
     float4 cnaInst3 [[attribute(15), function_constant(cnaInstanced)]];
 #define CNA_INSTANCE_MATRIX(in) float4x4(in.cnaInst0, in.cnaInst1, in.cnaInst2, in.cnaInst3)
 #define CNA_INSTANCE_POSITION(in, p) (cnaInstanced ? CNA_INSTANCE_MATRIX(in) * (p) : (p))
+// plans/plan_apple_m4.md AM4-152: BLENDINDICES in any format, as Direct3D 9 reads it. Byte4 feeds the
+// uchar4 input; every other format the float4 one, in the pipeline variant specialized with
+// cnaBoneIndicesFloat (cnaBoneIndexScale undoes Short2/Short4's normalized fetch). A float index
+// truncates, as HLSL's int conversion does.
+constant bool cnaBoneIndicesFloat [[function_constant(2)]];
+constant bool cnaBoneIndicesByte = !cnaBoneIndicesFloat;
+constant float cnaBoneIndexScale [[function_constant(3)]];
+#define CNA_BONE_INDEX_INPUTS(n) \
+    uchar4 boneIndices [[attribute(n), function_constant(cnaBoneIndicesByte)]]; \
+    float4 boneIndicesF [[attribute(n), function_constant(cnaBoneIndicesFloat)]];
+#define CNA_BONE_INDICES(in) \
+    (cnaBoneIndicesFloat ? uint4(max(cnaBoneIndexScale == 1.0 ? in.boneIndicesF \
+                                     : rint(in.boneIndicesF * cnaBoneIndexScale), 0.0)) \
+                         : uint4(in.boneIndices))
 #define CNA_INSTANCE_DIRECTION(in, d) \
     (cnaInstanced ? float3x3(in.cnaInst0.xyz, in.cnaInst1.xyz, in.cnaInst2.xyz) * (d) : (d))
 
@@ -541,10 +555,10 @@ struct SkinnedUniforms {
     float4 fogVector;
     float4 vertexColorEnabled; // x = 0/1
 };
-struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]];  CNA_INSTANCE_INPUTS };
-struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; float4 color [[attribute(5)]];  CNA_INSTANCE_INPUTS };
+struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; CNA_BONE_INDEX_INPUTS(4)  CNA_INSTANCE_INPUTS };
+struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; CNA_BONE_INDEX_INPUTS(4) float4 color [[attribute(5)]];  CNA_INSTANCE_INPUTS };
 struct VSkinnedOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
-inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
+inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uint4 boneIndices, float4 vcolor,
                                     constant SkinnedTransform& t, constant float4x4* bones,
                                     float4 fogVector, float4x4 instance) {
     VSkinnedOut o;
@@ -577,10 +591,10 @@ inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, fl
     return o;
 }
 vertex VSkinnedOut cna_v3d_skinned(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), float4(1.0), t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedOut cna_v3d_skinned_color(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), in.color, t, bones, su.fogVector, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float3 N = normalize(in.normal);
@@ -616,7 +630,7 @@ fragment CnaFragOut cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float
 // matching cna_f3d_skinned's own shape (SkinnedEffect pre-folds ambient into emissiveColor at the
 // C++ effect layer), so SkinnedUniforms/fillSkinnedUniforms() need no changes.
 struct VSkinnedVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float4 color; };
-inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
+inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uint4 boneIndices, float4 vcolor,
                                     constant SkinnedTransform& t, constant SkinnedUniforms& su, constant float4x4* bones,
                                     float4x4 instance) {
     VSkinnedVertexLitOut o;
@@ -652,10 +666,10 @@ inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 no
     return o;
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_vertexlit(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), float4(1.0), t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 vertex VSkinnedVertexLitOut cna_v3d_skinned_color_vertexlit(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
-    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, CNA_BONE_INDICES(in), in.color, t, su, bones, cnaInstanced ? CNA_INSTANCE_MATRIX(in) : float4x4(1.0));
 }
 fragment CnaFragOut cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]], constant uint& cnaSampleMask [[buffer(28), function_constant(cnaSampleMaskOut)]]) {
     float4 texColor = tex.sample(smp, in.uv);
@@ -821,7 +835,7 @@ fragment CnaFragOut cna_f3d_pbr(VPbrOut in [[stage_in]],
 // interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
 // tangents remain ordinary directions.
 struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
-struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; float2 uv1 [[attribute(7)]];  CNA_INSTANCE_INPUTS };
+struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; CNA_BONE_INDEX_INPUTS(5) float4 color [[attribute(6)]]; float2 uv1 [[attribute(7)]];  CNA_INSTANCE_INPUTS };
 float3 cna_skin_normal(float3x3 m, float3 n) {
     float3 c0=m[0], c1=m[1], c2=m[2];
     float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
@@ -832,9 +846,10 @@ float3 cna_skin_normal(float3x3 m, float3 n) {
 vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant SkinnedPbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     VPbrOut o;
     int weightsPerVertex = int(t.skinParams.x);
-    float4x4 skinMat = bones[in.boneIndices.x] * in.boneWeights.x;
-    if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y;
-    if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z + bones[in.boneIndices.w] * in.boneWeights.w;
+    const uint4 boneIndices = CNA_BONE_INDICES(in);   // AM4-152
+    float4x4 skinMat = bones[boneIndices.x] * in.boneWeights.x;
+    if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * in.boneWeights.y;
+    if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * in.boneWeights.z + bones[boneIndices.w] * in.boneWeights.w;
     float4 skinnedPos = CNA_INSTANCE_POSITION(in, skinMat * float4(in.position, 1.0));
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1120,7 +1135,8 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
         int colorCount=1, int sampleCount=1, bool sampleMaskOutput=false,
         const std::array<MTLPixelFormat,8>* colorFormats=nullptr, bool instanceMatrix=false,
         MTLPixelFormat depthFormat=MTLPixelFormatDepth32Float_Stencil8,
-        MTLPixelFormat stencilFormat=MTLPixelFormatDepth32Float_Stencil8)
+        MTLPixelFormat stencilFormat=MTLPixelFormatDepth32Float_Stencil8,
+        bool boneIndicesFloat=false, float boneIndexScale=1.0f)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         if(!d) throw std::runtime_error("Metal: failed to allocate render-pipeline descriptor");
@@ -1131,6 +1147,8 @@ fragment CnaFragOut cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[textur
         const bool instanced=instanceMatrix;
         [constants setConstantValue:&maskOutput type:MTLDataTypeBool atIndex:0];
         [constants setConstantValue:&instanced type:MTLDataTypeBool atIndex:1];
+        [constants setConstantValue:&boneIndicesFloat type:MTLDataTypeBool atIndex:2];   // AM4-152
+        [constants setConstantValue:&boneIndexScale type:MTLDataTypeFloat atIndex:3];
         NSError* functionError=nil;
         d.vertexFunction=[lib newFunctionWithName:vs constantValues:constants error:&functionError];
         d.fragmentFunction=[lib newFunctionWithName:fs constantValues:constants error:&functionError];
@@ -2892,7 +2910,9 @@ struct MetalRenderer::Impl
         pipelineOwner.Adopt(makePipeline(device, library, vs, fs, vd, currentBlend, colorCount,
                                          sampleCountKey, sampleMaskOutput, &activeColorFormats,
                                          vertexInput && vertexInput->instanceMatrix,   // AM4-143
-                                         activeDepthFormat, activeStencilFormat));     // AM4-151
+                                         activeDepthFormat, activeStencilFormat,       // AM4-151
+                                         vertexInput && vertexInput->boneIndicesFloat,
+                                         vertexInput ? vertexInput->boneIndexScale : 1.0f));   // AM4-152
         const auto inserted=EmplaceMetalOwnedResource(pipelineCache,key,pipelineOwner);
         return inserted->second;
     }
