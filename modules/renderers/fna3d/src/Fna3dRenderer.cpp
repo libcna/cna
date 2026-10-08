@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
@@ -114,9 +115,14 @@ namespace CNA::Internal::Renderers::Fna3d
 
         if (window_ == nullptr)
         {
-            throw std::runtime_error(
-                "FNA3D renderer: no SDL window was supplied. FNA3D presents into an OS window and "
-                "has no headless device path.");
+            // plans/plan_apple_m4.md AM4-188: a platform without SDL windows (HEADLESS, TERMINAL)
+            // declining what this renderer needs, which GraphicsDevice reports as XNA does
+            // (NoSuitableGraphicsDeviceException around the platform's refusal) -- the same
+            // answer SDL_GPU gives since AM4-176 -- not an FNA3D failure.
+            throw CNA::Platform::PlatformException(
+                "FNA3D device",
+                "no SDL window was supplied. FNA3D presents into an OS window and has no "
+                "headless device path.");
         }
 
         // FNA3D_PrepareWindowAttributes() is not only a window-flag query: it is where FNA3D
