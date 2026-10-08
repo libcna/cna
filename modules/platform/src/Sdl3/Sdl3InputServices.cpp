@@ -1106,9 +1106,12 @@ namespace CNA::Platform::Sdl3 {
                 return {};
             }
 
+            // A negative count is a backend that could not count (Darwin's haptics before
+            // SDL_INIT_HAPTIC report -1); it reports no device rather than reserving (size_t)-1.
+            const int listed = count > 0 ? count : 0;
             std::vector<InputDeviceInfo> devices;
-            devices.reserve(static_cast<std::size_t>(count));
-            for (int i = 0; i < count; ++i)
+            devices.reserve(static_cast<std::size_t>(listed));
+            for (int i = 0; i < listed; ++i)
             {
                 InputDeviceInfo info;
                 info.id = static_cast<DeviceId>(ids[i]);
