@@ -1066,6 +1066,53 @@ TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
     delete result;
 }
 
+// plans/plan_apple_m4.md AM4-090: the Guide primes its input -- every key already down counts as
+// held -- when something new appears on top, so the Enter that opened a message box cannot also
+// answer it. AM4-086 judged "new" by the box's text, so a box identical to the previous one was not
+// new: opened while Enter was down (the game's own Enter raising it, say), it took that Enter as a
+// fresh press and answered itself. The regression first showed only when an earlier test in the
+// same process had left a box with the same text; this pins it directly.
+TEST(GuideTest, AnIdenticalMessageBoxOpenedWhileEnterIsDownDoesNotAnswerItself) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using CNA::Platform::KeyCode;
+
+    MessageBoxGuard guard;
+    CannedKeyboardPlatform platform;
+    CNA::Platform::Testing::ScopedCurrentPlatform scope(platform);
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+    auto frame = [&](std::vector<KeyCode> keys) {
+        platform.keyboard.snapshot.pressedKeys = std::move(keys);
+        spriteBatch.Begin();
+        Guide::RenderPendingMessageBoxEXT(device, spriteBatch, *font, whitePixel);
+        spriteBatch.End();
+    };
+    const auto show = [] {
+        return Guide::BeginShowMessageBox("Same", "Same text", std::vector<std::string>{"OK"}, 0,
+                                          MessageBoxIcon::None, System::AsyncCallback{}, std::any{});
+    };
+
+    System::IAsyncResult* first = show();
+    frame({});
+    frame({KeyCode::Escape});
+    ASSERT_TRUE(first->getIsCompletedProperty()) << "Escape cancels the first box";
+    EXPECT_EQ(std::nullopt, Guide::EndShowMessageBox(first));
+    delete first;
+
+    System::IAsyncResult* second = show();
+    frame({KeyCode::Enter});   // Enter was already down when the identical box opened
+    EXPECT_FALSE(second->getIsCompletedProperty())
+        << "the Enter that was down when the box opened must not answer it";
+    frame({});
+    frame({KeyCode::Enter});
+    ASSERT_TRUE(second->getIsCompletedProperty()) << "a new press answers it";
+    EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(second));
+    delete second;
+}
+
 // Task 3.1 checklist: "focusButton parameter is honored as the initial default selection."
 // GetPendingMessageBoxFocusButtonForTestingEXT confirms it round-trips correctly without
 // requiring pixel readback of the rendered highlight.

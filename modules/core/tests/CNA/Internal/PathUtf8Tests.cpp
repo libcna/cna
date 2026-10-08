@@ -158,14 +158,31 @@ TEST(PathUtf8Test, DirectoryEnumerationAgreesWithTheUtf8TextOfWhatWasWritten)
     ScopedDirectory scope("enumerate");
     std::vector<std::string> expected;
 
+    // APFS (and HFS+) are normalization-insensitive: the NFC and NFD spellings of "étude" name ONE
+    // file there, and the second open reuses the first entry. Whether this filesystem folds is
+    // probed with raw bytes, independently of PathFromUtf8 (plans/plan_apple_m4.md AM4-111): on a
+    // byte-exact filesystem (ext4) every class must create its own entry, so a PathFromUtf8 that
+    // normalized NFD to NFC would still be caught there.
+#if defined(_WIN32)
+    // NTFS compares UTF-16 code units, and a std::string path would go through the ANSI code page.
+    const bool foldsNormalization = false;
+#else
+    const bool foldsNormalization = [&] {
+        const fs::path nfc = scope.Path() / fs::path(std::string("fold-probe-\xC3\xA9"));
+        const fs::path nfd = scope.Path() / fs::path(std::string("fold-probe-e\xCC\x81"));
+        { std::ofstream probe(nfc, std::ios::binary); }
+        std::error_code probeError;
+        const bool folds = fs::exists(nfd, probeError);
+        fs::remove(nfc, probeError);
+        return folds;
+    }();
+#endif
+
     for (const PathClass& item : Classes())
     {
         const fs::path file = scope.Path() / PathFromUtf8(std::string(item.utf8) + ".bin");
-        // APFS (and HFS+) are normalization-insensitive: the NFC and NFD spellings of "étude"
-        // name ONE file there, and the second open reuses the first entry. Only a name that
-        // creates its own entry can be expected back from the enumeration.
         std::error_code existsError;
-        const bool alreadyNamed = fs::exists(file, existsError);
+        const bool alreadyNamed = foldsNormalization && fs::exists(file, existsError);
         std::ofstream out(file, std::ios::binary);
         ASSERT_TRUE(out.is_open()) << "class " << item.label;
         if (!alreadyNamed)
