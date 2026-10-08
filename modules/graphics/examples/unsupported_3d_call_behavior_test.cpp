@@ -24,7 +24,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/NotSupportedException.hpp"
 
-#include <SDL3/SDL.h>
+#include "CNA/LogLevel.hpp"
+#include "CNA/Logger.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,6 +34,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -41,28 +43,14 @@ using CNA::Unsupported3DGraphicsCallBehavior;
 
 namespace
 {
+    // plans/plan_apple_m4.md AM4-196: the stub diagnostics are CNA::Logger warnings, so they are
+    // captured through CNA's own sink. This used to hook SDL's log output, which CNA::Logger no
+    // longer writes to (it writes to stderr through its sink), so nothing was ever captured.
     struct CapturedWarning
     {
-        SDL_LogPriority priority;
+        CNA::LogLevel level;
         std::string message;
     };
-
-    void SDLCALL CaptureWarnings(void* userdata, int, SDL_LogPriority priority,
-                                 const char* message)
-    {
-        if (message == nullptr)
-            return;
-
-        std::string text(message);
-        if (text.find("Unsupported3DGraphicsCallBehavior::WarnAndStub") ==
-            std::string::npos)
-        {
-            return;
-        }
-
-        static_cast<std::vector<CapturedWarning>*>(userdata)->push_back(
-            CapturedWarning{priority, std::move(text)});
-    }
 
     template <typename F>
     bool ThrowsRuntimeError(F&& fn)
@@ -130,11 +118,14 @@ protected:
         Check(ThrowsRuntimeError([&] { device.SetDepthTestEnabled(true); }),
               "unsupported state call throws by default");
 
-        SDL_LogOutputFunction previousLogFunction = nullptr;
-        void* previousLogUserdata = nullptr;
-        SDL_GetLogOutputFunction(&previousLogFunction, &previousLogUserdata);
         std::vector<CapturedWarning> warnings;
-        SDL_SetLogOutputFunction(CaptureWarnings, &warnings);
+        CNA::Logger::SetSink([&warnings](CNA::LogLevel level, CNA::LogCategory,
+                                         std::string_view message) {
+            if (message.find("Unsupported3DGraphicsCallBehavior::WarnAndStub") ==
+                std::string_view::npos)
+                return;
+            warnings.push_back(CapturedWarning{level, std::string(message)});
+        });
 
         device.SetUnsupported3DGraphicsCallBehavior(
             Unsupported3DGraphicsCallBehavior::WarnAndStub);
@@ -252,14 +243,14 @@ protected:
             !warnings.empty() &&
             std::all_of(warnings.begin(), warnings.end(),
                         [](const CapturedWarning& warning) {
-                            return warning.priority == SDL_LOG_PRIORITY_WARN;
+                            return warning.level == CNA::LogLevel::WARN;
                         });
         Check(depthWarningCount == 1,
               "the same unsupported operation warns only once");
         Check(allWarningsHaveWarningPriority,
               "stub diagnostics use warning severity");
 
-        SDL_SetLogOutputFunction(previousLogFunction, previousLogUserdata);
+        CNA::Logger::ResetSink();
 
         device.SetUnsupported3DGraphicsCallBehavior(
             Unsupported3DGraphicsCallBehavior::Throw);
@@ -278,6 +269,9 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(32);
         gdm_->setPreferredPresentationModeProperty(
             PresentationMode::NativeBackBuffer);
+        // plans/plan_apple_m4.md AM4-196: HiDef, because XNA's Reach profile refuses a Texture3D
+        // outright -- before any renderer or policy is asked -- and this checks the policy.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int GetResult() const { return fail_ == 0 ? 0 : 1; }

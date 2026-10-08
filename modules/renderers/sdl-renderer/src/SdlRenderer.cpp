@@ -884,8 +884,18 @@ namespace CNA::Internal::Renderers::SdlRenderer
                 "requested " + std::to_string(count) + ", but this renderer's 2D render pipeline "
                 "supports exactly one active render target at a time.");
         if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            // plans/plan_apple_m4.md AM4-196: under WarnAndStub the cube is CreateRenderTargetCube's
+            // own null object, and binding it is the same warned no-op as every other stubbed 3D
+            // call; under Throw it stays the established refusal.
+            if (ShouldStubUnsupported3DResource())
+            {
+                HandleUnsupported3DCall("SDL_Renderer", "SetRenderTargets(RenderTargetCube face)");
+                return;
+            }
             throw std::runtime_error(
                 "SDL_Renderer does not support RenderTargetCube face bindings.");
+        }
         SetRenderTarget2D(
             count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
@@ -932,8 +942,13 @@ namespace CNA::Internal::Renderers::SdlRenderer
     std::unique_ptr<ITextureCubeRenderer> SdlRenderer::CreateTextureCube(
         int size, bool, int)
     {
+        // plans/plan_apple_m4.md AM4-196: under the default Throw policy a cube is refused when it
+        // is constructed, deterministically and by name (REMED-GFX-130), as Texture3D already is --
+        // not created without storage so that only its first transfer could say so.
         if (!ShouldStubUnsupported3DResource())
-            return nullptr;
+            throw System::NotSupportedException(
+                "SDL_Renderer creates no cube-map texture resource: TextureCube is 3D storage this "
+                "2D-only renderer does not have (Unsupported3DGraphicsCallBehavior::Throw)");
         HandleUnsupported3DCall("SDL_Renderer", "CreateTextureCube");
         return std::make_unique<NoOpTextureCubeRenderer>(size);
     }

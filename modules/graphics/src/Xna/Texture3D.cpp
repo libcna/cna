@@ -170,7 +170,13 @@ namespace Microsoft::Xna::Framework::Graphics
         // silently no-op, so the capability is checked before renderer creation instead. The
         // renderer is asked directly: the device's answer also folds in the profile, which the
         // next check refuses with its own message.
-        if (!device.GetRenderer().SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        // plans/plan_apple_m4.md AM4-196: except where the device's caller opted into
+        // Unsupported3DGraphicsCallBehavior::WarnAndStub. A 2D-only renderer then answers
+        // CreateTexture3D with its own warn-once, zero-reading null object -- the documented
+        // meaning of that policy -- which this refusal used to pre-empt before it was asked.
+        if (!device.GetRenderer().SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
+            device.GetRenderer().GetUnsupported3DGraphicsCallBehavior() !=
+                CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub)
         {
             throw System::NotSupportedException(
                 "Texture3D: this renderer does not support real volume (3D) texture storage");

@@ -582,9 +582,6 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Runtime policy for calls permanently unsupported by this 2D-only renderer.
     cna_sdl_test(cna_test_sdl_unsupported_3d_behavior
                  ${CNA_GRAPHICS_EXAMPLES_DIR}/unsupported_3d_call_behavior_test.cpp)
-    # It captures SDL's log output through <SDL3/SDL.h> itself. CNA does not re-export SDL's
-    # headers, so they must come from SDL3::SDL3 rather than happening to be on the system path.
-    target_link_libraries(cna_test_sdl_unsupported_3d_behavior PRIVATE SDL3::SDL3)
     cna_register_renderer_test(NAME SDL_Renderer_Unsupported3DBehavior
         COMMAND cna_test_sdl_unsupported_3d_behavior
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
