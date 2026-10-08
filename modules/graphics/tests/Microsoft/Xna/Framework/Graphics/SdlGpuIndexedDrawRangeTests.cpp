@@ -62,6 +62,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
@@ -894,6 +895,10 @@ TEST_F(SdlGpuIndexedDrawRangeTest, MutatingSourceBuffersAfterQueuingDoesNotChang
     device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 3, 0, 3, 3, 1);
 
     // Rewrite both sources after the draw was queued but before the frame is rendered.
+    // plans/plan_apple_m4.md AM4-174: unbound first -- writing a buffer still set on the device is
+    // refused, as in XNA (SOFTWARE-247); the queued draw must keep its captured data regardless.
+    device.SetVertexBuffer(nullptr);
+    device.SetIndexBuffer(nullptr);
     std::vector<VertexPositionColor> replacement;
     Append(replacement, TriangleAt(-0.6f, Color::Yellow));
     Append(replacement, TriangleAt(0.6f, Color::Yellow));
@@ -1073,12 +1078,14 @@ TEST_F(SdlGpuIndexedDrawRangeTest, RejectsIndexedRangesOutsideTheBoundBuffers)
     EXPECT_THROW(
         device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 4, 0, 3, 0, 1),
         ArgumentOutOfRangeException);
-    // An index count that would overflow when derived from primitiveCount.
+    // An index count that would overflow when derived from primitiveCount. plans/plan_apple_m4.md
+    // AM4-174: since SOFTWARE-209 XNA's profile limit (HiDef: 1,048,575 primitives) refuses it
+    // first, with NotSupportedException, so no derived count can overflow any more.
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 3, 0,
             std::numeric_limits<int>::max()),
-        ArgumentOutOfRangeException);
+        System::NotSupportedException);
 
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
