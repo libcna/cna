@@ -3444,6 +3444,12 @@ namespace CNA::Internal::Renderers::WebGPU
             const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
             std::size_t streamCount,
             StockVertexShapeEXT shape) const;
+        /** @brief The resolution itself; ResolveStockVertexLayoutForDrawEXT adds the slot check. */
+        [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT ResolveStockVertexLayoutUncheckedEXT(
+            const WebGPUVertexBufferRenderer& vb,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount,
+            StockVertexShapeEXT shape) const;
 
         /**
          * @brief WEBGPU-172: copies each resolved stream's own bytes into a queued draw.

@@ -320,8 +320,8 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultiStreamVertexInput));
 
     // WEBGPU-172: and the width the capability is worth. GetMaxVertexStreams() is the device's own
-    // maxVertexBuffers less the slot reserved for the neutral record, clamped to the resolver's
-    // table -- never a constant, and never larger than what a draw can actually bind.
+    // maxVertexBuffers clamped to the resolver's table (AM4-185: no slot reserved up front, as the
+    // resolver binds only the streams a shader reads) -- never a constant.
     const CNA::RendererLimitValue maxStreams =
         gd.GetRendererCapabilityProfileEXT().GetLimit(CNA::RendererLimit::MaxVertexStreams);
     std::cout << "[WEBGPU-172] MaxVertexStreams == " << maxStreams.value

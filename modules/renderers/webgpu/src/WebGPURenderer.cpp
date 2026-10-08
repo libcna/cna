@@ -5626,6 +5626,30 @@ namespace CNA::Internal::Renderers::WebGPU
         const CNA::Internal::Graphics::StockVertexStreamEXT* streams, std::size_t streamCount,
         StockVertexShapeEXT shape) const
     {
+        CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT layout =
+            ResolveStockVertexLayoutUncheckedEXT(vb, streams, streamCount, shape);
+        // plans/plan_apple_m4.md AM4-185: the native slots this draw occupies are the streams its
+        // shader reads, the neutral record when it defaults an attribute, and -- counted always,
+        // so this cannot under-count -- the per-instance world-matrix stream an instanced twin
+        // binds. GetMaxVertexStreams() no longer reserves a slot up front, so a draw that would
+        // really exceed the device's maxVertexBuffers is refused here, by name.
+        const std::size_t nativeSlots = std::max<std::size_t>(layout.streamCount, 1u) +
+            (layout.usesNeutralRecord ? 1u : 0u) + 1u;
+        if (nativeSlots > static_cast<std::size_t>(maxVertexBuffers_))
+            throw System::NotSupportedException(
+                "CNA WebGPU: this draw's shader reads " + std::to_string(layout.streamCount) +
+                " vertex streams and needs " + std::to_string(nativeSlots) +
+                " native vertex-buffer slots, but the device binds at most " +
+                std::to_string(maxVertexBuffers_));
+        return layout;
+    }
+
+    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+    WebGPURenderer::ResolveStockVertexLayoutUncheckedEXT(
+        const WebGPUVertexBufferRenderer& vb,
+        const CNA::Internal::Graphics::StockVertexStreamEXT* streams, std::size_t streamCount,
+        StockVertexShapeEXT shape) const
+    {
         using namespace CNA::Internal::Graphics;
 
         const StockProgramInput* inputs = nullptr;
@@ -11691,12 +11715,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     int WebGPURenderer::GetMaxVertexStreams() const
     {
-        // One native slot is reserved for the neutral (0,0,0,1) record WEBGPU-155 binds after a
-        // draw's own streams, so the caller may bind one fewer than the device's own maximum. The
-        // resolver's own table is the other bound, and it is the smaller of the two on every device
-        // seen so far -- reporting the smaller of them is what makes GraphicsDevice refuse, by name,
-        // a binding array this renderer would otherwise have to truncate silently.
-        const int deviceBound = std::max(1, maxVertexBuffers_ - 1);
+        // plans/plan_apple_m4.md AM4-185: the public bound is the device's own maximum. The
+        // resolver searches every binding but binds only the streams the shader reads, so the
+        // neutral (0,0,0,1) record WEBGPU-155 binds after them needs a slot only beside those --
+        // ResolveStockVertexLayoutForDrawEXT checks that per draw. Reserving it here refused
+        // XNA's sixteen bindings outright. The resolver's own table is the other bound;
+        // reporting the smaller is what makes GraphicsDevice refuse, by name, a binding array
+        // this renderer would otherwise have to truncate silently.
+        const int deviceBound = std::max(1, maxVertexBuffers_);
         const int resolverBound =
             static_cast<int>(CNA::Internal::Graphics::kMaxStockVertexStreamsEXT);
         return std::min(deviceBound, resolverBound);
