@@ -70,6 +70,12 @@ FFmpeg (`VideoPlayer`) is available on macOS through Homebrew and is detected by
 exactly as on Linux. `CNA_ENABLE_VIDEO=AUTO` enables it when found; `OFF` produces a CNA/Game
 binary without FFmpeg while retaining the public video API.
 
+Homebrew builds its bottles for the macOS it runs on, so a binary linked against them does not
+start on an older macOS whatever `CNA_MACOS_DEPLOYMENT_TARGET` says: the linker warns "building
+for macOS-13.3, but linking with dylib ... built for newer version" (27.0 on the M4 campaign host).
+A binary meant to run down to the 13.3 floor either builds with `CNA_ENABLE_VIDEO=OFF` or links an
+FFmpeg built for that floor.
+
 An application consuming CNA with `add_subdirectory()` is not part of CNA's repository-owned
 bundle sweep. Configure its executable explicitly:
 
