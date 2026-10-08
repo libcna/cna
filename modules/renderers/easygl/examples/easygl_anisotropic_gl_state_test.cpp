@@ -68,11 +68,15 @@ protected:
               "SamplerParameter::MaxAnisotropy round-trips a real, sub-cap value through the driver");
 
         // Task 299's own extreme value, exercised directly against the raw Sampler API this time.
+        // plans/plan_apple_m4.md AM4-172: a driver may clamp an over-cap value when it is set
+        // (Mesa) or keep it and clamp when filtering (Apple's GL reads back 9999): the anisotropy
+        // used is min(TEXTURE_MAX_ANISOTROPY, MAX_TEXTURE_MAX_ANISOTROPY) either way, and only the
+        // stored value differs. What must not happen is a third value.
         s.set_parameter(::easygl::SamplerParameter::MaxAnisotropy, 9999.0f);
         float readBackExtreme = -1.0f;
         s.get_parameter_fv(::easygl::SamplerParameter::MaxAnisotropy, &readBackExtreme);
-        check(readBackExtreme <= driverMax + 0.01f,
-              "Driver clamps an over-cap MaxAnisotropy request to its own real cap, not 9999 verbatim");
+        check(readBackExtreme <= driverMax + 0.01f || nearlyEqual(readBackExtreme, 9999.0f),
+              "An over-cap MaxAnisotropy reads back as the driver's cap or as the value set");
 
         s.destroy();
 
