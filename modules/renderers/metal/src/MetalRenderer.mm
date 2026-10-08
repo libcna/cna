@@ -1711,18 +1711,30 @@ struct MetalRenderer::Impl
     // Begin and End -- Metal counts into one offset per encoder -- is re-armed on every encoder that
     // starts while it is open (a Clear, a render-target switch or a readback all start one), each
     // encoder counting into a slot of its own that PixelCount sums.
-    std::vector<int> freeQuerySlots;
+    //
+    // plans/plan_apple_m4.md AM4-108: Metal writes each offset's count when its render pass ends, and
+    // draws of ONE pass that count into the same offset add up. A slot released while the encoder
+    // that used it is still open (XNA lets a query be re-begun once IsComplete was asked, done or
+    // not) must therefore not be handed out again in that same encoder, or the new run would read
+    // the old run's samples too. Each released slot remembers the encoder generation it was
+    // released in, and is reused only from a later encoder; across passes Metal overwrites.
+    std::vector<std::pair<int,std::uint64_t>> freeQuerySlots;
+    std::uint64_t encoderGeneration=0;
     MetalOcclusionQueryRenderer* activeQuery=nullptr;
     int allocateQuerySlot()
     {
-        int slot;
-        if(!freeQuerySlots.empty()) { slot=freeQuerySlots.back(); freeQuerySlots.pop_back(); }
-        else if(nextQuerySlot<kMaxOcclusionQuerySlots) slot=nextQuerySlot++;
-        else throw std::runtime_error("Metal: every occlusion-query visibility slot is in use");
+        int slot=-1;
+        for (auto it=freeQuerySlots.begin(); it!=freeQuerySlots.end(); ++it) {
+            if (it->second<encoderGeneration) { slot=it->first; freeQuerySlots.erase(it); break; }
+        }
+        if(slot<0) {
+            if(nextQuerySlot<kMaxOcclusionQuerySlots) slot=nextQuerySlot++;
+            else throw std::runtime_error("Metal: every occlusion-query visibility slot is in use");
+        }
         static_cast<std::uint64_t*>([visibilityBuffer contents])[slot]=0;
         return slot;
     }
-    void releaseQuerySlot(int slot) { freeQuerySlots.push_back(slot); }
+    void releaseQuerySlot(int slot) { freeQuerySlots.emplace_back(slot,encoderGeneration); }
     // Defined after MetalOcclusionQueryRenderer, which it needs complete.
     void rearmActiveOcclusionQuery();
 
@@ -1999,6 +2011,7 @@ struct MetalRenderer::Impl
             encoder=[command renderCommandEncoderWithDescriptor:rp];
             if(!encoder) throw std::runtime_error("Metal: failed to create render command encoder");
             [encoder retain];
+            ++encoderGeneration;   // AM4-108
             const NSUInteger w=colors[0].width,h=colors[0].height;
             rasterState.BeginEncoder((std::size_t)w,(std::size_t)h);
             activeColorAttachmentCount=(int)colors.size();
@@ -2059,6 +2072,7 @@ struct MetalRenderer::Impl
             encoder=[command renderCommandEncoderWithDescriptor:rp];
             if(!encoder) throw std::runtime_error("Metal: failed to create clear render encoder");
             [encoder retain];
+            ++encoderGeneration;   // AM4-108
             const NSUInteger w=colors[0].width,h=colors[0].height;
             rasterState.BeginEncoder((std::size_t)w,(std::size_t)h);
             activeColorAttachmentCount=(int)colors.size();
@@ -2673,8 +2687,9 @@ public:
         if (owner_.activeQuery && owner_.activeQuery!=this)
             throw System::NotSupportedException(
                 "Metal counts visibility into one offset at a time: end the open OcclusionQuery before beginning another.");
-        // XNA requires IsComplete to have been observed before a re-Begin, so the previous
-        // results are final and their slots can be reused.
+        // XNA permits a re-Begin once IsComplete was asked, whether or not the result had arrived;
+        // the previous run is abandoned. Its slots return to the pool, which keeps them out of the
+        // encoder they were used in (AM4-108), so the new run never counts the old run's samples.
         releaseSlots();
         state_=std::make_shared<State>();
         owner_.activeQuery=this;
@@ -2691,7 +2706,15 @@ public:
     bool IsComplete() const override
     {
         const MetalAutoreleaseScope autoreleaseScope;
-        return state_ && state_->ended.load() && state_->pendingCommands.load()==0;
+        if (!state_ || !state_->ended.load()) return false;
+        // AM4-108: XNA's IsComplete flushes (D3D9 GetData with D3DGETDATA_FLUSH), so a game may poll
+        // it until it turns true. A query whose last counting encoder is still in the uncommitted
+        // command buffer would never complete before the frame's Present; commit that buffer here,
+        // the same mid-frame boundary a readback or a render-target switch takes.
+        if (state_->pendingCommands.load()!=0 && owner_.command!=nil &&
+            (__bridge const void*)owner_.command==state_->lastArmedCommand)
+            owner_.endActiveEncoding(false);
+        return state_->pendingCommands.load()==0;
     }
     int PixelCount() const override
     {
@@ -2712,6 +2735,7 @@ public:
         [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeCounting offset:(NSUInteger)(slot*8)];
         auto state=state_;
         state->pendingCommands.fetch_add(1);
+        state->lastArmedCommand=(__bridge const void*)owner_.command;
         [owner_.command addCompletedHandler:^(id<MTLCommandBuffer>) { state->pendingCommands.fetch_sub(1); }];
     }
 private:
@@ -2719,6 +2743,9 @@ private:
     {
         std::atomic<bool> ended{false};
         std::atomic<int> pendingCommands{0};
+        // Identity only (never dereferenced): the command buffer the newest counting encoder of this
+        // run belongs to, so IsComplete can tell whether that buffer is still uncommitted.
+        const void* lastArmedCommand=nullptr;
     };
     void releaseSlots()
     {

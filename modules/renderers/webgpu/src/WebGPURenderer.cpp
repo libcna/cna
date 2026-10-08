@@ -8666,6 +8666,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-84: tag the draw with the occlusion query open at queue time (nullptr if none), so
         // replay can wrap exactly this query's draws in BeginOcclusionQuery/EndOcclusionQuery.
         entry.occlusionQuery = activeOcclusionQuery_;
+        if (activeOcclusionQuery_ != nullptr)
+        {
+            entry.occlusionRun = activeOcclusionQuery_->runId_;
+            ++activeOcclusionQuery_->drawsThisRun_;
+        }
         drawOrder_.push_back(entry);
         // WEBGPU-115: the cumulative counterpart of drawOrder_.size(), which a flush drains.
         ++queuedDrawCommandCount_;
@@ -9085,6 +9090,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::PurgeOcclusionQuery(WebGPUOcclusionQueryRenderer* query)
     {
         if (activeOcclusionQuery_ == query) activeOcclusionQuery_ = nullptr;
+        // AM4-108: a draw still queued from the destroyed query's run keeps being drawn, uncounted.
+        // Its entry held the raw pointer, which the next flush dereferenced after the query was freed.
+        for (DrawOrderEntry& entry : drawOrder_)
+            if (entry.occlusionQuery == query) entry.occlusionQuery = nullptr;
         occlusionResolvedThisFlush_.erase(
             std::remove(occlusionResolvedThisFlush_.begin(), occlusionResolvedThisFlush_.end(), query),
             occlusionResolvedThisFlush_.end());
@@ -9153,6 +9162,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         ended_ = false;
         recordedThisFlush_ = false;
         pixelCount_ = 0;
+        ++runId_;
+        drawsThisRun_ = 0;
         owner_->activeOcclusionQuery_ = this;
     }
 
@@ -9165,7 +9176,24 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     bool WebGPUOcclusionQueryRenderer::IsComplete() const
     {
-        const_cast<WebGPURenderer*>(owner_)->ReadbackOcclusionResults();
+        auto* owner = const_cast<WebGPURenderer*>(owner_);
+        auto* self = const_cast<WebGPUOcclusionQueryRenderer*>(this);
+        if (ended_ && !complete_)
+        {
+            // plans/plan_apple_m4.md AM4-108: a run that drew nothing counted nothing; it has no
+            // query to resolve and would otherwise never complete.
+            if (drawsThisRun_ == 0)
+            {
+                self->complete_ = true;
+                pixelCount_ = 0;
+                return true;
+            }
+            // XNA's IsComplete flushes (Direct3D 9 GetData with D3DGETDATA_FLUSH): this run's draws
+            // may still be queued, and they are recorded -- and the query resolved -- only by a
+            // flush, so render the pending work now, as a back-buffer readback does.
+            owner->EnsureFrameRendered();
+        }
+        owner->ReadbackOcclusionResults();
         return complete_;
     }
 
@@ -11412,8 +11440,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // EndOcclusionQuery pair. A run ends when the tagged query changes (including to none);
             // only a query's FIRST run this flush is recorded, since a query slot may be written just
             // once per resolve -- the same policy VulkanRenderer applies.
+            // AM4-108: a draw queued in a run the query has since abandoned (begun again) is drawn
+            // but no longer counted, so the new run reports only its own samples.
             WebGPUOcclusionQueryRenderer* drawQuery =
-                (entry.kind == OrderedKind::Draw) ? entry.occlusionQuery : nullptr;
+                (entry.kind == OrderedKind::Draw && entry.occlusionQuery != nullptr &&
+                 entry.occlusionRun == entry.occlusionQuery->runId_)
+                    ? entry.occlusionQuery : nullptr;
             if (drawQuery != openQuery)
             {
                 if (openQuery != nullptr)

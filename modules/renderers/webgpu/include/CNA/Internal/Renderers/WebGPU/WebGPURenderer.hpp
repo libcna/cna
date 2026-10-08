@@ -863,6 +863,8 @@ namespace CNA::Internal::Renderers::WebGPU
         bool recordedThisFlush_ = false;   ///< Its first contiguous draw run this flush is wrapped.
         bool complete_ = false;            ///< A resolved result is available.
         mutable int pixelCount_ = 0;       ///< The last resolved sample count.
+        std::uint32_t runId_ = 0;          ///< AM4-108: incremented by every `Begin()`.
+        int drawsThisRun_ = 0;             ///< AM4-108: draws queued while this run was open.
     };
 
     /**
@@ -2791,6 +2793,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-84: the occlusion query active when this draw was queued (nullptr = none).
             /// Trailing with a default, so the same three-field aggregate inits stay valid.
             WebGPUOcclusionQueryRenderer* occlusionQuery = nullptr;
+            /// plans/plan_apple_m4.md AM4-108: that query's run (its `runId_` at queue time). A draw
+            /// queued before the query was begun again belongs to the abandoned run and is not counted.
+            std::uint32_t occlusionRun = 0;
         };
 
         /**
