@@ -57,6 +57,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     endif()
     cna_register_renderer_test(NAME Metal_Smoke COMMAND cna_test_metal_smoke
         TIMEOUT 60 LABELS "Metal")
+    # plans/plan_apple_m4.md AM4-102: the same 60 frames with the Objective-C runtime reporting every
+    # object autoreleased while no pool is in place. A frame's drawable, command buffer, render
+    # encoder or render-pass descriptor reported there is leaked for the life of the process (the
+    # renderer is manual retain/release and the game loop has no pool of its own). AppKit's one-time
+    # start-up allocations are not the renderer's and are not matched.
+    cna_register_renderer_test(NAME Metal_Smoke_AutoreleasePools COMMAND cna_test_metal_smoke
+        TIMEOUT 60 LABELS "Metal" ENVIRONMENT "OBJC_DEBUG_MISSING_POOLS=YES")
+    set_tests_properties(Metal_Smoke_AutoreleasePools PROPERTIES FAIL_REGULAR_EXPRESSION
+        "MISSING POOLS.* of class (CAMetalDrawable|MTLRenderPassDescriptorInternal|[A-Za-z0-9_]*CommandBuffer|[A-Za-z0-9_]*RenderContext|[A-Za-z0-9_]*BlitContext) ")
 
     # One runtime assertion per current GraphicsCapability. Unsupported features are asserted
     # false rather than left to IGraphicsRenderer's permissive default.

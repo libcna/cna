@@ -60,6 +60,28 @@
 #define CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS 0
 #endif
 #endif
+
+namespace {
+// plans/plan_apple_m4.md AM4-102: this file is compiled without ARC, and neither the renderer nor
+// the game loop had an autorelease pool, so every autoreleased object a call produced -- each
+// frame's command buffer, encoder, render-pass descriptor and drawable among them -- was never
+// released (objc "MISSING POOLS ... just leaking"). Every entry point that sends Objective-C
+// messages opens one of these, so its temporaries are released when it returns. Objects kept
+// across calls are retained explicitly (MetalObjectOwner::Reset, [x retain]); none of the scoped
+// entry points returns an Objective-C object, and the pools nest strictly with any the
+// application holds.
+class MetalAutoreleaseScope
+{
+public:
+    MetalAutoreleaseScope() : pool_([[NSAutoreleasePool alloc] init]) {}
+    ~MetalAutoreleaseScope() { [pool_ drain]; }
+    MetalAutoreleaseScope(const MetalAutoreleaseScope&) = delete;
+    MetalAutoreleaseScope& operator=(const MetalAutoreleaseScope&) = delete;
+
+private:
+    NSAutoreleasePool* pool_;
+};
+}
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -1157,6 +1179,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             texture_=(id<MTLTexture>)newTextureOwner.ReleaseOwnership();
         }
         void UpdatePixels(const uint8_t* rgba, int stride) override {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             MetalTextureTransferLayout layout{};
             if(!rgba||w_>std::numeric_limits<int>::max()/4||
@@ -1167,6 +1190,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             ownerHealthCheck_();
         }
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int lw, int lh) override {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             if(!rgba||level<0||level>=(int)texture_.mipmapLevelCount||
                lw!=MetalTextureTransferDetail::MipDimension(w_,level)||
@@ -1178,6 +1202,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
         bool GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
         {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
             return false;
@@ -1237,6 +1262,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // EasyGLTextureCubeRenderer's own kCubeFaceTargets order).
         bool SetData(int face,int level,int x,int y,int w,int h,const void* data,int dataLength) override
         {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             if(face<0||face>=6) return false;
             MetalTextureTransferLayout layout{};
@@ -1249,6 +1275,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
         bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
         {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             if(face<0||face>=6) return false;
             MetalTextureTransferLayout layout{};
@@ -1350,6 +1377,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         ~MetalTexture3D() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         bool SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int dataLength) override
         {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             MetalTextureTransferLayout layout{};
             if(!TryPrepareMetalTextureTransfer(
@@ -1364,6 +1392,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         // `z`/`depth` address the volume directly within slice 0).
         bool GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
         {
+            const MetalAutoreleaseScope autoreleaseScope;
             ownerHealthCheck_();
             MetalTextureTransferLayout layout{};
             if(!TryPrepareMetalTextureTransfer(
@@ -1438,6 +1467,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         explicit MetalVertexBuffer(id<MTLDevice> dev, int cap) : dev_(dev), capacity_(cap) { [dev_ retain]; }
         ~MetalVertexBuffer() override { [buffer_ release]; [dev_ release]; }
         void SetData(const void* data,int count,std::size_t stride) override {
+            const MetalAutoreleaseScope autoreleaseScope;
             std::size_t bytes=0;
             if(!data||stride>static_cast<std::size_t>(std::numeric_limits<int>::max())||
                !TryMetalBufferByteCount(count,stride,bytes))
@@ -1929,6 +1959,7 @@ struct MetalRenderer::Impl
 
     bool ensureFrame()
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         throwPendingCommandFailure();
         if (encoder) return true;
         try {
@@ -1980,6 +2011,7 @@ struct MetalRenderer::Impl
 
     void endFrame()
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         frameAvailability.EndLogicalFrame();
         throwPendingCommandFailure();
         if(!command && !drawable.HasValue()) return;
@@ -1994,6 +2026,8 @@ struct MetalRenderer::Impl
 
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
+        // Every Clear* entry point forwards here, so the scope lives here (AM4-102).
+        const MetalAutoreleaseScope autoreleaseScope;
         throwPendingCommandFailure();
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
         try {
@@ -2351,6 +2385,7 @@ public:
 
     bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         compileError_.clear();
         if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
         if (vertFn_) { [vertFn_ release]; vertFn_ = nil; }
@@ -2530,6 +2565,7 @@ public:
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         if(!begun_) throw std::runtime_error("Metal SpriteBatch.Draw called outside Begin/End");
         // plans/plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
         // drawing a previously-rendered-to RenderTarget2D as a sprite works, not just a plain Texture2D.
@@ -2628,6 +2664,7 @@ public:
     }
     void Begin() override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         if (owner_.activeQuery && owner_.activeQuery!=this)
             throw System::NotSupportedException(
                 "Metal counts visibility into one offset at a time: end the open OcclusionQuery before beginning another.");
@@ -2640,6 +2677,7 @@ public:
     }
     void End() override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         if (owner_.activeQuery!=this) return;
         if (owner_.encoder) [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeDisabled offset:0];
         owner_.activeQuery=nullptr;
@@ -2647,10 +2685,12 @@ public:
     }
     bool IsComplete() const override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         return state_ && state_->ended.load() && state_->pendingCommands.load()==0;
     }
     int PixelCount() const override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         if (!IsComplete()) return 0;
         const auto* data = static_cast<const std::uint64_t*>([owner_.visibilityBuffer contents]);
         std::uint64_t total=0;
@@ -2857,6 +2897,7 @@ public:
     int appliedDepthFormat() const noexcept { return appliedDepthFormat_; }
     void BindAsRenderTarget() override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         owner->endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
         // plans/plan_metal.md METAL-112: a single-target bind always means "not MRT" -- clears any stale
@@ -2905,6 +2946,7 @@ public:
     }
     void UnbindAsRenderTarget() override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         if (owner->currentRenderTarget==this) {
             regenerateMipsIfNeeded();
@@ -2913,6 +2955,7 @@ public:
     }
     void UpdatePixels(const uint8_t* rgba,int stride) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         if(!rgba||w_>std::numeric_limits<int>::max()/4||
            stride!=static_cast<int>(static_cast<std::size_t>(w_)*4u))
@@ -2925,6 +2968,7 @@ public:
     }
     void UpdatePixelsLevel(int level,const uint8_t* rgba,int levelWidth,int levelHeight) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         if(!rgba||level<0||level>=levelCount_||
            levelWidth!=MetalTextureTransferDetail::MipDimension(w_,level)||
@@ -2947,6 +2991,7 @@ public:
     // failed source command could be mistaken for successful current pixels.
     bool GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         MetalTextureTransferLayout layout{};
         if(!TryPrepareMetalTextureTransfer(
@@ -3102,6 +3147,7 @@ public:
     int appliedDepthFormat() const noexcept { return appliedDepthFormat_; }
     void BindAsRenderTargetFace(int face) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         if (face<0 || face>=6) throw std::out_of_range("Metal: RenderTargetCube face must be in [0, 5]");
         auto owner=lockOwner();
         owner->endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
@@ -3110,6 +3156,7 @@ public:
     }
     void UnbindAsRenderTarget() override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         if (owner->currentRenderTargetCube==this) {
             regenerateMipsIfNeeded();
@@ -3147,6 +3194,7 @@ public:
     bool SetData(int face,int level,int x,int y,int w,int h,
                  const void* data,int dataLength) override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         (void)lockOwner();
         (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
         (void)data; (void)dataLength;
@@ -3158,6 +3206,7 @@ public:
     // underlying MTLTexture object and command-buffer ordering concern.
     bool GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
     {
+        const MetalAutoreleaseScope autoreleaseScope;
         auto owner=lockOwner();
         if (face<0||face>=6) return false;
         MetalTextureTransferLayout layout{};
@@ -3461,6 +3510,7 @@ static std::function<void()> makeMetalResourceOwnerHealthCheck(
 
 MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>(args.surface))
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     auto& p=*impl_; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
     // plans/plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
     // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
@@ -3558,8 +3608,9 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
 }
 MetalRenderer::~MetalRenderer()=default;
 MetalRenderer::Impl& MetalRenderer::impl(){return *impl_;} const MetalRenderer::Impl& MetalRenderer::impl()const{return *impl_;}
-void MetalRenderer::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalRenderer::Present(){impl_->endFrame();}
+void MetalRenderer::Clear(float r,float g,float b,float a){ const MetalAutoreleaseScope autoreleaseScope; impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalRenderer::Present(){impl_->endFrame();}
 void MetalRenderer::GetViewportSize(int&w,int&h){
+    const MetalAutoreleaseScope autoreleaseScope;
     // plans/plan_metal.md METAL-156: now routed through the same computeLogicalViewport() the real
     // window<->logical transforms use, instead of a separate, simpler ad hoc formula. Verified by
     // hand to produce byte-identical results to the old `virtualW>0?virtualW:pw` formula for every
@@ -3572,6 +3623,7 @@ void MetalRenderer::GetViewportSize(int&w,int&h){
 }
 void MetalRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->surface.Update(surface);
     const auto drawableSize=impl_->surface.GetDrawableSize();
     [impl_->view updateDrawableWidth:drawableSize.width height:drawableSize.height
@@ -3579,6 +3631,7 @@ void MetalRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
 }
 void MetalRenderer::GetDefaultViewportRect(int&x,int&y,int&w,int&h)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     const auto vp=impl_->computeLogicalViewport();
     x=(int)std::lround(vp.x); y=(int)std::lround(vp.y);
     w=(int)std::lround(vp.width); h=(int)std::lround(vp.height);
@@ -3588,6 +3641,7 @@ void MetalRenderer::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->v
 // CAMetalLayer always presents on the display's refresh, so only the request is recorded there.
 void MetalRenderer::SetSwapInterval(int i)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->swapInterval=i;
 #if TARGET_OS_OSX
     impl_->layer.displaySyncEnabled=(i!=0);
@@ -3597,6 +3651,7 @@ void MetalRenderer::SetSwapInterval(int i)
 // produce correct coverage. Keep the public and internal values at their single-sample identity.
 int MetalRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     (void)requestedMultiSampleCount;
     auto& p=*impl_;
     p.deviceSampleCount=MetalAppliedMultiSampleCount(requestedMultiSampleCount)+1;
@@ -3631,6 +3686,7 @@ bool MetalRenderer::TransformLogicalToWindow(float logX,float logY,float& window
 // window) reads all zero, as WebGPU's does.
 void MetalRenderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     auto& p=*impl_;
     p.throwPendingCommandFailure();
     if(w<=0||h<=0) return;
@@ -3689,6 +3745,7 @@ void MetalRenderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
 }
 std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& d)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     switch(DescribeMetalTexture2DImagePolicy(d.surfaceFormat,d.width,d.height,d.mipLevels,d.pixels.size())){
         case MetalTexture2DImagePolicy::Supported: break;
@@ -3705,6 +3762,7 @@ std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& 
 std::unique_ptr<ISpriteBatchRenderer> MetalRenderer::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 std::unique_ptr<ITextureCubeRenderer> MetalRenderer::CreateTextureCube(int size,bool mipMap,int surfaceFormat)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     if (!MetalSupportsSurfaceFormat(surfaceFormat))
         throw System::NotSupportedException("Metal TextureCube supports only SurfaceFormat::Color.");
@@ -3717,6 +3775,7 @@ std::unique_ptr<ITextureCubeRenderer> MetalRenderer::CreateTextureCube(int size,
 // (ShaderEffect::IsEffectValid) rather than a throw; 3D draws with one stay refused in drawMetal3D.
 std::unique_ptr<IEffectRenderer> MetalRenderer::CreateEffectRenderer(const std::string& vertSrc,const std::string& fragSrc)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     auto renderer=std::make_unique<MetalEffectRenderer>(*impl_);
     if(!vertSrc.empty() && !fragSrc.empty()) renderer->CompileProgram(vertSrc,fragSrc);
@@ -3734,11 +3793,13 @@ bool MetalRenderer::SupportsShaderLanguageEXT(int language,int stage) const
 }
 std::unique_ptr<IOcclusionQueryRenderer> MetalRenderer::CreateOcclusionQuery()
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     return std::make_unique<MetalOcclusionQueryRenderer>(*impl_);
 }
 std::unique_ptr<ITexture3DRenderer> MetalRenderer::CreateTexture3D(int w,int h,int depth,bool mipMap,int surfaceFormat)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     if (!MetalSupportsSurfaceFormat(surfaceFormat))
         throw System::NotSupportedException("Metal Texture3D supports only SurfaceFormat::Color.");
@@ -3750,6 +3811,7 @@ std::unique_ptr<ITexture3DRenderer> MetalRenderer::CreateTexture3D(int w,int h,i
 // multisampling is deliberately clamped to zero at this boundary.
 std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2D(int w,int h,int depthFormat,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     (void)multiSampleCount;
     if(w<=0||h<=0) throw std::invalid_argument("Metal RenderTarget2D dimensions must be positive.");
@@ -3758,6 +3820,7 @@ std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2D(int w
 std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
     int w,int h,int depthFormat,bool preserveContents,bool mipMap,int multiSampleCount,int surfaceFormat)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (!MetalSupportsSurfaceFormat(surfaceFormat))
         throw System::NotSupportedException("Metal RenderTarget2D supports only SurfaceFormat::Color.");
     return CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount);
@@ -3765,6 +3828,7 @@ std::unique_ptr<IRenderTargetRenderer> MetalRenderer::CreateRenderTarget2DEXT(
 std::unique_ptr<IRenderTargetCubeRenderer> MetalRenderer::CreateRenderTargetCube(
     int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->throwPendingCommandFailure();
     if(size<=0) throw std::invalid_argument("Metal RenderTargetCube size must be positive.");
     return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, depthFormat, mipMap);
@@ -3782,6 +3846,7 @@ std::unique_ptr<IRenderTargetCubeRenderer> MetalRenderer::CreateRenderTargetCube
 // pass that made it observable, not left for a later phase to rediscover.
 void MetalRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     auto* metalRt=dynamic_cast<MetalRenderTargetRenderer*>(rt);
     if (rt && !metalRt) throw std::runtime_error("Metal: foreign RenderTarget2D renderer");
     auto& p=*impl_;
@@ -3792,6 +3857,7 @@ void MetalRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
 }
 void MetalRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt,int face)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (!rt) { SetRenderTarget2D(nullptr); return; }
     if (face<0 || face>=6) throw std::out_of_range("Metal: RenderTargetCube face must be in [0, 5]");
     auto* metalRt=dynamic_cast<MetalRenderTargetCubeRenderer*>(rt);
@@ -3804,6 +3870,7 @@ void MetalRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt,int fa
 }
 void MetalRenderer::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,int count)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (count<0) throw std::invalid_argument("Metal: render-target count cannot be negative");
     if (count==0) { SetRenderTarget2D(nullptr); return; }
     if (!renderTargets) throw std::invalid_argument("Metal: render-target descriptors cannot be null");
@@ -3865,18 +3932,20 @@ void MetalRenderer::SetRenderTargets(const RenderTargetBindingDescriptor* render
     }
     throw std::invalid_argument("Metal: unknown render-target descriptor type");
 }
-void MetalRenderer::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalRenderer::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalRenderer::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalRenderer::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalRenderer::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalRenderer::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
+void MetalRenderer::ClearColorAndDepth(float r,float g,float b,float a,float d){ const MetalAutoreleaseScope autoreleaseScope; impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalRenderer::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalRenderer::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalRenderer::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalRenderer::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalRenderer::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalRenderer::SetDepthTestEnabled(bool e)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     auto& p=*impl_;
     const auto previous=p.captureDepthState();
     p.depthEnabled=e;
     try { p.rebuildDepthState(); }
     catch (...) { p.restoreDepthState(previous); throw; }
 }
-void MetalRenderer::SetBlendEnabled(bool e){impl_->currentBlend=MetalBlendKeyForSetBlendEnabled(e);}
+void MetalRenderer::SetBlendEnabled(bool e){ const MetalAutoreleaseScope autoreleaseScope; impl_->currentBlend=MetalBlendKeyForSetBlendEnabled(e);}
 void MetalRenderer::SetDepthWriteEnabled(bool e)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     auto& p=*impl_;
     const auto previous=p.captureDepthState();
     p.depthWrite=e;
@@ -3885,6 +3954,7 @@ void MetalRenderer::SetDepthWriteEnabled(bool e)
 }
 void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colorDstBlend,int alphaDstBlend,int colorBlendFunc,int alphaBlendFunc,const BlendWriteState& writeState)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (!MetalSupportsBlendWriteState(writeState))
         throw System::NotSupportedException(
             "Metal supports colour-write masks on render target 0 only with the default multisample mask.");
@@ -3905,6 +3975,7 @@ void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnabl
                                                    int stencilMask,int stencilWriteMask,int referenceStencil,
                                                    bool twoSidedStencilMode,int ccwStencilFunc,int ccwStencilPass,int ccwStencilFail,int ccwStencilDepthFail)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     // plans/plan_metal.md METAL-7/9/10: real depthFunc + full front/back stencil-op wiring, replacing
     // the previous depthEnable/depthWrite/referenceStencil-only plumbing (depthFunc and all 8
     // stencil-op/mask/twoSided fields were silently ignored before this).
@@ -3937,6 +4008,7 @@ static MTLCullMode metalCullMode(int c)
 
 void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->cull=metalCullMode(c);
     impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;
     impl_->rasterState.SetScissorEnabled(se);
@@ -3955,6 +4027,7 @@ void MetalRenderer::ApplyRasterizerState(int c,int f,bool se,float db,float sb)
 }
 void MetalRenderer::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (slot<0 || slot>=16) throw std::out_of_range("Metal: sampler slot must be in [0, 15]");
     auto& request=impl_->samplerSlotRequests[slot];
     request.filter=filter; request.addressU=addressU; request.addressV=addressV; request.maxAnisotropy=maxAnisotropy;
@@ -3963,16 +4036,18 @@ void MetalRenderer::ApplySamplerState(int slot,int filter,int addressU,int addre
 }
 void MetalRenderer::ApplySamplerMipState(int slot,int maxMipLevel,float lodBias)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if (slot<0 || slot>=16) throw std::out_of_range("Metal: sampler slot must be in [0, 15]");
     auto& request=impl_->samplerSlotRequests[slot];
     impl_->samplerSlots[slot]=impl_->samplerFor(request.filter,request.addressU,request.addressV,
                                                 request.maxAnisotropy,maxMipLevel,lodBias);
     request.maxMipLevel=maxMipLevel; request.lodBias=lodBias;
 }
-void MetalRenderer::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
-void MetalRenderer::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
+void MetalRenderer::SetBlendFactor(float r,float g,float b,float a){ const MetalAutoreleaseScope autoreleaseScope; impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
+void MetalRenderer::SetReferenceStencil(int v){ const MetalAutoreleaseScope autoreleaseScope; impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
 void MetalRenderer::SetScissorRect(int x,int y,int w,int h)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->rasterState.SetScissor(x,y,w,h);
     if(impl_->encoder&&impl_->rasterState.IsScissorEnabled()){
         const MetalScissorState s=impl_->rasterState.NativeScissor();
@@ -3983,6 +4058,7 @@ void MetalRenderer::SetScissorRect(int x,int y,int w,int h)
 }
 void MetalRenderer::SetViewport(int x,int y,int w,int h,float mn,float mx)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     impl_->rasterState.SetViewport(x,y,w,h,mn,mx);
     if(impl_->encoder){
         const MetalViewportState v=impl_->rasterState.EffectiveViewport();
@@ -3990,7 +4066,7 @@ void MetalRenderer::SetViewport(int x,int y,int w,int h,float mn,float mx)
         [impl_->encoder setViewport:native];
     }
 }
-std::unique_ptr<IVertexBufferRenderer> MetalRenderer::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
+std::unique_ptr<IVertexBufferRenderer> MetalRenderer::CreateVertexBuffer(int c){ const MetalAutoreleaseScope autoreleaseScope; return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
 // plans/plan_metal.md METAL-34-style extraction: this dispatch logic's real body now lives in the
 // plain-C++ MetalSelectPipelineKind.hpp (no Objective-C, buildable and unit-tested on any platform
@@ -4334,6 +4410,7 @@ void MetalRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& v,const M
                                                   const Matrix& vi,const Matrix& p,
                                                   PrimitiveType pt,int pc)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
     drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);
@@ -4344,6 +4421,7 @@ void MetalRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& v,
                                                          const Matrix& w,const Matrix& vi,
                                                          const Matrix& p,PrimitiveType pt,int pc)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
@@ -4374,6 +4452,7 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
                                              const Matrix& vi,const Matrix& p,
                                              PrimitiveType pt,int pc,const GpuDrawParams& gp)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
     ValidateMetalDrawParams(gp,*vb);
@@ -4386,6 +4465,7 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
                                                     const Matrix& p,PrimitiveType pt,int pc,
                                                     const GpuDrawParams& gp)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
@@ -4394,6 +4474,7 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
 }
 void MetalRenderer::SetStringMarkerEXT(const char* m)
 {
+    const MetalAutoreleaseScope autoreleaseScope;
     if(!impl_->ensureFrame()) return;
     if(m) [impl_->encoder insertDebugSignpost:[NSString stringWithUTF8String:m]];
 }
