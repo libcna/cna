@@ -202,9 +202,21 @@ else()
     # an Emscripten build is where CNA first meets one. The submodule must remain byte-identical,
     # so attach the compatibility include to its owning object target after it is created rather
     # than changing CMAKE_CXX_FLAGS for the whole configure scope.
+    #
+    # Every compiled Draco target gets it, not only draco_io: the command-line tools (draco_decoder,
+    # draco_encoder) compile the same io/ sources themselves, and a build that names targets
+    # explicitly -- Android Gradle builds every target the CMake file API lists, EXCLUDE_FROM_ALL
+    # or not -- failed in draco_decoder (plans/plan_apple_m4.md AM4-305).
     add_subdirectory("${_cna_draco_dir}" "${CMAKE_CURRENT_BINARY_DIR}/draco" EXCLUDE_FROM_ALL)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        target_compile_options(draco_io PRIVATE -include algorithm)
+        get_property(_cna_draco_targets DIRECTORY "${_cna_draco_dir}" PROPERTY BUILDSYSTEM_TARGETS)
+        foreach(_cna_draco_target IN LISTS _cna_draco_targets)
+            get_target_property(_cna_draco_type "${_cna_draco_target}" TYPE)
+            if(_cna_draco_type MATCHES "^(STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY|EXECUTABLE)$")
+                target_compile_options("${_cna_draco_target}" PRIVATE
+                    "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include algorithm>")
+            endif()
+        endforeach()
     endif()
     set(CNA_DRACO_AVAILABLE ON)
     message(STATUS "CNA: Using pinned vendored Draco 1.5.7 (8786740086a9f4d83f44aa83badfbea4dce7a1b5)")
