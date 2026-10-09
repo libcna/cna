@@ -388,7 +388,9 @@ jobs:
               echo "::error::$exe links against SDL." >&2
               exit 1
             fi
-            if nm -D --undefined-only "$exe" | grep -q ' SDL_'; then
+            # grep reads to the end (no -q): under pipefail an early exit would let nm die of SIGPIPE
+            # and turn a found SDL reference into a pass (CNA plans/plan_apple_m4.md AM4-300).
+            if nm -D --undefined-only "$exe" | grep ' SDL_' > /dev/null; then
               echo "::error::$exe references SDL symbols." >&2
               exit 1
             fi

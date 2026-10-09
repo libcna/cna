@@ -168,9 +168,14 @@ jobs:
           core="cmake-build-wasm-multi/modules/core/libcna_core.a"
           test -f "$core" || { echo "libcna_core.a not built at $core" >&2; exit 1; }
 
-          # RTR-P10-23's surface: the page-facing export and the property reader.
+          # RTR-P10-23's surface: the page-facing export and the property reader. The symbol table
+          # goes to a file first: `llvm-nm | grep -q` under pipefail reports a symbol it found as
+          # missing, because grep exits at the first match and llvm-nm, still writing, dies of
+          # SIGPIPE (status 141) -- CNA plans/plan_apple_m4.md AM4-300.
+          core_symbols="${RUNNER_TEMP}/libcna_core.nm"
+          "$EMSDK/upstream/bin/llvm-nm" "$core" > "$core_symbols" 2>/dev/null
           for symbol in cna_set_preferred_renderer cna_read_module_preferred_renderer; do
-            if ! "$EMSDK/upstream/bin/llvm-nm" "$core" 2>/dev/null | grep -q "T ${symbol}$"; then
+            if ! grep -q "T ${symbol}$" "$core_symbols"; then
               echo "missing JS selection export: ${symbol}" >&2
               exit 1
             fi
@@ -185,7 +190,7 @@ jobs:
           missing=0
           for archive in libcna_renderer_easygl.a \
                          libcna_renderer_webgpu.a; do
-            if ! find cmake-build-wasm-multi -name "${archive}" | grep -q .; then
+            if ! find cmake-build-wasm-multi -name "${archive}" -print -quit | grep -q .; then
               echo "missing renderer archive: ${archive}" >&2
               missing=1
             fi
@@ -201,7 +206,7 @@ jobs:
           # generates GetDescriptor<Identity>() (EasyGL -> GetDescriptorWebGL2). A pattern requiring
           # the suffix silently counts only the multi-identity families -- it once reported 1 of 4
           # here while the bundle was in fact correct.
-          registry=$(find cmake-build-wasm-multi -name "CnaRendererRegistry.generated.cpp" | head -1)
+          registry=$(find cmake-build-wasm-multi -name "CnaRendererRegistry.generated.cpp" -print -quit)
           test -n "$registry" || { echo "generated registry not found" >&2; exit 1; }
           registered=$(grep -cE "::GetDescriptor[A-Za-z0-9]*\(\)," "$registry" || true)
           echo "registered renderers: ${registered}"
