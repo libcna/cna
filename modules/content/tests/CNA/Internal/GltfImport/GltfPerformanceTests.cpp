@@ -46,6 +46,24 @@ using Microsoft::Xna::Framework::Graphics::Model;
 
 namespace
 {
+#if defined(__SANITIZE_ADDRESS__)
+    constexpr bool kAddressSanitized = true;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+    constexpr bool kAddressSanitized = true;
+#else
+    constexpr bool kAddressSanitized = false;
+#endif
+#else
+    constexpr bool kAddressSanitized = false;
+#endif
+
+    /// The budgets below are tripwires for a change in the SHAPE of the work, sized against an
+    /// uninstrumented build. ASan+UBSan instrumentation costs about an order of magnitude on this
+    /// code: the sanitizer job measured 55.9 ms per parse and 53.5 ms per load/unload cycle against
+    /// 50 ms budgets (plans/plan_apple_m4.md AM4-316), so a sanitized build scales them.
+    constexpr double kBudgetScale = kAddressSanitized ? 10.0 : 1.0;
+
     /// Wall-clock milliseconds for one call of @p work, averaged over @p iterations.
     template <typename Work>
     double MillisecondsPerCall(int iterations, Work&& work)
@@ -95,7 +113,7 @@ TEST(GltfPerformance, ParseCostAndCachedCostAreMeasuredSeparately)
     // Two orders of magnitude above the measured cost of a small asset: a tripwire for a
     // regression that changes the shape of the work -- an accidental O(n^2), a re-read per
     // primitive -- not a benchmark target.
-    EXPECT_LT(msPerParse, 50.0)
+    EXPECT_LT(msPerParse, 50.0 * kBudgetScale)
         << "one parse-and-load of a three-vertex asset took " << msPerParse
         << " ms, which is not a slow machine -- it is a different algorithm";
     // The cache has to be worth having. A cached load is a map lookup and a copy; if it ever costs
@@ -234,7 +252,7 @@ TEST(GltfPerformance, AThousandLoadUnloadCyclesLeakNothing)
     });
     RecordProperty("cycles", kCycles);
     RecordProperty("msPerLoadUnloadCycle_x1000", static_cast<int>(msPerCycle * 1000.0));
-    EXPECT_LT(msPerCycle, 50.0) << "a load/unload cycle costs " << msPerCycle << " ms";
+    EXPECT_LT(msPerCycle, 50.0 * kBudgetScale) << "a load/unload cycle costs " << msPerCycle << " ms";
 }
 
 TEST(GltfPerformance, UnloadThenLoadAgainYieldsAWorkingModel)
@@ -362,7 +380,7 @@ TEST(GltfPerformance, OcclusionRemapCodecCostIsMeasured)
     RecordProperty("msPerOcclusionRemap_x1000", static_cast<int>(msPerRemap * 1000.0));
     RecordProperty("remappedImageBytes", static_cast<int>(remappedBytes));
     EXPECT_GT(remappedBytes, 0u) << "the remap produced nothing";
-    EXPECT_LT(msPerRemap, 25.0)
+    EXPECT_LT(msPerRemap, 25.0 * kBudgetScale)
         << "one occlusion remap of a small image took " << msPerRemap << " ms";
 }
 
@@ -421,7 +439,7 @@ TEST(GltfPerformance, MorphReuploadCostAndItsMemoryDuplicationAreMeasured)
         flip = !flip;
     });
     RecordProperty("msPerMorphReupload_x1000", static_cast<int>(msPerReupload * 1000.0));
-    EXPECT_LT(msPerReupload, 25.0)
+    EXPECT_LT(msPerReupload, 25.0 * kBudgetScale)
         << "one morph weight change on a tiny mesh took " << msPerReupload
         << " ms -- the blend is no longer linear in vertex count";
 }
