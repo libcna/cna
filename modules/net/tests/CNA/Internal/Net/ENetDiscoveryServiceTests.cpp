@@ -7,11 +7,15 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+// The discovery codec is built on every platform, and so are the tests of it below; only the
+// socket-level tests further down need a POSIX host (CNA plans/plan_apple_m4.md AM4-273).
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
+
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include <arpa/inet.h>
