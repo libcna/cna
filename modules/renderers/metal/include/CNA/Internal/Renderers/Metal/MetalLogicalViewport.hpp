@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include <algorithm>
+#include <cmath>
 
 // plans/plan_metal.md METAL-34-style extraction: the actual letterbox/logical-viewport arithmetic is
 // pure C++ (plain floats/ints and CnaPresentationMode, a shared enum with zero Objective-C
@@ -27,12 +28,14 @@ namespace CNA::Internal::Renderers::Metal
      * @param mode Active CNA presentation mode.
      * @param virtualWidth Requested logical width, or a non-positive value when unset.
      * @param virtualHeight Requested logical height, or a non-positive value when unset.
+     * @param displayScale Physical pixels per window unit (2 on a Retina display); a non-positive
+     *                     or non-finite value is treated as 1.
      * @return The resulting physical rectangle and logical dimensions.
      */
     [[nodiscard]] inline MetalLogicalViewport ComputeMetalLogicalViewport(
         int physicalWidth, int physicalHeight,
         CNA::Internal::Renderers::CnaPresentationMode mode,
-        int virtualWidth, int virtualHeight)
+        int virtualWidth, int virtualHeight, float displayScale = 1.0f)
     {
         using CNA::Internal::Renderers::CnaPresentationMode;
         MetalLogicalViewport vp{};
@@ -40,7 +43,18 @@ namespace CNA::Internal::Renderers::Metal
         vp.height = static_cast<float>(physicalHeight > 0 ? physicalHeight : 0);
         vp.logicalWidth = vp.width; vp.logicalHeight = vp.height;
         if (physicalWidth <= 0 || physicalHeight <= 0) return vp;
-        if (mode == CnaPresentationMode::NativeBackBuffer || virtualWidth <= 0 || virtualHeight <= 0) return vp;
+        if (mode == CnaPresentationMode::NativeBackBuffer || virtualWidth <= 0 || virtualHeight <= 0)
+        {
+            // plans/plan_apple_m4.md AM4-313: with no virtual resolution to scale to, the logical
+            // surface is the window's client area in WINDOW units, the whole drawable its physical
+            // rectangle -- as EasyGL's GlPresentationSurfaceState computes it. Reporting drawable
+            // pixels instead made a Retina window's Viewport twice the PresentationParameters and
+            // ClientBounds the rest of CNA describes the same window with.
+            const float scale = (displayScale > 0.0f && std::isfinite(displayScale)) ? displayScale : 1.0f;
+            vp.logicalWidth = std::round(vp.width / scale);
+            vp.logicalHeight = std::round(vp.height / scale);
+            return vp;
+        }
 
         float logicalWidth = static_cast<float>(virtualWidth);
         float logicalHeight = static_cast<float>(virtualHeight);

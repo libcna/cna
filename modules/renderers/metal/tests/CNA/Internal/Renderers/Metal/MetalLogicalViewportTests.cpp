@@ -12,6 +12,8 @@
 #include <gtest/gtest.h>
 #include "CNA/Internal/Renderers/Metal/MetalLogicalViewport.hpp"
 
+#include <limits>
+
 using namespace CNA::Internal::Renderers::Metal;
 using CNA::Internal::Renderers::CnaPresentationMode;
 
@@ -50,6 +52,33 @@ TEST(MetalLogicalViewport, NativeBackBufferIgnoresVirtualResolutionEntirely)
     EXPECT_FLOAT_EQ(vp.width, 1234.0f); EXPECT_FLOAT_EQ(vp.height, 567.0f);
     EXPECT_FLOAT_EQ(vp.logicalWidth, 1234.0f); EXPECT_FLOAT_EQ(vp.logicalHeight, 567.0f);
     EXPECT_FLOAT_EQ(vp.x, 0.0f); EXPECT_FLOAT_EQ(vp.y, 0.0f);
+}
+
+TEST(MetalLogicalViewport, NativeBackBufferOnARetinaDisplayIsTheClientAreaInWindowUnits)
+{
+    // plans/plan_apple_m4.md AM4-313: a 1280x720 window on a 2x display has a 2560x1440 drawable.
+    // The logical surface (Viewport, PresentationParameters, ClientBounds) is 1280x720; the
+    // physical rectangle still covers every drawable pixel.
+    auto vp = ComputeMetalLogicalViewport(2560, 1440, CnaPresentationMode::NativeBackBuffer, 1280, 720, 2.0f);
+    EXPECT_FLOAT_EQ(vp.width, 2560.0f); EXPECT_FLOAT_EQ(vp.height, 1440.0f);
+    EXPECT_FLOAT_EQ(vp.logicalWidth, 1280.0f); EXPECT_FLOAT_EQ(vp.logicalHeight, 720.0f);
+    EXPECT_FLOAT_EQ(vp.x, 0.0f); EXPECT_FLOAT_EQ(vp.y, 0.0f);
+}
+
+TEST(MetalLogicalViewport, NoVirtualResolutionOnARetinaDisplayIsTheClientAreaInWindowUnits)
+{
+    auto vp = ComputeMetalLogicalViewport(2000, 1200, CnaPresentationMode::Letterbox, 0, 0, 2.0f);
+    EXPECT_FLOAT_EQ(vp.width, 2000.0f); EXPECT_FLOAT_EQ(vp.height, 1200.0f);
+    EXPECT_FLOAT_EQ(vp.logicalWidth, 1000.0f); EXPECT_FLOAT_EQ(vp.logicalHeight, 600.0f);
+}
+
+TEST(MetalLogicalViewport, ANonPositiveOrNonFiniteDisplayScaleIsTreatedAsOne)
+{
+    auto zero = ComputeMetalLogicalViewport(800, 600, CnaPresentationMode::NativeBackBuffer, 0, 0, 0.0f);
+    EXPECT_FLOAT_EQ(zero.logicalWidth, 800.0f); EXPECT_FLOAT_EQ(zero.logicalHeight, 600.0f);
+    auto nan = ComputeMetalLogicalViewport(800, 600, CnaPresentationMode::NativeBackBuffer, 0, 0,
+                                           std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ(nan.logicalWidth, 800.0f); EXPECT_FLOAT_EQ(nan.logicalHeight, 600.0f);
 }
 
 TEST(MetalLogicalViewport, StretchFillsThePhysicalWindowIgnoringAspectRatio)

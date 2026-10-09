@@ -3134,7 +3134,8 @@ struct MetalRenderer::Impl
         const auto drawableSize=surface.GetDrawableSize();
         const int pw=drawableSize.width;
         const int ph=drawableSize.height;
-        LogicalViewport vp = ComputeMetalLogicalViewport(pw, ph, (CnaPresentationMode)presentationMode, virtualW, virtualH);
+        LogicalViewport vp = ComputeMetalLogicalViewport(pw, ph, (CnaPresentationMode)presentationMode, virtualW, virtualH,
+                                                         surface.GetDisplayScale());
         return vp;
     }
 
