@@ -91,6 +91,16 @@ namespace
     int RunProgram(const std::string& executable, const std::vector<std::string>& arguments,
             std::string& output)
     {
+#if defined(__EMSCRIPTEN__)
+        // A WebAssembly build cannot start a process: Emscripten declares posix_spawnp and links
+        // none, which stopped the wasm test bundle at link time. The parser tests read -1 as "the
+        // tool is unavailable" and skip; the fixture-tool tests below are not built here at all
+        // (CNA plans/plan_apple_m4.md AM4-282, as AM4-254 did for HostProcess).
+        (void)executable;
+        (void)arguments;
+        output.clear();
+        return -1;
+#else
         const std::filesystem::path capture =
             std::filesystem::temp_directory_path() /
             ("cna_xnb_conformance_out_" + std::to_string(::getpid()) + "_" +
@@ -124,6 +134,7 @@ namespace
         std::error_code error;
         std::filesystem::remove(capture, error);
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
     }
 
     /** @brief Returns whether a usable `python3` and the parser script are both present. */
@@ -136,7 +147,8 @@ namespace
 #endif
 }
 
-#if !defined(_WIN32) && defined(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH)
+// The fixture tool is a separate program these tests start; a WebAssembly build cannot start one.
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__) && defined(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH)
 
 TEST(XnbInteropCorpusTest, TheCommittedCorpusIsExactlyWhatTheGeneratorProducesToday)
 {
