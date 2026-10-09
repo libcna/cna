@@ -1329,6 +1329,26 @@ static void metalTextureReadbackToXna(const MetalTextureStorageInfo& storage,voi
     }
 }
 
+// plans/plan_apple_m4.md AM4-289: a replacement texture this renderer fills with a preservation
+// blit and then writes with replaceRegion: has to be synchronized between the two. Where Managed
+// storage keeps separate CPU and GPU copies -- an Intel or AMD Mac, the hosted CI runner's "Apple
+// Paravirtual device" -- the CPU write otherwise publishes a CPU copy that never saw the blit, and
+// every preserved face, mip or slice reads back as zero. Measured on that device with a CNA-free
+// probe: lost without synchronizeResource:, kept with it (Shared storage loses it too, so it is no
+// way out). On Apple silicon Managed is a single copy and this changes nothing.
+static void synchronizeBeforeCpuWrite(id<MTLBlitCommandEncoder> blit, id<MTLTexture> texture)
+{
+#if TARGET_OS_OSX
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    if (texture.storageMode == MTLStorageModeManaged) [blit synchronizeResource:texture];
+#pragma clang diagnostic pop
+#else
+    (void)blit;
+    (void)texture;
+#endif
+}
+
 // AM4-142: the view a shader samples a one- or two-channel target through. Direct3D 9 (XNA)
 // returns 1 for the channels such a format does not store -- (r,1,1,1) and (r,g,1,1) -- where
 // Metal returns 0 for colour; a +1 retained view, or nil when the texture samples as it is.
@@ -1433,6 +1453,7 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
                               sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(lw,lh,1)
                                  toTexture:newTex destinationSlice:0 destinationLevel:lvl destinationOrigin:MTLOriginMake(0,0,0)];
                 }
+                synchronizeBeforeCpuWrite(blit,newTex);   // AM4-289
                 [blit endEncoding];
                 [cmd commit];
                 [cmd waitUntilCompleted];
@@ -1640,6 +1661,7 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
                         destinationOrigin:MTLOriginMake(0,0,0)];
                 }
             }
+            synchronizeBeforeCpuWrite(blit,replacement);   // AM4-289
             [blit endEncoding]; [command commit]; [command waitUntilCompleted];
             if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: cube preservation blit failed: "+describeMetalCommandBufferError(command.error));
             ownerHealthCheck_();
@@ -1801,6 +1823,7 @@ static id<MTLTexture> makeXnaSamplingView(id<MTLTexture> texture,int channels)
                              toTexture:replacement destinationSlice:0 destinationLevel:(NSUInteger)mip
                     destinationOrigin:MTLOriginMake(0,0,0)];
             }
+            synchronizeBeforeCpuWrite(blit,replacement);   // AM4-289
             [blit endEncoding]; [command commit]; [command waitUntilCompleted];
             if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: 3D preservation blit failed: "+describeMetalCommandBufferError(command.error));
             ownerHealthCheck_();
@@ -4109,6 +4132,7 @@ private:
                              toTexture:replacement destinationSlice:0 destinationLevel:(NSUInteger)level
                     destinationOrigin:MTLOriginMake(0,0,0)];
             }
+            synchronizeBeforeCpuWrite(blit,replacement);   // AM4-289
             [blit endEncoding];[command commit];[command waitUntilCompleted];
             if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTarget2D preservation blit failed: "+describeMetalCommandBufferError(command.error));
             owner->throwPendingCommandFailure();
@@ -4382,6 +4406,7 @@ private:
                     destinationOrigin:MTLOriginMake(0,0,0)];
             }
         }
+        synchronizeBeforeCpuWrite(blit,replacement);   // AM4-289
         [blit endEncoding]; [command commit]; [command waitUntilCompleted];
         if(command.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: RenderTargetCube preservation blit failed: "+describeMetalCommandBufferError(command.error));
         owner->throwPendingCommandFailure();
