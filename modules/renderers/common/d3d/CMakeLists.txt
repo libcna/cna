@@ -9,7 +9,10 @@
 file(GLOB D3DCOMMON_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_library(cna_renderer_d3dcommon STATIC ${D3DCOMMON_SOURCES})
 target_link_libraries(cna_renderer_d3dcommon PUBLIC cna_renderer_common d3d11 dxgi d3dcompiler)
-cna_link_sharp_runtime(cna_renderer_d3dcommon PUBLIC)
+# A renderer helper linked PUBLIC by its renderer, so it takes the renderer closure, not the default
+# one: the default includes Xml (cmake/SharpRuntimeConsumption.cmake), and through this PUBLIC edge it
+# reached every program linking the renderer (plans/plan_apple_m4.md AM4-205).
+cna_link_sharp_runtime(cna_renderer_d3dcommon PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
 target_include_directories(cna_renderer_d3dcommon PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # Same reverse edges as every renderer target (cna_renderer_common_setup): the shared
 # core compiles against the graphics/math/core public headers and calls CNA-owned symbols.

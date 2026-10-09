@@ -8,7 +8,10 @@
 file(GLOB MOJOSHADER_EFFECT_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_library(cna_renderer_mojoshader_effect STATIC ${MOJOSHADER_EFFECT_SOURCES})
 target_link_libraries(cna_renderer_mojoshader_effect PUBLIC cna_renderer_common cna_mojoshader)
-cna_link_sharp_runtime(cna_renderer_mojoshader_effect PUBLIC)
+# A renderer helper linked PUBLIC by its renderer, so it takes the renderer closure, not the default
+# one: the default includes Xml (cmake/SharpRuntimeConsumption.cmake), and through this PUBLIC edge it
+# reached every program linking the renderer (plans/plan_apple_m4.md AM4-205).
+cna_link_sharp_runtime(cna_renderer_mojoshader_effect PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
 target_include_directories(cna_renderer_mojoshader_effect PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # Same reverse edges as every renderer target: this compiles against the graphics/math/core public
 # headers and calls CNA-owned symbols.
