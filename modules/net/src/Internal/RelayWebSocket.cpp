@@ -4,6 +4,7 @@
 #ifdef CNA_SERVICE_TLS_TRANSPORT
 #include <curl/curl.h>
 #endif
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <mutex>

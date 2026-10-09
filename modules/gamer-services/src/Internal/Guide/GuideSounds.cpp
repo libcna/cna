@@ -4,6 +4,7 @@
 // them off; without an audio device they are silently absent.
 #include "GuideScreen.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>

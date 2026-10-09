@@ -13,6 +13,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <mutex>
