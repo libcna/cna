@@ -151,9 +151,23 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
         r"(?:_[A-Z0-9_]+)?\b"
     )
     global_option = re.compile(r"\badd_(?:compile|link)_options\s*\(", re.IGNORECASE)
-    allowed_consumer_lines = {
-        'list(APPEND _configure_arguments "-DCMAKE_C_FLAGS=-fsanitize=${CNA_SANITIZE}")',
-        'list(APPEND _configure_arguments "-DCMAKE_EXE_LINKER_FLAGS=${_linker_flags}")',
+    # Exact lines one file may keep despite the rule, each because the rule cannot be met there.
+    allowed_lines = {
+        # The installed-package consumer configures a separate project and passes it flags.
+        "modules/c-api/cmake/RunInstalledConsumer.cmake": {
+            'list(APPEND _configure_arguments "-DCMAKE_C_FLAGS=-fsanitize=${CNA_SANITIZE}")',
+            'list(APPEND _configure_arguments "-DCMAKE_EXE_LINKER_FLAGS=${_linker_flags}")',
+        },
+        # Emscripten pthreads (CNA_ENABLE_EMSCRIPTEN_THREADS) are a whole-module WebAssembly ABI
+        # choice: every object linked into shared memory, third-party ones included, must be built
+        # and linked with -pthread, so the option is set for the directory before any target
+        # exists. Per-target options cannot reach targets CNA does not define. The block landed two
+        # days after this rule and failed general-tests-ci on every run (plans/plan_apple_m4.md
+        # AM4-240).
+        "CMakeLists.txt": {
+            "add_compile_options(-pthread)",
+            "add_link_options(-pthread)",
+        },
     }
 
     for path in cmake_policy_files():
@@ -164,9 +178,8 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
             line = original_line.split("#", 1)[0].strip()
             if not line:
                 continue
-            if relative == "modules/c-api/cmake/RunInstalledConsumer.cmake":
-                if line in allowed_consumer_lines:
-                    continue
+            if line in allowed_lines.get(relative, ()):
+                continue
             if raw_flag.search(line):
                 errors.append(f"{relative}:{line_number}: raw global flag policy: {line}")
             if global_option.search(line):
