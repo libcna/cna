@@ -464,6 +464,12 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
         }
     } restoreGuard;
 
+    // The gamer AddLocalGamer is given below must outlive the session: Dispose() still reaches it
+    // through its LocalNetworkGamer (CloseLeaderboardWriters). Declared after the dispose guard it
+    // was destroyed first, and Dispose() wrote through the dead stack object -- the heap corruption
+    // that crashed the Linux multi-renderer CnaTests at exit, now and then (AM4-322).
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("HostPlayer2");
+
     NetworkSession* hostSession = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
     struct DisposeGuard {
         NetworkSession* s;
@@ -481,7 +487,6 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     }
     ASSERT_NE(remoteGamer1, nullptr);
 
-    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("HostPlayer2");
     hostSession->AddLocalGamer(&secondSignedIn);
     ASSERT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 2);
     LocalNetworkGamer* firstLocal = hostSession->getLocalGamersProperty()[0];
@@ -541,10 +546,11 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
 // delivered in its original order.
 TEST(ENetBackendTest, ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriveInOrder) {
     std::size_t before = ENetBackend::GetDroppedAppDataCount();
+    // Declared before the client, whose destructor disposes the session that still reaches it.
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
     FakeHostedClient client;
     ASSERT_NE(client.otherPlayer, nullptr);
 
-    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
     client.session->AddLocalGamer(&secondSignedIn);
     LocalNetworkGamer* secondLocal = client.LocalFor(secondSignedIn);
     ASSERT_NE(secondLocal, nullptr);
@@ -586,8 +592,9 @@ TEST(ENetBackendTest, ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriv
 // welcome has numbered the others, exactly once, and not before: until then the host has no
 // machine to put it on.
 TEST(ENetBackendTest, ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed) {
-    FakeHostedClient client(false);
+    // Declared before the client, whose destructor disposes the session that still reaches it.
     SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
+    FakeHostedClient client(false);
     client.session->AddLocalGamer(&secondSignedIn);
     EXPECT_FALSE(client.ReceiveAtHost(MessageTag::AddLocalGamerRequest, 10).has_value());
 
@@ -662,6 +669,9 @@ TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGa
         }
     } restoreGuard;
 
+    // Outlives the session for the same reason as in HostLocalGamerAddedMidSessionIsAnnounced... above.
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
+
     NetworkSession* clientSession =
         NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
     struct DisposeGuard {
@@ -708,7 +718,6 @@ TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGa
     // stays unresolved for the rest of the test.
     // AddLocalGamer also adds the new gamer to getAllGamersProperty() itself (not just
     // getLocalGamersProperty()), so the "all gamers" count below is 3 from here on, not 2.
-    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
     clientSession->AddLocalGamer(&secondSignedIn);
     ASSERT_EQ(clientSession->getLocalGamersProperty().getCountProperty(), 2);
     ASSERT_EQ(clientSession->getAllGamersProperty().getCountProperty(), 3);
