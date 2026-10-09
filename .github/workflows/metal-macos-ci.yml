@@ -59,7 +59,10 @@ jobs:
           path: sharp-runtime
 
       - name: Install build dependencies
-        run: brew install ccache ffmpeg
+        # nlohmann-json: gamer services parse their JSON with it (cmake/HeaderOnlyJson.cmake), and
+        # the hosted image does not ship it, so configure stopped there (plans/plan_apple_m4.md
+        # AM4-247).
+        run: brew install ccache ffmpeg nlohmann-json
 
       - name: Configure native Metal renderer
         working-directory: cna
