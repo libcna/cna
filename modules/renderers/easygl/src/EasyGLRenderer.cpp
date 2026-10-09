@@ -5691,12 +5691,10 @@ namespace CNA::Internal::Renderers::EasyGL
         // are all recreated lazily by their ordinary first-use paths.
     }
 
-#if defined(CNA_EASYGL_COMPILED_EFFECTS)
     CNA::Platform::GlProcAddressLoader EasyGLRenderer::GetProcAddressLoaderEXT() const
     {
         return platformContext_->GetLoader();
     }
-#endif
 
     bool EasyGLRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {

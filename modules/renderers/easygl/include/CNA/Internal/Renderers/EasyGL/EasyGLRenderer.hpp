@@ -1827,6 +1827,17 @@ namespace CNA::Internal::Renderers::EasyGL
                 RendererThreadContextLeaseRelease release =
                     RendererThreadContextLeaseRelease::RestorePreviousBinding) override;
 
+        /**
+         * @brief CNAEXT. Returns the raw GL function-pointer loader this renderer's platform
+         * context resolves every native GL call through, so code outside the renderer can look GL
+         * functions up the same way: MojoShader's OpenGL adapter (EasyGLCompiledEffect.cpp), and a
+         * test that reads GL state through its own copy of meta-gl (plans/plan_apple_m4.md
+         * AM4-284). Available whether or not compiled effects are built (AM4-286).
+         *
+         * @return The loader of the context this renderer drew its GL functions from.
+         */
+        CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
+
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /**
          * @brief Parses a compiled XNA effect for this device (plans/plan_fx.md FX-062).
@@ -1863,14 +1874,6 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The context, or null if it could not be created.
          */
         CNAEXT [[nodiscard]] MOJOSHADER_glContext* GetMojoShaderContextEXT();
-
-        /**
-         * @brief CNAEXT. Returns the raw GL function-pointer loader this renderer's platform
-         * context resolves every native GL call through, so MojoShader's OpenGL adapter can look
-         * its own functions up the same way (EasyGLCompiledEffect.cpp, a different translation
-         * unit from where EasyGLPlatformContext is defined).
-         */
-        CNAEXT [[nodiscard]] CNA::Platform::GlProcAddressLoader GetProcAddressLoaderEXT() const;
 
         /**
          * @brief CNAEXT. One vertex stream a compiled-effect draw may read attributes from.
