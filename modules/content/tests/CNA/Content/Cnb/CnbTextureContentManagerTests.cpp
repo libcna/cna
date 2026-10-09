@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
@@ -30,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/NotSupportedException.hpp"
 
 using CNA::Content::Cnb::CnbTextureData;
 using CNA::Content::Cnb::CnbTextureFormat;
@@ -67,6 +70,16 @@ namespace
         std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()),
                   static_cast<std::streamsize>(bytes.size()));
+    }
+
+    /// Whether the active renderer stores cube faces: SDL_RENDERER creates no cube resource and
+    /// Headless stores no pixels, so both refuse TextureCube::SetData (REMED-GFX-135, the same
+    /// reviewed set as TextureCubeTests.cpp). A .cnb load passes that NotSupportedException
+    /// through, as an .xnb load passes a texture constructor's (CNA plans/plan_apple_m4.md AM4-268).
+    [[nodiscard]] bool CubeStorageSupported()
+    {
+        return !CNA_RENDERER_IS(CNA::Testing::Renderers::SdlRenderer,
+                                CNA::Testing::Renderers::Headless);
     }
 
     /// A 2x2 image whose four texels are all different, so a transposed or shifted upload is
@@ -163,6 +176,12 @@ TEST(CnbTextureContentManagerTest, ATextureCubeCnbLoadsAllSixFacesDistinctly)
     GraphicsDevice device;
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
+    if (!CubeStorageSupported())
+    {
+        EXPECT_THROW((void)cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky"),
+                     System::NotSupportedException);
+        return;
+    }
     auto cube = cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky");
     EXPECT_EQ(cube.getSizeProperty(), 2);
 
@@ -197,6 +216,14 @@ TEST(CnbTextureContentManagerTest, ATexture3DCnbLoadsAsASharedPointerWithItsDept
                           PresentationParameters());
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        // Texture3D's constructor refuses, and the .cnb load passes that through (AM4-268).
+        EXPECT_THROW(
+            (void)cm.Load<std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D>>("fog"),
+            System::NotSupportedException);
+        return;
+    }
     // Texture3D is non-copyable, so ContentManager boxes it as a shared_ptr -- the same shape the
     // .xnb reader registers. Asking for the bare type is the mistake this pins.
     auto volume = cm.Load<std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D>>("fog");

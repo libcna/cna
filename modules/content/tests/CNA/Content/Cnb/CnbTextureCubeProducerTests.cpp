@@ -21,6 +21,7 @@
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnjToCnb.hpp"
 #include "CNA/DdsCubeFixtureEXT.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -264,6 +265,15 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
     GraphicsDevice device;
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
+    // SDL_RENDERER creates no cube resource and Headless stores no pixels, so both refuse
+    // TextureCube::SetData (REMED-GFX-135), and the .cnb load passes that through (CNA
+    // plans/plan_apple_m4.md AM4-268).
+    if (CNA_RENDERER_IS(CNA::Testing::Renderers::SdlRenderer, CNA::Testing::Renderers::Headless))
+    {
+        EXPECT_THROW((void)cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky"),
+                     System::NotSupportedException);
+        return;
+    }
     auto cube = cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky");
     EXPECT_EQ(cube.getSizeProperty(), 4);
 

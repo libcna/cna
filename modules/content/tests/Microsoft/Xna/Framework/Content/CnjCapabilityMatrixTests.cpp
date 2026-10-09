@@ -229,7 +229,20 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
 
     if (!CubeStorageSupported())
     {
-        EXPECT_THROW((void)cm.Load<TextureCube>("cube"), System::NotSupportedException);
+        // SAMPLE-078: a loose-file load reports its reader's failure as ContentLoadException, as
+        // XNA does, carrying the cause in its message -- here the renderer's TextureCube refusal,
+        // from SetData on Headless and from construction on SDL_RENDERER
+        // (CNA plans/plan_apple_m4.md AM4-268).
+        try
+        {
+            (void)cm.Load<TextureCube>("cube");
+            ADD_FAILURE() << "a renderer that stores no cube face loaded a TextureCube";
+        }
+        catch (const ContentLoadException& exception)
+        {
+            EXPECT_NE(std::string(exception.what()).find("TextureCube"), std::string::npos)
+                << exception.what();
+        }
         return;
     }
     TextureCube loaded = cm.Load<TextureCube>("cube");

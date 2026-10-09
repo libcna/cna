@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <string>
 #include "CNA/RendererTestGate.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -104,9 +105,11 @@ protected:
 
 // REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, loading now throws a clean
-// System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
-// succeeding with all-zero pixel data.
+// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, loading now fails
+// cleanly -- Texture3D's own constructor throws System::NotSupportedException -- instead of
+// previously silently succeeding with all-zero pixel data. Since SAMPLE-078 a loose-file load
+// reports that as ContentLoadException, as XNA does, with the cause in its message
+// (CNA plans/plan_apple_m4.md AM4-268).
 TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
@@ -117,7 +120,17 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
     {
-        EXPECT_THROW(cm.Load<std::shared_ptr<Texture3D>>("volume"), System::NotSupportedException);
+        try
+        {
+            (void)cm.Load<std::shared_ptr<Texture3D>>("volume");
+            ADD_FAILURE() << "a renderer without Texture3D loaded a volume texture";
+        }
+        catch (const ContentLoadException& exception)
+        {
+            EXPECT_NE(std::string(exception.what()).find("real volume (3D) texture storage"),
+                      std::string::npos)
+                << exception.what();
+        }
         return;
     }
 
