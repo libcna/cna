@@ -23,6 +23,7 @@
 #else
 #include <errno.h>
 #include <poll.h>
+#include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -286,14 +287,29 @@ namespace CNA::Internal
         for (std::string& argument : owned) { argv.push_back(argument.data()); }
         argv.push_back(nullptr);
 
+        // The child starts with SIGPIPE at its default action, as Python's subprocess starts it
+        // (restore_signals). An ignored signal survives exec, and a host that ignores SIGPIPE --
+        // the GitHub Actions runner does -- otherwise hands that to every tool: GNU `yes` writing
+        // into a closed pipe printed "yes: standard output: Broken pipe" into the very stream a
+        // caller collects, and a tool that relies on SIGPIPE to stop keeps writing
+        // (plans/plan_apple_m4.md AM4-264).
+        posix_spawnattr_t attributes;
+        posix_spawnattr_init(&attributes);
+        sigset_t restored;
+        sigemptyset(&restored);
+        sigaddset(&restored, SIGPIPE);
+        posix_spawnattr_setsigdefault(&attributes, &restored);
+        posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF);
+
         pid_t child = -1;
         // posix_spawnp resolves a bare name through PATH, which is what a caller naming `fxc`
         // rather than a full path means.
         const int spawned = executable.has_parent_path()
-                                ? posix_spawn(&child, program.c_str(), &actions, nullptr,
+                                ? posix_spawn(&child, program.c_str(), &actions, &attributes,
                                               argv.data(), environ)
-                                : posix_spawnp(&child, program.c_str(), &actions, nullptr,
+                                : posix_spawnp(&child, program.c_str(), &actions, &attributes,
                                                argv.data(), environ);
+        posix_spawnattr_destroy(&attributes);
         posix_spawn_file_actions_destroy(&actions);
         ::close(outPipe[1]);
         ::close(errPipe[1]);

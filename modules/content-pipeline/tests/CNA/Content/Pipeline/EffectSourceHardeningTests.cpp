@@ -22,6 +22,10 @@
 #include <system_error>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <signal.h>
+#endif
+
 #include <gtest/gtest.h>
 
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
@@ -471,6 +475,28 @@ TEST(HostProcessHardeningTest, ClosingOneStreamLongBeforeTheOtherDoesNotTruncate
     EXPECT_EQ(outLast.standardError, "problem\n");
     EXPECT_EQ(outLast.standardOutput.size(), 200000u);
 }
+
+#if !defined(_WIN32)
+TEST(HostProcessHardeningTest, AChildStartsWithSigpipeAtItsDefaultActionWhateverTheParentIgnores)
+{
+    // The GitHub Actions runner starts its steps with SIGPIPE ignored, and an ignored signal is
+    // inherited across exec: GNU `yes` writing into a closed pipe then printed "yes: standard
+    // output: Broken pipe" into the stderr ClosingOneStreamLongBeforeTheOtherDoesNotTruncateEither
+    // counts (AM4-264). A tool started for a build gets SIGPIPE's default action, so a shell that
+    // sends itself SIGPIPE ends there.
+    struct sigaction ignore {};
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    struct sigaction previous {};
+    ASSERT_EQ(::sigaction(SIGPIPE, &ignore, &previous), 0);
+    const CNA::Internal::HostProcessResult result = RunShell("kill -PIPE $$; echo survived");
+    ::sigaction(SIGPIPE, &previous, nullptr);
+
+    EXPECT_TRUE(result.started) << result.failure;
+    EXPECT_EQ(result.standardOutput, "");
+    EXPECT_NE(result.exitCode, 0);
+}
+#endif
 
 TEST(HostProcessHardeningTest, AChildThatUsesOnlyOneStreamLeavesTheOtherEmpty)
 {
