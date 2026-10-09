@@ -82,10 +82,34 @@ jobs:
         working-directory: cna
         run: cmake --build cmake-build-metal --parallel 3
 
+      # API validation always. GPU shader validation wherever the device supports it: on the hosted
+      # runner's "Apple Paravirtual device" it reports "Texture usage flags mismatch" for any sampled
+      # ShaderRead texture and the sample reads zero -- measured with a 30-line Metal program and no
+      # CNA code, which passes without it and on Apple hardware with it (CNA
+      # plans/plan_apple_m4.md AM4-279). Under it on that device every textured or lit draw is black.
+      - name: Choose the Metal validation layers for this device
+        # The device is asked through Metal itself: system_profiler reports no display there.
+        run: |
+          cat > "${RUNNER_TEMP}/metal_device_name.m" <<'EOF'
+          #import <Metal/Metal.h>
+          #include <stdio.h>
+          int main(void) { @autoreleasepool { id<MTLDevice> d = MTLCreateSystemDefaultDevice();
+              printf("%s\n", d ? d.name.UTF8String : "none"); } return 0; }
+          EOF
+          clang -fobjc-arc -framework Metal -framework Foundation \
+            "${RUNNER_TEMP}/metal_device_name.m" -o "${RUNNER_TEMP}/metal_device_name"
+          device=$("${RUNNER_TEMP}/metal_device_name")
+          echo "Metal device: ${device}"
+          if [ "${device}" = "Apple Paravirtual device" ]; then
+            echo "API validation only on this device (AM4-279)"
+            echo "MTL_SHADER_VALIDATION=0" >> "$GITHUB_ENV"
+          else
+            echo "MTL_SHADER_VALIDATION=1" >> "$GITHUB_ENV"
+          fi
+
       - name: Run supported Metal contract tests
         working-directory: cna
         env:
-          MTL_SHADER_VALIDATION: '1'
           MTL_DEBUG_LAYER: '1'
         run: >
           ctest --test-dir cmake-build-metal
