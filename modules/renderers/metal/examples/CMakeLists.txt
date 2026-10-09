@@ -87,6 +87,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE SDL3::SDL3main)
     endif()
+    # The tests below that ask for Metal's validation layers get API validation always and GPU
+    # shader validation unless the configuration turns it off: on a device that cannot run it --
+    # the hosted runner's "Apple Paravirtual device" reads every sampled texture as zero under it
+    # (plans/plan_apple_m4.md AM4-279) -- metal-macos-ci configures with it OFF (AM4-283).
+    option(CNA_METAL_TEST_SHADER_VALIDATION
+        "Run the Metal tests that ask for validation under GPU shader validation as well" ON)
+    if(CNA_METAL_TEST_SHADER_VALIDATION)
+        set(CNA_METAL_VALIDATION_ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+    else()
+        set(CNA_METAL_VALIDATION_ENVIRONMENT "MTL_DEBUG_LAYER=1")
+    endif()
     # plans/plan_apple_m4.md AM4-080: declarations carrying only what the BasicEffect permutation reads.
     add_executable(cna_test_metal_untextured_declaration metal_untextured_declaration_test.cpp)
     target_link_libraries(cna_test_metal_untextured_declaration PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -96,7 +107,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_UntexturedDeclaration
         COMMAND cna_test_metal_untextured_declaration
         TIMEOUT 60 LABELS "Metal"
-        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+        ENVIRONMENT "${CNA_METAL_VALIDATION_ENVIRONMENT}")
     # plans/plan_apple_m4.md AM4-084: glTF COLOR_0 in the metallic-roughness product.
     add_executable(cna_test_metal_pbr_vertex_colour metal_pbr_vertex_colour_test.cpp)
     target_link_libraries(cna_test_metal_pbr_vertex_colour PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -106,7 +117,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_PbrVertexColour
         COMMAND cna_test_metal_pbr_vertex_colour
         TIMEOUT 60 LABELS "Metal"
-        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+        ENVIRONMENT "${CNA_METAL_VALIDATION_ENVIRONMENT}")
     # plans/plan_apple_m4.md AM4-085: the per-map coordinate set and KHR_materials_specular's maps.
     add_executable(cna_test_metal_pbr_dual_uv_specular metal_pbr_dual_uv_specular_test.cpp)
     target_link_libraries(cna_test_metal_pbr_dual_uv_specular PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -116,12 +127,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_PbrDualUvSpecular
         COMMAND cna_test_metal_pbr_dual_uv_specular
         TIMEOUT 60 LABELS "Metal"
-        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+        ENVIRONMENT "${CNA_METAL_VALIDATION_ENVIRONMENT}")
 
     cna_register_renderer_test(NAME Metal_SpriteBatch_CustomEffect
         COMMAND cna_test_metal_spritebatch_customeffect
         TIMEOUT 60 LABELS "Metal"
-        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+        ENVIRONMENT "${CNA_METAL_VALIDATION_ENVIRONMENT}")
 
     # plans/plan_apple_m4.md AM4-097: the shared MRT contract (SOFTWARE-120). Its multisampled
     # scenarios run since AM4-141 gave Metal MSAA.
@@ -134,7 +145,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_MRT_StockEffectContract
         COMMAND cna_test_metal_mrt_stock_effect_contract
         TIMEOUT 60 LABELS "Metal"
-        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+        ENVIRONMENT "${CNA_METAL_VALIDATION_ENVIRONMENT}")
 
     # plans/plan_apple_m4.md AM4-026: the shared, renderer-neutral pixel and contract tests from
     # modules/graphics/examples now run against Metal too; until backbuffer readback worked

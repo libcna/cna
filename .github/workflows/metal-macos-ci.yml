@@ -66,22 +66,6 @@ jobs:
         # AM4-247).
         run: brew install ccache ffmpeg nlohmann-json
 
-      - name: Configure native Metal renderer
-        working-directory: cna
-        run: >
-          cmake -S . -B cmake-build-metal
-          -DCNA_GRAPHICS_RENDERER=METAL
-          -DCNA_BUILD_TESTS=ON
-          -DCNA_ENABLE_DRACO=OFF
-          -DCNA_USE_CCACHE=ON
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCNA_MAX_VENDORED_BUILD_JOBS=2
-          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-
-      - name: Build native Metal renderer
-        working-directory: cna
-        run: cmake --build cmake-build-metal --parallel 3
-
       # API validation always. GPU shader validation wherever the device supports it: on the hosted
       # runner's "Apple Paravirtual device" it reports "Texture usage flags mismatch" for any sampled
       # ShaderRead texture and the sample reads zero -- measured with a 30-line Metal program and no
@@ -101,11 +85,31 @@ jobs:
           device=$("${RUNNER_TEMP}/metal_device_name")
           echo "Metal device: ${device}"
           if [ "${device}" = "Apple Paravirtual device" ]; then
+            # Left unset rather than 0, and the tests that set it themselves are configured
+            # without it (AM4-283).
             echo "API validation only on this device (AM4-279)"
-            echo "MTL_SHADER_VALIDATION=0" >> "$GITHUB_ENV"
+            echo "CNA_METAL_TEST_SHADER_VALIDATION=OFF" >> "$GITHUB_ENV"
           else
             echo "MTL_SHADER_VALIDATION=1" >> "$GITHUB_ENV"
+            echo "CNA_METAL_TEST_SHADER_VALIDATION=ON" >> "$GITHUB_ENV"
           fi
+
+      - name: Configure native Metal renderer
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-metal
+          -DCNA_GRAPHICS_RENDERER=METAL
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_ENABLE_DRACO=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          -DCNA_METAL_TEST_SHADER_VALIDATION=${{ env.CNA_METAL_TEST_SHADER_VALIDATION }}
+
+      - name: Build native Metal renderer
+        working-directory: cna
+        run: cmake --build cmake-build-metal --parallel 3
 
       - name: Run supported Metal contract tests
         working-directory: cna
