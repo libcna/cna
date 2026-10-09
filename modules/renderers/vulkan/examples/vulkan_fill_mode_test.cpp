@@ -21,6 +21,7 @@
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -36,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -121,11 +123,25 @@ protected:
             rs.setFillModeProperty(FillMode::WireFrame);
             dev.setRasterizerStateProperty(rs);
         }
-        px = drawAndRead(dev, vb, fx);
-        std::snprintf(buf, sizeof(buf),
-            "WireFrame: centre=(%d,%d,%d) expected black (interior not rasterized)",
-            px.getRProperty(), px.getGProperty(), px.getBProperty());
-        check(px.getRProperty() <= 30 && px.getGProperty() <= 30 && px.getBProperty() <= 30, buf);
+        // A device without native polygon mode -- EasyGL on a GLES/WebGL context with no
+        // polygon-mode extension, Mesa's included -- reports no WireFrame capability and refuses
+        // the draw (SOFTWARE-178); sub-test 3 then shows the refusal left Solid working
+        // (CNA plans/plan_apple_m4.md AM4-285).
+        if (dev.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        {
+            px = drawAndRead(dev, vb, fx);
+            std::snprintf(buf, sizeof(buf),
+                "WireFrame: centre=(%d,%d,%d) expected black (interior not rasterized)",
+                px.getRProperty(), px.getGProperty(), px.getBProperty());
+            check(px.getRProperty() <= 30 && px.getGProperty() <= 30 && px.getBProperty() <= 30, buf);
+        }
+        else
+        {
+            bool refused = false;
+            try { (void)drawAndRead(dev, vb, fx); }
+            catch (const System::NotSupportedException&) { refused = true; }
+            check(refused, "WireFrame: a device without the capability refuses the draw (SOFTWARE-178)");
+        }
 
         // Sub-test 3: Reset to Solid — verify FillMode change takes effect.
         {

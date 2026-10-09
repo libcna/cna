@@ -3,6 +3,7 @@
 // stencil, triangle/line RasterizerState.MultiSampleAntiAlias and GraphicsDevice.MultiSampleMask
 // contract.
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -27,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <array>
 #include <cstdio>
@@ -384,6 +386,18 @@ class MsaaFragmentContractTest final : public Game
             DrawHalfTriangle(device, kFullGreen, 0.5f);
             return FinishAndReadAll(device);
         };
+        // A device without native polygon mode -- EasyGL on a GLES/WebGL context with no
+        // polygon-mode extension, Mesa's included -- reports no WireFrame capability and refuses
+        // the draw (SOFTWARE-178). There the contract is that refusal; there is no wireframe edge
+        // to measure (CNA plans/plan_apple_m4.md AM4-285).
+        if (!device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        {
+            bool refused = false;
+            try { (void)renderWireframe(true); }
+            catch (const System::NotSupportedException&) { refused = true; }
+            Check(refused, "a device without WireFrame refuses a wireframe draw (SOFTWARE-178)");
+            return;
+        }
         const auto independentlySampledWireframe = renderWireframe(true);
         int partialWireframeWithMsaa = 0;
         for (const Color& pixel : independentlySampledWireframe)
@@ -458,6 +472,15 @@ class MsaaFragmentContractTest final : public Game
         Check(lineWitness,
               "a depth-gradient LineList evaluates depth independently at its covered samples");
 
+        // As above: no wireframe depth to measure where WireFrame is refused (AM4-285).
+        if (!device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        {
+            bool refused = false;
+            try { (void)render(true, false); }
+            catch (const System::NotSupportedException&) { refused = true; }
+            Check(refused, "a device without WireFrame refuses a wireframe draw (SOFTWARE-178)");
+            return;
+        }
         const auto wireframeCoverage = render(true, false);
         const auto wireframePixels = render(true, true);
         bool wireframeWitness = false;
