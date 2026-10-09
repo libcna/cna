@@ -23,13 +23,18 @@ int main()
     ok &= Expect(sizeof(std::size_t) == 4,
                  "framebuffer arithmetic harness is a genuine 32-bit binary");
 
+    // SOFTWARE-110 made 4x stencil sample-correct: four 8-bit stencil samples per pixel join the
+    // four RGBA8 colour samples. This harness was not updated with it -- its CI job had stopped
+    // compiling -- and still expected the earlier 174,182,400-byte total (plans/plan_apple_m4.md
+    // AM4-239).
     const SoftwareFramebufferAllocationLayout normal =
         PlanSoftwareFramebufferAllocation({3840, 2160, false, true, 4});
     ok &= Expect(normal.IsValid() && normal.pixelCount == 8294400u &&
                      normal.colorBytes == 33177600u &&
                      normal.stencilBytes == 8294400u &&
                      normal.multiSampleBytes == 132710400u &&
-                     normal.totalBytes == 174182400u,
+                     normal.multiSampleStencilBytes == 33177600u &&
+                     normal.totalBytes == 207360000u,
                  "32-bit planner accepts a budgeted 4K 4x framebuffer without depth exactly");
 
     const SoftwareFramebufferAllocationLayout overflow =
