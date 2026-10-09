@@ -129,7 +129,12 @@ jobs:
             --config "${source_root}/pipeline-config.json" --workers 1 --quiet
           second_hash=$(cmake -E sha256sum "${output_root}/Configured/curve.cnb" | awk '{print $1}')
           test "${first_hash}" = "${second_hash}"
-          grep -E '"version"[[:space:]]*:[[:space:]]*8' \
+          # The schema version the tool writes, read from where the tool takes it: a literal here
+          # went stale when XNAP-99 moved the format from 8 to 9 (AM4-278).
+          manifest_version=$(sed -n 's/.*ContentBuildManifestVersion = \([0-9][0-9]*\)u;.*/\1/p' \
+            modules/content/include/CNA/Content/Pipeline/ContentBuildManifest.hpp)
+          test -n "${manifest_version}"
+          grep -E "\"version\"[[:space:]]*:[[:space:]]*${manifest_version}[,}[:space:]]" \
             "${output_root}/.cna-content-manifest.json"
 
       - name: Upload content diagnostics on failure
