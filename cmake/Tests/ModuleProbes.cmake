@@ -408,9 +408,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --compiler "${CMAKE_C_COMPILER}")
 
         # The other half: the library that was actually built, asked for its own ABI version and its
-        # dynamic export list. ELF-only, because reading exports is what makes the symbol half
-        # meaningful, and only where the C API target exists.
-        if(TARGET cna_c_api AND UNIX AND NOT APPLE)
+        # dynamic export list, wherever its exports can be read -- ELF, and Mach-O since
+        # plans/plan_apple_m4.md AM4-212 -- and only where the C API target exists.
+        if(TARGET cna_c_api AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
             set(_abi_baseline_flags "")
             if(CNA_SANITIZE)
                 # A sanitized shared object refuses to load into a probe that was not built the same
@@ -429,8 +429,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # drift is caught -- but a header declaring a route the library never exports leaves both
         # halves self-consistent while a consumer written against the header fails at its call site.
         # A count cannot see that; the set difference can. Reported by the C# binding, which runs
-        # the same comparison on its own side.
-        if(TARGET cna_c_api AND UNIX AND NOT APPLE)
+        # the same comparison on its own side. ELF and Mach-O (AM4-212).
+        if(TARGET cna_c_api AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
             add_test(NAME CApiDeclaredExports
                 COMMAND Python3::Interpreter
                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_declared_exports.py"

@@ -229,19 +229,43 @@ def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> di
     return measured
 
 
+# plans/plan_apple_m4.md AM4-212: a Mach-O dylib has no dynamic symbol table for `nm -D` to read
+# ("File format has no dynamic symbol table"); its exports are the defined external symbols
+# (`nm -gU`), spelled with Mach-O's leading underscore. Decided by the file, not the host.
+_MACHO_MAGICS = {b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe",
+                 b"\xfe\xed\xfa\xcf", b"\xfe\xed\xfa\xce"}
+
+
+def is_macho(library: Path) -> bool:
+    with library.open("rb") as handle:
+        return handle.read(4) in _MACHO_MAGICS
+
+
+def nm_export_command(library: Path) -> list[str]:
+    """`nm` arguments listing a shared library's exported definitions, ELF or Mach-O."""
+    return ["-gU", str(library)] if is_macho(library) else ["-D", "--defined-only", str(library)]
+
+
+def export_name(symbol: str, macho: bool) -> str:
+    """The C name of an exported symbol: no ELF version suffix, no Mach-O underscore."""
+    symbol = re.sub(r"@@?.*", "", symbol)
+    return symbol[1:] if macho and symbol.startswith("_") else symbol
+
+
 def read_exports(library: Path) -> list[str]:
     nm = shutil.which("nm")
     if nm is None:
         raise SystemExit("nm is required to read the library's dynamic exports.")
-    completed = subprocess.run([nm, "-D", "--defined-only", str(library)], capture_output=True, text=True)
+    completed = subprocess.run([nm, *nm_export_command(library)], capture_output=True, text=True)
     if completed.returncode != 0:
         raise SystemExit(f"Reading dynamic exports failed:\n{completed.stderr.strip()}")
+    macho = is_macho(library)
     exports = set()
     for line in completed.stdout.splitlines():
         fields = line.split()
         if not fields:
             continue
-        symbol = fields[-1].split("@@")[0]
+        symbol = export_name(fields[-1], macho)
         if symbol.startswith("cna_"):
             exports.add(symbol)
     return sorted(exports)

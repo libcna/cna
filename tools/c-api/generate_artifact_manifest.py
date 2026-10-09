@@ -44,16 +44,44 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# plans/plan_apple_m4.md AM4-212: a Mach-O dylib has no dynamic symbol table for `nm -D` to read
+# ("File format has no dynamic symbol table"); its exports are the defined external symbols
+# (`nm -gU`), spelled with Mach-O's leading underscore. Decided by the file, not the host.
+_MACHO_MAGICS = {b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe",
+                 b"\xfe\xed\xfa\xcf", b"\xfe\xed\xfa\xce"}
+
+
+def is_macho(library: Path) -> bool:
+    with library.open("rb") as handle:
+        return handle.read(4) in _MACHO_MAGICS
+
+
+def nm_export_command(library: Path) -> list[str]:
+    """`nm` arguments listing a shared library's exported definitions, ELF or Mach-O."""
+    return ["-gU", str(library)] if is_macho(library) else ["-D", "--defined-only", str(library)]
+
+
+def export_name(symbol: str, macho: bool) -> str:
+    """The C name of an exported symbol: no ELF version suffix, no Mach-O underscore."""
+    symbol = re.sub(r"@@?.*", "", symbol)
+    return symbol[1:] if macho and symbol.startswith("_") else symbol
+
+
 def build_id(path: Path) -> str | None:
-    """The ELF build ID, which is what makes two otherwise identical builds differ."""
+    """The ELF build ID -- or a Mach-O image's LC_UUID -- which is what makes two otherwise
+    identical builds differ."""
+    if is_macho(path):
+        match = re.search(r"uuid ([0-9A-Fa-f-]{36})", run(["otool", "-l", str(path)]))
+        return match.group(1).replace("-", "").lower() if match else None
     match = re.search(r"Build ID:\s*([0-9a-f]+)", run(["readelf", "-n", str(path)]))
     return match.group(1) if match else None
 
 
 def exported_routes(path: Path) -> int:
     """Count exported ``cna_*`` routes -- the ABI's actual surface, not every ELF symbol."""
-    symbols = run(["nm", "-D", "--defined-only", str(path)])
-    return sum(1 for line in symbols.splitlines() if re.search(r"\s[TW]\s+cna_", line))
+    symbols = run(["nm", *nm_export_command(path)])
+    prefix = r"_cna_" if is_macho(path) else r"cna_"
+    return sum(1 for line in symbols.splitlines() if re.search(r"\s[TW]\s+" + prefix, line))
 
 
 def cache_values(cache: Path, keys: tuple[str, ...]) -> dict[str, str]:
