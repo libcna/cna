@@ -61,6 +61,10 @@ concurrency:
   group: arithmetic-32bit-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   build-and-run-32bit:
     name: Build + run (i386, gcc-multilib)

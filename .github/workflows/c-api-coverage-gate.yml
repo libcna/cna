@@ -40,6 +40,10 @@ concurrency:
   group: c-api-coverage-gate-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   coverage-matrix:
     name: C API mappings cover the public headers

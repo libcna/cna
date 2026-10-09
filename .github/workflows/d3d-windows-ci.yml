@@ -28,6 +28,10 @@ name: Windows graphics CI (D3D11, MSVC)
 on:
   workflow_dispatch: {}
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   msvc-build-and-test:
     name: ${{ matrix.renderer }} (native MSVC, windows-latest)

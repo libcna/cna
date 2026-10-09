@@ -67,6 +67,10 @@ env:
   # one-variable-per-scope convention.
   CNA_DEVICES_GTEST_FILTER: "CameraTests.*:ClipboardTests.*:DisplayInfoTests.*:FileDialogTests.*:LocaleTests.*:MessageBoxTests.*:PowerInfoTests.*:SystemInfoTests.*:SystemTrayTests.*:UrlLauncherTests.*"
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     name: Build + test (devices-ubsan preset)

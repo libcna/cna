@@ -57,6 +57,10 @@ concurrency:
   group: general-tests-ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   general-tests:
     name: CnaTests (unfiltered, OPENGLES3 / EasyGL family)

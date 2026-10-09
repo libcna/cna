@@ -36,6 +36,10 @@ concurrency:
   group: c-api-compat-matrix-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   header-compatibility:
     name: Every public header, every declared toolchain

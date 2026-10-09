@@ -35,6 +35,10 @@ concurrency:
   group: c-api-abi-baseline-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   abi-baseline:
     name: Layouts, widths and constant values against the baseline

@@ -26,6 +26,10 @@ concurrency:
   group: input-ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: no job here writes to the repository, its releases or its packages.
+permissions:
+  contents: read
+
 jobs:
   input-tests:
     name: ${{ matrix.name }} (Linux)
