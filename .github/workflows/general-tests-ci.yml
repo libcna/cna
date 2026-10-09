@@ -85,6 +85,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            libcurl4-openssl-dev \
             gcc-14 g++-14 cmake ninja-build ccache time pkg-config doxygen xvfb x11-utils \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libvulkan-dev \
