@@ -16,7 +16,12 @@ struct Registry {
         if(owner!=std::this_thread::get_id())throw System::InvalidOperationException("Service updates require their owner thread.");
     }
 };
-Registry& registry(){static Registry value;return value;}
+// Never destroyed. Subscriptions live in other translation units' statics too -- AvatarDescription's
+// cache keeps one per cached description -- and those are destroyed at exit after this file's,
+// so a function-local static registry was gone when they cancelled: Remove() wrote into its freed
+// handler, the heap corruption behind the Linux CnaTests' crash at exit (AM4-323). Reachable
+// through the pointer until the process ends, so it is no leak.
+Registry& registry(){static Registry* const value=new Registry;return *value;}
 }
 struct ServiceUpdateSubscription::State {
     std::function<void()> callback;

@@ -9,6 +9,8 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IServiceProvider.hpp"
+#include <cstdlib>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -141,3 +143,22 @@ TEST_F(ServiceUpdateSubscriptionTest, AutomaticPresenceSaturationStillDrainsWork
     EXPECT_EQ(128,completions);EXPECT_EQ(5,progress);
     ASSERT_EQ(1,service->friends("b").size());EXPECT_EQ("Level 7",service->friends("b")[0].presence);
 }
+
+#if GTEST_HAS_DEATH_TEST
+// AM4-323. A subscription owned by a static constructed BEFORE the update registry is destroyed
+// AFTER it at exit -- AvatarDescription's description cache is one. The registry was a
+// function-local static and was gone by then, so the subscription's cancel wrote into its freed
+// handler: an AddressSanitizer build reports a heap-use-after-free and exits non-zero, a plain build
+// corrupts the heap (the Linux CnaTests' crash at exit). "threadsafe" re-executes this one test, so
+// in the child the static really is constructed before the registry.
+TEST(ServiceUpdateSubscriptionExitTest, ASubscriptionOwnedByAnEarlierStaticCancelsSafelyAtExit) {
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(
+        {
+            static std::vector<std::unique_ptr<Service::ServiceUpdateSubscription>> earlier;
+            earlier.push_back(std::make_unique<Service::ServiceUpdateSubscription>([] {}));
+            std::exit(0);
+        },
+        ::testing::ExitedWithCode(0), "");
+}
+#endif
