@@ -101,7 +101,9 @@ if a symbol of any other binding appears, so the exception cannot widen quietly.
 
 A static consumer links the archive plus SDL3 (shipped in the package) and the usual
 `stdc++ m pthread dl`; when `CNA_ENABLE_VIDEO=AUTO/ON` selected the optional backend, it also links
-FFmpeg from the system. The `CNA::CApiStatic` target carries the resolved set for you.
+FFmpeg from the system. The `CNA::CApiStatic` target carries the resolved set for you. On macOS the
+same archive is made with ld64's partial link (`ld -r -all_load`) and `nmedit -s`, and its interface
+is `c++` plus the frameworks and dylibs the closure links -- see [macOS](#macos).
 
 Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: it is a
 few hundred megabytes in a debug build and is rewritten whenever the library relinks. Where it is
@@ -134,6 +136,42 @@ metadata remains usable. `AUTO` is the default; see [../video-backend.md](../vid
 
 The example runs headless. Set `SDL_VIDEODRIVER=dummy` where there is no display, exactly as this
 repository's own tests do.
+
+## macOS
+
+Everything above holds on macOS (Apple silicon, macOS 13.3 or newer); each mechanism has its
+Mach-O spelling. `CApi_InstalledConsumer` installs, builds and runs the package there too, shared
+and static, so these statements are tested rather than described.
+
+- **The library** is `libcna_c_api.dylib`. Its install name is `@rpath/libcna_c_api.dylib`, and its
+  Mach-O compatibility and current versions are the ABI's `MAJOR.MINOR.0` and
+  `MAJOR.MINOR.PATCH`, so dyld refuses an older minor than the one a program was linked against.
+  It exports `_cna_*` and nothing else, through ld64's exported-symbols list
+  (`cmake/CnaCApiExports.darwin.txt`); `CApi_Exports` reads that back with `nm -gU`.
+- **SDL3 ships beside it**, and the library's `LC_RPATH` is `@loader_path` -- `$ORIGIN`'s meaning
+  for dyld. `find_package(CNA)` gives your program an rpath to the package's `lib` directory, so
+  nothing needs a `DYLD_*` variable; the consumer test reads the installed dylib's load commands to
+  keep it that way.
+- **The libraries CNA did not build stay outside the package**, as FFmpeg does on Linux, and for
+  the same reasons. Which ones a build links depends on its configuration: libcurl (required on
+  desktop for the gamer-services TLS transport), FFmpeg (`CNA_ENABLE_VIDEO=AUTO/ON`), Opus (network
+  voice, when found) and zstd (CNB compression, when found). With Homebrew:
+
+  ```sh
+  brew install curl ffmpeg opus zstd
+  ```
+
+  They are linked by the path each library advertises (`/opt/homebrew/opt/...`), which survives a
+  `brew upgrade`. Homebrew's bottles target the macOS they were built on, so a package linked
+  against them runs only on that macOS or newer, whatever `CNA_MACOS_DEPLOYMENT_TARGET` says
+  (ld64 says so at link time). The SDK's own libcurl works for TLS but has no WebSocket support,
+  and a build that found it refuses the online relay transport by name.
+- **Create and run the game on the main thread.** SDL's Cocoa video driver initializes only on the
+  process's main thread. Off it, a renderer that needs that driver is refused with a message that
+  says so, and SOFTWARE runs on SDL's offscreen driver without a window -- see
+  [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
+- **Without a display**, `SDL_VIDEODRIVER=dummy` serves the SOFTWARE and SDL_RENDERER renderers.
+  SDL's `offscreen` driver creates its contexts through EGL, which macOS does not have.
 
 ## Where to go next
 

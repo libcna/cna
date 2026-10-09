@@ -87,8 +87,12 @@
       "note": "The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed."
     },
     {
-      "subject": "macOS, iOS, Android and the web targets",
-      "note": "No toolchain for any of them is present, so no cell exists for them at all rather than an untested claim."
+      "subject": "macOS, as a cell of this matrix",
+      "note": "The matrix records the reference Linux host and its four configurations, and macOS is not one of them. It was measured separately on Apple silicon (plans/plan_apple_m4.md AM4-209..213): every C API test passes in the SOFTWARE and SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know."
+    },
+    {
+      "subject": "iOS, Android and the web targets",
+      "note": "No toolchain for any of them is present here, so no cell exists for them at all rather than an untested claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on them."
     },
     {
       "subject": "C89",

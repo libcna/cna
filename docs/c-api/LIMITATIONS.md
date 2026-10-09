@@ -138,7 +138,8 @@ promise rather than of any declaration.
 Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree:
 
 - **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
-- **macOS, iOS, Android and the web targets.** No toolchain for any of them is present, so no cell exists for them at all rather than an untested claim.
+- **macOS, as a cell of this matrix.** The matrix records the reference Linux host and its four configurations, and macOS is not one of them. It was measured separately on Apple silicon (plans/plan_apple_m4.md AM4-209..213): every C API test passes in the SOFTWARE and SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know.
+- **iOS, Android and the web targets.** No toolchain for any of them is present here, so no cell exists for them at all rather than an untested claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on them.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
 - **Renderers other than the four configured.** CNA has 25 renderer identities; four are built and run here. The other 21 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
 
