@@ -2473,6 +2473,17 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLOcclusionQueryRenderer::Begin()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
+        // XNA lets a query begin again once IsComplete was asked, answered or not, abandoning the
+        // run still in flight. Beginning the same GL name again leaves it to the driver whether
+        // that run's samples can still reach the new one, and on Mesa's llvmpipe -- the ES driver
+        // CNA's Linux CI runs -- they did: a second run that drew nothing read 1. The abandoned run
+        // keeps its name and the new run starts on a fresh one (plans/plan_apple_m4.md AM4-271).
+        if (hasRun_ && !query_.is_result_available())
+        {
+            query_.destroy();
+            query_.create();
+        }
+        hasRun_ = true;
         if (g_preciseOcclusionTarget < 0)
             g_preciseOcclusionTarget = ResolvePreciseTarget(query_) ? 1 : 0;
         query_.begin(OcclusionTarget());
@@ -2521,6 +2532,7 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()
     {
         query_.create();
+        hasRun_ = false;
     }
 
     // --- EasyGLGpuTimerRenderer ---

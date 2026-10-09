@@ -892,6 +892,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// query last began on, so its occlusion-target ownership is per context and can be given up
         /// even after that registry is gone. Never dereferenced.
         const void* contextKey_ = nullptr;
+        /// plans/plan_apple_m4.md AM4-271: whether this query has begun a run, so a Begin can tell
+        /// a run it abandons -- whose result is still pending -- from a query that never ran.
+        bool hasRun_ = false;
     };
 
     /// plans/plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
