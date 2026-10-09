@@ -18,6 +18,8 @@
 #if defined(_WIN32)
 #include <thread>
 #include <windows.h>
+#elif defined(__EMSCRIPTEN__)
+// A browser has no processes to start; see RunHostProcess.
 #else
 #include <errno.h>
 #include <poll.h>
@@ -99,6 +101,7 @@ namespace CNA::Internal
             }
             return text;
         }
+#elif defined(__EMSCRIPTEN__)
 #else
         /**
          * @brief Reads both descriptors to end-of-file, interleaved.
@@ -239,6 +242,14 @@ namespace CNA::Internal
         CloseHandle(process.hThread);
         result.started = true;
         result.exitCode = static_cast<int>(exitCode);
+        return result;
+#elif defined(__EMSCRIPTEN__)
+        // Emscripten declares posix_spawn but a browser has nothing to spawn, so linking the POSIX
+        // path failed every WebAssembly build of the content tools ("undefined symbol:
+        // posix_spawnp", plans/plan_apple_m4.md AM4-254). The external-compiler routes refuse here,
+        // by name, as they do when the compiler is missing.
+        (void)arguments;
+        result.failure = "a WebAssembly build cannot start host processes";
         return result;
 #else
         int outPipe[2] = {-1, -1};
