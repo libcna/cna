@@ -9,7 +9,8 @@
 # ("v1/catalog.json"). Invoked with -P this file is the generator itself.
 
 if(CMAKE_SCRIPT_MODE_FILE)
-    # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES (;-list), optional BASE.
+    # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES_LIST (a file that sets FILES), optional BASE.
+    include("${FILES_LIST}")
     set(_body "")
     set(_table "")
     set(_index 0)
@@ -45,12 +46,17 @@ set(_cna_embed_binary_files_script "${CMAKE_CURRENT_LIST_FILE}")
 
 function(cna_embed_binary_files target namespace function output)
     cmake_parse_arguments(PARSE_ARGV 4 _embed "" "BASE" "FILES")
-    string(REPLACE ";" "\\;" _escaped "${_embed_FILES}")
+    # plans/plan_apple_m4.md AM4-299: the list travels in a file, not on the command line. An
+    # escaped `;`-list in one argument survives Ninja and Makefiles, but the Visual Studio
+    # generator's cmd.exe quoting left a literal `"` on its last element ("failed to open for
+    # reading: .../animations.glb").
+    set(_list_file "${output}.files.cmake")
+    file(CONFIGURE OUTPUT "${_list_file}" CONTENT "set(FILES [==[@_embed_FILES@]==])\n" @ONLY)
     add_custom_command(
         OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${output}" "-DNAMESPACE=${namespace}" "-DFUNCTION=${function}"
-                "-DBASE=${_embed_BASE}" "-DFILES=${_escaped}" -P "${_cna_embed_binary_files_script}"
-        DEPENDS ${_embed_FILES} "${_cna_embed_binary_files_script}"
+                "-DBASE=${_embed_BASE}" "-DFILES_LIST=${_list_file}" -P "${_cna_embed_binary_files_script}"
+        DEPENDS ${_embed_FILES} "${_list_file}" "${_cna_embed_binary_files_script}"
         COMMENT "Embedding ${function} data files"
         VERBATIM)
     target_sources(${target} PRIVATE "${output}")
