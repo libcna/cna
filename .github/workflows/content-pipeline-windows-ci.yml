@@ -36,11 +36,17 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout pinned sharp-runtime sibling
+      - name: Choose the sharp-runtime branch
+        id: sharp_runtime_branch
+        # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
+        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        run: echo "ref=$(bash cna/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout sharp-runtime sibling
         uses: actions/checkout@v4
         with:
-          repository: openeggbert/sharp-runtime
-          ref: df1b42abfcdefda030d63e97f16d2f7ea883837f
+          repository: libcna/sharp-runtime
+          ref: ${{ steps.sharp_runtime_branch.outputs.ref }}
           path: sharp-runtime
 
       - name: Set up MSVC developer environment (x64)
