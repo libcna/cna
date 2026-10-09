@@ -162,7 +162,38 @@ def include_roots() -> list[str]:
     return [f"-I{root}" for root in roots]
 
 
-MISSING_INCLUDE = re.compile(r"fatal error: ([^:]+): No such file or directory")
+# GCC: "fatal error: vulkan/vulkan.h: No such file or directory"; Clang: "fatal error:
+# 'vulkan/vulkan.h' file not found". Matching only GCC's wording made every unreachable family a
+# hard failure under Clang (plans/plan_apple_m4.md AM4-241).
+MISSING_INCLUDE = re.compile(
+    r"fatal error: (?:([^:']+): No such file or directory|'([^']+)' file not found)")
+
+
+_OWNED_NAMES: set[str] | None = None
+
+
+def owned_header_names() -> set[str]:
+    """Basenames of the files this repository itself tracks.
+
+    Submodule contents are not this repository's: third_party/SDL carries a private copy of the
+    Khronos headers (src/video/khronos/vulkan/vulkan.h), and searching the working tree for a
+    `vulkan.h` found it, so a host without the Vulkan SDK looked like a broken CNA include and the
+    Vulkan descriptor failed the gate (AM4-241). `git ls-files` lists a submodule as one gitlink
+    path, not its files.
+    """
+    global _OWNED_NAMES
+    if _OWNED_NAMES is None:
+        try:
+            listed = subprocess.run(["git", "-C", str(REPO), "ls-files"], capture_output=True,
+                                    text=True, check=True).stdout.splitlines()
+            _OWNED_NAMES = {Path(line).name for line in listed}
+        except (OSError, subprocess.CalledProcessError):
+            # Not a git checkout: fall back to the tree, minus what is vendored or generated.
+            skip = {"third_party", "vendor", ".git"}
+            _OWNED_NAMES = {path.name for path in REPO.rglob("*") if path.is_file()
+                            and not any(part in skip or part.startswith(".sdl-prebuilt")
+                                        for part in path.relative_to(REPO).parts)}
+    return _OWNED_NAMES
 
 
 def compile_check(cxx: str, path: Path, defines: list[str], roots: list[str]):
@@ -177,10 +208,10 @@ def compile_check(cxx: str, path: Path, defines: list[str], roots: list[str]):
 
     missing = MISSING_INCLUDE.search(finished.stderr)
     if missing:
-        header = missing.group(1)
+        header = missing.group(1) or missing.group(2)
         # A header this repository owns is never a legitimate excuse: that is a broken include
         # path or a genuinely missing file, not a third-party toolchain the host lacks.
-        if not list(REPO.rglob(header.split("/")[-1])):
+        if header.split("/")[-1] not in owned_header_names():
             return "unreachable", header
 
     first = next((line for line in finished.stderr.splitlines() if " error: " in line), "")
