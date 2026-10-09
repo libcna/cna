@@ -103,9 +103,27 @@ if(CNA_EXPECT_STATIC)
             "The installed package offered no CNA::CApiStatic target, so nothing linked the archive.")
     endif()
 else()
-    message(STATUS
-        "skipped: the static archive, because this tree was configured with "
-        "CNA_C_API_BUILD_STATIC=OFF")
+    if(NOT DEFINED CNA_STATIC_SKIP_REASON OR CNA_STATIC_SKIP_REASON STREQUAL "")
+        set(CNA_STATIC_SKIP_REASON "this tree was configured with CNA_C_API_BUILD_STATIC=OFF")
+    endif()
+    message(STATUS "skipped: the static archive, because ${CNA_STATIC_SKIP_REASON}")
+endif()
+
+# plans/plan_apple_m4.md AM4-211: on Mach-O the claim "the installed library looks beside itself" is
+# a load command, so it is read rather than inferred from the consumer happening to run -- a
+# consumer whose own rpath reached the stage would run either way.
+if(CNA_CONSUMER_PLATFORM STREQUAL "MACHO")
+    cna_run_step("Reading the installed dylib's load commands"
+        otool -l "${_stage}/lib/libcna_c_api.dylib")
+    if(NOT cna_last_output MATCHES "LC_RPATH[^\n]*\n[^\n]*\n[ \t]*path @loader_path ")
+        message(FATAL_ERROR
+            "The installed libcna_c_api.dylib has no LC_RPATH @loader_path:\n${cna_last_output}")
+    endif()
+    foreach(_sdl IN ITEMS libSDL3.0.dylib)
+        if(NOT EXISTS "${_stage}/lib/${_sdl}")
+            message(FATAL_ERROR "The package does not ship ${_sdl} beside libcna_c_api.dylib.")
+        endif()
+    endforeach()
 endif()
 
 # The caller normally names the driver, and the suite's window-creating tests name the same one it
@@ -182,4 +200,8 @@ foreach(_expected IN ITEMS "CNA C ABI" "renderer:" "game type: Microsoft.Xna.Fra
 endforeach()
 endif()
 
-message(STATUS "The installed CNA package built and ran a standalone C consumer, shared and static.")
+if(CNA_EXPECT_STATIC)
+    message(STATUS "The installed CNA package built and ran a standalone C consumer, shared and static.")
+else()
+    message(STATUS "The installed CNA package built and ran a standalone C consumer (shared only).")
+endif()

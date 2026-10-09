@@ -2281,10 +2281,28 @@ if(CNA_BUILD_TESTS)
     # but CMAKE_PREFIX_PATH, builds it and runs it. Everything else in this suite proves the ABI
     # works from inside the build; this proves the *package* works from outside it.
     #
-    # ELF-only: the run step inspects an installed shared object and its RPATH. Since CBIND-045 it
-    # passes no SDL path of any kind -- the package ships those libraries, so a consumer needing an
-    # environment variable would be a defect rather than a fact of life, and this is where it shows.
+    # Since CBIND-045 it passes no SDL path of any kind -- the package ships those libraries, so a
+    # consumer needing an environment variable would be a defect rather than a fact of life, and this
+    # is where it shows. plans/plan_apple_m4.md AM4-211: macOS runs it too, now that the installed
+    # dylib looks beside itself (AM4-210). There the consumer gets the platform's own video driver
+    # rather than an x11 pin, and the static half is skipped by name: the archive is still produced
+    # only for ELF.
+    set(_cna_consumer_platform)
     if(UNIX AND NOT APPLE)
+        set(_cna_consumer_platform ELF)
+        set(_cna_consumer_videodriver x11)
+        set(_cna_consumer_display "${CNA_TEST_DISPLAY}")
+        set(_cna_consumer_expect_static "${CNA_C_API_BUILD_STATIC}")
+        set(_cna_consumer_static_reason "")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        set(_cna_consumer_platform MACHO)
+        set(_cna_consumer_videodriver "")
+        set(_cna_consumer_display "")
+        set(_cna_consumer_expect_static OFF)
+        set(_cna_consumer_static_reason
+            "the static archive is produced only for ELF on this release (tools/c-api/generate_static_archive.py)")
+    endif()
+    if(_cna_consumer_platform)
         add_test(NAME CApi_InstalledConsumer
             COMMAND ${CMAKE_COMMAND}
                 -DCNA_BUILD_DIR=${CMAKE_BINARY_DIR}
@@ -2298,9 +2316,11 @@ if(CNA_BUILD_TESTS)
                 # entirely in how it passes its own arguments.
                 "-DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}"
                 -DCNA_SANITIZE=${CNA_SANITIZE}
-                -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
-                -DCNA_CONSUMER_VIDEODRIVER=x11
-                -DCNA_CONSUMER_DISPLAY=${CNA_TEST_DISPLAY}
+                -DCNA_EXPECT_STATIC=$<BOOL:${_cna_consumer_expect_static}>
+                "-DCNA_STATIC_SKIP_REASON=${_cna_consumer_static_reason}"
+                -DCNA_CONSUMER_PLATFORM=${_cna_consumer_platform}
+                -DCNA_CONSUMER_VIDEODRIVER=${_cna_consumer_videodriver}
+                -DCNA_CONSUMER_DISPLAY=${_cna_consumer_display}
                 -DCNA_GRAPHICS_RENDERER=${CNA_GRAPHICS_RENDERER}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
