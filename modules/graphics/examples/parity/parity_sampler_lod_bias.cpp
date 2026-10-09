@@ -24,6 +24,9 @@
 
 #include "parity/ParityFixture.hpp"
 
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/GraphicsRendererType.hpp"
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -90,6 +93,18 @@ namespace
         state.setMipMapLevelOfDetailBiasProperty(bias);
         return state;
     }
+}
+
+/// plans/plan_fx.md section 10.5: on the OpenGL ES profiles `MipMapLevelOfDetailBias` is a Case 1
+/// limitation for stock sampling -- ES has no `GL_TEXTURE_LOD_BIAS`, which is why FNA3D's own GL
+/// driver skips it too. There the documented answer is that a bias changes nothing, and the fixture
+/// measures that rather than skipping, so whoever emulates it on ES updates that row as well
+/// (CNA plans/plan_apple_m4.md AM4-270).
+static bool StockSamplingHasNoLodBias()
+{
+    const CNA::GraphicsRendererType renderer = CNA::GraphicsRendererSelection::GetSelected();
+    return renderer == CNA::GraphicsRendererType::OpenGLES3 ||
+           renderer == CNA::GraphicsRendererType::WebGL2;
 }
 
 /// WEBGPU-205: MipMapLevelOfDetailBias shifts which mip level a sample comes from.
@@ -164,6 +179,16 @@ protected:
 
         // Each level is a flat colour and the filter selects rather than blends, so every value is
         // exact; tolerance 2 covers the unorm8 round trip and nothing else.
+        if (StockSamplingHasNoLodBias())
+        {
+            ExpectAverage("bias 0 samples level 0", grid.Interior(0, 0), kLevelColors[0], 2);
+            ExpectAverage("ES (plan_fx 10.5, Case 1): bias +1 leaves stock sampling on level 0",
+                          grid.Interior(1, 0), kLevelColors[0], 2);
+            ExpectAverage("ES (plan_fx 10.5, Case 1): bias +2 leaves stock sampling on level 0",
+                          grid.Interior(2, 0), kLevelColors[0], 2);
+            ExpectAverage("bias -1 clamps to level 0", grid.Interior(3, 0), kLevelColors[0], 2);
+            return;
+        }
         ExpectAverage("bias 0 samples level 0",  grid.Interior(0, 0), kLevelColors[0], 2);
         ExpectAverage("bias +1 samples level 1", grid.Interior(1, 0), kLevelColors[1], 2);
         ExpectAverage("bias +2 samples level 2", grid.Interior(2, 0), kLevelColors[2], 2);

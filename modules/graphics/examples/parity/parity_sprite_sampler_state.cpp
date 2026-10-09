@@ -24,6 +24,9 @@
 
 #include "parity/ParityFixture.hpp"
 
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/GraphicsRendererType.hpp"
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -92,6 +95,18 @@ namespace
         state.setMipMapLevelOfDetailBiasProperty(bias);
         return state;
     }
+}
+
+/// plans/plan_fx.md section 10.5: on the OpenGL ES profiles `MipMapLevelOfDetailBias` is a Case 1
+/// limitation for stock sampling -- ES has no `GL_TEXTURE_LOD_BIAS`, which is why FNA3D's own GL
+/// driver skips it too. There the documented answer is that a bias changes nothing, and the fixture
+/// measures that rather than skipping, so whoever emulates it on ES updates that row as well
+/// (CNA plans/plan_apple_m4.md AM4-270).
+static bool StockSamplingHasNoLodBias()
+{
+    const CNA::GraphicsRendererType renderer = CNA::GraphicsRendererSelection::GetSelected();
+    return renderer == CNA::GraphicsRendererType::OpenGLES3 ||
+           renderer == CNA::GraphicsRendererType::WebGL2;
 }
 
 /// WEBGPU-205: whether a SamplerState field beyond filter/address reaches a SpriteBatch draw.
@@ -201,6 +216,20 @@ protected:
         std::printf("[%s] SpriteBatch leaves its complete sampler in GraphicsDevice slot 0\n",
                     completeStateRetained ? "PASS" : "FAIL");
         if (!completeStateRetained) MarkFailedEXT();
+
+        if (StockSamplingHasNoLodBias())
+        {
+            // Neither route applies a bias here, so both rows read the natural level in every
+            // column -- and still agree with each other, which is the claim this fixture exists for.
+            for (int column = 0; column < 4; ++column)
+            {
+                ExpectAverage("ES (plan_fx 10.5, Case 1): the 3D quad stays on the natural level 2",
+                              grid.Interior(column, 1), kLevelColors[kNaturalLevel], 2);
+                ExpectAverage("ES (plan_fx 10.5, Case 1): the sprite stays on the natural level 2",
+                              grid.Interior(column, 0), kLevelColors[kNaturalLevel], 2);
+            }
+            return;
+        }
 
         // --- The control, read first ----------------------------------------------------------
         ExpectAverage("control: a 3D quad at 1/4 scale samples the natural level 2",
