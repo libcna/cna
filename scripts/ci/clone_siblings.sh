@@ -16,11 +16,12 @@
 # a push tries the pushed branch; a pull request tries its source branch, then its target.
 set -euo pipefail
 
+# Resolved before the `cd` below: the script may have been invoked by a relative path.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 candidates="${1:-}"
 shift
 cd "${GITHUB_WORKSPACE:-$(pwd)}/.."
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for repo in "$@"; do
     chosen="$("${script_dir}/sibling_branch.sh" "${candidates}" "${repo}")"
     echo "${repo}: cloning branch ${chosen}"
