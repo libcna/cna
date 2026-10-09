@@ -38,7 +38,7 @@ jobs:
     # macos-26 (Xcode 26): macos-14's default Xcode 15.4 has no std::jthread/std::stop_token in its
     # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
 
     steps:
       - name: Checkout CNA
@@ -89,9 +89,14 @@ jobs:
             # without it (AM4-283).
             echo "API validation only on this device (AM4-279)"
             echo "CNA_METAL_TEST_SHADER_VALIDATION=OFF" >> "$GITHUB_ENV"
+            # One GPU test process at a time here: three runs at --parallel 3 each lost one test,
+            # each time a different one, to "Caused GPU Hang Error (kIOGPUCommandBufferCallbackErrorHang)"
+            # from this device (AM4-306). Apple hardware keeps three.
+            echo "CNA_METAL_TEST_PARALLEL=1" >> "$GITHUB_ENV"
           else
             echo "MTL_SHADER_VALIDATION=1" >> "$GITHUB_ENV"
             echo "CNA_METAL_TEST_SHADER_VALIDATION=ON" >> "$GITHUB_ENV"
+            echo "CNA_METAL_TEST_PARALLEL=3" >> "$GITHUB_ENV"
           fi
 
       - name: Configure native Metal renderer
@@ -119,7 +124,7 @@ jobs:
           ctest --test-dir cmake-build-metal
           -R '^Metal'
           --output-on-failure
-          --parallel 3
+          --parallel ${{ env.CNA_METAL_TEST_PARALLEL }}
 
       - name: Run renderer compile-definition control
         working-directory: cna
