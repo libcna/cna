@@ -56,6 +56,10 @@ using CNA::Platform::IPlatform;
 using CNA::Platform::PlatformFactory;
 using CNA::Platform::Sdl3::SdlGlobalStateLock;
 
+// The two exit tests are death tests, which GoogleTest builds only where it can fork a child --
+// not under Emscripten, which also defines __unix__ (CNA plans/plan_apple_m4.md AM4-280). The
+// ownership query below needs no child and runs everywhere this file does.
+#if GTEST_HAS_DEATH_TEST
 constexpr unsigned kChildDeadlineSeconds = 20;
 
 /// The child's whole life: construct a platform, optionally hold the global-state lock, exit().
@@ -103,6 +107,8 @@ TEST(Sdl3PlatformExitUnderLockTest, DestructorSurvivesExitReachedFromInsideItsOw
            "the thread that already owned it (finding F-28). The control test above shows the "
            "harness works.";
 }
+
+#endif // GTEST_HAS_DEATH_TEST
 
 TEST(Sdl3PlatformExitUnderLockTest, OwnershipQueryIsFalseWhenNothingIsHeld)
 {
