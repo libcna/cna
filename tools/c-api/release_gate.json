@@ -80,7 +80,7 @@
     {
       "id": "packaging-dependencies",
       "title": "The package carries the native libraries CNA builds",
-      "requirement": "An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN.",
+      "requirement": "An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN, and beside libcna_c_api.dylib on macOS, whose LC_RPATH is @loader_path.",
       "check": "native_dependencies_shipped",
       "recorded": "met",
       "evidence": "the CNACApi install component, proved by CApi_InstalledConsumer",

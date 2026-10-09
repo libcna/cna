@@ -430,6 +430,8 @@ if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/lib")
         FILES_MATCHING
             # The soname symlinks come too: DT_NEEDED names libSDL3.so.0, not the versioned file.
             PATTERN "libSDL3*.so*"
+            # AM4-210: and on macOS the dylibs, whose LC_LOAD_DYLIB names are @rpath/libSDL3*.0.dylib.
+            PATTERN "libSDL3*.dylib"
             PATTERN "SDL3*.dll"
             # A consumer links CNA::CApi and never SDL directly, so SDL's own CMake package and
             # pkg-config files have no business in this install.
@@ -488,6 +490,23 @@ if(NOT DEFINED _cna_abi_MAJOR OR NOT DEFINED _cna_abi_MINOR OR NOT DEFINED _cna_
         "The ABI version could not be read from modules/c-api/include/CNA/C/abi.h.")
 endif()
 set(CNA_C_ABI_VERSION "${_cna_abi_MAJOR}.${_cna_abi_MINOR}.${_cna_abi_PATCH}")
+
+# plans/plan_apple_m4.md AM4-210: the Mach-O half of CBIND-041's "the installed library keeps looking
+# beside itself". `$ORIGIN` is ELF syntax; ld64 writes it into LC_RPATH literally, where dyld treats it
+# as a directory named "$ORIGIN". `@loader_path` is the same rule for dyld, and the shipped SDL3
+# dylibs, whose install names are `@rpath/libSDL3*.0.dylib`, resolve through it. The install name
+# stays `@rpath/libcna_c_api.dylib`, so a consumer finds the library through its own rpath, as CMake
+# arranges for a `find_package(CNA)` consumer. The Mach-O versions come from the ABI version: a
+# minor release only adds functions, so a program linked against 0.N runs on any 0.M >= 0.N and dyld
+# can say so; the file name does not change.
+if(APPLE AND NOT EMSCRIPTEN)
+    set_target_properties(cna_c_api PROPERTIES
+        INSTALL_RPATH "@loader_path"
+        INSTALL_NAME_DIR "@rpath"
+        MACHO_COMPATIBILITY_VERSION "${_cna_abi_MAJOR}.${_cna_abi_MINOR}.0"
+        MACHO_CURRENT_VERSION "${CNA_C_ABI_VERSION}"
+    )
+endif()
 
 set(CNA_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 set(CNA_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
