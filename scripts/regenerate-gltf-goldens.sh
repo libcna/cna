@@ -74,12 +74,12 @@ if [ "$DETERMINISM" -eq 1 ]; then
 fi
 
 if [ "$CHECK_ONLY" -eq 0 ]; then
-    python3 -m gltf_fixtures --out "$CORPUS" "${validator_args[@]}"
+    python3 -m gltf_fixtures --out "$CORPUS" ${validator_args[@]+"${validator_args[@]}"}
 fi
 
 # The generator's own comparison: every emitted byte against what is on disk. This is the assertion,
 # not the write above -- a generator that wrote nothing at all would still "succeed" without it.
-python3 -m gltf_fixtures --check "$CORPUS" "${validator_args[@]}"
+python3 -m gltf_fixtures --check "$CORPUS" ${validator_args[@]+"${validator_args[@]}"}
 
 # The second half of GLTF-020's acceptance, and the one a human actually reads: on an unchanged tree
 # the regeneration must leave the working tree untouched. Reported rather than enforced, because a
