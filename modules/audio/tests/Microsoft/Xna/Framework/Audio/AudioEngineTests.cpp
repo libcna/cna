@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "AudioEngineTestAccess.hpp"
+#include "CNA/Internal/TitlePath.hpp"
 #include "CueTestAccess.hpp"
 #include "SoundBankTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -28,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -792,6 +794,38 @@ TEST(AudioEngineTest, ConstructorResolvesXnaCaseInsensitiveSettingsPath)
                            "CNA_AUDIO_ENGINE_TEST" / "FIXTURE.XGS";
 
     EXPECT_NO_THROW(AudioEngine engine(requested.string()));
+}
+
+// AM4-321: XNA opens the settings file through TitleContainer, so a relative name is under
+// TitleLocation.Path whatever the working directory is. The Racing Game played silently when it
+// was started from anywhere but its own folder: its models came through ContentManager, which
+// already resolves under the title, while "Content/Audio/RacingGameManager.xgs" was looked for
+// under the working directory.
+TEST(AudioEngineTest, ARelativeSettingsPathIsUnderTheTitleNotTheWorkingDirectory)
+{
+    const std::filesystem::path exact(XgsFixturePath());
+    const std::filesystem::path title = exact.parent_path().parent_path();
+    const std::filesystem::path elsewhere = CnaAudioTest::FixtureRoot() / "cna_audio_engine_elsewhere";
+    std::filesystem::create_directories(elsewhere);
+
+    const std::optional<std::string> previousTitle = CNA::Internal::TryGetTitlePath();
+    const std::filesystem::path previousDirectory = std::filesystem::current_path();
+    CNA::Internal::SetTitlePath(title.string());
+    std::filesystem::current_path(elsewhere);
+
+    bool constructed = false;
+    try
+    {
+        AudioEngine engine((exact.parent_path().filename() / exact.filename()).string());
+        constructed = true;
+    }
+    catch (const std::exception&)
+    {
+    }
+
+    std::filesystem::current_path(previousDirectory);
+    CNA::Internal::SetTitlePath(previousTitle.value_or(std::string{}));
+    EXPECT_TRUE(constructed);
 }
 
 // XA-13/P9-HARDWARE-003: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) matches
