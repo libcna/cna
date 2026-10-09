@@ -396,6 +396,9 @@ class MsaaFragmentContractTest final : public Game
             try { (void)renderWireframe(true); }
             catch (const System::NotSupportedException&) { refused = true; }
             Check(refused, "a device without WireFrame refuses a wireframe draw (SOFTWARE-178)");
+            // The refused draw leaves FillMode::WireFrame on the device; later checks inherit
+            // the state this one leaves, which on a wireframe-capable device ends Solid.
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
             return;
         }
         const auto independentlySampledWireframe = renderWireframe(true);
@@ -479,6 +482,8 @@ class MsaaFragmentContractTest final : public Game
             try { (void)render(true, false); }
             catch (const System::NotSupportedException&) { refused = true; }
             Check(refused, "a device without WireFrame refuses a wireframe draw (SOFTWARE-178)");
+            // As above: leave the Solid state the next check relies on.
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
             return;
         }
         const auto wireframeCoverage = render(true, false);
