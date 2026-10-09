@@ -702,6 +702,88 @@ TEST_F(Sdl3InputTest, MouseReadsThePointerBesideTheWindowAsXnaDoes)
     platform_->ReleaseSubsystem(PlatformSubsystem::Video);
 }
 
+TEST_F(Sdl3InputTest, RecenteringAHiddenCursorKeepsItsWarpsReal)
+{
+    // AM4-320. A mouse-look game hides the cursor and warps it back to the window centre every
+    // frame. SDL3 turns that pattern into relative mode, which stops the desktop pointer the
+    // snapshot reads on these drivers: every later warp became virtual, and GetState kept
+    // reporting the centre however far the mouse moved (house-simulator's camera never turned on
+    // macOS). After two centre warps a warp elsewhere must still land, and be read back.
+    const char* chosen = SDL_GetHint(SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE);
+    if (chosen != nullptr && std::strcmp(chosen, "0") != 0)
+    {
+        GTEST_SKIP() << "the host chose SDL's warp emulation itself";
+    }
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "no video subsystem (no display): " << error.what();
+    }
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if (driver == nullptr || (std::strcmp(driver, "x11") != 0 && std::strcmp(driver, "windows") != 0 &&
+                              std::strcmp(driver, "cocoa") != 0))
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "this driver does not report the desktop pointer";
+    }
+
+    WindowDescription description;
+    description.title = "Sdl3MouseRecentreTest";
+    description.width = 200;
+    description.height = 160;
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "no window: " << error.what();
+    }
+
+    IPlatformMouse* mouse = platform_->GetMouse();
+    float originalX = 0.0f;
+    float originalY = 0.0f;
+    (void)SDL_GetGlobalMouseState(&originalX, &originalY);
+
+    window->Sync();
+    const WindowBounds bounds = window->GetClientBounds();
+    const WindowId id = window->GetId();
+    mouse->SetCursorVisible(false);
+    mouse->SetPosition(id, bounds.width / 2, bounds.height / 2);
+    mouse->SetPosition(id, bounds.width / 2, bounds.height / 2);
+    mouse->SetPosition(id, 10, 12);
+
+    // SetPosition records the target itself, so only a read of the pointer after it counts.
+    std::vector<PlatformEvent> events;
+    MouseSnapshot landed{};
+    for (int attempt = 0; attempt < 100; ++attempt)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        events.clear();
+        platform_->PollEvents(events);
+        mouse->Update();
+        landed = mouse->GetSnapshot();
+        if (landed.x == 10 && landed.y == 12)
+        {
+            break;
+        }
+    }
+
+    mouse->SetCursorVisible(true);
+    (void)mouse->SetGlobalPosition(originalX, originalY);
+    window.reset();
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+
+    EXPECT_STREQ(SDL_GetHint(SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE), "0");
+    EXPECT_EQ(landed.x, 10);
+    EXPECT_EQ(landed.y, 12);
+}
+
 TEST(Sdl3TextInputTypesTest, EveryPortablePurposeMapsToTheExpectedNativeHint)
 {
     using CNA::Platform::Sdl3::ToSdlTextInputType;

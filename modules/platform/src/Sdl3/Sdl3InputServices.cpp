@@ -47,6 +47,21 @@ namespace CNA::Platform::Sdl3 {
                     std::strcmp(driver, "cocoa") == 0);
         }
 
+        // SDL3 turns a hidden cursor that is warped to the window centre twice in quick succession
+        // into relative mode ("warp emulation"), which on these drivers stops the desktop pointer
+        // moving -- the pointer ReportsTheDesktopPointer reads. Every XNA mouse-look loop
+        // (GetState, then SetPosition back to the centre) then measured a zero delta: the camera
+        // never turned (AM4-320). FNA's SDL3 platform asks for real warps wherever it reads the
+        // global pointer, for the same reason; a host that set the hint keeps its own choice.
+        void KeepCursorWarpsReal()
+        {
+            if (ReportsTheDesktopPointer() &&
+                SDL_GetHint(SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE) == nullptr)
+            {
+                (void)SDL_SetHint(SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE, "0");
+            }
+        }
+
         bool NeedsVirtualMouseWarp()
         {
 #if defined(__EMSCRIPTEN__)
@@ -313,6 +328,7 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException("Mouse::SetPosition", "window id is not owned by SDL3");
         }
 #if !defined(__EMSCRIPTEN__)
+        KeepCursorWarpsReal();
         SDL_WarpMouseInWindow(nativeWindow, static_cast<float>(x), static_cast<float>(y));
 
         // Wayland and the other local-coordinate-only SDL drivers may refuse a real cursor warp,
