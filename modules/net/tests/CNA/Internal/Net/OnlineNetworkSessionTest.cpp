@@ -475,7 +475,6 @@ TEST_F(OnlineNetworkSessionTest, AnAddTheServiceRefusesLeavesTheGamerOut) {
     // Nothing is left pending: the same gamer may be asked for again.
     EXPECT_NO_THROW(session->AddLocalGamer(gamer(2)));
 }
-#endif
 
 namespace {
 // A microphone hearing a steady tone and a speaker counting what it played.
@@ -555,3 +554,6 @@ TEST_F(OnlineNetworkSessionTest, LiveBlockAndMuteSnapshotsSuppressSubsequentVoic
     ++reply.Sequence;peer->sendVoice(reply);const auto played=probe->played;
     until([&]{return probe->played>played;});
 }
+// The voice tests use the same online-session fixture, which is not built for Emscripten
+// (CNA plans/plan_apple_m4.md AM4-275).
+#endif // __EMSCRIPTEN__
