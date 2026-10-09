@@ -75,7 +75,14 @@ jobs:
   build-and-test:
     name: Build + test (devices-ubsan preset)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A cold UBSan build of CnaTests on the hosted runner had reached 90 % when the former
+    # 45-minute budget cancelled it (run 37922925862), so no run could finish -- or ever save the
+    # compiler cache below that makes the next one warm (CNA plans/plan_apple_m4.md AM4-281).
+    timeout-minutes: 75
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 2G
     steps:
       # Sibling repos (sharp-runtime, easy-gl, meta-gl) are plain sibling
       # checkouts referenced via add_subdirectory(../x) in CMakeLists.txt, not
@@ -119,7 +126,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
             libcurl4-openssl-dev nlohmann-json3-dev \
-            build-essential ninja-build pkg-config \
+            build-essential ninja-build pkg-config ccache \
             libasound2-dev libpulse-dev libaudio-dev libfribidi-dev libjack-dev \
             libsndio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
@@ -137,6 +144,13 @@ jobs:
         with:
           path: cna_devices/.sdl-prebuilt-Linux-x86_64
           key: sdl-prebuilt-linux-x86_64-${{ hashFiles('cna_devices/third_party/SDL/**', 'cna_devices/third_party/SDL_image/**', 'cna_devices/third_party/SDL_mixer/**') }}
+
+      - name: Cache the compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-devices-ubsan-${{ github.sha }}
+          restore-keys: ccache-devices-ubsan-
 
       - name: Configure (devices-ubsan preset)
         working-directory: cna_devices
