@@ -69,6 +69,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clone the sharp-runtime sibling
+        # The audio check compiles sharp-runtime's System::Exception (AM4-239), from the branch
+        # scripts/ci/clone_siblings.sh chooses for every other CNA workflow.
+        run: bash scripts/ci/clone_siblings.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
+
       - name: Install 32-bit toolchain
         run: |
           sudo apt-get update -y

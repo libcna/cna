@@ -42,10 +42,27 @@ set(CNA_MODULE_INCLUDE_ROOTS
     "${CNA_ROOT}/modules/renderers/software/include"
 )
 
+# ContentLoadException derives from sharp-runtime's System::Exception, and its serialization
+# support includes System/Runtime/Serialization, so the audio check needs sharp-runtime's headers
+# and the one translation unit that defines System::Exception -- from the same sibling checkout the
+# main build uses. Without them the check stopped compiling once ContentLoadException gained that
+# support, and the 32-bit job failed on every run (plans/plan_apple_m4.md AM4-239).
+set(CNA_SHARP_RUNTIME_ROOT "${CNA_ROOT}/../sharp-runtime" CACHE PATH
+    "Path to the sharp-runtime checkout (sibling '../sharp-runtime' of the CNA checkout by default)")
+get_filename_component(CNA_SHARP_RUNTIME_ROOT "${CNA_SHARP_RUNTIME_ROOT}" ABSOLUTE)
+file(GLOB _sharp_runtime_include_roots LIST_DIRECTORIES true "${CNA_SHARP_RUNTIME_ROOT}/modules/*/include")
+if(NOT _sharp_runtime_include_roots)
+    message(FATAL_ERROR
+        "No sharp-runtime checkout at ${CNA_SHARP_RUNTIME_ROOT}; clone it beside CNA or pass "
+        "-DCNA_SHARP_RUNTIME_ROOT=<path>.")
+endif()
+list(APPEND CNA_MODULE_INCLUDE_ROOTS ${_sharp_runtime_include_roots})
+
 add_executable(cna_audio_tag_parser_32bit_overflow_check
     "${CMAKE_CURRENT_SOURCE_DIR}/../audio_tag_parser_32bit_overflow_check.cpp"
     "${CNA_ROOT}/modules/media/src/Internal/AudioTagParser.cpp"
     "${CNA_ROOT}/modules/content/src/Xna/ContentLoadException.cpp"
+    "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/Exception.cpp"
 )
 target_include_directories(cna_audio_tag_parser_32bit_overflow_check PRIVATE
     ${CNA_MODULE_INCLUDE_ROOTS}
