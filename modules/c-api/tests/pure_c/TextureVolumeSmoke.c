@@ -443,6 +443,31 @@ static int validate_render_target_cube(const CNA_Handle device)
         VOL(cna_render_target_destroy(target) == CNA_RESULT_SUCCESS);
 }
 
+/*
+ * plans/plan_apple_m4.md AM4-206: a device without 3D (SDL_RENDERER) refuses cube storage at
+ * construction under the default Unsupported3DGraphicsCallBehavior::Throw (REMED-GFX-130). The
+ * claim on such a device is that the refusal is by name and leaves no handle behind, for a cube
+ * and a DDS-decoded cube alike. A RenderTargetCube keeps its own contract there -- constructed, with
+ * the face binding refused -- so stage 4 runs unchanged on every device.
+ */
+static int validate_cube_refusal(const CNA_Handle device)
+{
+    const CNA_TextureCubeCreateInfo cube_info = {
+        sizeof(CNA_TextureCubeCreateInfo), UINT32_C(1), 4U,
+        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    uint8_t dds[176];
+    const size_t dds_size = build_minimal_cube_dds(dds);
+    CNA_Handle cube = UINT64_MAX;
+    CNA_Handle decoded = UINT64_MAX;
+    return VOL(cna_texturecube_create(device, &cube_info, &cube) == CNA_RESULT_NOT_SUPPORTED) &&
+        VOL(cube == CNA_INVALID_HANDLE) &&
+        VOL(dds_size == sizeof(dds)) &&
+        VOL(cna_texturecube_create_from_dds_memory(device, dds, (uint64_t)dds_size, &decoded) ==
+            CNA_RESULT_NOT_SUPPORTED) &&
+        VOL(decoded == CNA_INVALID_HANDLE);
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -508,8 +533,17 @@ static CNA_Result on_load(
     } else if (!validate_texture3d_rejection(device)) {
         return CNA_RESULT_INVALID_STATE;
     }
+    CNA_Bool three_d = CNA_FALSE;
+    if (!VOL(cna_graphics_device_supports_capability(
+            device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d) == CNA_RESULT_SUCCESS)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
     state->stage = 3;
-    if (!validate_cube(device)) {
+    if (three_d != CNA_TRUE) {
+        if (!validate_cube_refusal(device)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    } else if (!validate_cube(device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 4;

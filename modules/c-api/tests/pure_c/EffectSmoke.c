@@ -19,9 +19,45 @@ _Static_assert(sizeof(CNA_EffectHandle) == 8U, "CNA Effect handle size changed")
 typedef struct CallbackState {
     CNA_Handle borrowed_device;
     CNA_EffectPassHandle retained_pass;
-    CNA_Handle retained_cube;
+    CNA_Handle retained_texture;
     int stage;
+    CNA_Bool retained_is_cube;
 } CallbackState;
+
+/*
+ * plans/plan_apple_m4.md AM4-206: a device without 3D (SDL_RENDERER) refuses a cube texture at
+ * construction under the default Unsupported3DGraphicsCallBehavior::Throw (REMED-GFX-130), so the
+ * sampler-retention checks below hold a cube where the device can make one and a Texture2D where it
+ * cannot -- the retention rule under test is the same for both.
+ */
+static CNA_Result create_sampler_cube(
+    const CNA_Handle device,
+    const CNA_TextureCubeCreateInfo* const info,
+    CNA_Handle* const out_cube,
+    CNA_Bool* const out_created)
+{
+    CNA_Bool three_d = CNA_FALSE;
+    CNA_Result result = cna_graphics_device_supports_capability(
+        device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = cna_texturecube_create(device, info, out_cube);
+    if (three_d == CNA_TRUE) {
+        *out_created = result == CNA_RESULT_SUCCESS ? CNA_TRUE : CNA_FALSE;
+        return result;
+    }
+    *out_created = CNA_FALSE;
+    return result == CNA_RESULT_NOT_SUPPORTED && *out_cube == CNA_INVALID_HANDLE
+        ? CNA_RESULT_SUCCESS
+        : CNA_RESULT_INVALID_STATE;
+}
+
+static CNA_Result destroy_sampler_texture(const CNA_Handle texture, const CNA_Bool is_cube)
+{
+    return is_cube == CNA_TRUE ? cna_texturecube_destroy(texture)
+                               : cna_texture2d_destroy(texture);
+}
 
 typedef struct WrongThreadState {
     CNA_EffectHandle effect;
@@ -590,13 +626,18 @@ static int validate_shader_effect(const CNA_Handle device)
                     shader, 32, block_names, 0, 2U) == CNA_RESULT_INVALID_ARGUMENT);
     }
 
+    CNA_Bool has_cube = CNA_FALSE;
     REQUIRE(cna_texture2d_create(device, &texture_info, &texture2d) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_create(device, &cube_info, &cube) == CNA_RESULT_SUCCESS);
+            create_sampler_cube(device, &cube_info, &cube, &has_cube) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_shader_effect_set_texture2d(shader, 1, texture2d) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture2d) == CNA_RESULT_INVALID_STATE);
-    REQUIRE(cna_shader_effect_set_texture_cube(shader, 1, cube) == CNA_RESULT_SUCCESS &&
-            cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
+    if (has_cube == CNA_TRUE) {
+        REQUIRE(cna_shader_effect_set_texture_cube(shader, 1, cube) == CNA_RESULT_SUCCESS &&
+                cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
+                cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
+    }
+    /* What sampler 1 holds from here on: the cube, or the Texture2D it would have replaced. */
+    const CNA_Handle sampled = has_cube == CNA_TRUE ? cube : texture2d;
     /*
      * Volume-texture storage is backend-dependent. This used to require CNA_RESULT_NOT_SUPPORTED,
      * so a renderer gaining Texture3D support turned the suite red -- the same stale expectation
@@ -613,7 +654,7 @@ static int validate_shader_effect(const CNA_Handle device)
         REQUIRE(volume_created == CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
     }
     /* A handle of the wrong family is refused whichever way the above went. */
-    REQUIRE(cna_shader_effect_set_texture3d(shader, 2, cube) ==
+    REQUIRE(cna_shader_effect_set_texture3d(shader, 2, sampled) ==
             CNA_RESULT_INVALID_HANDLE);
 
     REQUIRE(cna_effect_clone(shader, &clone) == CNA_RESULT_SUCCESS &&
@@ -629,12 +670,12 @@ static int validate_shader_effect(const CNA_Handle device)
 
     REQUIRE(cna_effect_destroy(shader) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_apply(pass) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
+            destroy_sampler_texture(sampled, has_cube) == CNA_RESULT_INVALID_STATE);
     REQUIRE(cna_effect_technique_collection_destroy(techniques) == CNA_RESULT_SUCCESS &&
             cna_effect_technique_destroy(technique) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_collection_destroy(passes) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_destroy(pass) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS);
+            destroy_sampler_texture(sampled, has_cube) == CNA_RESULT_SUCCESS);
     /*
      * The volume texture is released here for the same reason the cube is, and only once the pass
      * is gone: until then the effect still retains it. Omitting this leaked one owned graphics
@@ -681,13 +722,20 @@ static int create_retained_descendant(
     const CNA_TextureCubeCreateInfo cube_info = {
         sizeof(CNA_TextureCubeCreateInfo), UINT32_C(1), 1U,
         CNA_FALSE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U};
+    const CNA_Texture2DCreateInfo texture_info = {
+        sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 1U, 1U,
+        CNA_FALSE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR};
     if (cna_shader_effect_create(
             device, string_view("void main() { }"), string_view("void main() { }"),
             &shader) != CNA_RESULT_SUCCESS ||
-        cna_texturecube_create(device, &cube_info, &state->retained_cube) !=
-            CNA_RESULT_SUCCESS ||
-        cna_shader_effect_set_texture_cube(shader, 1, state->retained_cube) !=
-            CNA_RESULT_SUCCESS ||
+        create_sampler_cube(device, &cube_info, &state->retained_texture,
+                            &state->retained_is_cube) != CNA_RESULT_SUCCESS ||
+        (state->retained_is_cube == CNA_TRUE
+             ? cna_shader_effect_set_texture_cube(shader, 1, state->retained_texture)
+             : (cna_texture2d_create(device, &texture_info, &state->retained_texture) ==
+                        CNA_RESULT_SUCCESS
+                    ? cna_shader_effect_set_texture2d(shader, 1, state->retained_texture)
+                    : CNA_RESULT_INVALID_STATE)) != CNA_RESULT_SUCCESS ||
         cna_effect_get_techniques(shader, &techniques) != CNA_RESULT_SUCCESS ||
         cna_effect_technique_collection_get_at(techniques, 0U, &technique) !=
             CNA_RESULT_SUCCESS ||
@@ -743,7 +791,7 @@ static CNA_Result on_load(
 int main(void)
 {
     CallbackState state = {
-        CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, 0};
+        CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, 0, CNA_FALSE};
     const CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks), UINT32_C(1), on_load, 0, 0, 0, 0, &state};
     static const char Title[] = "C API effects";
@@ -756,12 +804,14 @@ int main(void)
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 6 ||
         state.borrowed_device == CNA_INVALID_HANDLE ||
         state.retained_pass == CNA_INVALID_HANDLE ||
-        state.retained_cube == CNA_INVALID_HANDLE ||
+        state.retained_texture == CNA_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
         cna_effect_pass_apply(state.retained_pass) != CNA_RESULT_SUCCESS ||
-        cna_texturecube_destroy(state.retained_cube) != CNA_RESULT_INVALID_STATE ||
+        destroy_sampler_texture(state.retained_texture, state.retained_is_cube) !=
+            CNA_RESULT_INVALID_STATE ||
         cna_effect_pass_destroy(state.retained_pass) != CNA_RESULT_SUCCESS ||
-        cna_texturecube_destroy(state.retained_cube) != CNA_RESULT_SUCCESS ||
+        destroy_sampler_texture(state.retained_texture, state.retained_is_cube) !=
+            CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
         fprintf(stderr, "EffectSmoke lifecycle failure at stage %d\n", state.stage);
         return 1;

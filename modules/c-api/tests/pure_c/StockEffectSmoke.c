@@ -387,12 +387,25 @@ static int validate_environment_map(
     REQUIRE(cna_environment_map_effect_get_fresnel_factor(environment_map, &scalar) ==
                 CNA_RESULT_SUCCESS && scalar == 2.5F);
 
-    REQUIRE(cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_create(device, &cube_info, &cube) == CNA_RESULT_SUCCESS &&
-            cna_environment_map_effect_set_texture(environment_map, texture) ==
+    /*
+     * plans/plan_apple_m4.md AM4-206: a device without 3D (SDL_RENDERER) refuses the cube at
+     * construction under the default Unsupported3DGraphicsCallBehavior::Throw (REMED-GFX-130), by
+     * name; the effect itself, its Texture2D and its clone work the same either way, and an unset
+     * environment map reads back as unset.
+     */
+    CNA_Bool three_d = CNA_FALSE;
+    REQUIRE(cna_graphics_device_supports_capability(
+                device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS);
+    const CNA_Result cube_created = cna_texturecube_create(device, &cube_info, &cube);
+    const int has_cube = cube_created == CNA_RESULT_SUCCESS;
+    REQUIRE(three_d == CNA_TRUE ? has_cube
+                                : cube_created == CNA_RESULT_NOT_SUPPORTED &&
+                                      cube == CNA_INVALID_HANDLE);
+    REQUIRE(cna_environment_map_effect_set_texture(environment_map, texture) ==
                 CNA_RESULT_SUCCESS &&
-            cna_environment_map_effect_set_environment_map(environment_map, cube) ==
-                CNA_RESULT_SUCCESS &&
+            (!has_cube || cna_environment_map_effect_set_environment_map(
+                              environment_map, cube) == CNA_RESULT_SUCCESS) &&
             cna_effect_clone(environment_map, &clone) == CNA_RESULT_SUCCESS &&
             type_equals(clone, TypeName));
     REQUIRE(cna_environment_map_effect_get_texture(
@@ -400,19 +413,19 @@ static int validate_environment_map(
             boolean == CNA_TRUE && returned == texture &&
             cna_environment_map_effect_get_environment_map(
                 clone, &boolean, &returned) == CNA_RESULT_SUCCESS &&
-            boolean == CNA_TRUE && returned == cube);
+            (has_cube ? boolean == CNA_TRUE && returned == cube : boolean == CNA_FALSE));
     REQUIRE(cna_environment_map_effect_set_texture(
                 environment_map, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
             cna_environment_map_effect_set_environment_map(
                 environment_map, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE &&
-            cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE &&
+            (!has_cube || cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE) &&
             cna_environment_map_effect_set_texture(
                 clone, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
             cna_environment_map_effect_set_environment_map(
                 clone, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS &&
-            cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS &&
+            (!has_cube || cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS) &&
             cna_effect_destroy(clone) == CNA_RESULT_SUCCESS &&
             cna_effect_apply(environment_map) == CNA_RESULT_SUCCESS);
     return 1;
