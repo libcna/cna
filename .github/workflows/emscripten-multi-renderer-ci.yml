@@ -137,6 +137,21 @@ jobs:
             -DCMAKE_JOB_POOLS=link=1 \
             -DCMAKE_JOB_POOL_LINK=link
 
+      # wasm-ld peaks at 9.4 GB resident linking the Debug CnaTests.js (a 956 MB .wasm; measured on
+      # the same emsdk 6.0.3 build), and with links serialized the 16 GB runner still shut down
+      # 80 s into that one link (run 37934405097). Swap on the runner's large /mnt disk lets the
+      # peak page instead of killing the agent; nothing about what is built changes
+      # (CNA plans/plan_apple_m4.md AM4-290).
+      - name: Swap for the test binary's link
+        run: |
+          set -euo pipefail
+          free -g
+          sudo fallocate -l 16G /mnt/cna-link.swap
+          sudo chmod 600 /mnt/cna-link.swap
+          sudo mkswap /mnt/cna-link.swap
+          sudo swapon /mnt/cna-link.swap
+          free -g
+
       - name: Build the bundle
         run: |
           set -euo pipefail
