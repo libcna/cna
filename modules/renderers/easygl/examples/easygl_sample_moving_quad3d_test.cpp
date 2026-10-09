@@ -107,7 +107,9 @@ protected:
 
     void Update(GameTime&) override
     {
-        if (done_) return;
+        // A fixed-step Game that falls behind runs several Updates before one Draw, so the quad
+        // stops at its fourth step rather than walking off the 64-pixel back buffer.
+        if (done_ || frame_ >= kFrameCount) return;
         x_ += kStepX;
         ++frame_;
     }
