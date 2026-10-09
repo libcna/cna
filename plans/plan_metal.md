@@ -3500,6 +3500,76 @@ this plan, the CI job, or the implementation has ever addressed that claim.
 | METAL-254 | Audit whether `GraphicsAdapter`/`GraphicsDeviceManager` already has a NOXNA extension point for backend-specific device info (`MTLDevice.name`/`recommendedMaxWorkingSetSize`/`MTLGPUFamily`/`hasUnifiedMemory`), or whether a new accessor is needed | ⬜ |
 | METAL-255 | Multi-GPU (Mac Pro/eGPU) `MTLCopyAllDevices()` enumeration — currently always `MTLCreateSystemDefaultDevice()`; confirm whether XNA's `GraphicsAdapter.Adapters` model already has a cross-backend enumeration contract to plug into, or defer until a concrete multi-GPU need exists | ⬜ |
 
+## Phase 31 — Shader packages, source shaders, compute and IBL for engine-style games (METAL-283 – METAL-295)
+
+Owner request 2026-10-09 (Apple M4 campaign, `plans/plan_apple_m4.md` AM4-307): make
+`cna-street` and `living-room-simulator` render on METAL what they render on OPENGL33 -- sky,
+image-based lighting, post-processing, auto-exposure. Planned here for a later session; nothing in
+this phase is implemented yet. `house-simulator` is unaffected (it forbids CNAEXT and already runs
+on METAL with Tier S+E, AM4-303).
+
+**What is missing today, measured on the M4 (2026-10-09).** Both games run on METAL (cna-street at
+54.8 fps) but the sky is black and there is no IBL, because they reach shaders three ways and
+Metal supports none of them:
+
+1. **Raw GLSL ES source.** `living-room-simulator/src/Render/SkySystem.cpp:360-370` (and Vignette,
+   Sunbeams, Steam, TelevisionContent in `src/Render/*`) compiles GLSL ES and is gated on
+   `GraphicsDevice::ExecutesShaderEffectSourceEXT()`; Metal returns false, so the effect is off.
+2. **Shader packages** (`ShaderPackageEXT`: AtmosphericSky, Skybox, the post-process passes,
+   AutoExposureEXT's compute). Their variants are GlslEs / GlslDesktop / SpirV (Vulkan 1.0 SPIR-V
+   from shaderc) / Wgsl / Hlsl -- never Msl -- and Metal's `SupportsShaderLanguageEXT`
+   (`MetalRenderer.mm` ~5158) accepts only Msl for Vertex/Fragment: "no usable shader variant".
+3. **IBL and shadow sampling** are not game shaders at all: `SupportsImageBasedLightingEXT()` means
+   the renderer's *stock* PBR shader samples `GpuDrawParams.ibl*`; Metal's `cna_f3d_pbr`
+   (`MetalRenderer.mm` ~703-830) does not.
+
+**How the other renderers do it (read before starting).** Variant selection:
+`ShaderPackageEXT::selectFor` (`modules/graphics-ext/src/ShaderPackageEXT.cpp:334-429`; fixed
+order SpirV, Dxil, GlslDesktop, GlslEs, GlslVulkan, Hlsl, Msl, Wgsl; the language is NOT passed to
+the renderer -- it must recognise SPIR-V by the magic word `0x07230203`). The binding contract is
+Vulkan's, shared byte-for-byte by the generated WGSL (`VulkanRenderer.hpp:983-1032`,
+`WebGPUModernEffect.cpp:7-19`): set 0 b0 the draw/sprite texture; set 1 b0-3 `sampler2D` units 0-3,
+b4-7 `samplerCube`, b8-11 `sampler3D`, b12-15 std140 float/vec2/vec3/mat4 arrays (72 entries,
+stride 16, mat4 64), b16-18 `sampler2DArray`, b19 six named engine matrices; set 2 read-only storage
+buffers; a 128-byte push block (`vec2 viewportSize`@0, `mat4`@16, `vec4`@80, scalar@96). Compute:
+all in set 0 by binding; push scalars are named (needs `OpMemberName`). Closest precedent:
+**SDL_GPU** already runs these packages on Apple's Metal (AM4-068): `SdlGpuEffectRenderer::CompileProgram`
+(`SdlGpuRenderer.cpp` ~13446) → `LooksLikeSpirvEXT` → `RemapSpirvForSdlGpuEXT` → SDL_shadercross
+MSL. Metal's own SPIRV-Cross use: `TranslateMetalCompiledStageEXT`
+(`MetalCompiledEffect.cpp:368-478`; do NOT reuse `RebaseFragCoordToPixelCorner` -- that is Direct3D
+9's pixel convention, not Vulkan's).
+
+**Risks to design for.** Metal allows 16 samplers and 31 buffers per stage (set 1 alone reaches
+binding 19, so samplers need compaction); buffer 28 is CNA's sample-mask slot and SPIRV-Cross
+reserves 23-30 for its own aux buffers; combined image samplers split into texture + sampler;
+storage images need format/access mapping; shaderc at `performance` strips `OpMemberName`;
+`.length()` on a storage buffer needs `buffer_size_buffer_index`; Vulkan NDC Y is down, Metal's up
+(`flip_vert_y`), while `gl_FragCoord` origin and [0,1] depth agree; the hosted CI GPU is the
+"Apple Paravirtual device" (Apple1-5 + Mac2, argument buffers tier 1, no Metal3, ignores sampler
+`lodBias` -- AM4-279/289/296/306).
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-283 | **Decision record superseding `METAL-143` ("raw MSL only").** Metal accepts SPIR-V payloads and translates them at run time with SPIRV-Cross. Decide the build switch: reuse `CNA_METAL_COMPILED_EFFECTS` or add `CNA_METAL_SPIRV_EFFECTS` that calls only `cna_configure_spirv_cross` (`cmake/ThirdPartySDLShaderCross.cmake:19`) without MojoShader; decide its default on macOS. Record in this file, `docs/metal-shader-effect-contract.md` and `docs/metal-backend.md`. `ExecutesShaderEffectSourceEXT` stays false until METAL-291 -- if it were true, the games' raw-GLSL effects would hand GLSL to an MSL compiler and log errors. | ⬜ |
+| METAL-284 | **SPIR-V vertex/fragment programs.** `SupportsShaderLanguageEXT(SpirV, Vertex/Fragment)` → true. `MetalEffectRenderer::CompileProgram` (`MetalRenderer.mm` ~3225-3433) detects the SPIR-V magic word and translates each stage with `spirv_cross::CompilerMSL` (macOS/iOS platform, MSL 2.1+, `flip_vert_y = true`, entry from `get_cleansed_entry_point_name` -- `main` becomes `main0`), then `newLibraryWithSource`. Cache translations process-wide by content hash, as `MetalCompiledEffect.cpp:324-356` does. Raw-MSL effects (METAL-142..152) keep working unchanged. Acceptance: a package with SpirV+Msl variants still picks SpirV first (selection order) and draws identically to the Msl variant. | ⬜ |
+| METAL-285 | **Binding remap, Vulkan contract → Metal indices.** `add_msl_resource_binding` for set 0 b0, set 1 b0-19, set 2 storage buffers and the push block (`kPushConstDescSet`/`kPushConstBinding` → one buffer index). Write the table (texture index, sampler index, buffer index per binding) into `docs/metal-shader-effect-contract.md`; compact samplers to fit 16 (0 sprite, 1-12 2D/cube/3D units, 13-15 arrays -- or derive from what the program actually uses); keep clear of buffer 28 and SPIRV-Cross's 23-30. At draw time write the 128-byte push block with `viewportSize` = the current projection width/height. Acceptance: a unit test over the remap table (no GPU), and a GPU fixture that binds every binding class once. | ⬜ |
+| METAL-286 | **Vertex input for package effects.** `pipelineFor` (~3331) currently uses no vertex descriptor (the raw-MSL contract reads `v[vid]`). SPIR-V programs read stage-in attributes: build an `MTLVertexDescriptor` (SpriteBatch's 32-byte vertex: locations 0/1/2 at offsets 0/8/16, stride 32) on a dedicated buffer index, and record the program's input locations by reflection, as Vulkan's `reflectSpirV` lambda does (`VulkanRenderer.cpp` ~6387). | ⬜ |
+| METAL-287 | **Uniform arrays and engine matrices (completes `METAL-146`).** Implement `SetUniformFloatArray/Vec2Array/Vec3Array/Mat4Array` into the std140 blocks at set 1 b12-15 (72 entries; stride 16, mat4 64) and the six named engine matrices at b19 (`SetUniformMat4` names, `VulkanRenderer.cpp` ~6711-6724). Today these fall through to no-ops. | ⬜ |
+| METAL-288 | **Texture units (completes `METAL-147`).** `BindTexture`, `BindTextureCube`, `BindTexture3D`, `BindTexture2DArrayEXT` with each unit's own `SamplerState` (not the sprite's). Skybox needs cube unit 1; AtmosphericSky and the post passes need 2D units. | ⬜ |
+| METAL-289 | **Custom effects on 3D draws (completes `METAL-148`).** `MetalRenderer.mm` ~6401-6404 refuses a custom effect on a 3D draw. Route `GpuDrawParams`' custom effect to the package pipeline with the draw's own vertex declaration (generic `VertexElement` → `MTLVertexDescriptor`), depth/stencil/raster state, the engine matrices (b19) and read-only storage buffers (`BindStorageBufferForDrawEXT`, set 2). Needed by the games' 3D packages: shadow casters, depth/normal prepass, decals. | ⬜ |
+| METAL-290 | **Compute (supersedes optional `METAL-253`).** `CreateComputeShader` (SPIR-V → MSL kernel; `threadsPerThreadgroup` from `ExecutionModeLocalSize`), `CreateStorageBuffer(EXT)` (shared `MTLBuffer`), `IComputeShaderRenderer` setters/binders (`IGraphicsRenderer.hpp:353-471`: `BindStorageBuffer`, `BindConstantBufferEXT`, `BindImageTexture`, `BindStorageTexture2DEXT`, `BindTexture`, `UsesDirectSampledTextureBindingsEXT() = true`), `DispatchCompute` (end the render encoder, encode compute, resume with `MTLLoadActionLoad` -- see `endActiveEncoding` ~2730 and the reload logic ~2842), `MemoryBarrierEXT`, the `GetMaxCompute*` limits and `SupportsCapability(ComputeShaders)`. Decide how named push scalars survive shaderc's `performance` optimisation (reflect by offset, or ask packages to keep names). Acceptance: AutoExposureEXT's reduction runs on METAL and its luminance matches a CPU reduction of the same frame (OPENGL33 on macOS cannot serve as the reference: GL 4.1 has no compute). | ⬜ |
+| METAL-291 | **Raw GLSL ES source at run time** (`ExecutesShaderEffectSourceEXT() == true`). Option A: vendor glslang (or shaderc), compile GLSL ES 3.00/3.10 to SPIR-V with automatic binding assignment matching the contract and named-uniform reflection for `SetUniform*` by name, then reuse METAL-284..290. Option B: the games ship SpirV variants for their raw-GLSL effects (a game-side change, no new CNA dependency). Decide first (new third-party dependency, binary size, licence -- record it), then implement. Without this the sky in both games stays black even after METAL-284..290. | ⬜ |
+| METAL-292 | **IBL in the stock PBR shader.** `cna_f3d_pbr` (`MetalRenderer.mm` ~703-830) samples `GpuDrawParams.ibl*` -- irradiance cube, prefiltered specular cube with mips, BRDF LUT -- exactly as EasyGL's stock PBR does; `SupportsImageBasedLightingEXT()` → true. `EnvironmentProcessor` already prepares the maps on the CPU. Acceptance: the IBL parity fixtures against EasyGL. | ⬜ |
+| METAL-293 | **Shadow sampling in the stock PBR shader.** A comparison sampler and the depth target as a shader resource (`METAL-252`); `SupportsShadowSamplingEXT()` → true. | ⬜ |
+| METAL-294 | **Tests and parity.** Run the shared shader-effect/package fixtures on METAL and unblock the cross-renderer parity rows `MOD-1636`, `MOD-1656`, `MOD-1674`; add compute, IBL and shadow fixtures to the Metal suite. Games: living-room-simulator (`--view entrance --time 12:00 --weather cloudy --hold-weather --screenshot`) and cna-street (`--screenshot`, its 18 reference viewpoints via `scripts/check-screenshots.sh`) on OPENGL33 vs METAL -- sky present, IBL present, post passes and auto-exposure running; record the measured differences. house-simulator's suite stays 1,830/1,832-equivalent. | ⬜ |
+| METAL-295 | **CI, docs and plan hygiene.** Confirm every new path runs on the hosted paravirtual device (argument buffers tier 1, no Metal3 family, serial GPU tests per AM4-306) or is refused there by name; update `docs/metal-backend.md`, `docs/metal-shader-effect-contract.md`, `docs/apple-platforms.md`, the capability rows, and `plans/plan_modern.md` Phase 16's Metal rows (`MOD-1614`, `MOD-1633`, `MOD-1653`, `MOD-1673`, `MOD-1684`, still marked "macOS only, by a hard configure gate" from Linux). | ⬜ |
+
+Estimate when planned: A (METAL-283..289) about 1-1.5 days, B (METAL-290) about 1 day, C
+(METAL-291) about 1 day, D (METAL-292/293) 0.5-1 day, E (METAL-294/295) 0.5-1 day -- 3 to 5 days
+in all. A cheaper interim data point exists: on macOS the **SDL_GPU** renderer already executes the
+SPIR-V package variants through SDL_shadercross (AM4-068), so the package-based passes (not the
+raw-GLSL sky) can be checked there first.
+
 ---
 
 ## Testing strategy
