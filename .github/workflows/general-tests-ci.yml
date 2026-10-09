@@ -73,7 +73,10 @@ jobs:
       - name: Checkout cna (with submodules)
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
+          # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
+          submodules: true
 
       - name: Check build-performance policy
         run: python3 tools/build/check_build_performance_policy.py
