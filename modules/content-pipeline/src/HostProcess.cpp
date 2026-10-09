@@ -15,11 +15,21 @@
 #include <cstring>
 #include <sstream>
 
+#if defined(__ANDROID__)
+#include <android/api-level.h>
+#endif
+
+// plans/plan_apple_m4.md AM4-297: posix_spawn and its attribute/file-action calls exist in Bionic
+// only from Android API 28, so an NDK build for an older minimum API refuses as a browser does.
+#if defined(__EMSCRIPTEN__) || (defined(__ANDROID__) && __ANDROID_API__ < 28)
+#define CNA_HOST_PROCESS_CANNOT_SPAWN 1
+#endif
+
 #if defined(_WIN32)
 #include <thread>
 #include <windows.h>
-#elif defined(__EMSCRIPTEN__)
-// A browser has no processes to start; see RunHostProcess.
+#elif defined(CNA_HOST_PROCESS_CANNOT_SPAWN)
+// No processes to start here; see RunHostProcess.
 #else
 #include <errno.h>
 #include <poll.h>
@@ -102,7 +112,7 @@ namespace CNA::Internal
             }
             return text;
         }
-#elif defined(__EMSCRIPTEN__)
+#elif defined(CNA_HOST_PROCESS_CANNOT_SPAWN)
 #else
         /**
          * @brief Reads both descriptors to end-of-file, interleaved.
@@ -244,13 +254,18 @@ namespace CNA::Internal
         result.started = true;
         result.exitCode = static_cast<int>(exitCode);
         return result;
-#elif defined(__EMSCRIPTEN__)
+#elif defined(CNA_HOST_PROCESS_CANNOT_SPAWN)
         // Emscripten declares posix_spawn but a browser has nothing to spawn, so linking the POSIX
         // path failed every WebAssembly build of the content tools ("undefined symbol:
-        // posix_spawnp", plans/plan_apple_m4.md AM4-254). The external-compiler routes refuse here,
-        // by name, as they do when the compiler is missing.
+        // posix_spawnp", plans/plan_apple_m4.md AM4-254); Android below API 28 does not declare it
+        // at all (AM4-297). The external-compiler routes refuse here, by name, as they do when the
+        // compiler is missing.
         (void)arguments;
+#if defined(__EMSCRIPTEN__)
         result.failure = "a WebAssembly build cannot start host processes";
+#else
+        result.failure = "an Android build below API 28 cannot start host processes (no posix_spawn)";
+#endif
         return result;
 #else
         int outPipe[2] = {-1, -1};
