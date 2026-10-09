@@ -356,7 +356,10 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 # to ship and the wrong one to regenerate idly, so it can be turned off per build tree -- and when
 # it is off, the consumer gate says so by name instead of quietly testing half the package.
 option(CNA_C_API_BUILD_STATIC "Build and install the static C API archive" ON)
-if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
+# plans/plan_apple_m4.md AM4-213: macOS builds it too -- ld64's `ld -r -all_load` and `nmedit -s` keep
+# the same promise objcopy keeps on ELF.
+if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+   AND Python3_Interpreter_FOUND)
     set(CNA_C_API_STATIC_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/libcna_c_api_static.a")
     set(CNA_C_API_STATIC_TARGETS "${CMAKE_CURRENT_BINARY_DIR}/CNACStaticTargets.cmake")
     # Under Emscripten cna_c_api is itself static and its objects are WebAssembly, which the host
@@ -2285,8 +2288,7 @@ if(CNA_BUILD_TESTS)
     # consumer needing an environment variable would be a defect rather than a fact of life, and this
     # is where it shows. plans/plan_apple_m4.md AM4-211: macOS runs it too, now that the installed
     # dylib looks beside itself (AM4-210). There the consumer gets the platform's own video driver
-    # rather than an x11 pin, and the static half is skipped by name: the archive is still produced
-    # only for ELF.
+    # rather than an x11 pin; since AM4-213 the static half is built and run there as well.
     set(_cna_consumer_platform)
     if(UNIX AND NOT APPLE)
         set(_cna_consumer_platform ELF)
@@ -2298,9 +2300,8 @@ if(CNA_BUILD_TESTS)
         set(_cna_consumer_platform MACHO)
         set(_cna_consumer_videodriver "")
         set(_cna_consumer_display "")
-        set(_cna_consumer_expect_static OFF)
-        set(_cna_consumer_static_reason
-            "the static archive is produced only for ELF on this release (tools/c-api/generate_static_archive.py)")
+        set(_cna_consumer_expect_static "${CNA_C_API_BUILD_STATIC}")
+        set(_cna_consumer_static_reason "")
     endif()
     if(_cna_consumer_platform)
         add_test(NAME CApi_InstalledConsumer

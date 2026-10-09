@@ -21,6 +21,11 @@ What survives step 4 is `cna_*` and nothing else, with one measured exception: s
 `objcopy`, by design, because their uniqueness is what makes them correct. They are mangled C++
 names that no C program can collide with, they are never callable API, and this tool fails if any
 non-`cna_*` symbol of any *other* binding survives -- so the exception cannot quietly widen.
+
+Mach-O (plans/plan_apple_m4.md AM4-213) takes the same five steps with ld64's tools: `ld -r
+-all_load` for the partial link and `nmedit -s` -- which turns every global not on its list into a
+static symbol -- for the localization, and the verification is the same. Mach-O has no
+`STB_GNU_UNIQUE`, so there the survivors must be exactly the `_cna_*` names.
 """
 
 from __future__ import annotations
@@ -88,7 +93,17 @@ def read_link_line(module_dir: Path, build_dir: Path,
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []
+    previous = ""
     for token in tokens:
+        option, previous = previous, token
+        # ld64 spells a framework as two words; its name is an input the consumer needs too.
+        if option == "-framework":
+            if f"framework:{token}" not in external:
+                external.append(f"framework:{token}")
+            continue
+        # The values of these options are not inputs: the image's own name and architecture.
+        if option in {"-o", "-install_name", "-arch", "-compatibility_version", "-current_version"}:
+            continue
         if token.startswith("-") or token.endswith("link.txt"):
             if token.startswith("-l"):
                 external.append(token)
@@ -109,9 +124,75 @@ def read_link_line(module_dir: Path, build_dir: Path,
         elif ".so" in token:
             if resolved not in external and not token.endswith("libcna_c_api.so"):
                 external.append(resolved)
+        elif token.endswith(".dylib") and not token.startswith("@"):
+            if resolved not in external and not Path(token).name.startswith("libcna_c_api"):
+                external.append(resolved)
+        elif token.endswith(".tbd"):
+            # An SDK text stub (`<sdk>/usr/lib/libcurl.tbd`): its path belongs to one Xcode
+            # install, so the consumer names the library and its own SDK supplies the stub.
+            library = Path(token).name.removeprefix("lib").removesuffix(".tbd")
+            if f"-l{library}" not in external:
+                external.append(f"-l{library}")
     if not objects or not archives:
         raise SystemExit("the link line yielded no objects or no archives; its format changed")
     return objects, archives, external
+
+
+def link_architecture(module_dir: Path, build_dir: Path, target: str = "cna_c_api") -> str | None:
+    """The `-arch` the dylib was linked for, which ld64's partial link must be told as well."""
+    tokens, _ = link_line_tokens(module_dir, build_dir, target)
+    for option, value in zip(tokens, tokens[1:]):
+        if option == "-arch":
+            return value
+    return None
+
+
+def macho_globals(nm: str, path: Path) -> list[tuple[str, str]]:
+    """Defined external symbols of a Mach-O object, as (type letter, name with its underscore)."""
+    output = run([nm, "-gU", str(path)], f"reading symbols from {path.name}")
+    symbols = []
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= 2:
+            symbols.append((fields[-2], fields[-1]))
+    return symbols
+
+
+def build_macho(module_dir: Path, build_dir: Path, work: Path, output: Path) -> tuple[int, list[str], int]:
+    """ld64's version of the partial link, localization and verification. Returns the number of
+    exported symbols, the external inputs, and the archive count."""
+    linker, nmedit, archiver, nm = (require(tool) for tool in ("ld", "nmedit", "ar", "nm"))
+    objects, archives, external = read_link_line(module_dir, build_dir)
+    architecture = link_architecture(module_dir, build_dir)
+
+    combined = work / "cna_c_api_combined.o"
+    run([linker, "-r", *(["-arch", architecture] if architecture else []), "-all_load",
+         *archives, *objects, "-o", str(combined)], "the partial link")
+
+    keep = sorted({name for _, name in macho_globals(nm, combined) if name.startswith("_cna_")})
+    if not keep:
+        raise SystemExit("the combined object exports no cna_* symbols at all")
+    keep_file = work / "cna_c_api_exports.txt"
+    keep_file.write_text("\n".join(keep) + "\n", encoding="utf-8")
+
+    localized = work / "cna_c_api_localized.o"
+    run([nmedit, "-s", str(keep_file), str(combined), "-o", str(localized)],
+        "localizing the internal symbols")
+
+    leaked = [(kind, name) for kind, name in macho_globals(nm, localized)
+              if not name.startswith("_cna_")]
+    if leaked:
+        listing = "\n  ".join(f"{kind} {name}" for kind, name in leaked[:20])
+        raise SystemExit(
+            f"{len(leaked)} non-ABI symbols survived localization:\n  {listing}\n"
+            "A static archive that publishes them is not the same ABI as the shared library.")
+
+    if output.exists():
+        output.unlink()
+    run([archiver, "crs", str(output), str(localized)], "archiving")
+    combined.unlink(missing_ok=True)
+    localized.unlink(missing_ok=True)
+    return len(keep), external, len(archives)
 
 
 def global_symbols(nm: str, path: Path) -> list[tuple[str, str]]:
@@ -147,6 +228,66 @@ def merge_archives(module_dir: Path, build_dir: Path, target: str, archiver: str
     return 0
 
 
+def advertised_dylib(entry: str) -> str:
+    """The path a dylib advertises as its install name, when that is an absolute path that exists.
+
+    The link line names whatever path CMake resolved, which for a package manager's library can be
+    a versioned directory that the next upgrade deletes; the install name is the path the library
+    promises to stay at (it is what LC_LOAD_DYLIB records in every image linked against it)."""
+    otool = shutil.which("otool")
+    if otool is None:
+        return entry
+    lines = run([otool, "-D", entry], f"reading the install name of {Path(entry).name}").splitlines()
+    name = lines[-1].strip() if len(lines) >= 2 else ""
+    return name if name.startswith("/") and Path(name).exists() else entry
+
+
+def write_macho_targets(path: Path, output: Path, external: list[str]) -> None:
+    """The Mach-O targets file: the same imported target, with ld64's link interface."""
+    lines = [
+        "# SPDX-License-Identifier: MS-PL",
+        "# Generated by tools/c-api/generate_static_archive.py. Do not edit.",
+        "#",
+        "# The static half of the package on macOS. It is a single relocatable object in an archive,",
+        "# with every symbol that is not part of the ABI made static by nmedit, so linking it",
+        "# publishes the same names the shared library exports and no others.",
+        "",
+        "if(NOT TARGET CNA::CApiStatic)",
+        "    add_library(CNA::CApiStatic STATIC IMPORTED)",
+        "    set_target_properties(CNA::CApiStatic PROPERTIES",
+        f"        IMPORTED_LOCATION \"${{_cna_package_lib_dir}}/{output.name}\"",
+        "        INTERFACE_INCLUDE_DIRECTORIES \"${_cna_package_include_dir}\"",
+        "        INTERFACE_COMPILE_DEFINITIONS \"CNA_C_API_STATIC\"",
+        "    )",
+        "    set(_cna_static_interface \"\")",
+    ]
+    seen: set[str] = set()
+    for entry in external:
+        if entry.startswith("/") and "libSDL3" not in entry:
+            entry = advertised_dylib(entry)
+        if entry in seen:
+            continue
+        seen.add(entry)
+        if entry.startswith("framework:"):
+            lines.append(f"    list(APPEND _cna_static_interface \"-Wl,-framework,{entry[10:]}\")")
+        elif entry.startswith("-l"):
+            lines.append(f"    list(APPEND _cna_static_interface \"{entry[2:]}\")")
+        elif "libSDL3" in entry:
+            # SDL ships inside this package (AM4-210), so the interface names the installed copy.
+            lines.append(
+                f"    list(APPEND _cna_static_interface \"${{_cna_package_lib_dir}}/{Path(entry).name}\")")
+        else:
+            lines.append(f"    list(APPEND _cna_static_interface \"{entry}\")")
+    lines += [
+        "    list(APPEND _cna_static_interface c++)",
+        "    set_property(TARGET CNA::CApiStatic PROPERTY",
+        "        INTERFACE_LINK_LIBRARIES \"${_cna_static_interface}\")",
+        "endif()",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True)
@@ -162,6 +303,10 @@ def main() -> int:
         help="Emscripten: merge the archives on this target's link line instead of partially "
              "linking the C API's own")
     parser.add_argument("--archiver", help="the archiver to merge with (Emscripten's llvm-ar)")
+    parser.add_argument(
+        "--object-format", choices=("elf", "macho"),
+        default="macho" if sys.platform == "darwin" else "elf",
+        help="the host's object format; the partial-link and localization tools differ")
     arguments = parser.parse_args()
 
     build_dir = Path(arguments.build_dir).resolve()
@@ -195,6 +340,14 @@ def main() -> int:
                 "",
             ]), encoding="utf-8")
         return result
+
+    if arguments.object_format == "macho":
+        exported, external, archive_count = build_macho(module_dir, build_dir, work, output)
+        if arguments.targets_file:
+            write_macho_targets(Path(arguments.targets_file), output, external)
+        print(f"wrote {output.name}: {exported} exported cna_* symbols, "
+              f"{archive_count} archives combined")
+        return 0
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
     objects, archives, external = read_link_line(module_dir, build_dir)
