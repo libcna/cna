@@ -16,6 +16,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -73,6 +74,16 @@ namespace
             device = std::make_unique<GraphicsDevice>(
                 GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                 PresentationParameters());
+            // CnaTests links its own static copy of meta-gl, apart from the renderer's inside
+            // libcna.so (VKPAR-0017), and meta-gl terminates on a call through a table nobody
+            // initialised -- which is how three of these tests aborted on Linux, as FX-144 found in
+            // EasyGLCompiledEffectTests (CNA plans/plan_apple_m4.md AM4-284). Load this binary's
+            // copy from the renderer's own context before reading GL state directly.
+            auto* renderer = dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLRenderer*>(
+                &device->GetRenderer());
+            ASSERT_NE(renderer, nullptr);
+            if (!::metagl::IsInitialized())
+                ASSERT_TRUE(::metagl::Initialize(renderer->GetProcAddressLoaderEXT()));
             texture = std::make_unique<Texture2D>(*device, 1, 1);
             const Color white = Color::White;
             texture->SetData(&white, 1);
