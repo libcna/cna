@@ -119,6 +119,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends ccache python3 nlohmann-json3-dev
 
       - name: Configure one bundle with both renderers
+        # One link at a time: wasm-ld peaks at 9.4 GB resident linking the Debug CnaTests.js
+        # (measured on the same emsdk 6.0.3 build), so the final links running side by side under
+        # -j$(nproc) exhausted the 16 GB runner, which shut down at step 1,679 of 1,700 (run
+        # 37929597871). Compilation keeps its full parallelism (CNA plans/plan_apple_m4.md AM4-287).
         run: |
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
@@ -129,7 +133,9 @@ jobs:
             -DCNA_SHARP_RUNTIME_ROOT="${GITHUB_WORKSPACE}/.ci-deps/sharp-runtime" \
             -DCNA_ENABLE_DRACO=OFF \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_JOB_POOLS=link=1 \
+            -DCMAKE_JOB_POOL_LINK=link
 
       - name: Build the bundle
         run: |
