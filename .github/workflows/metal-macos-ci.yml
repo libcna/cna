@@ -35,7 +35,9 @@ concurrency:
 
 jobs:
   metal-build:
-    runs-on: macos-14
+    # macos-26 (Xcode 26): macos-14's default Xcode 15.4 has no std::jthread/std::stop_token in its
+    # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
