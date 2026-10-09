@@ -1,0 +1,4 @@
+# ld64's counterpart of CnaCApiExports.map (plans/plan_apple_m4.md AM4-209): the dylib exports the C
+# ABI -- every `cna_*` function, which Mach-O spells with a leading underscore -- and nothing else,
+# so the canonical C++ implementation and Sharp Runtime never become anybody's ABI on Apple either.
+_cna_*

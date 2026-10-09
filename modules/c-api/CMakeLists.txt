@@ -105,6 +105,14 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         "LINKER:--exclude-libs,ALL"
         "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map"
     )
+elseif(APPLE)
+    # plans/plan_apple_m4.md AM4-209: Mach-O has no version scripts, so without this the dylib
+    # exported every default-visibility symbol of the private archives it links -- 21,904 names on
+    # macOS, of which 3,210 were the ABI. ld64's exported-symbols list is the same promise.
+    target_link_options(cna_c_api PRIVATE
+        "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.darwin.txt")
+    set_property(TARGET cna_c_api APPEND PROPERTY
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.darwin.txt")
 endif()
 
 # ---- Wasm module (plans/plan_cabi.md CABI-14) --------------------------------------------
@@ -510,6 +518,13 @@ if(CNA_BUILD_TESTS)
                 -DCNA_C_API_LIBRARY=$<TARGET_FILE:cna_c_api>
                 -DCNA_C_API_NM=${CMAKE_NM}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckElfExports.cmake
+        )
+    elseif(APPLE)
+        add_test(NAME CApi_Exports
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_C_API_LIBRARY=$<TARGET_FILE:cna_c_api>
+                -DCNA_C_API_NM=${CMAKE_NM}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckMachOExports.cmake
         )
     endif()
 
