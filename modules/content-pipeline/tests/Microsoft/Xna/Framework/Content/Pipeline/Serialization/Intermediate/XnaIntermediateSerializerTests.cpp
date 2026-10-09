@@ -9,6 +9,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -1221,8 +1223,56 @@ TEST_F(XnaIntermediateSerializerCorpus, WrittenDocumentsRoundTripThroughCnaUncha
     EXPECT_GE(covered, 70u);
 }
 
+namespace
+{
+    /**
+     * The zone the XNA corpus was captured in, for the length of one test.
+     *
+     * XNA converts a DateTime that carries an offset to local time, so accept_datetime_offset
+     * normalizes to +01:00 on the capture machine (central Europe, in January). CNA converts the
+     * same way, through the C library's local time, so it reproduces those bytes only in that zone:
+     * on a UTC runner the case produced +00:00 and the test failed (plans/plan_apple_m4.md
+     * AM4-263). A POSIX rule string, so no tzdata is needed. Windows resolves zones through Win32,
+     * not TZ, and keeps the host's zone.
+     */
+    class CorpusCaptureTimeZone
+    {
+    public:
+        CorpusCaptureTimeZone()
+        {
+#if !defined(_WIN32)
+            const char* current = std::getenv("TZ");
+            hadZone_ = current != nullptr;
+            if (hadZone_)
+                saved_ = current;
+            ::setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+            ::tzset();
+#endif
+        }
+
+        ~CorpusCaptureTimeZone()
+        {
+#if !defined(_WIN32)
+            if (hadZone_)
+                ::setenv("TZ", saved_.c_str(), 1);
+            else
+                ::unsetenv("TZ");
+            ::tzset();
+#endif
+        }
+
+        CorpusCaptureTimeZone(const CorpusCaptureTimeZone&) = delete;
+        CorpusCaptureTimeZone& operator=(const CorpusCaptureTimeZone&) = delete;
+
+    private:
+        bool hadZone_ = false;
+        std::string saved_;
+    };
+}
+
 TEST_F(XnaIntermediateSerializerCorpus, AcceptedInputsNormalizeExactlyAsXnaDid)
 {
+    const CorpusCaptureTimeZone captureZone;
     const auto trips = RoundTrips();
     std::size_t covered = 0;
     for (const ManifestCase& item : ReadManifest())
