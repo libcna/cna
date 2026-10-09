@@ -2238,6 +2238,95 @@ static id<MTLTexture> makeMultisampleTexture(id<MTLDevice> dev, MTLPixelFormat f
     return t;
 }
 
+#if CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS
+// plans/plan_apple_m4.md AM4-296: a device can accept MTLSamplerDescriptor.lodBias and ignore it --
+// the "Apple Paravirtual device" of a macOS virtual machine samples level 0 at a +1 or +2 sampler
+// bias, while the shader's own bias() works. No device query says so, so the first non-zero bias
+// measures it once: a three-level 4x4 chain drawn one texel per pixel with a +1 sampler bias must
+// show level 1. A probe that cannot run leaves the property trusted, as before.
+API_AVAILABLE(macos(26.0), ios(26.0))
+static bool metalDeviceHonoursSamplerLodBias(id<MTLDevice> dev)
+{
+    static const char* const kProbeSource = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+struct CnaLodProbeV { float4 p [[position]]; float2 uv; };
+vertex CnaLodProbeV cnaLodProbeVs(uint i [[vertex_id]])
+{
+    const float2 q[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
+    CnaLodProbeV o; o.p = float4(q[i], 0.0, 1.0); o.uv = float2(q[i].x * 0.5 + 0.5, 0.5 - q[i].y * 0.5);
+    return o;
+}
+fragment float4 cnaLodProbeFs(CnaLodProbeV in [[stage_in]], texture2d<float> tex [[texture(0)]],
+                              sampler smp [[sampler(0)]])
+{
+    return tex.sample(smp, in.uv);
+}
+)MSL";
+    bool honoured=true;
+    @autoreleasepool
+    {
+        NSError* error=nil;
+        id<MTLLibrary> lib=[dev newLibraryWithSource:[NSString stringWithUTF8String:kProbeSource] options:nil error:&error];
+        id<MTLFunction> vs=lib?[lib newFunctionWithName:@"cnaLodProbeVs"]:nil;
+        id<MTLFunction> fs=lib?[lib newFunctionWithName:@"cnaLodProbeFs"]:nil;
+        MTLRenderPipelineDescriptor* pd=[[MTLRenderPipelineDescriptor alloc] init];
+        pd.vertexFunction=vs; pd.fragmentFunction=fs;
+        pd.colorAttachments[0].pixelFormat=MTLPixelFormatRGBA8Unorm;
+        id<MTLRenderPipelineState> pipeline=(vs&&fs)?[dev newRenderPipelineStateWithDescriptor:pd error:&error]:nil;
+        MTLTextureDescriptor* sd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                    width:4 height:4 mipmapped:YES];
+        sd.usage=MTLTextureUsageShaderRead;
+        id<MTLTexture> chain=[dev newTextureWithDescriptor:sd];
+        MTLTextureDescriptor* td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                    width:4 height:4 mipmapped:NO];
+        td.usage=MTLTextureUsageRenderTarget; td.storageMode=MTLStorageModePrivate;
+        id<MTLTexture> target=[dev newTextureWithDescriptor:td];
+        id<MTLBuffer> readback=[dev newBufferWithLength:64 options:MTLResourceStorageModeShared];
+        MTLSamplerDescriptor* smpd=[[MTLSamplerDescriptor alloc] init];
+        smpd.minFilter=MTLSamplerMinMagFilterNearest; smpd.magFilter=MTLSamplerMinMagFilterNearest;
+        smpd.mipFilter=MTLSamplerMipFilterNearest; smpd.lodBias=1.0f;
+        id<MTLSamplerState> smp=[dev newSamplerStateWithDescriptor:smpd];
+        id<MTLCommandQueue> queue=[dev newCommandQueue];
+        if(pipeline&&chain&&target&&readback&&smp&&queue)
+        {
+            const std::uint8_t levels[3][4]={{255,0,0,255},{0,255,0,255},{0,0,255,255}};
+            for(int level=0;level<3;++level)
+            {
+                const int n=4>>level;
+                std::uint8_t texels[64];
+                for(int i=0;i<n*n;++i) std::memcpy(texels+4*i,levels[level],4);
+                [chain replaceRegion:MTLRegionMake2D(0,0,n,n) mipmapLevel:level withBytes:texels bytesPerRow:4*n];
+            }
+            MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
+            rp.colorAttachments[0].texture=target; rp.colorAttachments[0].loadAction=MTLLoadActionClear;
+            rp.colorAttachments[0].clearColor=MTLClearColorMake(0,0,0,1);
+            rp.colorAttachments[0].storeAction=MTLStoreActionStore;
+            id<MTLCommandBuffer> cb=[queue commandBuffer];
+            id<MTLRenderCommandEncoder> enc=[cb renderCommandEncoderWithDescriptor:rp];
+            [enc setRenderPipelineState:pipeline];
+            [enc setFragmentTexture:chain atIndex:0]; [enc setFragmentSamplerState:smp atIndex:0];
+            [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+            [enc endEncoding];
+            id<MTLBlitCommandEncoder> blit=[cb blitCommandEncoder];
+            [blit copyFromTexture:target sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)
+                       sourceSize:MTLSizeMake(4,4,1) toBuffer:readback destinationOffset:0
+           destinationBytesPerRow:16 destinationBytesPerImage:64];
+            [blit endEncoding];
+            [cb commit]; [cb waitUntilCompleted];
+            if(cb.status==MTLCommandBufferStatusCompleted)
+            {
+                const std::uint8_t* px=static_cast<const std::uint8_t*>(readback.contents)+16+4;
+                honoured=px[1]>200&&px[0]<50;
+            }
+        }
+        [queue release]; [smp release]; [smpd release]; [readback release]; [target release];
+        [chain release]; [pipeline release]; [pd release]; [fs release]; [vs release]; [lib release];
+    }
+    return honoured;
+}
+#endif
+
 struct MetalRenderer::Impl
 {
     explicit Impl(const RendererSurfaceInfo& surfaceInfo)
@@ -2260,6 +2349,8 @@ struct MetalRenderer::Impl
     id<MTLSamplerState> sampler=nil;
     // (filter, addressU, addressV, anisotropy, maxMipLevel, lodBias bits)
     std::map<std::tuple<int,int,int,int,int,std::uint32_t,int>, id<MTLSamplerState>> samplerCache;
+    // AM4-296: whether this device applies MTLSamplerDescriptor.lodBias; -1 until first measured.
+    int samplerLodBiasHonoured=-1;
     id<MTLSamplerState> samplerSlots[16]={};
     // plans/plan_apple_m4.md AM4-034: what each slot was last asked for, so ApplySamplerState and
     // ApplySamplerMipState -- two calls for one XNA SamplerState -- each rebuild the whole sampler.
@@ -2991,6 +3082,17 @@ struct MetalRenderer::Impl
             throw System::NotSupportedException(
                 "Metal SamplerState.MipMapLevelOfDetailBias needs macOS/iOS 26 and a build against their "
                 "SDK (MTLSamplerDescriptor.lodBias).");
+#if CNA_METAL_SDK_HAS_SAMPLER_LOD_BIAS
+        // AM4-296: refused, not dropped, on a device measured to ignore the sampler's bias.
+        if(lodBias!=0.0f){
+            if (@available(macOS 26.0, iOS 26.0, *))
+                if(samplerLodBiasHonoured<0) samplerLodBiasHonoured=metalDeviceHonoursSamplerLodBias(device)?1:0;
+            if(samplerLodBiasHonoured==0)
+                throw System::NotSupportedException(
+                    "Metal SamplerState.MipMapLevelOfDetailBias: this Metal device ignores "
+                    "MTLSamplerDescriptor.lodBias (measured), so a non-zero bias is refused.");
+        }
+#endif
         MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc] init];
         if(!sd) throw std::runtime_error("Metal: failed to allocate sampler descriptor");
         sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
