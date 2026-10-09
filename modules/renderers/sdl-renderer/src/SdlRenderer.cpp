@@ -1,5 +1,6 @@
 #include "CNA/Internal/Renderers/SdlRenderer/SdlRenderer.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 #include <cmath>
 #include <cstring>
@@ -378,7 +379,15 @@ namespace CNA::Internal::Renderers::SdlRenderer
                                            CnaPresentationMode mode, int swapInterval)
         : window(window), logicalWidth(virtualWidth), logicalHeight(virtualHeight), presentationMode_(mode)
     {
-        if (!window) throw std::runtime_error("SdlRenderer initialized with null window.");
+        // plans/plan_apple_m4.md AM4-207: a platform without SDL windows (HEADLESS, TERMINAL)
+        // declining what this renderer needs, which GraphicsDevice reports as XNA does
+        // (NoSuitableGraphicsDeviceException around the platform's refusal) -- the answer SDL_GPU
+        // (AM4-176) and FNA3D (AM4-188) give -- not an SDL_Renderer failure.
+        if (!window)
+            throw CNA::Platform::PlatformException(
+                "SDL_Renderer device",
+                "no SDL window was supplied. SDL_Renderer draws into an SDL window and has no "
+                "windowless device path.");
 
         // NOTE: SDL_Window is NOT owned by the renderer.
         // It is owned by GraphicsDevice or higher level platform layer.
