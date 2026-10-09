@@ -114,7 +114,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ccache python3
+          # nlohmann-json3-dev: gamer services read the host's header-only JSON even in a cross build
+          # (cmake/HeaderOnlyJson.cmake), and configure stops without it (plans/plan_apple_m4.md AM4-238).
+          sudo apt-get install -y --no-install-recommends ccache python3 nlohmann-json3-dev
 
       - name: Configure one bundle with both renderers
         run: |
