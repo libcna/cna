@@ -344,7 +344,8 @@ jobs:
 
       - name: Launch the smoke application in the iOS simulator
         if: matrix.simulator == 'ON'
-        timeout-minutes: 10
+        # Boot (2:42 measured), two installs and two bounded 180 s waits (AM4-312).
+        timeout-minutes: 15
         working-directory: cna
         run: |
           set -euo pipefail
@@ -361,10 +362,14 @@ jobs:
           # UIKit owns the application process lifetime; returning from SDL_main need not make
           # `simctl launch --console` return. Stream it in the background, require the flushed
           # one-frame marker within a bounded interval, then terminate the app ourselves.
+          # The interval is wall-clock, 180 s: a cold simulator on a loaded runner (boot 2:42)
+          # printed its marker about a minute after launch, seconds after a 60-iteration loop
+          # had already given up (plans/plan_apple_m4.md AM4-312). One launch, no retry.
           xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke >"$log_file" 2>&1 &
           launch_pid=$!
           smoke_ok=0
-          for _attempt in {1..60}; do
+          deadline=$((SECONDS + 180))
+          while [ "$SECONDS" -lt "$deadline" ]; do
             if grep -q 'CNA_APPLE_SMOKE_OK' "$log_file"; then
               smoke_ok=1
               break
@@ -392,7 +397,8 @@ jobs:
           xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-pixel-probe >"$probe_log" 2>&1 &
           probe_pid=$!
           probe_ok=0
-          for _attempt in {1..90}; do
+          deadline=$((SECONDS + 180))   # wall-clock, as for the smoke launch above (AM4-312)
+          while [ "$SECONDS" -lt "$deadline" ]; do
             if grep -q 'CNA_APPLE_PIXELS_OK' "$probe_log"; then
               probe_ok=1
               break
