@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <array>
 
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -63,6 +66,17 @@ namespace
             pixels.begin(), pixels.end(), [](const Color& pixel) { return pixel != Color::Black; }));
     }
 
+    // These are pixel oracles, so they need a renderer that rasterizes 3D triangles into a target
+    // it can read back. A 2D-only renderer reports no ThreeD; Headless reports ThreeD -- it
+    // accepts every 3D call -- and rasterizes nothing, refusing the readback. Neither has a
+    // pixel to measure (CNA plans/plan_apple_m4.md AM4-269).
+    [[nodiscard]] bool RasterizesTriangles()
+    {
+        GraphicsDevice device;
+        return device.SupportsCapability(CNA::GraphicsCapability::ThreeD) &&
+               !CNA_RENDERER_IS(CNA::Testing::Renderers::Headless);
+    }
+
     std::array<VertexPositionColor, 3> PixelTriangle(float size, bool reverseWinding = false)
     {
         std::array<VertexPositionColor, 3> vertices{
@@ -78,18 +92,21 @@ namespace
 
 TEST(PixelTriangleRasterizationTest, OnePixelClockwiseTriangleSurvivesXnaDefaultCull)
 {
+    if (!RasterizesTriangles()) GTEST_SKIP() << "this renderer rasterizes no 3D triangles";
     EXPECT_EQ(RenderTriangle(PixelTriangle(1.0f), RasterizerState::CullCounterClockwise), 1)
         << "the one-pixel star geometry used by the XNA Primitives sample changed coverage";
 }
 
 TEST(PixelTriangleRasterizationTest, OnePixelTriangleSurvivesWhenCullingIsDisabled)
 {
+    if (!RasterizesTriangles()) GTEST_SKIP() << "this renderer rasterizes no 3D triangles";
     EXPECT_EQ(RenderTriangle(PixelTriangle(1.0f), RasterizerState::CullNone), 1)
         << "the failure is pixel coverage rather than face orientation";
 }
 
 TEST(PixelTriangleRasterizationTest, DefaultCullRejectsOnlyTheOppositeWinding)
 {
+    if (!RasterizesTriangles()) GTEST_SKIP() << "this renderer rasterizes no 3D triangles";
     EXPECT_GT(RenderTriangle(PixelTriangle(4.0f), RasterizerState::CullCounterClockwise), 0);
     EXPECT_EQ(RenderTriangle(PixelTriangle(4.0f, true), RasterizerState::CullCounterClockwise), 0);
 }

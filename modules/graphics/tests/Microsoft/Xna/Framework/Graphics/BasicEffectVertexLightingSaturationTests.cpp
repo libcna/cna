@@ -34,6 +34,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -144,11 +145,14 @@ namespace
             return pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
         }
 
+        // Headless reports ThreeD -- it accepts every 3D call -- and rasterizes nothing, refusing
+        // the readback, so it has no pixel to measure either (CNA plans/plan_apple_m4.md AM4-269).
         static bool Renders3D()
         {
             GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                                   PresentationParameters());
-            return device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
+            return device.SupportsCapability(CNA::GraphicsCapability::ThreeD) &&
+                   !CNA_RENDERER_IS(CNA::Testing::Renderers::Headless);
         }
     };
 }
