@@ -1440,12 +1440,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_MsaaChange COMMAND cna_test_easygl_msaa_change
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # SOFTWARE-127: one source proves renderer-applied backbuffer sample reporting and real
-        # MultiSampleMask storage on both CPU Software (4) and non-reconfigurable EasyGL (0).
+        # SOFTWARE-127/182: one source proves renderer-applied backbuffer sample reporting and real
+        # MultiSampleMask storage on CPU Software (always 4) and on EasyGL, whose applied count is
+        # the driver's clamp of the manager's 8-sample request (8 on radeonsi, 4 on llvmpipe).
+        # "device" makes the test read that clamp from a Color RenderTarget2D, not assume one.
         cna_easygl_test(cna_test_easygl_presentation_msaa_contract
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_PresentationMsaaContract
-            COMMAND cna_test_easygl_presentation_msaa_contract 4
+            COMMAND cna_test_easygl_presentation_msaa_contract device
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_setdata

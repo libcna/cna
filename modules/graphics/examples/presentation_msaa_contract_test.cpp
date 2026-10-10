@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
@@ -27,12 +28,28 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
+    // GraphicsDeviceManager.PreferMultiSampling asks the device for this many samples
+    // (GraphicsDeviceManager::INTERNAL_CreateGraphicsDeviceInformation, FNA's cap of 8).
+    constexpr int ManagerMultiSampleRequest = 8;
+
+    // The applied count is either a fixed property of the renderer (CPU Software and Metal always
+    // multisample at 4x) or, with the "device" argument, the device's own clamp of the manager's
+    // request. EasyGL's clamp is the driver's GL_MAX_SAMPLES -- 8 on radeonsi, 4 on llvmpipe --
+    // so no constant written into the test registration can stand in for it.
+    bool expectDeviceClamp = false;
     int expectedSamples = 0;
 
     bool Near(int actual, int expected, int tolerance = 3)
     {
         const int difference = actual > expected ? actual - expected : expected - actual;
         return difference <= tolerance;
+    }
+
+    // MultiSampleMask 1 lets only sample 0 of N receive the red fragment; the resolve averages it
+    // with N - 1 black samples. Single-sample storage ignores the mask and keeps full red.
+    int ExpectedMaskedRed(int samples)
+    {
+        return samples > 1 ? 255 / samples : 255;
     }
 }
 
@@ -42,6 +59,7 @@ class PresentationMsaaContractTest final : public Game
     int passed_ = 0;
     int total_ = 0;
     int result_ = 1;
+    bool noMultiSampleStorage_ = false;
 
     void Check(bool condition, const std::string& label)
     {
@@ -83,8 +101,37 @@ class PresentationMsaaContractTest final : public Game
     }
 
 protected:
+    void LoadContent() override
+    {
+        if (expectDeviceClamp)
+        {
+            // FNA applies one clamp, FNA3D_GetMaxMultiSampleCount(format, count), both to the back
+            // buffer in GraphicsDevice.Reset and to RenderTarget2D.MultiSampleCount. A Color target
+            // asking for the manager's request therefore reports, outside the reset path under
+            // test, the count the Color back buffer has to apply.
+            RenderTarget2D probe(getGraphicsDeviceProperty(), 4, 4, false, SurfaceFormat::Color,
+                                 DepthFormat::None, ManagerMultiSampleRequest,
+                                 RenderTargetUsage::DiscardContents);
+            const int clamped = probe.getMultiSampleCountProperty();
+            expectedSamples = clamped > 1 ? clamped : 0;
+            noMultiSampleStorage_ = expectedSamples == 0;
+            std::printf("device clamps a %d-sample Color request to %d\n",
+                        ManagerMultiSampleRequest, expectedSamples);
+        }
+        Game::LoadContent();
+    }
+
     void Draw(const GameTime&) override
     {
+        if (noMultiSampleStorage_)
+        {
+            std::printf("SKIP: this device offers no multisampled Color storage, so there is no "
+                        "backbuffer sample storage to apply, release or restore\n");
+            result_ = 77;
+            Exit();
+            return;
+        }
+
         auto& device = getGraphicsDeviceProperty();
         auto& renderer = device.GetRenderer();
         const auto& parameters = device.getPresentationParametersProperty();
@@ -104,7 +151,7 @@ protected:
         device.Clear(Color::Black);
         DrawFullScreen(device, Color::Red);
         const Color enabledPixel = ReadCenter(device);
-        const int expectedRed = expectedSamples == 4 ? 63 : 255;
+        const int expectedRed = ExpectedMaskedRed(expectedSamples);
         Check(Near(enabledPixel.getRProperty(), expectedRed) &&
                   enabledPixel.getGProperty() == 0 && enabledPixel.getBProperty() == 0,
               "MultiSampleMask observes the actual backbuffer sample storage");
@@ -160,10 +207,12 @@ int main(int argc, char** argv)
 {
     if (argc != 2)
     {
-        std::fprintf(stderr, "usage: presentation_msaa_contract_test <expected-samples>\n");
+        std::fprintf(stderr, "usage: presentation_msaa_contract_test <expected-samples|device>\n");
         return 2;
     }
-    expectedSamples = std::atoi(argv[1]);
+    expectDeviceClamp = std::string(argv[1]) == "device";
+    if (!expectDeviceClamp)
+        expectedSamples = std::atoi(argv[1]);
     PresentationMsaaContractTest game;
     game.Run();
     return game.Result();
