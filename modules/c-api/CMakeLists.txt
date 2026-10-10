@@ -348,6 +348,18 @@ target_link_libraries(cna_c_api PRIVATE cna_core cna_platform cna_runtime cna_gr
 #
 # It reads the link line CMake already computed for cna_c_api, which is why it cannot drift from the
 # set of objects and archives that actually produce the working .so.
+#
+# The wgpu-native runtime ships in the package whenever the WEBGPU renderer is compiled in (the
+# install rule is beside SDL's, below). It is decided here because the static interface needs it
+# too: the link line names the library as `-L<release>/lib -lwgpu_native` (the official release
+# has no SONAME, so ThirdPartyWebGPU.cmake imports it IMPORTED_NO_SONAME), and without being told
+# the package carries it, the generator could only write a bare `wgpu_native` that no consumer's
+# linker can find.
+set(_cna_c_api_webgpu_runtime "")
+if(TARGET WebGPU::WebGPU AND NOT EMSCRIPTEN AND CNA_WEBGPU_RUNTIME_LIBRARY
+   AND EXISTS "${CNA_WEBGPU_RUNTIME_LIBRARY}")
+    set(_cna_c_api_webgpu_runtime "${CNA_WEBGPU_RUNTIME_LIBRARY}")
+endif()
 # Python3 is looked up here rather than relied upon: cmake/Tests/ModuleProbes.cmake finds it too,
 # but that file is included after add_subdirectory(modules), so at this point nothing has yet.
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -371,6 +383,12 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
         set(_cna_c_api_static_mode)
         set(_cna_c_api_static_input cna_c_api)
     endif()
+    # Libraries on the link line that the package carries itself, so CNA::CApiStatic names the
+    # installed copy rather than the build machine's.
+    set(_cna_c_api_static_shipped)
+    if(_cna_c_api_webgpu_runtime)
+        list(APPEND _cna_c_api_static_shipped --shipped-library "${_cna_c_api_webgpu_runtime}")
+    endif()
     add_custom_command(
         OUTPUT "${CNA_C_API_STATIC_ARCHIVE}" "${CNA_C_API_STATIC_TARGETS}"
         COMMAND Python3::Interpreter
@@ -384,6 +402,7 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
             --output "${CNA_C_API_STATIC_ARCHIVE}"
             --targets-file "${CNA_C_API_STATIC_TARGETS}"
             --work-dir "${CMAKE_CURRENT_BINARY_DIR}/static-archive"
+            ${_cna_c_api_static_shipped}
         DEPENDS ${_cna_c_api_static_input} "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
         COMMENT "Combining the C API and its closure into a single static archive"
         VERBATIM)
@@ -448,6 +467,27 @@ if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install
         COMPONENT CNACApi
         FILES_MATCHING PATTERN "SDL3*.dll"
     )
+endif()
+# The WEBGPU renderer's wgpu-native runtime ships as well. It is a case of the SDL rule, not an
+# exception to the FFmpeg one: CNA's build chooses the exact binary -- a pinned, checksum-verified
+# release fetched by cmake/ThirdPartyWebGPU.cmake, or the one CNA_WEBGPU_ROOT names -- rather than
+# taking a distribution's, so there is no system copy for a consumer to match and no distribution
+# soname a bundled copy would freeze. The release links nothing but the C runtime, its licence (MIT
+# or Apache-2.0) permits redistribution, and cna_copy_renderer_runtime() already puts the same file
+# beside every executable built in this tree. Without this rule a package with WEBGPU compiled in
+# -- every multi-renderer tree that lists it -- linked only on a machine that happened to have
+# wgpu-native on its library path. The release has no SONAME, so libcna_c_api.so's DT_NEEDED is the
+# file name `libwgpu_native.so`, which $ORIGIN resolves in this directory. The Windows DLL goes
+# where cna_c_api.dll goes.
+if(_cna_c_api_webgpu_runtime)
+    if(WIN32)
+        set(_cna_c_api_webgpu_runtime_destination ${CMAKE_INSTALL_BINDIR})
+    else()
+        set(_cna_c_api_webgpu_runtime_destination ${CMAKE_INSTALL_LIBDIR})
+    endif()
+    install(FILES "${_cna_c_api_webgpu_runtime}"
+        DESTINATION ${_cna_c_api_webgpu_runtime_destination}
+        COMPONENT CNACApi)
 endif()
 # CABI-14: a wasm build ships an ESM factory plus a .wasm, not an installable CMake
 # package, and cna_c_api is STATIC there -- which makes install(EXPORT) demand every

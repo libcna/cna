@@ -242,7 +242,27 @@ def advertised_dylib(entry: str) -> str:
     return name if name.startswith("/") and Path(name).exists() else entry
 
 
-def write_macho_targets(path: Path, output: Path, external: list[str]) -> None:
+def shipped_file_name(entry: str, shipped: set[str]) -> str | None:
+    """The file name under which the package carries a link-line library, or None if it does not.
+
+    `shipped` holds the file names of the libraries the package installs beside the C API. A
+    library the link line names by path matches by its file name; one it names as `-l<name>` --
+    which is how CMake links an imported library that has no SONAME, such as the official
+    wgpu-native release -- matches the file the linker would have found for it. Either way the
+    consumer must link the installed copy: the build machine's path is not in the package, and a
+    bare name is not on any consumer's library path.
+    """
+    if entry.startswith("-l"):
+        for candidate in (f"lib{entry[2:]}.so", f"lib{entry[2:]}.dylib"):
+            if candidate in shipped:
+                return candidate
+        return None
+    name = Path(entry).name
+    return name if name in shipped else None
+
+
+def write_macho_targets(path: Path, output: Path, external: list[str],
+                        shipped: set[str]) -> None:
     """The Mach-O targets file: the same imported target, with ld64's link interface."""
     lines = [
         "# SPDX-License-Identifier: MS-PL",
@@ -263,6 +283,13 @@ def write_macho_targets(path: Path, output: Path, external: list[str]) -> None:
     ]
     seen: set[str] = set()
     for entry in external:
+        packaged = shipped_file_name(entry, shipped)
+        if packaged is not None:
+            entry = f"${{_cna_package_lib_dir}}/{packaged}"
+            if entry not in seen:
+                seen.add(entry)
+                lines.append(f"    list(APPEND _cna_static_interface \"{entry}\")")
+            continue
         if entry.startswith("/") and "libSDL3" not in entry:
             entry = advertised_dylib(entry)
         if entry in seen:
@@ -307,7 +334,12 @@ def main() -> int:
         "--object-format", choices=("elf", "macho"),
         default="macho" if sys.platform == "darwin" else "elf",
         help="the host's object format; the partial-link and localization tools differ")
+    parser.add_argument(
+        "--shipped-library", action="append", default=[], metavar="PATH",
+        help="a library on the link line that the package installs beside the C API, so the "
+             "static interface names the installed copy (repeatable; SDL3 is recognized by name)")
     arguments = parser.parse_args()
+    shipped = {Path(library).name for library in arguments.shipped_library}
 
     build_dir = Path(arguments.build_dir).resolve()
     module_dir = (Path(arguments.module_binary_dir).resolve()
@@ -344,7 +376,7 @@ def main() -> int:
     if arguments.object_format == "macho":
         exported, external, archive_count = build_macho(module_dir, build_dir, work, output)
         if arguments.targets_file:
-            write_macho_targets(Path(arguments.targets_file), output, external)
+            write_macho_targets(Path(arguments.targets_file), output, external, shipped)
         print(f"wrote {output.name}: {exported} exported cna_* symbols, "
               f"{archive_count} archives combined")
         return 0
@@ -405,7 +437,14 @@ def main() -> int:
             "    set(_cna_static_interface \"\")",
         ]
         for entry in external:
-            if entry.startswith("-l"):
+            packaged = shipped_file_name(entry, shipped)
+            if packaged is not None:
+                # Named by its installed path. For a library without a SONAME (wgpu-native) the
+                # consumer's CMake reads the file, finds none and links it as -L<dir> -l<name>, so
+                # the program records the file name rather than the package's path.
+                lines.append(
+                    f"    list(APPEND _cna_static_interface \"${{_cna_package_lib_dir}}/{packaged}\")")
+            elif entry.startswith("-l"):
                 lines.append(f"    list(APPEND _cna_static_interface \"{entry[2:]}\")")
             elif "libSDL3" in entry:
                 # SDL ships inside this package, so the interface points at the installed copy

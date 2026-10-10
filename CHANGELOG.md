@@ -11,6 +11,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Fixed
 
+- **The C API package works on a machine without wgpu-native.** With the `WEBGPU` renderer
+  compiled in, `libcna_c_api.so` needs the wgpu-native runtime (`DT_NEEDED libwgpu_native.so`, the
+  official release having no SONAME), but the package shipped only SDL3, so an installed consumer
+  linked only where wgpu-native happened to be on the library path; and the static interface named
+  it as a bare `wgpu_native` no consumer's linker could find. The package now installs the exact
+  pinned runtime beside the C API (`lib/`, or `bin/` for the Windows DLL), under the same rule as
+  SDL3, and `CNA::CApiStatic` names that installed copy. `CApi_InstalledConsumer` passes for both
+  the shared and the static consumer.
 - **A game without a `GraphicsDeviceManager` gets a depth buffer.** CNA lets a game run with no
   `IGraphicsDeviceService` — a C API game owns no manager unless it creates one — and gave that
   implicit device `PresentationParameters`' own default, `DepthFormat::None`, so its

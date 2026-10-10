@@ -99,9 +99,10 @@ statics in inline and template code), which cannot be localized because their un
 makes them correct. Those are mangled C++ names no C program can collide with, and the build fails
 if a symbol of any other binding appears, so the exception cannot widen quietly.
 
-A static consumer links the archive plus SDL3 (shipped in the package) and the usual
-`stdc++ m pthread dl`; when `CNA_ENABLE_VIDEO=AUTO/ON` selected the optional backend, it also links
-FFmpeg from the system. The `CNA::CApiStatic` target carries the resolved set for you. On macOS the
+A static consumer links the archive plus SDL3 and, in a build with the `WEBGPU` renderer,
+wgpu-native (both shipped in the package), and the usual `stdc++ m pthread dl`; when
+`CNA_ENABLE_VIDEO=AUTO/ON` selected the optional backend, it also links FFmpeg from the system.
+The `CNA::CApiStatic` target carries the resolved set for you. On macOS the
 same archive is made with ld64's partial link (`ld -r -all_load`) and `nmedit -s`, and its interface
 is `c++` plus the frameworks and dylibs the closure links -- see [macOS](#macos).
 
@@ -120,6 +121,15 @@ installs them into the same directory as `libcna_c_api.so`, whose `INSTALL_RPATH
 result is that an installed CNA needs **no environment variable of any kind**: it links without
 `-rpath-link` and runs without `LD_LIBRARY_PATH`. `CApi_InstalledConsumer` passes neither, which is
 how that claim stays true — a regression fails a test instead of surprising a consumer.
+
+**wgpu-native ships too, when the `WEBGPU` renderer is compiled in.** CNA's build chooses that
+binary itself — the pinned, checksum-verified wgpu-native release it fetches, or the one
+`CNA_WEBGPU_ROOT` names — so it is in the same position as SDL3 rather than FFmpeg: there is no
+system copy for you to match, and it links nothing beyond the C runtime. The `CNACApi` component
+installs `libwgpu_native.so` beside `libcna_c_api.so` (`wgpu_native.dll` beside `cna_c_api.dll` on
+Windows), and `CNA::CApiStatic` links that installed copy. The official release has no SONAME, so
+`libcna_c_api.so`'s `DT_NEEDED` entry is the file name `libwgpu_native.so`: keep that name when you
+deploy it.
 
 **When enabled, FFmpeg does not ship in the package.** `libavcodec`, `libavformat`, `libavutil` and
 `libswresample` come from the distribution, and copying a distribution's binaries into this package

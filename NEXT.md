@@ -119,8 +119,10 @@ The single authoritative list. Every entry below was checked against the code on
 5. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
    and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
    (`misc/known_bugs.md` §5). They pass on an idle machine.
-6. **`CApi_InstalledConsumer` cannot link an installed consumer against an external `wgpu_native`**
-   (measured 2026-10-07, `plans/plan_renderer_cleanup.md`; nothing has touched it since).
+6. ~~**`CApi_InstalledConsumer` cannot link an installed consumer against an external
+   `wgpu_native`**~~ — fixed 2026-10-10: the C API package ships the wgpu-native runtime when
+   WEBGPU is compiled in, and `CNA::CApiStatic` names the installed copy (`CHANGELOG.md`
+   `[Unreleased]`).
 7. **`FNA3D` does not saturate the stock effects' `COLOR0` output**, which Direct3D 9 (and so XNA)
    clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU and Metal. Three
    `CnaTests` pixel checks fail with `FNA3D` as the renderer (measured 2026-10-10, SDL_GPU Vulkan
