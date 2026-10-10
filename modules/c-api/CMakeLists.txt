@@ -727,6 +727,25 @@ if(CNA_BUILD_TESTS)
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
     )
 
+    # A game that creates no GraphicsDeviceManager gets a device with Depth24, the manager's
+    # XNA default, so Clear(color, depth) works the way it does under a manager.
+    add_executable(cna_c_api_game_default_depth_buffer_smoke
+        tests/pure_c/GameDefaultDepthBufferSmoke.c
+    )
+    set_target_properties(cna_c_api_game_default_depth_buffer_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_game_default_depth_buffer_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_game_default_depth_buffer_smoke)
+    add_test(NAME CApi_GameDefaultDepthBufferSmoke COMMAND cna_c_api_game_default_depth_buffer_smoke)
+    # Creates the game's device on the default renderer, so it needs the same display as
+    # CApi_Draw3DSmoke above.
+    set_tests_properties(CApi_GameDefaultDepthBufferSmoke PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+    )
+
     add_executable(cna_c_api_graphics_ext_smoke
         tests/pure_c/GraphicsExtSmoke.c
     )

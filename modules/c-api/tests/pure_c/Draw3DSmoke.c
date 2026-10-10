@@ -149,10 +149,10 @@ static int clear_and_confirm(
      * The mask is the planes this device actually has, not a fixed three. SOFTWARE-333 stopped
      * masking a clear of an attachment that does not exist -- Microsoft XNA reports
      * InvalidOperationException where FNA silently dropped the flags -- and XNA's own
-     * Clear(Color) derives the same set rather than asserting all three. A C-API game gets no
-     * GraphicsDeviceManager, so its device comes from default PresentationParameters, whose
-     * DepthFormat is None; with no depth plane there is no undefined depth for the test above to
-     * be about, and the flag would only be refused.
+     * Clear(Color) derives the same set rather than asserting all three. A C-API game owns no
+     * GraphicsDeviceManager unless it creates one; its device now carries the manager's default
+     * Depth24 (GameDefaultDepthBufferSmoke.c), but a 2D-only renderer still has no real depth
+     * plane, so the flags are derived from the active parameters rather than assumed.
      */
     CNA_PresentationParameters active;
     if (!REPORT(cna_presentation_parameters_init(&active) == CNA_RESULT_SUCCESS) ||

@@ -9,6 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+### Fixed
+
+- **A game without a `GraphicsDeviceManager` gets a depth buffer.** CNA lets a game run with no
+  `IGraphicsDeviceService` — a C API game owns no manager unless it creates one — and gave that
+  implicit device `PresentationParameters`' own default, `DepthFormat::None`, so its
+  `Clear(color, depth)` was refused since the SOFTWARE-333 contract. The implicit device now
+  carries `Depth24`, the default `PreferredDepthStencilFormat` of an XNA `GraphicsDeviceManager`,
+  as every XNA game's device does; `new PresentationParameters()` keeps XNA's `None`. Pinned by
+  `CApi_GameDefaultDepthBufferSmoke`. Found by cna-c-template 0.1.0's 3D path.
+
 ## [0.1.0] — 2026-10-10
 
 The final 0.1.0 release, cut from `next`. The entries below describe what changed since
