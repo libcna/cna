@@ -1,5 +1,8 @@
 # NEXT_platform.md — SDL3/CNA platform separation
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 > Continuity document for the platform-abstraction campaign. The authoritative task list is
 > **`plans/plan_platform.md`** (PLAT-1…PLAT-141 plus lettered follow-ups); this file records state,
 > discoveries and the next starting point. The design note that started it is `cnaplatform.md`.

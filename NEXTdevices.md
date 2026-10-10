@@ -1,5 +1,8 @@
 # NEXT.md — CNA Project Handoff (Devices)
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model, built on SDL3

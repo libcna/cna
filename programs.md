@@ -64,8 +64,8 @@ sudo apt-get install -y \
 SDL3, SDL3_image, and SDL3_mixer are **built from vendored git submodules** (`third_party/SDL*`),
 not installed as system packages (`README.md` §9 already covers this) — but building *that vendored
 source* still needs the underlying platform dev headers SDL3 probes for at CMake-configure time.
-This project always drives tests with `SDL_VIDEODRIVER=x11` (see `NEXT.md` §7), so the X11 dev
-headers are the load-bearing ones. SDL3 builds without the Wayland dev headers (it just won't offer
+The window tests are registered with `SDL_VIDEODRIVER=x11`, so the X11 dev headers are the
+load-bearing ones. SDL3 builds without the Wayland dev headers (it just won't offer
 that video driver); for SDL3 to run as a native Wayland client install `libwayland-dev`,
 `wayland-protocols`, `libxkbcommon-dev` and `libdecor-0-dev` as well (`cmake/ThirdPartySDL.cmake`
 warns when a Wayland session is about to run through Xwayland for want of them).
@@ -122,14 +122,14 @@ sudo apt-get install -y zlib1g-dev
 ## 6. Headless testing environment
 
 ```bash
-sudo apt-get install -y xvfb mesa-utils
+sudo apt-get install -y weston xwayland xvfb mesa-utils
 ```
 
-- **`xvfb`** — this sandbox has no real X server on `:0` by default for automated test runs; every
-  GPU/window-creating test binary in this repo's `ctest` suite runs against a virtual `Xvfb` display
-  (conventionally `:99` in this project's own session notes — see `NEXT.md` §7's "Environment
-  note"). Start it with e.g. `Xvfb :99 -screen 0 1280x1024x24 &` before running any
-  `SDL_VIDEODRIVER=x11 DISPLAY=:99 ...` command.
+- **`weston`, `xwayland`** — GPU/window tests run through `tools/platform/run_gpu_tests_private.sh`,
+  which starts a headless Weston and a private rootful Xwayland on the real GPU; nothing appears on
+  the desktop, and tests must never run on the live display.
+- **`xvfb`** — only for the harnesses that start their own virtual display (the Wine-based XNA
+  interop tests use `:99`). Xvfb cannot present Vulkan (no DRI3).
 - **`mesa-utils`** — provides `glxinfo` (`glxinfo -B` is the fastest way to check what GL version a
   given `DISPLAY` actually negotiates/supports — essential when root-causing why a GL backend
   reports a lower version than the underlying driver actually supports).
@@ -137,11 +137,9 @@ sudo apt-get install -y xvfb mesa-utils
 > **Note on real GPU vs. software rendering**: if the target machine has a real GPU with proper
 > kernel driver support (confirmed in this project's own sandbox: `glxinfo -B` on the *real* display
 > shows a hardware-accelerated `radeonsi`/AMD device up to GL 4.6), an `Xvfb` virtual display will
-> still typically fall back to **llvmpipe** (software Mesa) unless it's specifically configured with
-> GPU passthrough (e.g. `Xvfb` + DRI3, or running tests against the real display instead). Both
-> paths work for this project's tests; llvmpipe is just slower and has its own quirks (documented in
-> `NEXT.md` §5 — e.g. a GL backend negotiating only a legacy GL 2.1 context in this specific
-> software-GL environment).
+> still typically fall back to **llvmpipe** (software Mesa); the private Xwayland of
+> `tools/platform/run_gpu_tests_private.sh` uses the real GPU. llvmpipe is slower and has its own
+> quirks (e.g. a GL backend negotiating only a legacy GL 2.1 context).
 
 ## 7. Debugging tools
 

@@ -13,9 +13,11 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CnaTests
-ctest --test-dir build --output-on-failure
+cmake --build build
+tools/platform/run_gpu_tests_private.sh build --output-on-failure   # private display, never the desktop
 ```
+
+Current state, known bugs and the maintained build/test commands: [`NEXT.md`](NEXT.md).
 
 ### Version
 

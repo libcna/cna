@@ -1,5 +1,8 @@
 # NEXT.md — CNA Audio Port Handoff (branch `feature/audio`)
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 > Covers the **audio** subsystem work on `feature/audio` only
 > (`Microsoft::Xna::Framework::Audio` + `CNA::Internal::Audio`).
 > Full file-by-file history, every fix's exact rationale, and FNA/FAudio line citations live in

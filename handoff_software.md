@@ -1,5 +1,8 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 Updated: 2026-09-13, completed through SOFTWARE-100 final reconciliation
 
 This document is the final restart and audit record for the hostile Software-versus-EasyGL classic

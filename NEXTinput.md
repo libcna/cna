@@ -1,5 +1,8 @@
 # NEXT.md — CNA Input Handoff
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 > Closing handoff, written 2026-07-18. `plans/plan_input.md`'s own 500+-task audit is **done and
 > merged** — this revision replaces the 2026-07-07 "Phase 0 just finished" version, which had
 > gone stale (Phases 1–13 all completed and closed on 2026-07-16/17 without this file ever being

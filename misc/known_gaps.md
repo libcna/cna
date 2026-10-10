@@ -1,12 +1,13 @@
 # Known gaps
 
 Capabilities XNA has and CNA does not, **measured** against a specific XNA behaviour and recorded
-with the case that found them. Distinct from [`known_bugs.md`](known_bugs.md): nothing here is
-wrong, it is absent — or present as a deliberate divergence — and closing it is a decision rather
-than a repair.
+with the case that found them. Nothing here is wrong, it is absent — or present as a deliberate
+divergence — and closing it is a decision rather than a repair.
 
-A row leaves this file when the capability lands, or when the owner records that CNA will not have
-it. Entry numbers are stable evidence references, so removing a closed entry leaves a number gap.
+**Status lives in [`NEXT.md`](../NEXT.md) §5**, the one authoritative list of current bugs and
+limitations; this file only keeps the measurement behind each gap listed there. When a gap closes,
+remove it from both in the same commit. Entry numbers are stable evidence references, so removing a
+closed entry leaves a number gap.
 
 Most of these surface through the `cna-samples` campaign, because porting a sample is what puts
 weight on a corner of the API nothing else reaches. The sample that found a gap is named, but a gap

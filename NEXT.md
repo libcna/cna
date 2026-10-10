@@ -1,4 +1,226 @@
-# NEXT.md
+# NEXT.md — current state of CNA
+
+This file has two parts. **Sections 1–7 describe the repository as it is now** and are kept true.
+Everything under [Historical log](#historical-log--not-current-state) further down is a dated record
+of past sessions; its "still open" and "remains unfinished" statements were true only on their own
+date.
+
+**§5 is the one authoritative list of current known bugs and limitations.** No other file keeps a
+live bug list: `known_bugs.md` points here, `misc/known_bugs.md` and `misc/known_gaps.md` hold only
+the measurements behind some §5 entries, the per-subsystem `NEXT*.md`/`handoff*.md` files and the
+plans under `plans/` are history, and capability documents (renderer docs, `docs/gltf-limitations.md`,
+`docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted deviations) describe what a
+subsystem does by design, not what is broken. When a bug is fixed, delete its §5 entry (and its
+measurement record, if it has one) in the same commit.
+
+Last reconciled against the code and a full test run: **2026-10-10** (`next`).
+
+## 1. Project summary
+
+CNA is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`) on a
+CNA-owned platform abstraction (SDL3 by default) and a curated set of graphics renderers. FNA's
+source is the day-to-day behavioural reference; where FNA and XNA disagree, XNA wins (`CLAUDE.md`).
+
+The project is leaving its AI-driven feature-expansion phase for long-term maintenance by a human
+C++ developer. The renderer set, the platform layer and the content formats are deliberately kept as
+they are: no new renderers, asset formats, graphics engines or subsystems. Work from here is fixing
+§5, keeping behaviour faithful to XNA, and keeping validation deterministic.
+
+## 2. Current status
+
+**Renderers.** 14 public identities over 12 implementation families — `SDL_RENDERER`, `OPENGLES3`,
+`OPENGL33`, `WEBGL2`, `VULKAN`, `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX11`, `DIRECTX9`,
+`SDL_GPU`, `METAL`, `FNA3D`; the three GL identities share the internal EasyGL implementation.
+The canonical list is `cmake/RendererIdentities.cmake` (held to the C++ enum and the C ABI by
+`scripts/check_renderer_identities.py`); the table with gates and factories is
+[`docs/renderer-registry.md`](docs/renderer-registry.md). 37 identities are retired and refused at
+configure time by name; their reserved ABI values are in
+[`docs/removed-renderers.md`](docs/removed-renderers.md). Do not add or restore a renderer without an
+explicit owner decision.
+
+**Platforms.** `CNA_PLATFORM` is `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and the
+browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERMINAL`. CNA's own
+`WIN32`/`X11`/`WAYLAND` backends were retired on 2026-10-06 and are refused by name.
+`CNA_AUDIO_PLATFORM` is `SDL3`, `NULL` or `ALSA`. Evidence differs per target:
+
+| Target | What is actually verified |
+|---|---|
+| Linux x86_64 | Everything; this is where the suites run. |
+| Windows | MinGW-w64 cross builds run under Wine (+DXVK) for `SDL_RENDERER`, `DIRECTX9`, `DIRECTX11`; MSVC builds in the Windows CI workflows. No real-Windows hardware validation is current. |
+| Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
+| Android | `OPENGLES3` on an x86_64 emulator (`docs/android-graphics-limitations.md`). |
+| macOS / iOS | macOS CI builds and runs the supported Metal contract; iOS is a simulator smoke app only (`docs/apple-platforms.md`). |
+
+**XNA API surface.** Every public type and every documented member of the Microsoft XNA 4.0 runtime
+reference is represented; the generated census is
+[`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
+(`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation is not behaviour:
+behavioural fidelity is held by each module's tests. One member is deliberately left unimplemented
+(§6).
+
+**Content.** XNB readers (including LZX), CNA's `.cnb`/`.cnj`, direct glTF 2.0 loading, the
+`cna-content` build tool and the XNA Content Pipeline façade: `docs/content-pipeline.md`,
+`docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
+planned.
+
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. On 2026-10-10 the
+HEADLESS Debug tree registered 8,808 tests and passed all 8,802 it ran (546 of them skip by design
+on that renderer; the 6 Wine-based XNA interop tests run separately), and the run left the checkout
+clean. CI: `general-tests-ci.yml` runs the unfiltered suite for `OPENGLES3` and fails on a dirty
+checkout; the other workflows are subsystem- or platform-specific.
+
+## 3. Where current information lives
+
+| Question | Source of truth |
+|---|---|
+| Is X broken right now? | §5 of this file |
+| Which renderers exist, how are they selected? | `docs/renderer-registry.md`, `docs/runtime-renderer-selection.md` |
+| Does renderer R support feature F? | `docs/graphics-renderer-feature-matrix.md`, `docs/renderer-capability-profiles.md`, each renderer's own doc |
+| Compiled XNA effects per renderer | `docs/fx-compiled-effects.md` §10 |
+| Platform contract | `docs/platform-abstraction.md` |
+| API-surface coverage | `docs/xna-4-runtime-member-coverage.md` (generated) |
+| Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `plans/plan_bindings_upstream.md` |
+| GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
+| Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
+| Index of the other documents | `docs/README.md`, `plans/README.md` |
+
+## 4. Working rules for this phase
+
+- Fix defects, do not add surface. A fix comes with a focused regression test.
+- Never run tests on the live desktop: use `tools/platform/run_gpu_tests_private.sh`.
+- A test may write only to its build tree or a temporary directory. `scripts/check_clean_checkout.sh`
+  enforces that a validation run leaves tracked files unchanged.
+- Build into the existing `cmake-build-<variant>/` trees with ccache; do not create one-off build
+  directories (`CLAUDE.md`, "Build locations & caching").
+
+## 5. Known bugs and limitations
+
+The single authoritative list. Every entry below was checked against the code on 2026-10-10.
+
+### 5.1 Defects
+
+1. **`VULKAN` applies no realistic `RasterizerState.DepthBias`.** `VulkanRenderer.cpp` passes XNA's
+   normalized bias to `vkCmdSetDepthBias` unscaled (`draw.depthBias`), so a typical bias such as
+   `-1e-4` has no visible effect. XNA's value must be multiplied by `2^(depth bits)`, as EasyGL,
+   DirectX 11 (`XnaDepthBiasToD3D` in `modules/renderers/common/d3d/src/D3DStateMapping.cpp`),
+   SDL_GPU, WebGPU and Metal already do. `Vulkan_DepthBias` uses `-1e6` and so still encodes the old
+   premise, and `RasterizerDepthBiasContractTest` does not cover Vulkan. Measurement:
+   `misc/known_bugs.md` §1.
+2. **`SDL_RENDERER` ignores `TextureAddressMode::Wrap` and `Mirror`.** `SdlRenderer.cpp` has no
+   sampler address-mode handling, so wrapped or mirrored sprites draw clamped, silently
+   (`docs/sdl-renderer-2d-completeness.md`, Tasks 686/687).
+3. **`DIRECTX9` `BasicEffect` draws 12 of its 32 shader variants.** The other 20 (Position-only,
+   untextured lighting, lit with vertex colour) throw a named `std::runtime_error` from
+   `D3D9EffectDraw.cpp`. Every register table exists; only the dispatch is missing.
+4. **Test defects, not renderer defects.** With `SDL_GPU` as the default renderer, two
+   `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail, and with `WEBGPU` two cases of the same
+   class: they rewrite a buffer that is still bound, which the device correctly refuses
+   (`plans/plan_renderer_cleanup.md` RRC-026).
+5. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
+   and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
+   (`misc/known_bugs.md` §5). They pass on an idle machine.
+6. **`CApi_InstalledConsumer` cannot link an installed consumer against an external `wgpu_native`**
+   (measured 2026-10-07, `plans/plan_renderer_cleanup.md`; nothing has touched it since).
+7. **`FNA3D` does not saturate the stock effects' `COLOR0` output**, which Direct3D 9 (and so XNA)
+   clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU and Metal. Three
+   `CnaTests` pixel checks fail with `FNA3D` as the renderer (measured 2026-10-10, SDL_GPU Vulkan
+   driver, AMD RADV): `BasicEffectVertexLightingSaturationTest.ALitSumAboveOneIsSaturatedBeforeTheTexel`,
+   `.TheVertexColourScalesTheLitSumBeforeItIsSaturated`, and
+   `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (line 536: a
+   negative diffuse colour times a negative texel gives 128 instead of 0).
+
+### 5.2 Limitations
+
+- `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
+  not compute — reserved for the human author, see §6.
+- Native `SurfaceFormat::Alpha8` render-target storage is unavailable; an Alpha8 request falls back
+  to `Color` as XNA's preferred-format rule allows (`misc/known_gaps.md` §1).
+- Online sessions and invitations are native-only; a browser build refuses them explicitly
+  (`misc/known_gaps.md` §4, `docs/browser-network-readiness.md`).
+- `DIRECTX9`/`DIRECTX11` are validated under Wine (+DXVK) only; real-Windows hardware validation is
+  not current. iOS has simulator smoke evidence only; `METAL` is validated by the macOS CI contract.
+- `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
+- `SDL_RENDERER` is 2D-only (3D calls throw), `SOFTWARE` is a bounded CPU renderer, and `HEADLESS`
+  and `STUB` make no pixel claim (`docs/renderer-registry.md`, "Capability classes").
+- Per-subsystem capability boundaries, by design rather than defect, are in the documents listed
+  in §3.
+
+### 5.3 Closed on 2026-10-10
+
+Fixed in this pass, or found already fixed while older documents still called them open:
+
+- `SdlGpu_ConstructorExceptionSafety` aborting with `free(): double free` at exit (backlogged as
+  `SMG-0042`): the test linked CNA's static archives on top of `libcna.so`, so every static object
+  had two definitions and the static `SamplerState`s were destroyed twice (AddressSanitizer: an ODR
+  violation, then a heap-use-after-free in `~SamplerState` from `__cxa_finalize`). Fixed by STAB-004;
+  5/5 clean runs under AddressSanitizer afterwards (287/287 checks).
+- FNA3D resources outliving their device (`known_bugs.md`, a heap-use-after-free that crashed
+  `CnaTests` after its last test): fixed by `d5c3460db` (liveness token). Re-verified on 2026-10-10
+  under AddressSanitizer with `FNA3D` as the renderer: the original
+  `MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove` scenario is clean,
+  and the whole `CnaTests` binary (10,694 tests in one process) reached its summary with no
+  AddressSanitizer report.
+- Several `SpriteBatch` `Begin`/`End` pairs per frame on Vulkan: `7dd71cd88` (`Vulkan_SpriteBatch_MultiBeginEnd`).
+- DirectX 11 `DepthBias` scaling: `23e8edbee` (`DirectX11_DepthBias`).
+- EasyGL letterboxed default viewport and readback: `7bcf3f496`, `1dbc94f28`.
+- LOD-bias parity fixtures on GL ES profiles: `570d76677`.
+- `Window.CurrentOrientation` following the OS window: `0285061fa`.
+- DirectX 9 `DualTextureEffect` variants (`969ffbfb2`), cull winding (`8d60131bc`), render targets
+  sampled as textures (`DirectX9_RenderTarget_SamplingOrientation`).
+- `Texture3D`/`TextureCube` deriving from `Texture` (`b3145eaa6`); `GraphicsDevice` state objects
+  aliased like XNA's (`ca8e1e8c3`).
+- EasyGL non-`Color` `SurfaceFormat` forwarding (`1f891080d`); SDL_Renderer `Texture3D`/`TextureCube`
+  construction refused by name (`219330aeb`).
+- A full ctest run rewriting `docs/xna-content-pipeline-parity-report.md`: fixed by STAB-001 (the
+  gate now writes into the build tree).
+- `EasyGL_GraphicsDevice_ReferenceStencil`, still allow-listed as a known failure in
+  `general-tests-ci.yml`: fixed by REMED-GFX-236, passes; the allow-list is gone (STAB-001).
+- `scripts/check_renderer_configure_sweep.sh` found no renderer identity since the registry moved to
+  `cmake/RendererIdentities.cmake`: reads that list again (STAB-003).
+
+## 6. Reserved for the human author
+
+- **`BoundingFrustum::Intersects(Ray)`** (`modules/math/src/BoundingFrustum.cpp`). It answers a ray
+  whose origin is outside (`nullopt`) or inside (`0`) the frustum, and throws
+  `System::NotImplementedException` in the remaining case. The owner reserved the real
+  implementation as hands-on C++ work: do not implement it, generate it, or remove the exception.
+  `BoundingFrustumTests.cpp` covers only the two answered cases.
+
+## 7. Build, test and environment
+
+```bash
+# Configure once per variant (reuse the tree afterwards; see CLAUDE.md for the directory rules).
+cmake -S . -B cmake-build-headless -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS \
+      -DCNA_BUILD_TESTS=ON \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+cmake --build cmake-build-headless -j8
+
+# Run the suite on a private display and prove the run left the checkout clean.
+scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh cmake-build-headless -j8 \
+      -E 'XnaPipelineGenuineRuntime|XnaDifferentialBuildTest'
+
+# The six Wine-based XNA interop tests hang inside the private runtime; run them on their own
+# (their harness starts its own Xvfb :99).
+
+# Renderer and platform boundary gates.
+python3 scripts/check_renderer_identities.py
+python3 tools/platform/sdl_inventory.py --check && python3 tools/platform/sdl_classify.py --check
+```
+
+- GPU renderers are tested in their own trees (`cmake-build-vulkan`, `cmake-build-multi`, …) through
+  the same private runner. Never run several renderers' full suites at the same time: GPU and driver
+  contention produces false failures.
+- `CMakePresets.json` has the focused unit, sanitizer, web, Apple and multi-renderer presets.
+- System packages for a fresh Debian machine: [`programs.md`](programs.md).
+
+---
+
+# Historical log — not current state
+
+Everything below is the dated session log this file accumulated from 2026-07 to 2026-10, kept as
+written. Section numbers, "current" banners, open-item lists and bug lists below are historical;
+§1–§7 above supersede them.
 
 > **XACTBUILD-001 / SAMPLE-122 (2026-10-03):** BuildXact now sends genuine `/WINDOWS`/`/XBOX360`
 > switches and shares the effect compiler's Wine path spelling. Three invocation regressions fail
@@ -5079,7 +5301,7 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 
 ---
 
-# NEXT.md — `feature/graphics` session handoff (2026-07-18)
+## Historical handoff: `feature/graphics` session (2026-07-18)
 
 > **This section is current for `feature/graphics` (this checkout).** Everything below the
 > `---` divider that follows is stale, D3D9-branch-scoped content (`feature/dx9`) that ended up
@@ -5187,7 +5409,7 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 >
 > ---
 
-# NEXT.md — CNA Project Handoff (`feature/dx9` branch — Direct3D 9 backend only)
+## Historical handoff: `feature/dx9` branch (Direct3D 9 backend only, 2026-07)
 
 > **This `NEXT.md` is scoped to the D3D9 backend only, per explicit project-owner instruction
 > (2026-07-14).** This branch (`feature/dx9`, worktree `cnadx9`) is a parallel effort to the
@@ -5289,7 +5511,7 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > in any run this session. If resuming this track: read `plans/plan_input.md`'s Phase overview + the last
 > `[x]`-marked checkpoint task's Result for the exact stopping point, not this file.
 
-## 1. Project summary
+## D3D9 handoff (2026-07), part 1: project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
 (`Microsoft::Xna::Framework`), built on SDL3 with a pluggable graphics backend layer. This branch
@@ -5321,7 +5543,7 @@ plausibly."
 
 ---
 
-## 2. Current status
+## D3D9 handoff (2026-07), part 2: status at the time
 
 ### Build status
 
@@ -6615,7 +6837,7 @@ the buffer-creation path, the texture/render-target-creation paths, and the draw
 
 ---
 
-## 3. Recent changes
+## D3D9 handoff (2026-07), part 3: recent changes
 
 Most recent first. Full detail lives in `plans/plan_dx9.md` — this is a short index.
 
@@ -6690,7 +6912,7 @@ Most recent first. Full detail lives in `plans/plan_dx9.md` — this is a short 
 
 ---
 
-## 4. Current blocker / main problem
+## D3D9 handoff (2026-07), part 4: blocker at the time
 
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5/D9-6/D9-7 are all fully closed (D9-32/D9-34/
 D9-60/D9-62/D9-73 honestly 🟨 — see their own plan rows for exactly what's deferred and why). Phase
@@ -6858,7 +7080,7 @@ for real once culling-sensitive scenes are drawn.
 
 ---
 
-## 5. Known bugs and limitations
+## D3D9 handoff (2026-07), part 5: bugs and limitations at the time
 
 - `BasicEffect` via `DrawPrimitivesEx` only supports 12 of its 32 `ShaderIndex` values (was 10,
   updated 2026-07-16 — see below) — every combination whose `VSInput` shape has no matching CNA
@@ -6897,7 +7119,7 @@ before any backend acts on them — see §9.
 
 ---
 
-## 6. Architecture notes
+## D3D9 handoff (2026-07), part 6: architecture notes
 
 ### Main modules (D3D9-relevant)
 
@@ -6925,7 +7147,7 @@ real XNA 4.0 runtime under Wine (`~/.wine-cna-xna40`, `tools/xna-oracle/`) for b
 
 ---
 
-## 7. Useful commands
+## D3D9 handoff (2026-07), part 7: commands
 
 ```bash
 # Wine prefixes (see dx9-spike/README.md for full detail)
@@ -6948,7 +7170,7 @@ cmake -S . -B cmake-build-d3d9 \
 
 ---
 
-## 8. Next smallest tasks
+## D3D9 handoff (2026-07), part 8: next tasks at the time
 
 **Phases D9-0 through D9-13 are ALL fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73`
 honestly 🟨 — see their own plan rows for exactly what's deferred and why; `D9-73` is now 4/5
@@ -7048,7 +7270,7 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
 
 ---
 
-## 9. Do not do yet
+## D3D9 handoff (2026-07), part 9: do not do yet
 
 - **Do not fix any of the six CNA-vs-XNA divergences** (`plans/plan_dx9.md`'s own section) from inside this
   branch — measure with the oracle, report, propose to the project owner for a `plans/plan_graphics.md`
@@ -7106,7 +7328,7 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
 
 ---
 
-## 10. Resume prompt
+## D3D9 handoff (2026-07), part 10: resume prompt
 
 ```
 Read NEXT.md first (this file, feature/dx9 branch), then plans/plan_dx9.md in full before touching any

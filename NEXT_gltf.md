@@ -1,5 +1,8 @@
 # glTF campaign continuity
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 Read this before `plans/plan_gltf.md`. The plan is 2 700 lines and its own header used to say "nothing in
 it was implemented", which stopped being true a long time ago; this file is the short version a new
 session needs to start work without re-deriving the state.

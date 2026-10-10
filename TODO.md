@@ -1,5 +1,8 @@
 # CNA Sensors – TODO Roadmap
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 ## Overview
 This document outlines the planned implementation roadmap for sensor support in CNA.
 

@@ -1,5 +1,8 @@
 # NEXTmedia.md — CNA Media Namespace Handoff (`feature/media` branch)
 
+> **Historical record, not current state.** The current state of CNA and the one authoritative
+> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+
 > Scoped to `Microsoft::Xna::Framework::Media` + `CNA::Internal::Media::*` only, per the same
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
