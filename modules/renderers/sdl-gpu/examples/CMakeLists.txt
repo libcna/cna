@@ -340,8 +340,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # renderer makes GraphicsDevice.cpp live. Keep the static archive which satisfies that file's
     # TouchPanel/TextInput/Mouse references after the renderer/graphics cycle as well. The group
     # is the whole archive cycle: in a multi-renderer build it also holds every other renderer.
+    # Only a static CNA needs it. With CNA_SHARED_LIBRARY those archives are already inside
+    # libcna.so, and linking them again gave every static object two definitions: the static
+    # SamplerStates were destroyed twice at exit, aborting the test with a double free (STAB-004).
     cna_graphics_archive_cycle(_cna_sdlgpu_archive_cycle)
-    if(APPLE)
+    if(CNA_SHARED_LIBRARY)
+        # libcna.so provides every archive member.
+    elseif(APPLE)
         # plans/plan_apple_m4.md AM4-039: CMake implements the RESCAN link group only for
         # GNU-style linkers and refuses it at configure time for Apple's. ld64 needs no group: it
         # keeps rescanning every static archive on the line until nothing new resolves.

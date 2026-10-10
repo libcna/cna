@@ -1418,7 +1418,8 @@ SMG-0035's validation messages by SMG-0040.
 
 ### Backlog — SDL_GPU classic debt
 
-- **`SdlGpu_ConstructorExceptionSafety` → pre-existing double free.** A real bug, not test debt:
+- **`SdlGpu_ConstructorExceptionSafety` → pre-existing double free.** *Fixed 2026-10-10 (STAB-004,
+  see `NEXT.md` §5.3): the test linked CNA's static archives on top of `libcna.so`.* A real bug, not test debt:
   the binary aborts with `free(): double free detected in tcache 2`, identically on the unmodified
   renderer sources (SMG-0041). Owner decision 2026-09-23: fix it later as a small targeted bugfix;
   it is not a reason to hold the modern branch open.
