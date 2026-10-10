@@ -89,13 +89,15 @@ set_tests_properties(XnaPipelineFinalAuditIsGreen PROPERTIES LABELS "parity;xnap
 # question -- "is the parity itself complete?" -- and fails on any MISSING type, member or enum
 # value, on a status without its required note, and on a map entry the inventory does not have. It
 # was run by hand while MISSING was still non-zero; it is zero now, so it is a test.
+# Without --check the script writes the report, so it writes into the build tree: a test run must
+# never rewrite the committed document (XnaPipelineParityReportIsCurrent above compares that one).
 # =====================================================================================
 add_test(NAME XnaPipelineParityGateIsGreen
          COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/parity_report.py"
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
-                 --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
+                 --output "${CMAKE_CURRENT_BINARY_DIR}/xna-content-pipeline-parity-report.gate.md"
                  --gate)
 
 # The denominator is frozen at the measurement it was read from (XNAPP-016). Three things are

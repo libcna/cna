@@ -1911,8 +1911,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DepthStencilState_StencilTwoSided COMMAND cna_test_easygl_depthstencilstate_stencil_twosided
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (Task 872 -
-        # confirmed a universal, not-Vulkan-specific gap; registered as a documented known failure)
+        # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (EasyGL's gap was
+        # fixed by REMED-GFX-236; an ordinary test that must pass)
         cna_easygl_test(cna_test_easygl_graphicsdevice_reference_stencil
                         easygl_graphicsdevice_reference_stencil_test.cpp)
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_ReferenceStencil COMMAND cna_test_easygl_graphicsdevice_reference_stencil
