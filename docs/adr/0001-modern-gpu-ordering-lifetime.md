@@ -4,6 +4,8 @@
 - Date: 2026-09-09
 - Decision owner: `plans/plan_modern.md` `MOD-2202`
 - Scope: CNA's native C++ API and C ABI; no language-specific binding design
+- Note (2026-10-10): the `DIRECTX12` renderer this record discusses was retired on 2026-10-06
+  (`docs/removed-renderers.md`); its D3D12 rows are historical.
 
 ## Context
 

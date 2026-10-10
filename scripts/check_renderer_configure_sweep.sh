@@ -6,8 +6,8 @@
 #   scripts/check_renderer_configure_sweep.sh [--cnaext] [--jobs N] [--only A,B,C]
 #
 # What it does and, more usefully, what it does not: it runs `cmake` configure only -- no build --
-# against each identity in cmake/RendererSelection.cmake's own list, derived from that file rather
-# than typed here so a renderer added later cannot be quietly missed. A configure that fails because
+# against each identity in cmake/RendererIdentities.cmake's public list, derived from that file
+# rather than typed here so the list cannot drift from the registry. A configure that fails because
 # a toolchain or SDK is absent in this container (Emscripten, the Windows SDK, wgpu-native, ...) is
 # reported as SKIPPED, not FAILED: "this machine has no D3D12" is not a defect in CNA. A configure
 # that fails for any other reason is a real failure and is printed with its last lines.
@@ -33,15 +33,21 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-selection="$root/cmake/RendererSelection.cmake"
-if [ ! -f "$selection" ]; then
-    echo "cannot find $selection" >&2
+registry="$root/cmake/RendererIdentities.cmake"
+if [ ! -f "$registry" ]; then
+    echo "cannot find $registry" >&2
     exit 2
 fi
 
-# The identity list, straight out of the STRINGS property -- never a copy kept here.
-identities="$(grep -m1 'set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS' "$selection" \
-              | grep -o '"[A-Z0-9_]*"' | tr -d '"')"
+# The identity list, straight out of the registry's CNA_RENDERER_PUBLIC_IDENTITIES -- never a copy
+# kept here.
+identities="$(sed -n '/^set(CNA_RENDERER_PUBLIC_IDENTITIES/,/)/p' "$registry" \
+              | sed 's/set(CNA_RENDERER_PUBLIC_IDENTITIES//; s/)//' | tr -s ' ' '\n' \
+              | grep -E '^[A-Z0-9_]+$')"
+if [ -z "$identities" ]; then
+    echo "no renderer identity found in $registry" >&2
+    exit 2
+fi
 
 if [ -n "$only" ]; then
     identities="$(echo "$only" | tr ',' '\n')"

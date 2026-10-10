@@ -167,7 +167,7 @@ Names in the snapshot that no longer name a renderer: `SKIA` was retired in 2026
 and `OPENVG` on 2026-09-17. Each is refused by name at configure time and keeps its C ABI value
 permanently reserved; see [`removed-renderers.md`](removed-renderers.md).
 
-The live registry is `cmake/RendererIdentities.cmake` — 25 public renderer identities over 21
+The live registry is `cmake/RendererIdentities.cmake` — 14 public renderer identities over 12
 implementation families — pinned by `scripts/check_renderer_identities.py` against the
 `GraphicsRendererType` enum and the `CNA_GRAPHICS_RENDERER` STRINGS list, which also rejects the
 old selectors (`DX1`..`DX8`, `D3D9`..`D3D12`, `OPENGLES`) as unknown. See

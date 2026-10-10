@@ -36,9 +36,8 @@ would drift. Anything above either maximum is refused by every route that accept
 `CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
 
 **The renderer range is bounded but not contiguous, and a walker must expect gaps.** A retired
-identity's value is permanently reserved and never reassigned, so 7, 10, 19, 20, 23–30, 32, 34–39,
-41, 45 and 47–51 are holes: twenty-six identities have been retired (Skia in 2026-08, twenty-five
-more on 2026-09-17). A reserved value is a well-formed `uint32_t` in range that no longer names a
+identity's value is permanently reserved and never reassigned, so 2, 5, 7, 10, 15–21, 23–30,
+32–41 and 44–51 are holes: thirty-seven identities have been retired (`docs/removed-renderers.md`). A reserved value is a well-formed `uint32_t` in range that no longer names a
 renderer, and every route that takes a renderer identity refuses it with
 `CNA_RESULT_INVALID_ARGUMENT` — "not a public CNA renderer identity" — exactly as it refuses a value
 that was never assigned. Walking the range and keeping what is accepted is therefore correct; walking

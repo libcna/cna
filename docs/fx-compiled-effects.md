@@ -260,7 +260,10 @@ shared.
 | `VULKAN` | **true** | `CNA_VULKAN_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding; passes every applicable shared section, with multi-stream input refused renderer-wide |
 | `DIRECTX11` | **true** | `CNA_DIRECTX11_COMPILED_EFFECTS` (off by default) | MojoShader's D3D11 adapter; all 18 shared/public-path tests pass, including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling |
 | `METAL` | **true** | `CNA_METAL_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to MSL in process by SPIRV-Cross (`plans/plan_apple_m4.md` AM4-144); passes every shared section Vulkan, SDL_GPU and WebGPU run, multi-stream and instancing included, plus the Shader Model 1-3 sections the SPIR-V route can express -- see below |
-| every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
+| `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (`plans/plan_webgpu.md` WEBGPU-167, WEBGPU-203/204) |
+| `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | The CPU executor runs the shared public contract (`plans/plan_software.md` SOFTWARE-162/165) |
+| `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (`plans/plan_fx.md` FX-070) |
+| every other renderer identity | false | — | No compiled-effect runtime, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
 desktop `OPENGL33` uses `glsl120`, and the ES 3/WebGL 2 identities use `glsles3`. It deliberately

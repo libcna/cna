@@ -112,7 +112,7 @@ To reproduce this locally:
    should set `CNA_D3D11_SKIP_DXVK_GATE=1` to opt out of this check.
 
 ```bash
-scripts/run-wine-dxvk.sh cmake-build-d3d11/examples/directx11_smoke_test.exe
+scripts/run-wine-dxvk.sh cmake-build-d3d11/cna_test_directx11_smoke.exe
 ```
 
 CTest wires this in automatically — `ctest --test-dir cmake-build-d3d11 -L DIRECTX11` runs the

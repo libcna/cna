@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# plans/plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe (D3D12 renderer) under Wine with
+# plans/plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe that uses Direct3D 12 (today
+# only SDL_GPU's D3D12 driver, through run-wine-vkd3d-headless.sh; the DIRECTX12 renderer was
+# retired on 2026-10-06) under Wine with
 # vkd3d-proton, using a dedicated Wine prefix distinct from D3D11's own DXVK prefix
 # (run-wine-dxvk.sh / ~/.wine-cna-d3d11) -- D3D11 and D3D12 need different translation layers
 # (DXVK vs. vkd3d-proton) with different native-DLL overrides, so sharing one prefix would require

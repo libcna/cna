@@ -61,14 +61,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
-- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 32 renderer identities and the
-  curated renderer set that remains.
-- [`plan_canvas.md`](plan_canvas.md) — HTML Canvas 2D.
-- [`plan_dx.md`](plan_dx.md) — Direct3D 11 and Direct3D 12.
+- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 37 renderer identities and the
+  curated set of 14 that remains (`../docs/renderer-registry.md` is the canonical list).
+- [`plan_dx.md`](plan_dx.md) — Direct3D 11 (its Direct3D 12 half is history: `DIRECTX12` was retired
+  on 2026-10-06).
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_metal.md`](plan_metal.md) — native Metal.
-- [`plan_opengles2.md`](plan_opengles2.md) — the OpenGL ES 2.0 profile of the EasyGL family.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - [`plan_stub.md`](plan_stub.md) — no-op stub renderer.
@@ -84,9 +83,9 @@ These renderers no longer exist in CNA (`docs/removed-renderers.md`). Their plan
 record of the work; each carries a retired banner, and none of them describes current support.
 Their standalone probes were removed from the current `spikes/` tree under
 `plan_renderer_cleanup.md` RRC-011; probe paths inside historical plans refer to Git history.
-Skia's own plan was deleted with that renderer in 2026-08, and the plans of `GDI`, `HTML_DOM`,
-`SVG_DOM` and `OPENGL4` with those renderers on 2026-09-28; `docs/removed-renderers.md` and Git
-history are their record.
+Skia's own plan was deleted with that renderer in 2026-08, the plans of `GDI`, `HTML_DOM`,
+`SVG_DOM` and `OPENGL4` with those renderers on 2026-09-28, and the plans of `CANVAS` and
+`OPENGLES2` on 2026-10-06; `docs/removed-renderers.md` and Git history are their record.
 
 - [`plan_ascii.md`](plan_ascii.md) — the former ASCII renderer identity, replaced by a
   renderer-neutral post-process effect.

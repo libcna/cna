@@ -1,5 +1,8 @@
 # Direct3D 11 / Direct3D 12 Graphics Backends — Implementation Plan
 
+> **Historical for Direct3D 12.** The `DIRECTX12` renderer was retired on 2026-10-06
+> (`docs/removed-renderers.md`); everything below about it is history. `DIRECTX11` remains.
+
 > **Current status (2026-09-06): Phase DX17 is the live phase.** A full source-backed re-audit of
 > EasyGL, `D3DCommon`, DirectX 11 and DirectX 12 replaced Phase DX16's parity baseline with a
 > measured 87-group one. Against it, **DirectX 11 is at 43 % of behavioural groups fully proven and

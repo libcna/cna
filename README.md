@@ -24,30 +24,32 @@ Current release: **0.1.0-alpha.1** (pre-release — the public API may still cha
 [`docs/releasing.md`](docs/releasing.md) for how versions are managed). Compiled code reads its
 own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 
-> **Looking for a specific doc?** `docs/` has 93 Markdown documents — see [`docs/README.md`](docs/README.md)
-> for an index of what's current vs. historical. Implementation roadmaps and retained task logs are
+> **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
+> current vs. historical. **Current state, known bugs and limitations:** [`NEXT.md`](NEXT.md) (§5 is
+> the one authoritative bug list). Implementation roadmaps and retained task logs are
 > indexed separately in [`plans/README.md`](plans/README.md).
 
 ### Project Status
 
-- **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested. **As of 2026-07-11, all 5 confirmed bugs behind the original 2026-07-09 milestone declaration are fixed** (Vulkan `BlendState`, EasyGL anisotropic filtering, `IndexElementSize`'s numeric values, `Model`'s root-bone override, `SpriteBatch::Draw`'s optional source rectangle), and Vulkan `OcclusionQuery` (previously architecturally blocked) is fixed too. `docs/graphics-compatibility-report.md` is a dated snapshot from that declaration, kept for its methodology, not current status — see `NEXT.md` §5 for the actively-maintained bug list. What's left to 100% is a smaller set of individually-tracked issues plus a handful of project-owner architecture decisions (e.g. SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, `Texture3D`/`TextureCube` sampler-bind architecture) — none silent or undocumented.
-- **Documented XNA 4.0 runtime API surface:** 331 of 331 public types (100.00%) and 3,467 of 3,627 documented non-type members (95.59%) represented in CNA in the Microsoft reference corpus. The [member audit](docs/xna-4-runtime-member-coverage.md) lists all 160 remaining gaps and their scope tiers; its [JSON report](docs/xna-4-runtime-member-coverage.json) records every reference member. Run `python3 tools/audit_xna_runtime_surface.py --write-reports`. API representation does not establish behavioral compatibility; the Content Pipeline is measured separately.
+- **`Microsoft::Xna::Framework::Graphics`:** every major Graphics class is present, implemented and tested; what each renderer supports is in [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md), and the remaining known defects are in [`NEXT.md`](NEXT.md) §5. `docs/graphics-compatibility-report.md` is a dated 2026-07-09 snapshot kept for its methodology, not current status.
+- **Documented XNA 4.0 runtime API surface:** every public type and every documented member of the Microsoft reference corpus is represented in CNA. The [member audit](docs/xna-4-runtime-member-coverage.md) holds the current counts and classifications; its [JSON report](docs/xna-4-runtime-member-coverage.json) records every reference member. Run `python3 tools/audit_xna_runtime_surface.py --write-reports`. API representation does not establish behavioral compatibility; the Content Pipeline is measured separately.
 - **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
-  execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally and on SDL_GPU,
-  EasyGL/OpenGL, Vulkan, and DirectX 11 behind their renderer-specific build options. The shared
+  execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally, and behind
+  opt-in `CNA_<RENDERER>_COMPILED_EFFECTS` build options on `SDL_GPU`, the EasyGL family, `VULKAN`,
+  `WEBGPU`, `SOFTWARE`, `DIRECTX9`, `DIRECTX11` and `METAL`. The shared
   public contract covers reflection, parameter mutation, techniques/passes, pass states, cloning,
   3D draws, and `SpriteBatch`. Unsupported renderers reject the constructor explicitly; MGFX and
   runtime `.fx` source compilation remain separate formats/projects. See
   [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
-- **`OPENGLES3`/`OPENGL33`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not three separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) is newer and still landing — see `plans/plan_glbackends.md` for current per-profile status.
-- **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
+- **`OPENGLES3`/`OPENGL33`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not three separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) is the desktop-GL profile of the same implementation; per-profile limits are in [`docs/renderer-registry.md`](docs/renderer-registry.md) and [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md).
+- **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer. Its known open defect, an unscaled `RasterizerState.DepthBias`, is in `NEXT.md` §5.
 - **`WEBGPU` renderer:** Experimental renderer using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). `RenderTargetCube` mip regeneration/MSAA and a few narrow items remain — see the status summary in `plans/plan_webgpu.md` and [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
-- **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (14 CTest binaries). A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Render targets sampled as textures, non-`Color` `SurfaceFormat`, and real-Windows hardware verification are still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md), and `plans/plan_dx9.md`.
-- **`DIRECTX11` renderer:** Windows-only native Direct3D 11 renderer, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/directx11-renderer.md`](docs/directx11-renderer.md) and `plans/plan_dx.md`.
+- **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU. A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Validation on real Windows hardware is still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md), and `plans/plan_dx9.md`.
+- **`DIRECTX11` renderer:** Windows-only native Direct3D 11 renderer, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/directx11-renderer.md`](docs/directx11-renderer.md) and `plans/plan_dx.md`.
 - **`METAL` renderer (macOS only, experimental):** Direct native `MTLDevice`/`CAMetalLayer` rendering with runtime-compiled MSL shaders. Its supported and evidence-backed boundary is documented in [`docs/metal-renderer.md`](docs/metal-renderer.md) and `plans/plan_metal.md`; iOS and tvOS remain unvalidated and are not claimed.
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `CNAEXT` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "CNAEXT markers" section and `CMakeLists.txt`.
-- **Automatic CI is partial** (see `.github/workflows/`): Linux workflows run the `Input` and `Devices`/`Sensors` gtest suites, not the full ~4,370-test unit suite or the complete GPU pixel matrix. A dedicated macOS 14 workflow builds the native Metal renderer and runs only its supported contract tests; a separate manual-dispatch Windows MSVC workflow covers D3D11 renderer CTests. There is no automatic Windows or Android gate, and the macOS gate does not establish support for the Metal paths documented as unsupported.
+- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. A dedicated macOS 14 workflow builds the native Metal renderer and runs only its supported contract tests; a separate manual-dispatch Windows MSVC workflow covers D3D11 renderer CTests. There is no automatic Windows or Android gate, and the macOS gate does not establish support for the Metal paths documented as unsupported.
 
 ## 2. 🎯 Goals
 
@@ -125,11 +127,14 @@ The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect`
 
 ### Cross-Platform Direction
 
-- SDL3-based platform foundation for windowing/input/audio integration.
+- Platform layer (`CNA_PLATFORM`): `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and
+  the browser are all reached through SDL3's own drivers), `HEADLESS`, and POSIX-only `TERMINAL`.
+  See [`docs/platform-abstraction.md`](docs/platform-abstraction.md).
 - Renderer abstraction supports targeting multiple rendering paths from one API layer.
-- **Windows support** via the `SDL_RENDERER` renderer (MSVC, clang-cl, or MinGW-w64) — cross-compiled
-  with MinGW-w64 and verified running under Wine.
-- Linux support via `OPENGLES3`/`OPENGL33` (OpenGL) or `SDL_RENDERER`.
+- **Windows:** `SDL_RENDERER`, `DIRECTX9` and `DIRECTX11` are cross-compiled with MinGW-w64 and
+  verified under Wine (+DXVK). Validation on real Windows hardware is not current.
+- **Linux:** `OPENGLES3`/`OPENGL33`, `VULKAN`, `SDL_GPU`, `WEBGPU`, `FNA3D`, `SDL_RENDERER`, and the
+  CPU/no-GPU renderers `SOFTWARE`, `HEADLESS` and `STUB`.
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for what `Net`
   does on each (browsers have no multiplayer through the XNA API).
@@ -158,14 +163,14 @@ CNA is organized into clear layers with strict responsibility boundaries:
                                v
 +-----------------------------------------------------------+
 |            API Layer (XNA-style public surface)           |
-| include/Microsoft/Xna/Framework/...                       |
+| modules/<module>/include/Microsoft/Xna/Framework/...      |
 | - Game, GraphicsDevice, SpriteBatch, Texture2D, ...       |
 +------------------------------+----------------------------+
                                |
                                v
 +-----------------------------------------------------------+
 |         CNA Internal Layer (abstractions/factories)       |
-| include/CNA/Internal/Renderers + src/CNA/Internal/Renderers |
+| modules/graphics/include/CNA/Internal/Renderers/Common/... |
 | - IGraphicsRenderer, ISpriteBatchRenderer, ITextureRenderer  |
 +------------------------------+----------------------------+
                                |
@@ -178,9 +183,10 @@ CNA is organized into clear layers with strict responsibility boundaries:
 
 ### Interface vs Implementation Separation
 
-- **Public API** lives under `include/Microsoft/...` and stays framework-facing.
-- **Renderer contracts** live under `CNA::Internal::Renderers` interfaces.
-- **Renderer implementations** live under `src/CNA/Internal/Renderers/...`.
+- **Public API** lives under `modules/<module>/include/Microsoft/...` and stays framework-facing.
+- **Renderer contracts** live under `CNA::Internal::Renderers` interfaces
+  (`modules/graphics/include/CNA/Internal/Renderers/Common/`).
+- **Renderer implementations** live under `modules/renderers/<family>/`.
 - `GraphicsDevice` constructs renderers via factory (`CreateGraphicsRenderer(...)`) based on build-time renderer selection.
 
 ## 5. 🎮 Rendering System
@@ -249,8 +255,8 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
     - Better control over rendering behavior and extensibility than fixed SDL renderer usage.
 
 - **Vulkan renderer**
-    - Present as an architecture target/scaffold.
-    - Current implementation is incomplete and contains TODO/stub areas.
+    - Full 2D and 3D path (stock effects, render targets, depth/stencil, occlusion queries).
+    - Takes SPIR-V, not GLSL, for custom `ShaderEffect`s.
 
 ## 7. 🌐 Networking, Services & Avatar
 
@@ -463,35 +469,35 @@ cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGL33
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=VULKAN
 ```
 
-### Build (Windows cross-compilation — D3D9 renderer)
+### Build (Windows cross-compilation — DIRECTX9 renderer)
 
 A native Direct3D 9 renderer, Windows-only (hard-`FATAL_ERROR`-gated at configure time, same as
-`D3D11`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
+`DIRECTX11`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
 see [`docs/directx9-renderer.md`](docs/directx9-renderer.md) for what that means and why. Developed and
 verified on this repo's own Debian dev machine via the same MinGW-w64 cross toolchain the other
 Windows renderers use, tested locally through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
 [`docs/directx9-renderer.md`](docs/directx9-renderer.md) and [`plans/plan_dx9.md`](plans/plan_dx9.md) for full detail.
 
 ```bash
-# Install cross toolchain (same package D3D11/SDL_RENDERER's own Windows cross-build uses)
+# Install cross toolchain (same package DIRECTX11/SDL_RENDERER's own Windows cross-build uses)
 sudo apt install mingw-w64
 
 git submodule update --init --recursive
 cmake -S . -B cmake-build-d3d9 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=D3D9 \
+      -DCNA_GRAPHICS_RENDERER=DIRECTX9 \
       -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-d3d9 --target CnaTests --parallel
 ```
 
-Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from D3D11's own
+Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from DIRECTX11's own
 (`docs/directx9-renderer.md` has full setup steps); CTest wires this in automatically:
 
 ```bash
-ctest --test-dir cmake-build-d3d9 -L D3D9 --output-on-failure
+ctest --test-dir cmake-build-d3d9 -L DIRECTX9 --output-on-failure
 ```
 
-### Build (Windows cross-compilation — D3D11 renderer)
+### Build (Windows cross-compilation — DIRECTX11 renderer)
 
 A native Direct3D 11 renderer, Windows-only (hard-`FATAL_ERROR`-gated at configure time on any other
 `CMAKE_SYSTEM_NAME`). Developed and verified on this repo's own Debian dev machine via the same
@@ -506,7 +512,7 @@ sudo apt install mingw-w64
 git submodule update --init --recursive
 cmake -S . -B cmake-build-d3d11 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=D3D11 \
+      -DCNA_GRAPHICS_RENDERER=DIRECTX11 \
       -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-d3d11 --target CnaTests --parallel
 ```
@@ -515,18 +521,20 @@ Running the resulting `.exe`s needs a Wine + DXVK dev-loop (`docs/directx11-rend
 steps); CTest wires this in automatically:
 
 ```bash
-ctest --test-dir cmake-build-d3d11 -R D3D11 --output-on-failure
+ctest --test-dir cmake-build-d3d11 -L DIRECTX11 --output-on-failure
 ```
 
 ### Run Demo / Verification
 
 This repository intentionally prioritizes framework/runtime development over shipping a bundled game demo executable.
 
-Use these commands for quick environment and rendering-path verification:
+Use these commands for quick environment and rendering-path verification. Tests that open a
+window run on a private headless compositor, never on the desktop:
 
 ```bash
-ctest --test-dir build --output-on-failure
-cmake --build build --target hello-triangle-sdl
+cmake --build build
+tools/platform/run_gpu_tests_private.sh build --output-on-failure
+scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh build   # also proves the run left the checkout clean
 ```
 
 ### Tested Compilers
@@ -535,26 +543,27 @@ cmake --build build --target hello-triangle-sdl
 |----------|----------|---------|--------|
 | Linux x86_64 | GCC 12+ | OPENGLES3, SDL_RENDERER | ✅ |
 | Linux x86_64 | Clang 15+ | OPENGLES3, SDL_RENDERER | ✅ |
-| Windows x86_64 | MSVC 2022 | SDL_RENDERER | planned |
+| Windows x86_64 | MSVC 2022 | DIRECTX11, HEADLESS | covered by the Windows MSVC workflows (`d3d-windows-ci.yml`, `content-pipeline-windows-ci.yml`); not run locally |
 | Windows x86_64 (native) | MinGW-w64 | SDL_RENDERER | planned |
 | Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
-| Linux → Windows (cross) | MinGW-w64 | D3D9 | ✅ verified building + `D3D9` CTest suite (14 tests) under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
-| Linux → Windows (cross) | MinGW-w64 | D3D11 | ✅ verified building + `D3D11` CTest suite (6 tests, 96+ checks) under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/directx11-renderer.md` |
-| Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2 | ✅ verified building + running under Node.js (as `EASYGL`, prior to the `plans/plan_glbackends.md` rename — not yet re-verified under its new `WEBGL2` name/build flags) |
-| Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on a real x86_64 emulator (as `EASYGL`, prior to the `plans/plan_glbackends.md` rename) |
+| Linux → Windows (cross) | MinGW-w64 | DIRECTX9 | ✅ verified building + `DIRECTX9`-labelled CTest suite under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
+| Linux → Windows (cross) | MinGW-w64 | DIRECTX11 | ✅ verified building + `DIRECTX11`-labelled CTest suite under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/directx11-renderer.md` |
+| Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2, WEBGPU | ✅ verified building + running in Chrome; limits in `docs/web-emscripten-graphics-limitations.md` |
+| Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on an x86_64 emulator; limits in `docs/android-graphics-limitations.md` |
 
 ## 10. 📖 Usage Example
 
-Minimal XNA-style game skeleton in CNA:
+Minimal XNA-style game skeleton in CNA (`Game` presents the frame itself, exactly as in XNA):
 
 ```cpp
 #include <memory>
 
-#include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -564,33 +573,31 @@ public:
     MyGame()
         : graphics_(this)
     {
+        getContentProperty().setRootDirectoryProperty("Content");
     }
 
 protected:
     void LoadContent() override
     {
         spriteBatch_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
-        logo_ = std::make_unique<Texture2D>("assets/logo.png", getGraphicsDeviceProperty());
+        logo_ = std::make_unique<Texture2D>(getContentProperty().Load<Texture2D>("logo"));
     }
 
     void Update(GameTime& gameTime) override
     {
-        (void)gameTime;
         // Update game state here.
+        Game::Update(gameTime);
     }
 
     void Draw(const GameTime& gameTime) override
     {
-        (void)gameTime;
-
-        auto& device = getGraphicsDeviceProperty();
-        device.Clear(CornflowerBlue);
+        getGraphicsDeviceProperty().Clear(Color::CornflowerBlue);
 
         spriteBatch_->Begin();
-        spriteBatch_->Draw(*logo_, 100.0f, 80.0f);
+        spriteBatch_->Draw(*logo_, Vector2(100.0f, 80.0f), Color::White);
         spriteBatch_->End();
 
-        device.Present();
+        Game::Draw(gameTime);
     }
 
 private:
@@ -615,16 +622,13 @@ int main()
 - **Renderer-oriented architecture:** Renderer can be swapped at build-time with a single CMake option while keeping high-level game code stable.
 - **Performance-minded C++ implementation:** Native code path enables tighter control over memory, lifetime, and rendering behavior than managed runtime abstractions.
 
-## 12. 🛣 Roadmap
+## 12. 🛣 Direction
 
-- Continue expanding XNA API coverage and behavior parity (incremental, class-by-class).
-- Extend compiled XNA Effect Framework bytecode beyond the completed `FNA3D` implementation. Each
-  additional renderer remains gated off until it passes the shared reflection, state, lifecycle,
-  3D, and SpriteBatch conformance contract; fixed-function/2D-only renderers stay explicitly
-  unsupported.
-- Continue testing the existing `.xnb` content readers against Microsoft reference assets.
-- Close the remaining named architecture-decision gaps (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, SDL_Renderer `Texture3D`/`TextureCube` construction, EasyGL non-`Color` `SurfaceFormat` GPU forwarding, `Texture3D`/`TextureCube` sampler-bind architecture) — see `NEXT.md` §5 and `docs/graphics-renderer-feature-matrix.md`.
-- Strengthen cross-platform execution targets and validation coverage.
+CNA is moving from feature expansion to long-term maintenance by a human C++ developer. The work
+ahead is fixing the defects listed in [`NEXT.md`](NEXT.md) §5, keeping behaviour faithful to XNA
+4.0, and keeping validation deterministic. The renderer set (14 identities), the platform layer and
+the content formats are deliberately kept as they are; new renderers, asset formats or subsystems
+are not planned.
 
 ## 13. 📜 License
 

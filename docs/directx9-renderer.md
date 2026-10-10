@@ -2,9 +2,9 @@
 
 ## What this renderer is for (and isn't)
 
-XNA 4.0 ran on Direct3D 9. Every other CNA graphics renderer (`EasyGL`, `Vulkan`, `D3D11`,
-`SDL_Renderer`, `WebGPU`, `Headless`, `Software`) targets **feature parity** — the same
-XNA-shaped surface, reimplemented against a modern API. `D3D9` targets something narrower and
+XNA 4.0 ran on Direct3D 9. Every other CNA graphics renderer (`docs/renderer-registry.md`)
+targets **feature parity** — the same XNA-shaped surface, reimplemented against another API.
+`DIRECTX9` targets something narrower and
 harder: **pixel-for-pixel indistinguishability from the original XNA 4.0 runtime itself**, not
 just "renders plausibly." It runs **Microsoft's own XNA 4.0 Stock Effects HLSL** (`BasicEffect.fx`
 and 5 siblings), vendored verbatim from the FNA tree and compiled by CNA itself via the real
@@ -30,7 +30,7 @@ Select this renderer with:
 ```bash
 cmake -S . -B cmake-build-d3d9 \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-  -DCNA_GRAPHICS_RENDERER=D3D9 \
+  -DCNA_GRAPHICS_RENDERER=DIRECTX9 \
   -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-d3d9 -j
 ```
@@ -92,9 +92,6 @@ configure time.
 - **NPOT-wrap-on-`Reach`, hardware-instancing's `HiDef`-only gate**: real XNA's own enforcement
   behavior here is undocumented and FNA implements neither — inventing enforcement without a
   reference to verify against would be asserting behavior this project cannot actually check.
-- **`CnaTests` does not build under `CNA_GRAPHICS_RENDERER=D3D9`** — ~10 test files call
-  POSIX-only `::setenv()`, the same wall `D3D11` already hits. A known, pre-existing,
-  cross-renderer gap, not something this renderer introduced.
 - **Real Windows hardware verification** — see the DXVK-authenticity caveat immediately below.
 
 ## The one caveat every result above inherits
@@ -127,11 +124,11 @@ Debian (this repo's actual dev machine)
 ```
 
 ```bash
-scripts/run-wine-dxvk9.sh cmake-build-d3d9/examples/directx9_smoke_test.exe
+scripts/run-wine-dxvk9.sh cmake-build-d3d9/cna_test_directx9_smoke.exe
 ```
 
 `CNA_D3D9_WINEPREFIX` overrides the prefix; the D9-5 gate fails loudly (exit 3) if a run silently
-fell back to WineD3D instead of DXVK. `ctest --test-dir cmake-build-d3d9 -L D3D9` runs every D3D9
+fell back to WineD3D instead of DXVK. `ctest --test-dir cmake-build-d3d9 -L DIRECTX9` runs every D3D9
 test — including `D3D9_XNA_Diff` (below) — through this same wrapper automatically; none of them
 need the separate XNA prefix to run.
 

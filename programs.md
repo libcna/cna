@@ -203,10 +203,9 @@ backend.
 sudo apt-get install -y dxvk-wine64
 ```
 
-Only needed if you're working on the `D3D11` graphics backend plan (`plans/plan_dx.md`, not yet
-implemented as of this writing — Phase DX1 only). Not needed for any other backend or task in this
-repo. Builds on §8 (`mingw-w64`) — this is the piece that lets a cross-compiled `D3D11` `.exe`
-actually be *run and pixel-tested* on this Debian machine instead of only compiled.
+Only needed for the `DIRECTX9`/`DIRECTX11` renderers. Not needed for any other renderer or task in
+this repo. Builds on §8 (`mingw-w64`) — this is the piece that lets a cross-compiled `.exe` actually
+be *run and pixel-tested* on this Debian machine instead of only compiled.
 
 - **`dxvk-wine64`** — DXVK (Vulkan-based Direct3D 8/9/10/11 translation layer for Wine), the 64-bit
   build. Pulls in two more packages automatically via `Recommends`: **`dxvk`** (a small meta-package
@@ -267,7 +266,7 @@ prefixes already exist" note):
 
 - **`~/.wine-cna-d3d9-spike`** (or `~/.wine-cna-d3d11`, the default `CNA_D3D9_WINEPREFIX` falls
   back to if unset) — the normal CNA-side D3D9 dev-loop prefix, DXVK-enabled the same way as §9
-  above. This is what `scripts/run-wine-dxvk9.sh` and every `D3D9`-labeled CTest actually run
+  above. This is what `scripts/run-wine-dxvk9.sh` and every `DIRECTX9`-labeled CTest actually run
   against.
 - **`~/.wine-cna-d3d9-spike`** specifically — also has the **real Microsoft `d3dcompiler_47.dll`**
   (not Wine's builtin, which cannot compile SM2/SM3 shaders at all). Needed for any task that
@@ -283,7 +282,7 @@ export WINEPREFIX=~/.wine-cna-d3d9-spike
 wineboot --init
 dxvk-setup install
 # then install the real d3dcompiler_47.dll and, for ~/.wine-cna-xna40, the XNA 4.0 GAC —
-# see dx9-spike/README.md for exactly what is in each prefix and how they were built.
+# see spikes/dx9-spike/README.md for exactly what is in each prefix and how they were built.
 ```
 
 `CNA_D3D9_WINEPREFIX` (env var) selects which prefix `scripts/run-wine-dxvk9.sh` targets; the
@@ -293,9 +292,8 @@ verification discipline as §9 above.
 ## 10. Out of scope here: Android (NDK)
 
 Android cross-compilation needs the Android NDK (not an apt package — a separate SDK/NDK download
-and toolchain file), and is currently **blocked** by pre-existing build regressions in the sibling
-`sharp-runtime` repo unrelated to system packages (`NEXT.md`/`plans/plan_graphics.md` Task 920). Not
-included in the list above; set up the NDK separately if/when that work resumes.
+and toolchain file), so it is not in the list above. CNA builds and runs on an x86_64 emulator; see
+`docs/devices-android.md` and `docs/android-graphics-limitations.md`.
 
 ---
 

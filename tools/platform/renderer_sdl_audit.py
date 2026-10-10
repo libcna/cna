@@ -132,7 +132,7 @@ def parse_identity_map(repo_root: Path) -> dict[str, str]:
 
     Parsed from cmake/RendererSelection.cmake rather than hardcoded, so a renderer added or
     re-homed later is picked up here without this tool needing an edit. One directory may serve
-    several identities (EasyGL serves five GL profiles).
+    several identities (EasyGL serves three GL profiles).
     """
     selection = (repo_root / "cmake" / "RendererSelection.cmake").read_text(encoding="utf-8")
 

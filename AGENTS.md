@@ -455,7 +455,7 @@ real browser (Emscripten) path.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized its
 renderer implementation.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-148`). Its top-of-file status
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`). Its top-of-file status
   summary + "Current limitations" is the source of truth; keep both current as work proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the

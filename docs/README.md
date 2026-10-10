@@ -1,7 +1,7 @@
 # docs/ index
 
-229 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
-AI agent) can tell what's current without opening every file. It groups files by topic and flags
+This index exists so a reader (human or AI agent) can tell what's current in `docs/` without
+opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
 their currency with normal caution (check the file's own "last updated"/date header before relying
@@ -9,9 +9,10 @@ on it) rather than assuming either way.
 
 ## Start here
 
-- **`../NEXT.md`** (repo root) — the single most reliable, actively-maintained document in the
-  repository. §5 is the current known-bugs-and-limitations list; treat it as the source of truth for
-  "is X still broken" over any dated snapshot below.
+- **[`../NEXT.md`](../NEXT.md)** (repo root) — the current state of the project. Its §5 is the
+  **one** authoritative list of current known bugs and limitations; treat it as the source of truth
+  for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live
+  bug list.
 - **[`diagnostics.md`](diagnostics.md)** — CNA's OFF/STATS/FULL profiler architecture, public API,
   renderer-independent engine metrics, bounded event/trace formats, resource accuracy rules, and
   Inspector provider boundary. Performance methodology and measured cost are in
@@ -33,12 +34,8 @@ on it) rather than assuming either way.
   gate). Start here for "which renderers does CNA have."
 - **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
   colour-depth and DebugDraw extensions; the previous modern engine layer has been retired.
-- **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
-  **41** possible future renderer identities, screened against the live registry and against the
-  "no alias identities" rule, plus the list of things that must *not* become identities. A
-  catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
-  limitations for the experimental fifth renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
+  limitations for the experimental `WEBGPU` renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
@@ -92,8 +89,9 @@ original phase closed — check each file's own status banner/date.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
   `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
-- `shader-effect-vs-fx-bytecode.md`, `fx-bytecode-support-plans/plan.md` — planning docs for the
-  compiled `.fx` bytecode gap (the single biggest real gap in the project — see the migration guide).
+- `shader-effect-vs-fx-bytecode.md` — custom GLSL `ShaderEffect` versus compiled XNA effect
+  bytecode, and which renderers execute the latter; `fx-bytecode-support-plan.md` is the original
+  (historical) plan for that work.
 
 ## Graphics — historical audits and dated snapshots
 
@@ -145,10 +143,13 @@ documentation-accuracy pass; check each file's own date before relying on it.
 
 `devices-android.md`, `devices-api-coverage.md`, `devices-build.md`, `devices-hardware-checklist.md`,
 `devices-native-backend-design.md`, `devices_sensor_hardware_qa_template.md`,
-`devices-thread-safety.md`, `cna-devices-camera-design.md`, `location-future-plans/plan.md` — not in
+`devices-thread-safety.md`, `cna-devices-camera-design.md`, `location-future-plan.md` — not in
 scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's own date.
 
 ## Other
+
+- [`renderer-expansion-candidates.md`](renderer-expansion-candidates.md) — research only, never a
+  roadmap: the renderer set is curated (`renderer-registry.md`) and this catalog authorizes nothing.
 
 - `avatars.md` — the XNA avatar API on original CNA avatars: description encoding, rendering,
   animations and the asset catalog; `avatar-demos.md` lists the avatar demos.
@@ -165,7 +166,7 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
 
 ---
 
-*This index was written 2026-07-11 as part of a documentation-accuracy pass (see `../AUDIT.md` and
-`../NEXT.md` for what changed). It is a map, not a guarantee — a file listed above without a
-"refreshed"/"current" note may still contain stale claims that simply weren't hit by this pass.
-When in doubt, prefer `../NEXT.md` §5 and `graphics-renderer-feature-matrix.md` over any file below.*
+*This index was written 2026-07-11 and last reconciled 2026-10-10. It is a map, not a guarantee — a
+file listed above without a "refreshed"/"current" note may still contain stale claims. When in
+doubt, prefer `../NEXT.md` §5, `renderer-registry.md` and `graphics-renderer-feature-matrix.md`
+over any other file.*

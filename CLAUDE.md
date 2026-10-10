@@ -571,50 +571,27 @@ the capability boundary.
 
 ---
 
-## The CNAEXT Engine Layer (`CNA::Graphics`)
+## The CNA graphics extensions (`CNA_CNAEXT`, `modules/graphics-ext/`)
 
-Everything above the XNA API — HDR pipeline, post-process passes, shadows, sky, image-based
-lighting, materials, instancing/LOD/culling, compute — lives in `modules/graphics-ext/` under the
-`CNA_CNAEXT` CMake option, which is **OFF by default**. With it off the layer does not exist: every
-file in that module is wrapped in `#ifdef CNA_CNAEXT`, and a ctest (`CNAEXT_GuardDiscipline`)
-enforces that. A game that does not opt in renders exactly what it rendered before.
+`CNA_CNAEXT=ON` (**OFF by default**) builds a small standalone extension module:
+`AsciiPostProcessEffect`, `CRTEffect`, `DepthEffect`, `DebugDraw` and the shader-package helpers
+they use. With the option off the module does not exist. The exact public list and its capability
+boundary are in **`docs/cnaext-engine-layer.md`**.
 
-Do not reconstruct this subsystem's state by reading its code:
+The larger engine layer that used to live here (HDR, shadows, sky, image-based lighting, materials,
+instancing/LOD, compute; the `MOD-*` tasks) was removed in the 2026-09 scope reduction.
+`misc/CNAEXT.md`, `plans/plan_modern.md`, `NEXT_modern.md` and `docs/cnaext-perf.md` are its
+historical record, not current state. Do not restore it.
 
-- **`misc/CNAEXT.md`** — the design (what the layer is, what it is not, why).
-- **`plans/plan_modern.md`** — the task backlog implementing it, `MOD-1`–`MOD-1924`, with every deviation
-  and refusal recorded in the row itself rather than in a commit message.
-- **`NEXT_modern.md`** — the running ledger: what is done, the decisions that did not survive
-  contact, the full-suite baseline after each phase, and how to run the tests here
-  (repo-root CWD, a real display, `Xvfb :99`).
-- **`docs/cnaext-engine-layer.md`** — the capability boundary, per subsystem and per renderer.
-- **`docs/cnaext-perf.md`** — every recorded measurement, with the recipe that produced it.
-
-The build directory for this work is `cmake-build-cnaext/` (`-DCNA_CNAEXT=ON`). EasyGL is the
-reference renderer; other renderers pick each subsystem up in `plans/plan_modern.md` Phase 16, and until
-they do they report `false` from the matching capability and take a documented fallback rather than
-failing.
-
-Two house rules that differ from the XNA layer, because there is no XNA name to preserve here
-(`plans/plan_modern.md` `MOD-6`, `MOD-15`):
-
-- **Naming.** Verbs are `lowerCamelCase` (`apply`, `resize`, `begin`); properties are
-  `getX()`/`setX()`, or `isX()` for booleans. Types and enum values stay `UpperCamelCase`. The
-  `EXT` suffix marks a type that names an XNA concept CNA extended (`DirectionalLightEXT`), not
-  everything in the layer.
-- **Shader profile.** Every engine-layer shader is written to **GLSL ES 3.00**, and the compute
-  shaders to **GLSL ES 3.10**. `ShaderEffect` owns the `#version` line, so a pass never writes
-  one; what a pass author must respect is the GLSL ES 3.00 floor itself — see
-  `docs/cnaext-engine-layer.md`.
+House rules for this module, because there is no XNA name to preserve here: verbs are
+`lowerCamelCase`; properties are `getX()`/`setX()`, or `isX()` for booleans; types and enum values
+stay `UpperCamelCase`.
 
 **Asking a renderer what it will actually do.** `GraphicsCapability::CustomEffects` means the
 renderer *accepts* an effect, not that it runs your shader source: SOFTWARE and HEADLESS accept any
 source and keep rendering with their own fixed path, and Vulkan's `ShaderEffect` takes SPIR-V rather
-than the GLSL this layer writes. Four `GraphicsDevice` queries answer the question the capability
-cannot — `ExecutesShaderEffectSourceEXT()`, `SupportsShadowSamplingEXT()`,
-`SupportsImageBasedLightingEXT()`, `SupportsComputeShadersEXT()`. New shader-based code asks the
-capability **and** the matching query; asking only the capability is how a pass reports success
-while drawing nothing.
+than GLSL. The detailed capability profile (`docs/renderer-capability-profiles.md`) answers the
+narrower question; new shader-based code must ask it rather than the coarse capability alone.
 
 ---
 
@@ -623,15 +600,15 @@ while drawing nothing.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 its renderer implementation.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-151`; its top-of-file
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`; its top-of-file
   script-counted status summary is the source of truth). Keep task statuses and
   limitations current as implementation proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
-- The current baseline implements native surface/device setup, clear/present, Texture2D, buffer
-  uploads and WGSL SpriteBatch. Do not describe it as Vulkan-level or full XNA 3D parity until the
-  remaining shader, state, effect, render-target, readback and test tasks are actually complete.
+- It is past a 2D baseline (stock effects, render targets, MSAA, instancing, stencil, compressed
+  textures; see `docs/webgpu-renderer.md`). Do not describe it as Vulkan-level or full XNA 3D
+  parity until the remaining tasks in `plans/plan_webgpu.md` are actually complete.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.
 

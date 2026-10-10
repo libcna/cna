@@ -268,7 +268,7 @@ undeclared raw SDL include; the previous warning here was obsolete.
 |---|---|---|
 | 686 | SDL_Renderer | `TextureAddressMode::Wrap` via `SpriteBatch` — no native support in the `Draw()` path used; 3 options (throw / rewrite to `SDL_RenderGeometry` / hybrid), none picked |
 | 687 | SDL_Renderer | Same underlying constraint as 686, for `Mirror` — resolving 686 resolves this too |
-| 725 | SDL_Renderer | `Texture3D`/`TextureCube` construction succeeds silently with a null renderer; 94 existing tests rely on that silent-success behavior, so fixing needs a blast-radius-aware architecture decision |
+| 725 | SDL_Renderer | **Resolved 2026-10-09 (`219330aeb`, AM4-196):** construction follows the unsupported-3D policy — refused by name under the default `Throw`, stubbed under `WarnAndStub` |
 | 732 | EasyGL | Real `SurfaceFormat` GPU forwarding conflicts with an already-shipped, already-tested `Texture::ValidateFormat` contract (Task 176) plus the public `SetData`/`GetData` API being `Color*`-only |
 
 ## Known pre-existing test-failure baseline, per renderer

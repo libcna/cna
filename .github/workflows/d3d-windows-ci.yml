@@ -7,7 +7,7 @@
 # until then, only ever been built with MinGW-w64 g++ and run through Wine's translation layers.
 # This job builds with native MSVC (a completely different compiler) and runs the renderer's
 # off-screen smoke/common CTest suites directly against real Windows D3D11 runtime DLLs (no Wine
-# involved at all). The D3D legs also recompile every checked-in HLSL shader
+# involved at all). The DIRECTX11 leg also recompiles every checked-in HLSL shader
 # against a real D3DCOMPILER_47.dll.
 #
 # Deliberately workflow_dispatch-only (manual): Windows GitHub-hosted runners are slower and more
