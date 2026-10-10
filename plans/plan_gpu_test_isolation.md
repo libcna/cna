@@ -67,8 +67,13 @@ when no compositor or Xwayland exists.
 every test process on the private display. Pointed at `cmake-build-multi`, whose cache still holds
 `:0`, it refuses with the reconfigure instruction.
 
-Known limit, recorded rather than hidden: the Wine-based XNA interop/differential tests hang inside
-the private runtime directory; run them separately (their harness pins Xvfb `:99`).
+The Wine-based XNA genuine-runtime tests (`XnaPipelineGenuineRuntime*`) used to fail or hang here
+and were run separately under Xvfb `:99`, which their harness pinned. Since 2026-10-10 they run in
+the private runner like any other GPU test: `tests/interop/xna40/run-interop-harness.sh` uses the
+display it was launched with, keeps Wine on X11 (`WAYLAND_DISPLAY` empty, so it can never fall
+back to the owner's `wayland-0`), gives Wine ALSA's null device because the session's PulseAudio
+socket is not in this runtime directory, and disables winedbg's modal crash dialog, which was what
+"hung". `XnaDifferentialBuildTest` also passes here (about 12 minutes).
 
 ## GTI-0003 — the dead WebGPU and SDL_GPU tests
 

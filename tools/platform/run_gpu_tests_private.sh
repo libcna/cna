@@ -25,9 +25,12 @@
 # their own (CNA_TEST_DISPLAY), because ctest would override the private one with it
 # (cmake/TestDisplayPolicy.cmake, GTI-0001).
 #
-# Known limit: the Wine-based XNA interop/differential tests hang inside the private runtime
-# directory; exclude them (-E 'XnaPipelineGenuineRuntime|XnaDifferentialBuildTest') or run them on
-# their own, where their harness pins Xvfb :99.
+# The Wine-based XNA genuine-runtime tests (XnaPipelineGenuineRuntime*) run here like any other:
+# their harness (tests/interop/xna40/run-interop-harness.sh) uses this private Xwayland and gives
+# Wine a null audio device, since the session's PulseAudio socket is not in this runtime directory.
+# They used to pin Xvfb :99 and inherit no usable audio, and "hung" here: a crash with a working
+# display opened winedbg's modal crash dialog, which the harness now disables.
+# XnaDifferentialBuildTest (fxc under Wine, no window) also passes here; it is slow, ~12 minutes.
 #
 # After a ctest run, tools/platform/profile_dead_tests.py names every failed test that died on a
 # graphics-profile refusal before its assertions (GTI-0007) -- a test defect, not a renderer result.
