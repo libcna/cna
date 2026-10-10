@@ -7,12 +7,22 @@
 // changing the host-side state does nothing until Update(), after which keys and modifiers move
 // together. The old SystemKeyboardBackend fake could inject only a live modifier query and could
 // therefore never prove that Keyboard::GetState() and GetModStateEXT() used the same clock.
+//
+// The platform below also withholds the real window-focus changes. The canned keys are typed into
+// the game's own window by construction, but the real display's focus belongs to whichever window
+// appeared on it last -- under a parallel ctest run on the shared private display, another test
+// process's. Game gates its keyboard-driven emulations (GamePad, accelerometer, orientation) on
+// IsActive, so letting that focus through made a canned keypress count or not depending on what
+// another process did, and only under load.
 
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/KeyCode.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include <initializer_list>
+#include <variant>
+#include <vector>
 
 namespace CNA::Platform::Testing {
 
@@ -66,10 +76,27 @@ namespace CNA::Platform::Testing {
         int updateCount_ = 0;
     };
 
-    /** @brief A platform that is real in every respect except its keyboard snapshot. */
+    /**
+     * @brief A platform that is real in every respect except its keyboard snapshot and the
+     *        window focus that decides whether a game acts on it.
+     */
     class CannedKeyboardPlatform final : public PlatformTestDecorator
     {
     public:
+        /**
+         * @brief Polls the real platform's events, minus its window focus changes.
+         * @param destination Receives the batch.
+         */
+        void PollEvents(std::vector<PlatformEvent>& destination) override
+        {
+            PlatformTestDecorator::PollEvents(destination);
+            std::erase_if(destination, [](const PlatformEvent& event) {
+                const auto* window = std::get_if<WindowEvent>(&event);
+                return window != nullptr && (window->kind == WindowEventKind::FocusGained ||
+                                             window->kind == WindowEventKind::FocusLost);
+            });
+        }
+
         /** @brief Gets the scripted keyboard service. @return The service, or null when hidden. */
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override
         {
