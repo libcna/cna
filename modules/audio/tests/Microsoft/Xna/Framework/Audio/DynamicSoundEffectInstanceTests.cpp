@@ -567,7 +567,15 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
 TEST(DynamicSoundEffectInstanceTest, BufferNeededDoesNotFireWhenStreamHasEnoughData)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
+    // One second per buffer, not the 256 frames (~6 ms) the other tests use: the audio device
+    // thread pulls a whole device period from the stream as soon as Play() starts it, and three
+    // 256-frame buffers fit inside one period. Whenever that first pull ran before the Update()
+    // below -- under parallel load, routinely -- all three were genuinely consumed and
+    // BufferNeeded fired three times, which is correct behaviour for a stream that has run dry
+    // and not what this test is about. A buffer that takes a second to play cannot be consumed
+    // in the moment between Play() and Update(), and a chunk only stops being pending once it is
+    // consumed whole (AUDIO-BUFFER-001), so the stream really does have enough data here.
+    std::vector<unsigned char> pcm(4 * 44100, 0); // 44100 stereo S16 frames of silence
     d.SubmitBuffer(pcm);
     d.SubmitBuffer(pcm);
     if (!tryStartHeadless(d)) // submits a 3rd buffer, then Play()s
