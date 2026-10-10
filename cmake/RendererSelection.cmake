@@ -189,6 +189,14 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
         endif()
         add_subdirectory("${CNA_EASYGL_ROOT}" easy-gl)
         set(_cna_easygl_subdir_added TRUE)
+        # cmake/DependencyVersions.cmake: easy-gl and the meta-gl it adds from its own
+        # ../meta-gl must be the releases this CNA release requires.
+        cna_require_sibling_version(easy-gl "${CNA_EASYGL_ROOT}"
+            "${easy-gl_BINARY_DIR}/include/easygl/Version.hpp"
+            EASYGL_VERSION_STRING "${CNA_REQUIRED_EASYGL_VERSION}")
+        cna_require_sibling_version(meta-gl "${meta-gl_SOURCE_DIR}"
+            "${meta-gl_BINARY_DIR}/include/metagl/Version.hpp"
+            METAGL_VERSION_STRING "${CNA_REQUIRED_METAGL_VERSION}")
     endif()
 endif()
 

@@ -290,6 +290,11 @@ if(NOT EXISTS "${CNA_SHARP_RUNTIME_ROOT}/CMakeLists.txt")
         "git clone https://github.com/openeggbert/sharp-runtime.git")
 endif()
 add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
+# The sibling releases CNA requires, and the check that enforces them (docs/releasing.md).
+include(cmake/DependencyVersions.cmake)
+cna_require_sibling_version(sharp-runtime "${CNA_SHARP_RUNTIME_ROOT}"
+    "${SHARP_RUNTIME_BINARY_DIR}/generated/include/SharpRuntime/Version.hpp"
+    SHARP_RUNTIME_VERSION_STRING "${CNA_REQUIRED_SHARP_RUNTIME_VERSION}")
 
 # The pinned sharp-runtime's invariant date/time parser intentionally uses a second `run` local
 # inside its zone-token arm. MSVC reports that harmless inner scope as C4456 at /W4, and the
