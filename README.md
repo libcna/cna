@@ -21,10 +21,15 @@ Current state, known bugs and the maintained build/test commands: [`NEXT.md`](NE
 
 ### Version
 
-Current release: **0.1.0-alpha.1** (pre-release — the public API may still change; see
+Current release: **0.1.0** (pre-1.0 — a minor release may still change the public API; see
 [`CHANGELOG.md`](CHANGELOG.md) for what the release contains and
 [`docs/releasing.md`](docs/releasing.md) for how versions are managed). Compiled code reads its
 own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
+
+CNA 0.1.0 requires the sibling checkouts **sharp-runtime 0.1.0**, **easy-gl 0.1.1** and
+**meta-gl 0.4.1** (or a later patch release of each). They are not submodules, so check out
+those tags next to this repository; configuration stops with instructions when a checkout
+declares an incompatible version (`cmake/DependencyVersions.cmake`).
 
 > **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
 > current vs. historical. **Current state, known bugs and limitations:** [`NEXT.md`](NEXT.md) (§5 is

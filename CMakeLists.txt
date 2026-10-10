@@ -9,7 +9,7 @@ project(CNA VERSION 0.1.0 LANGUAGES CXX)
 # copy would keep an already-configured build directory reporting the previous release after a
 # bump. CNA_VERSION_STRING is the single spelling the rest of the build reads -- the generated
 # CNA/Version.hpp, the Apple bundle version, the configure banner. Do not re-derive it elsewhere.
-set(CNA_VERSION_PRERELEASE "alpha.1")
+set(CNA_VERSION_PRERELEASE "")
 if(CNA_VERSION_PRERELEASE)
     set(CNA_VERSION_STRING "${PROJECT_VERSION}-${CNA_VERSION_PRERELEASE}")
 else()

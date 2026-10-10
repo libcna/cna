@@ -9,6 +9,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-10
+
+The final 0.1.0 release, cut from `next`. The entries below describe what changed since
+`0.1.0-alpha.1`. For the first time the sibling checkouts CNA builds against are **required**
+rather than only recorded: see *Dependencies*.
+
+### Dependencies
+
+CNA consumes three separately versioned sibling checkouts with `add_subdirectory`, so checking out
+this tag does not select them. This release requires, and was built and tested against:
+
+| Sibling | Required | Verified against |
+|---|---|---|
+| sharp-runtime (`../sharp-runtime`) | **0.1.0** | [`v0.1.0`](https://github.com/libcna/sharp-runtime/releases/tag/v0.1.0), `c20373bae5be1f02d1fe2fa33c4cbba8ad05e4a0` |
+| easy-gl (`../easy-gl`) | **0.1.1** | [`v0.1.1`](https://github.com/libcna/easy-gl/releases/tag/v0.1.1), `f4d6afaf16cdc7e7e73130950bc45e6d865b41bd` |
+| meta-gl (easy-gl's `../meta-gl`) | **0.4.1** | [`v0.4.1`](https://github.com/libcna/meta-gl/releases/tag/v0.4.1), `dd3b30055d55fdc42240de7af248259338256992` |
+
+`cmake/DependencyVersions.cmake` now enforces this at configure time. Each sibling generates a
+`Version.hpp` from its own single-source version, and CNA reads it right after
+`add_subdirectory`. A checkout that declares the required version or a later patch release of the
+same minor line is accepted. Anything else — another minor line, a pre-release of the required
+version, or a checkout too old to declare a version — stops configuration with the `git checkout`
+that fixes it. `-DCNA_CHECK_DEPENDENCY_VERSIONS=OFF` downgrades the error to a warning. The check
+compares versions, not commits; the commits above record exactly what was verified.
+
+Every other dependency is still pinned by this repository through submodule gitlinks and the
+`GIT_TAG` values in `cmake/ThirdParty*.cmake` and `cmake/RendererSelection.cmake`.
+
 ### Added
 
 - GamerServices and Net against CNA's own account service (`cna-gamer-services-server`; not Xbox
@@ -153,6 +181,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   identical to the values recorded by hand, with the ABI unchanged at `0.29.0` — and
   `docs/c-api/RELEASE_GATE.md` regenerates normally instead of publishing a traceback.
 
+### Known limitations
+
+- Pre-release quality remains: a minor release may change the public API, renderer coverage is
+  uneven by design (`docs/<renderer>-renderer.md`), the known per-renderer bugs are in `NEXT.md`
+  §5, and `Content` has no general `.xnb` reader.
+- Three tests fail in the release gate's tree and failed in the same tree before this release
+  (its 2026-10-07 run): `CnaInputTests`
+  (`KeyboardOrientationTest.LateEnableHonorsDefaultLandscapeAndPreparingParameters`),
+  `EasyGL_PresentationMsaaContract`, and `CApi_InstalledConsumer`, which cannot link an installed
+  consumer against an external `wgpu_native` (`NEXT.md` §5, item 6). They are carried, not fixed,
+  by this release.
+- The three `XnaPipelineGenuineRuntime*` tests run the genuine XNA 4.0 runtime under Wine and
+  need an X11 display Wine can drive; inside the private Weston/Xwayland runner of
+  `tools/platform/run_gpu_tests_private.sh` Wine loads no window driver and they fail. They pass
+  under Xvfb.
+
+### Verification
+
+- `cmake-build-multi` — `OPENGLES3` as the default renderer plus `OPENGL33`, `VULKAN`, `WEBGPU`,
+  `SDL_GPU`, `FNA3D`, `SDL_RENDERER`, `SOFTWARE`, `HEADLESS` and `STUB` in one binary, Debug,
+  tests on — configures with `CNA: version 0.1.0` and one accepted-version line for each of
+  sharp-runtime 0.1.0, easy-gl 0.1.1 and meta-gl 0.4.1, and builds its 2,771 steps with 0 errors.
+  The log carries 9 warnings, all `ignoring return value` in two test sources
+  (`XnaMaterialContentTests.cpp`, `GamerServicesGamerTests.cpp`), present before this release.
+- The complete suite on the private display: **11,509 tests, 11,310 passed, 192 skipped,
+  7 failed** in 24.5 minutes at `-j8`. The 192 skips are the tests' own renderer and profile
+  conditions (`Fna3dCompiledEffect*`, `SdlGpuIndexedDrawRangeTest`, `WebGpuWireFrameContract`, …).
+  Of the 7 failures, 3 are the pre-existing ones above, 3 are the Wine display limitation above
+  (all three pass under Xvfb, 22–24 s each), and
+  `KeyboardGamepadPumpTest.GamePublishesBeforeUpdateAndClearsWhenKeyboardServiceDisappears`
+  passed 3 of 3 re-runs in isolation — it is timing-sensitive under the parallel run. No failure
+  is new to this release.
+- The dependency check was exercised on purpose: a checkout declaring a later patch release is
+  accepted; a pre-release of the required version, another minor line, an older patch release and
+  a checkout with no version are refused with the `git checkout` that fixes it, and
+  `-DCNA_CHECK_DEPENDENCY_VERSIONS=OFF` turns the refusal into a warning.
+- Verified on Debian GNU/Linux 13 with GCC 14.2.0, CMake 3.31.6, Ninja and Mesa 25.0.7, with the
+  siblings checked out clean at their tags: sharp-runtime `v0.1.0`, easy-gl `v0.1.1`,
+  meta-gl `v0.4.1`.
+
 ## [0.1.0-alpha.1] — 2026-08-20
 
 First tagged release. CNA has been developed continuously since 2025-02-22; this tag names a
@@ -213,5 +281,6 @@ mechanism (a configure-time check against a recorded pin, or a submodule) is pla
 - Per-renderer bugs and gaps that are known and tracked are listed in `NEXT.md` §5.
 - `Content` has no general `.xnb` reader by design, and 14 of the `Media` types are shells.
 
-[Unreleased]: https://github.com/libcna/cna/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/libcna/cna/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/libcna/cna/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/libcna/cna/releases/tag/v0.1.0-alpha.1

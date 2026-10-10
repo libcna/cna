@@ -1,6 +1,6 @@
 # Releasing CNA
 
-*Current as of 0.1.0-alpha.1 (2026-08-20).*
+*Current as of 0.1.0 (2026-10-10).*
 
 CNA follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). A release is a
 git tag plus a `CHANGELOG.md` entry — there is no separate release branch, and nothing is
@@ -13,11 +13,11 @@ The version is decided in exactly **one** place:
 ```cmake
 # CMakeLists.txt (repository root)
 project(CNA VERSION 0.1.0 LANGUAGES CXX)
-set(CNA_VERSION_PRERELEASE "alpha.1")   # empty on a final release
+set(CNA_VERSION_PRERELEASE "")   # e.g. "beta.1"; empty on a final release
 ```
 
 `project(VERSION …)` accepts numeric components only, so the pre-release identifier sits beside
-it and the two are joined into `CNA_VERSION_STRING` (`0.1.0-alpha.1`). `CNA_VERSION_PRERELEASE`
+it and the two are joined into `CNA_VERSION_STRING` (`0.1.0`, or `0.2.0-beta.1`). `CNA_VERSION_PRERELEASE`
 is deliberately a normal variable and not a cache entry: a cached copy would keep an existing
 build directory reporting the previous release after a bump.
 
@@ -60,34 +60,45 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
 2. **Write the changelog entry.** Move what is under `## [Unreleased]` into a new
    `## [x.y.z] — YYYY-MM-DD` section in `CHANGELOG.md` and add the two link definitions at the
    bottom of the file.
-3. **Record the sharp-runtime revision** in that entry. Everything else is pinned by this
-   repository — submodule gitlinks, and the `GIT_TAG` values in `cmake/ThirdParty*.cmake` and
-   `cmake/RendererSelection.cmake` — but sharp-runtime is a sibling checkout consumed with
-   `add_subdirectory`, so the tag alone does not select it:
+3. **Require the sibling releases.** Everything else is pinned by this repository — submodule
+   gitlinks, and the `GIT_TAG` values in `cmake/ThirdParty*.cmake` and
+   `cmake/RendererSelection.cmake` — but sharp-runtime, easy-gl and meta-gl are sibling checkouts
+   consumed with `add_subdirectory`, so the CNA tag alone does not select them. Release them
+   first, check their tags out next to this repository, and set
+   `CNA_REQUIRED_SHARP_RUNTIME_VERSION`, `CNA_REQUIRED_EASYGL_VERSION` and
+   `CNA_REQUIRED_METAGL_VERSION` in `cmake/DependencyVersions.cmake`. Configuration then refuses
+   any checkout that declares neither that version nor a later patch release of the same minor
+   line. Record the exact commits in the entry's *Dependencies* table:
 
    ```bash
-   git -C ../sharp-runtime log -1 --format='%H (%D, %ad)' --date=short
+   for r in sharp-runtime easy-gl meta-gl; do
+       git -C ../$r describe --tags --exact-match HEAD   # must name the release tag
+       git -C ../$r log -1 --format='%H (%D, %ad)' --date=short
+       git -C ../$r status --short                       # must be clean
+   done
    ```
-
-   This is a stopgap that documents the revision without enforcing it; a configure-time check
-   against a recorded pin, or a submodule, is the intended replacement.
 4. **Build and test** in an existing build directory (see the build rules in `CLAUDE.md` —
    reuse a `cmake-build-<variant>/` tree):
 
    ```bash
-   cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_RENDERER=OPENGLES3
-   cmake --build cmake-build-debug --target CnaTests -j3
-   ctest --test-dir cmake-build-debug --output-on-failure
+   cmake -S . -B cmake-build-multi
+   cmake --build cmake-build-multi --parallel
+   tools/platform/run_gpu_tests_private.sh cmake-build-multi -j8 --output-on-failure
    ```
 
-   The configure banner prints `CNA: version <x.y.z>` — check it matches. Run `CnaTests` from
-   the repository root: its fixtures are resolved relative to the working directory.
+   `cmake-build-multi` is the tree that builds the most renderers at once (OPENGLES3 as the
+   default, plus OPENGL33, VULKAN, WEBGPU, SDL_GPU, FNA3D, SDL_RENDERER, SOFTWARE, HEADLESS and
+   STUB), and the only one that exercises all three siblings, because easy-gl and meta-gl are
+   added only for the GL renderers. Its GPU and window tests must run on the private display,
+   never on the owner's desktop (`CLAUDE.md` § *Running GPU/window tests*). The configure output
+   prints `CNA: version <x.y.z>` and one `CNA: <sibling> <version> at <path>` line per sibling —
+   check all four.
 5. **Commit** the version-bearing files by explicit name (`CMakeLists.txt`, `Doxyfile`,
    `CHANGELOG.md`), never `git add -A`.
 6. **Tag** with a `v` prefix and an annotated tag:
 
    ```bash
-   git tag -a v0.1.0-alpha.1 -m "CNA 0.1.0-alpha.1"
+   git tag -a v0.1.0 -m "CNA 0.1.0"
    ```
 
    The tag string carries the `v`; `CNA_VERSION_STRING` never does.
@@ -95,7 +106,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
 
    ```bash
    git push origin develop
-   git push origin v0.1.0-alpha.1
+   git push origin v0.1.0
    ```
 8. **Open the next cycle** by adding an empty `## [Unreleased]` section back to `CHANGELOG.md`
    if step 2 consumed it.
