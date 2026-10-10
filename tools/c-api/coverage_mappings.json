@@ -7421,7 +7421,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 14 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
-      "tests": "`CoreExtSmoke.c` classifies all 46 identities, pins three fixed answers a consumer can rely on, and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` classifies all 14 public renderer identities, pins three fixed answers a consumer can rely on, and asserts that the unknown identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7484,7 +7484,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 14 public renderer identities and refuses anything else",
-      "tests": "`CoreExtSmoke.c` reads the maturity of all 46 identities and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` reads the maturity of all 14 public renderer identities and asserts that an out-of-range identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
