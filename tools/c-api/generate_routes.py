@@ -32,7 +32,9 @@ Spec format. Each top-level table is one group of routes sharing how they reach 
 A lookup receives the route's first parameter -- usually a handle, sometimes a struct or a string
 it validates -- unconverted; ``arguments = 2`` in the group passes it the first two (an index, say). A group without ``lookup`` holds routes that take no handle. A group
 whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. A group whose lookup
-reads the null handle as "none" says ``accepts_null_handle = true``. Each route is ``name = { <kind> = "<C++>" }``:
+reads the null handle as "none" says ``accepts_null_handle = true``. A group whose routes exist only
+when a macro is defined says ``feature = "CNA_DEVICES"`` and ``unavailable = "<C++ result>"``, what
+they return without it; a handle output is cleared there too. Each route is ``name = { <kind> = "<C++>" }``:
 
 ``value``  (args..., T* out)          ``*out`` = the expression; no handle.
 ``get``    (handle, args..., T* out)   ``*out`` = the expression, after the lookup.
@@ -358,8 +360,22 @@ class Route:
                       f"{capacity}, {out_bytes});"]
         return lines + ["    });"]
 
+    def unavailable_body(self) -> list[str]:
+        """The stub a build without the group's feature compiles instead."""
+        lines = [f"    (void){self._c_name(p)};" for p in self.params]
+        for output in self.outputs:
+            if output.pointer and self.types.kind_of(output.type) == "handle":
+                lines += [f"    if ({output.name} != nullptr) {{",
+                          f"        *{output.name} = CNA_INVALID_HANDLE;", "    }"]
+        return lines + [f"    return {self.group['unavailable']};"]
+
     def render(self) -> str:
-        return "\n".join(self.signature() + ["{"] + self.body() + ["}"]) + "\n"
+        real = self.signature() + ["{"] + self.body() + ["}"]
+        if "feature" not in self.group:
+            return "\n".join(real) + "\n"
+        stub = self.signature() + ["{"] + self.unavailable_body() + ["}"]
+        return "\n".join([f"#if defined({self.group['feature']})"] + real + ["#else"] + stub
+                          + ["#endif"]) + "\n"
 
 
 # ---- one spec file --------------------------------------------------------------------------
@@ -374,12 +390,15 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
     for group_name, group in data.items():
         if not isinstance(group, dict) or "routes" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] has no [{group_name}.routes] table")
-        unknown = set(group) - {"lookup", "object", "arguments", "accepts_null_handle", "routes"}
+        unknown = set(group) - {"lookup", "object", "arguments", "accepts_null_handle", "feature",
+                                "unavailable", "routes"}
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
         if ("object" in group or "arguments" in group) and "lookup" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] names an object or arguments but no lookup")
+        if ("feature" in group) != ("unavailable" in group):
+            raise SpecError(f"{spec.name}: [{group_name}] needs both feature and unavailable")
         if "arguments" in group and (not isinstance(group["arguments"], int) or group["arguments"] < 1):
             raise SpecError(f"{spec.name}: [{group_name}] arguments must be a positive number")
         for name, entry in group["routes"].items():
@@ -445,8 +464,9 @@ def _arguments(route: Route, handle: str | None = None, **overrides: str) -> str
     return ", ".join(out)
 
 
-def _expect(call: str, wanted: str, route: str, contract: str) -> str:
-    return f'    failures += expect({call}, {wanted}, "{route}", {contract});'
+def _expect(call: str, wanted: str, route: str, contract: str, gated: bool = False) -> str:
+    check = "expect_unless_compiled_out" if gated else "expect"
+    return f'    failures += {check}({call}, {wanted}, "{route}", {contract});'
 
 
 def _takes_handle(route: Route) -> bool:
@@ -488,6 +508,13 @@ def render_contract_test(routes: list[Route]) -> str:
         "    return 1;",
         "}",
         "",
+        "/* A route whose feature this build compiled out answers NOT_SUPPORTED to everything. */",
+        "static int expect_unless_compiled_out(const CNA_Result result, const CNA_Result wanted,",
+        "                                      const char* const route, const char* const contract)",
+        "{",
+        "    return result == CNA_RESULT_NOT_SUPPORTED ? 0 : expect(result, wanted, route, contract);",
+        "}",
+        "",
         "/* A refused route leaves a handle output invalid rather than as the caller left it. */",
         "static int expect_cleared(const CNA_Handle output, const char* const route)",
         "{",
@@ -507,11 +534,12 @@ def render_contract_test(routes: list[Route]) -> str:
             for output in r.outputs:
                 lines.append(_expect(f"{r.name}({_arguments(r, **{output.name: 'NULL'})})",
                                      "CNA_RESULT_INVALID_ARGUMENT", r.name,
-                                     f'"a null {output.name}"'))
+                                     f'"a null {output.name}"', "feature" in r.group))
         elif r.kind in ("value", "get", "size"):
             output = r.outputs[0].name
             lines.append(_expect(f"{r.name}({_arguments(r, **{output: 'NULL'})})",
-                                 "CNA_RESULT_INVALID_ARGUMENT", r.name, f'"a null {output}"'))
+                                 "CNA_RESULT_INVALID_ARGUMENT", r.name, f'"a null {output}"',
+                                 "feature" in r.group))
         elif r.kind == "copy" and not r.has_lookup:
             destination, capacity, out_bytes = (p.name for p in r.outputs)
             lines.append(_expect(f"{r.name}({_arguments(r, **{destination: 'NULL', capacity: '1U'})})",
@@ -532,7 +560,7 @@ def render_contract_test(routes: list[Route]) -> str:
                        if r.kind == "result" and r.types.kind_of(o.type) == "handle"]
             lines += [f"    {_standin('o', o.type)} = UINT64_C(0xDEAD);" for o in cleared]
             check = [_expect(f"{r.name}({_arguments(r, handle)})",
-                             "CNA_RESULT_INVALID_HANDLE", r.name, "what")]
+                             "CNA_RESULT_INVALID_HANDLE", r.name, "what", "feature" in r.group)]
             check += [f'    failures += expect_cleared({_standin("o", o.type)}, "{r.name}");'
                       for o in cleared]
             if r.group.get("accepts_null_handle"):
@@ -594,6 +622,12 @@ def render_contract_test(routes: list[Route]) -> str:
               "",
               f'    printf("%d failed checks across {len(routes)} generated routes\\n", failures);',
               "    return failures == 0 ? 0 : 1;", "}", ""]
+    text = "\n".join(lines)
+    for helper in ("expect_unless_compiled_out", "expect_cleared"):
+        if text.count(f"{helper}(") == 1:  # only its definition: leave it out
+            text = re.sub(r"/\*[^\n]*\*/\nstatic int " + helper + r"\(.*?\n\}\n\n", "", text,
+                          flags=re.S)
+    lines = text.split("\n")
     spelled = {_standin("v", p.type)[2:]: p.type for route in routes for p in route.params}
     used = sorted(set(re.findall(r"\b([vo])_(\w+)", "\n".join(lines))))
     standins = [f"static {spelled[name]} {kind}_{name};" for kind, name in used if name in spelled]

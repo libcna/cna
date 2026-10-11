@@ -865,89 +865,6 @@ CNA_Result cna_camera_device_info_init(CNA_CameraDeviceInfo* const outInfo)
 
 #ifdef CNA_DEVICES
 
-CNA_Result cna_power_get_state_ext(const CNA_Handle gameHandle, CNA_PowerState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The power state output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_PowerState>(PowerInfo::getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_power_get_battery_percent_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outPercent)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPercent == nullptr) {
-            return InvalidArgument("The battery percentage output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPercent = static_cast<int32_t>(PowerInfo::getBatteryPercentProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_power_get_seconds_remaining_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outSeconds)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSeconds == nullptr) {
-            return InvalidArgument("The battery seconds output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSeconds = static_cast<int32_t>(PowerInfo::getSecondsRemainingProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The core count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(SystemInfo::getLogicalCpuCoreCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_info_get_system_ram_megabytes_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outMegabytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMegabytes == nullptr) {
-            return InvalidArgument("The system memory output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outMegabytes = static_cast<int32_t>(SystemInfo::getSystemRamMegabytesProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_locale_get_preferred_count_ext(
     const CNA_Handle gameHandle,
     uint64_t* const outCount)
@@ -965,96 +882,6 @@ CNA_Result cna_locale_get_preferred_count_ext(
             return result;
         }
         *outCount = static_cast<uint64_t>(locales.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_locale_get_language_size_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The locale language size output is null.");
-        }
-        LocaleInfo locale;
-        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = locale.Language.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_locale_copy_language_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LocaleInfo locale;
-        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(locale.Language, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_locale_get_country_size_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The locale country size output is null.");
-        }
-        LocaleInfo locale;
-        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = locale.Country.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_locale_copy_country_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LocaleInfo locale;
-        if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(locale.Country, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_display_info_get_content_scale_ext(
-    const CNA_Handle gameHandle,
-    float* const outScale)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outScale == nullptr) {
-            return InvalidArgument("The content scale output is null.");
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outScale = DisplayInfo::getContentScaleProperty(*window);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1129,23 +956,6 @@ CNA_Result cna_url_launcher_open_ext(
             return InvalidArgument("The URL is empty.");
         }
         *outOpened = ToCBool(UrlLauncher::Open(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_message_box_get_is_supported_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The message box support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(MessageBox::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1300,23 +1110,6 @@ CNA_Result cna_message_box_get_test_log_ext(
             log.last_button_count = state->lastButtonCount;
         }
         *outLog = log;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_file_dialog_get_is_supported_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The file dialog support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(FileDialog::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1485,23 +1278,6 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
     });
 }
 
-CNA_Result cna_system_tray_get_is_supported_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The system tray support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(SystemTray::getIsSupportedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_system_tray_create(
     const CNA_Handle gameHandle,
     const CNA_StringView tooltip,
@@ -1658,84 +1434,6 @@ CNA_Result cna_system_tray_set_entry_label(
     });
 }
 
-CNA_Result cna_system_tray_set_entry_checked(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_Bool checked)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(checked, "checked");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetEntryChecked(static_cast<std::size_t>(index), checked != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_tray_get_entry_checked(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    CNA_Bool* const outChecked)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outChecked == nullptr) {
-            return InvalidArgument("The tray entry check output is null.");
-        }
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outChecked = ToCBool(resource->value->GetEntryChecked(static_cast<std::size_t>(index)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_tray_set_entry_enabled(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetEntryEnabled(static_cast<std::size_t>(index), enabled != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_tray_get_entry_enabled(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The tray entry enabled output is null.");
-        }
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEnabled = ToCBool(resource->value->GetEntryEnabled(static_cast<std::size_t>(index)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_system_tray_click_entry_for_tests_ext(
     const CNA_SystemTrayHandle tray,
     const uint64_t index)
@@ -1767,50 +1465,6 @@ CNA_Result cna_system_tray_click_entry_for_tests_ext(
     });
 }
 
-CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(tray);
-    });
-}
-
-CNA_Result cna_camera_get_is_supported_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The camera support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(Camera::getIsSupportedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_get_count_ext(const CNA_Handle gameHandle, uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The camera count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(Camera::getAvailableCamerasProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_camera_get_info_at_ext(
     const CNA_Handle gameHandle,
     const uint64_t index,
@@ -1831,42 +1485,6 @@ CNA_Result cna_camera_get_info_at_ext(
         mapped.position = static_cast<CNA_CameraPosition>(info.Position);
         *outInfo = mapped;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_get_name_size_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The camera name size output is null.");
-        }
-        CameraDeviceInfo info;
-        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = info.Name.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_copy_name_at_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CameraDeviceInfo info;
-        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(info.Name, destination, capacity, outBytes);
     });
 }
 
@@ -1910,60 +1528,6 @@ CNA_Result cna_camera_create_with_test_backend_ext(
         return CreateHandle(ObjectKind::Camera,
             std::move(resource),
             outCamera);
-    });
-}
-
-CNA_Result cna_camera_get_state_ext(
-    const CNA_CameraHandle camera,
-    CNA_CameraState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The camera state output is null.");
-        }
-        std::shared_ptr<CameraResource> resource;
-        if (const CNA_Result result = BorrowCamera(camera, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_CameraState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_get_frame_width_ext(
-    const CNA_CameraHandle camera,
-    int32_t* const outWidth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr) {
-            return InvalidArgument("The camera frame width output is null.");
-        }
-        std::shared_ptr<CameraResource> resource;
-        if (const CNA_Result result = BorrowCamera(camera, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWidth = static_cast<int32_t>(resource->value->getFrameWidthProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_get_frame_height_ext(
-    const CNA_CameraHandle camera,
-    int32_t* const outHeight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeight == nullptr) {
-            return InvalidArgument("The camera frame height output is null.");
-        }
-        std::shared_ptr<CameraResource> resource;
-        if (const CNA_Result result = BorrowCamera(camera, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHeight = static_cast<int32_t>(resource->value->getFrameHeightProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2106,108 +1670,10 @@ CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
 
 #else // CNA_DEVICES
 
-CNA_Result cna_power_get_state_ext(const CNA_Handle game, CNA_PowerState* const outState)
-{
-    (void)game;
-    (void)outState;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_power_get_battery_percent_ext(const CNA_Handle game, int32_t* const outPercent)
-{
-    (void)game;
-    (void)outPercent;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_power_get_seconds_remaining_ext(const CNA_Handle game, int32_t* const outSeconds)
-{
-    (void)game;
-    (void)outSeconds;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
-    const CNA_Handle game,
-    int32_t* const outCount)
-{
-    (void)game;
-    (void)outCount;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_info_get_system_ram_megabytes_ext(
-    const CNA_Handle game,
-    int32_t* const outMegabytes)
-{
-    (void)game;
-    (void)outMegabytes;
-    return ExtensionUnavailable();
-}
-
 CNA_Result cna_locale_get_preferred_count_ext(const CNA_Handle game, uint64_t* const outCount)
 {
     (void)game;
     (void)outCount;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_locale_get_language_size_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)outBytes;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_locale_copy_language_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)destination;
-    (void)capacity;
-    (void)outBytes;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_locale_get_country_size_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)outBytes;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_locale_copy_country_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)destination;
-    (void)capacity;
-    (void)outBytes;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_display_info_get_content_scale_ext(const CNA_Handle game, float* const outScale)
-{
-    (void)game;
-    (void)outScale;
     return ExtensionUnavailable();
 }
 
@@ -2237,15 +1703,6 @@ CNA_Result cna_url_launcher_open_ext(
     (void)game;
     (void)url;
     (void)outOpened;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_message_box_get_is_supported_ext(
-    const CNA_Handle game,
-    CNA_Bool* const outSupported)
-{
-    (void)game;
-    (void)outSupported;
     return ExtensionUnavailable();
 }
 
@@ -2298,15 +1755,6 @@ CNA_Result cna_message_box_get_test_log_ext(
 {
     (void)game;
     (void)outLog;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_file_dialog_get_is_supported_ext(
-    const CNA_Handle game,
-    CNA_Bool* const outSupported)
-{
-    (void)game;
-    (void)outSupported;
     return ExtensionUnavailable();
 }
 
@@ -2371,15 +1819,6 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
     (void)installed;
     (void)results;
     (void)resultCount;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_get_is_supported_ext(
-    const CNA_Handle game,
-    CNA_Bool* const outSupported)
-{
-    (void)game;
-    (void)outSupported;
     return ExtensionUnavailable();
 }
 
@@ -2450,76 +1889,12 @@ CNA_Result cna_system_tray_set_entry_label(
     return ExtensionUnavailable();
 }
 
-CNA_Result cna_system_tray_set_entry_checked(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_Bool checked)
-{
-    (void)tray;
-    (void)index;
-    (void)checked;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_get_entry_checked(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    CNA_Bool* const outChecked)
-{
-    (void)tray;
-    (void)index;
-    (void)outChecked;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_set_entry_enabled(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_Bool enabled)
-{
-    (void)tray;
-    (void)index;
-    (void)enabled;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_get_entry_enabled(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    CNA_Bool* const outEnabled)
-{
-    (void)tray;
-    (void)index;
-    (void)outEnabled;
-    return ExtensionUnavailable();
-}
-
 CNA_Result cna_system_tray_click_entry_for_tests_ext(
     const CNA_SystemTrayHandle tray,
     const uint64_t index)
 {
     (void)tray;
     (void)index;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
-{
-    (void)tray;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_is_supported_ext(const CNA_Handle game, CNA_Bool* const outSupported)
-{
-    (void)game;
-    (void)outSupported;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_count_ext(const CNA_Handle game, uint64_t* const outCount)
-{
-    (void)game;
-    (void)outCount;
     return ExtensionUnavailable();
 }
 
@@ -2531,32 +1906,6 @@ CNA_Result cna_camera_get_info_at_ext(
     (void)game;
     (void)index;
     (void)outInfo;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_name_size_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)outBytes;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_copy_name_at_ext(
-    const CNA_Handle game,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    (void)game;
-    (void)index;
-    (void)destination;
-    (void)capacity;
-    (void)outBytes;
     return ExtensionUnavailable();
 }
 
@@ -2577,27 +1926,6 @@ CNA_Result cna_camera_create_with_test_backend_ext(
     if (outCamera != nullptr) {
         *outCamera = CNA_INVALID_HANDLE;
     }
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_state_ext(const CNA_CameraHandle camera, CNA_CameraState* const outState)
-{
-    (void)camera;
-    (void)outState;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_frame_width_ext(const CNA_CameraHandle camera, int32_t* const outWidth)
-{
-    (void)camera;
-    (void)outWidth;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_get_frame_height_ext(const CNA_CameraHandle camera, int32_t* const outHeight)
-{
-    (void)camera;
-    (void)outHeight;
     return ExtensionUnavailable();
 }
 

@@ -114,3 +114,751 @@ CNA_Result cna_vibrate_controller_copy_device_name_ext(
         return CNA::C::Detail::CopyText(VibrateController::getDefaultProperty()->getDeviceNameProperty(), destination, capacity, out_bytes);
     });
 }
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_power_get_state_ext(
+    const CNA_Handle game,
+    CNA_PowerState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_state_ext: out_state is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = static_cast<CNA_PowerState>(PowerInfo::getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_power_get_state_ext(
+    const CNA_Handle game,
+    CNA_PowerState* const out_state)
+{
+    (void)game;
+    (void)out_state;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_power_get_battery_percent_ext(
+    const CNA_Handle game,
+    int32_t* const out_percent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_percent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_battery_percent_ext: out_percent is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_percent = static_cast<int32_t>(PowerInfo::getBatteryPercentProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_power_get_battery_percent_ext(
+    const CNA_Handle game,
+    int32_t* const out_percent)
+{
+    (void)game;
+    (void)out_percent;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_power_get_seconds_remaining_ext(
+    const CNA_Handle game,
+    int32_t* const out_seconds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_seconds_remaining_ext: out_seconds is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_seconds = static_cast<int32_t>(PowerInfo::getSecondsRemainingProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_power_get_seconds_remaining_ext(
+    const CNA_Handle game,
+    int32_t* const out_seconds)
+{
+    (void)game;
+    (void)out_seconds;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
+    const CNA_Handle game,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_info_get_logical_cpu_core_count_ext: out_count is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(SystemInfo::getLogicalCpuCoreCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
+    const CNA_Handle game,
+    int32_t* const out_count)
+{
+    (void)game;
+    (void)out_count;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_info_get_system_ram_megabytes_ext(
+    const CNA_Handle game,
+    int32_t* const out_megabytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_megabytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_info_get_system_ram_megabytes_ext: out_megabytes is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_megabytes = static_cast<int32_t>(SystemInfo::getSystemRamMegabytesProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_info_get_system_ram_megabytes_ext(
+    const CNA_Handle game,
+    int32_t* const out_megabytes)
+{
+    (void)game;
+    (void)out_megabytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_message_box_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_message_box_get_is_supported_ext: out_supported is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(MessageBox::getIsSupportedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_message_box_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    (void)game;
+    (void)out_supported;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_file_dialog_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_file_dialog_get_is_supported_ext: out_supported is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(FileDialog::getIsSupportedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_file_dialog_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    (void)game;
+    (void)out_supported;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_get_is_supported_ext: out_supported is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(SystemTray::getIsSupportedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    (void)game;
+    (void)out_supported;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_is_supported_ext: out_supported is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(Camera::getIsSupportedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_is_supported_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_supported)
+{
+    (void)game;
+    (void)out_supported;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_count_ext(
+    const CNA_Handle game,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_count_ext: out_count is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(Camera::getAvailableCamerasProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_count_ext(
+    const CNA_Handle game,
+    uint64_t* const out_count)
+{
+    (void)game;
+    (void)out_count;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_locale_get_language_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_locale_get_language_size_at_ext: out_bytes is null.");
+        }
+        LocaleInfo object{};
+        if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object.Language.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_locale_get_language_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_locale_copy_language_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocaleInfo object{};
+        if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.Language, destination, capacity, out_bytes);
+    });
+}
+#else
+CNA_Result cna_locale_copy_language_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_locale_get_country_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_locale_get_country_size_at_ext: out_bytes is null.");
+        }
+        LocaleInfo object{};
+        if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object.Country.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_locale_get_country_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_locale_copy_country_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocaleInfo object{};
+        if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.Country, destination, capacity, out_bytes);
+    });
+}
+#else
+CNA_Result cna_locale_copy_country_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_display_info_get_content_scale_ext(
+    const CNA_Handle game,
+    float* const out_scale)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_scale == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_info_get_content_scale_ext: out_scale is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_scale = static_cast<float>(DisplayInfo::getContentScaleProperty(*object));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_display_info_get_content_scale_ext(
+    const CNA_Handle game,
+    float* const out_scale)
+{
+    (void)game;
+    (void)out_scale;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_set_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool c_checked)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_checked, "checked");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool checked = CNA::C::Detail::FromCBool(c_checked);
+        object->value->SetEntryChecked(static_cast<std::size_t>(index), checked);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_set_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool c_checked)
+{
+    (void)tray;
+    (void)index;
+    (void)c_checked;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_get_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const out_checked)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_checked == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_get_entry_checked: out_checked is null.");
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_checked = CNA::C::Detail::ToCBool(object->value->GetEntryChecked(static_cast<std::size_t>(index)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_get_entry_checked(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const out_checked)
+{
+    (void)tray;
+    (void)index;
+    (void)out_checked;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_set_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        object->value->SetEntryEnabled(static_cast<std::size_t>(index), enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_set_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_Bool c_enabled)
+{
+    (void)tray;
+    (void)index;
+    (void)c_enabled;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_get_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_get_entry_enabled: out_enabled is null.");
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(object->value->GetEntryEnabled(static_cast<std::size_t>(index)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_get_entry_enabled(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    CNA_Bool* const out_enabled)
+{
+    (void)tray;
+    (void)index;
+    (void)out_enabled;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_destroy(
+    const CNA_SystemTrayHandle tray)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(tray);
+    });
+}
+#else
+CNA_Result cna_system_tray_destroy(
+    const CNA_SystemTrayHandle tray)
+{
+    (void)tray;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_name_size_at_ext: out_bytes is null.");
+        }
+        CameraDeviceInfo object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedCamera(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object.Name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        CameraDeviceInfo object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedCamera(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.Name, destination, capacity, out_bytes);
+    });
+}
+#else
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)out_bytes;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_state_ext(
+    const CNA_CameraHandle camera,
+    CNA_CameraState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_state_ext: out_state is null.");
+        }
+        std::shared_ptr<CameraResource> object{};
+        if (const CNA_Result routeResult = BorrowCamera(camera, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = static_cast<CNA_CameraState>(object->value->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_state_ext(
+    const CNA_CameraHandle camera,
+    CNA_CameraState* const out_state)
+{
+    (void)camera;
+    (void)out_state;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_frame_width_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const out_width)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_frame_width_ext: out_width is null.");
+        }
+        std::shared_ptr<CameraResource> object{};
+        if (const CNA_Result routeResult = BorrowCamera(camera, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_width = static_cast<int32_t>(object->value->getFrameWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_frame_width_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const out_width)
+{
+    (void)camera;
+    (void)out_width;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_frame_height_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const out_height)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_frame_height_ext: out_height is null.");
+        }
+        std::shared_ptr<CameraResource> object{};
+        if (const CNA_Result routeResult = BorrowCamera(camera, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_height = static_cast<int32_t>(object->value->getFrameHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_get_frame_height_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const out_height)
+{
+    (void)camera;
+    (void)out_height;
+    return ExtensionUnavailable();
+}
+#endif

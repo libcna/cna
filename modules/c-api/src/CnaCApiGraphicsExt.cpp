@@ -221,26 +221,6 @@ CNA_Result cna_ascii_post_process_effect_get_cell_size(
     return ExtensionUnavailable();
 }
 
-CNA_Result cna_ascii_post_process_effect_set_cell_size(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    const int32_t width,
-    const int32_t height)
-{
-    (void)effect;
-    (void)width;
-    (void)height;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_ascii_post_process_effect_get_quantize_mode(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    CNA_AsciiQuantizeMode* const outMode)
-{
-    (void)effect;
-    (void)outMode;
-    return ExtensionUnavailable();
-}
-
 CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
     const CNA_AsciiPostProcessEffectHandle effect,
     const CNA_AsciiQuantizeMode mode)
@@ -329,40 +309,6 @@ CNA_Result cna_ascii_post_process_effect_get_cell_size(
         effect->value->getCellSize(width, height);
         *outWidth = static_cast<int32_t>(width);
         *outHeight = static_cast<int32_t>(height);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_ascii_post_process_effect_set_cell_size(
-    const CNA_AsciiPostProcessEffectHandle effectHandle,
-    const int32_t width,
-    const int32_t height)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->value->setCellSize(static_cast<int>(width), static_cast<int>(height));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_ascii_post_process_effect_get_quantize_mode(
-    const CNA_AsciiPostProcessEffectHandle effectHandle,
-    CNA_AsciiQuantizeMode* const outMode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMode == nullptr) {
-            return InvalidArgument("The quantize-mode output is null.");
-        }
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outMode = NativeOrdinal(effect->value->getQuantizeMode());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -466,3 +412,6 @@ CNA_Result cna_ascii_post_process_effect_destroy(
 }
 
 #endif // CNA_CNAEXT
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsExt.toml.
+#include "generated/GraphicsExt.inc"

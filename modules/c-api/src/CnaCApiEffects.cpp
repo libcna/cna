@@ -4750,28 +4750,6 @@ template<typename TCallable>
 
 } // namespace
 
-CNA_Result cna_crt_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The CRTEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<CNA::Graphics::CRTEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_crt_effect_get_scanline_intensity(
     const CNA_EffectHandle effectHandle,
     float* const outValue)
@@ -4880,28 +4858,6 @@ CNA_Result cna_crt_effect_set_mask_type(
     });
 }
 
-CNA_Result cna_depth_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The DepthEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<CNA::Graphics::DepthEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_depth_effect_get_mode(
     const CNA_EffectHandle effectHandle,
     CNA_DepthEffectMode* const outMode)
@@ -4989,17 +4945,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_crt_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    (void)graphicsDeviceHandle;
-    if (outEffect != nullptr) {
-        *outEffect = CNA_INVALID_HANDLE;
-    }
-    return ExtensionEffectUnavailable();
-}
-
 CNA_Result cna_crt_effect_get_scanline_intensity(
     const CNA_EffectHandle effectHandle,
     float* const outValue)
@@ -5085,17 +5030,6 @@ CNA_Result cna_crt_effect_set_mask_type(
 {
     (void)effectHandle;
     (void)maskType;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_depth_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    (void)graphicsDeviceHandle;
-    if (outEffect != nullptr) {
-        *outEffect = CNA_INVALID_HANDLE;
-    }
     return ExtensionEffectUnavailable();
 }
 

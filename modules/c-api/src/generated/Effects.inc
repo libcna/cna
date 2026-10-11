@@ -2882,3 +2882,67 @@ CNA_Result cna_skinned_pbr_effect_create(
         return CreateEffectHandle(std::make_shared<SkinnedPbrEffect>(*object->value), object->parentGame, out_effect);
     });
 }
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_crt_effect_create: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateEffectHandle(std::make_shared<CNA::Graphics::CRTEffect>(*object->value), object->parentGame, out_effect);
+    });
+}
+#else
+CNA_Result cna_crt_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_EffectHandle* const out_effect)
+{
+    (void)graphics_device;
+    (void)out_effect;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_depth_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_depth_effect_create: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateEffectHandle(std::make_shared<CNA::Graphics::DepthEffect>(*object->value), object->parentGame, out_effect);
+    });
+}
+#else
+CNA_Result cna_depth_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_EffectHandle* const out_effect)
+{
+    (void)graphics_device;
+    (void)out_effect;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionEffectUnavailable();
+}
+#endif

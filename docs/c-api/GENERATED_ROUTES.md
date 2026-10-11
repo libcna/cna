@@ -85,7 +85,13 @@ null, stale, released or wrong-kind handle. A group without `lookup` holds value
 that only validates (`ValidateActiveGameHandle`) is written without `object`. `arguments = 2` passes
 the lookup the route's first two parameters (a handle and an index), and
 `accepts_null_handle = true` records that the lookup reads the null handle as "none" (the
-contract test then refuses only real handles).
+contract test then refuses only real handles). A group whose routes exist only in builds with an
+optional module says so, and what the routes answer without it:
+
+```toml
+feature = "CNA_DEVICES"                 # the real routes compile under #if defined(CNA_DEVICES)
+unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing handle outputs
+```
 
 ## What stays hand-written
 

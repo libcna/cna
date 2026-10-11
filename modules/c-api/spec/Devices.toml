@@ -12,3 +12,77 @@ cna_vibrate_controller_stop = { call = "VibrateController::getDefaultProperty()-
 cna_vibrate_controller_get_is_supported_ext = { get = "VibrateController::getDefaultProperty()->getIsSupportedProperty()" }
 cna_vibrate_controller_get_device_name_size_ext = { size = "VibrateController::getDefaultProperty()->getDeviceNameProperty()" }
 cna_vibrate_controller_copy_device_name_ext = { copy = "VibrateController::getDefaultProperty()->getDeviceNameProperty()" }
+
+[game_devices]
+lookup = "ValidateActiveGameHandle"
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[game_devices.routes]
+cna_power_get_state_ext = { get = "PowerInfo::getStateProperty()" }
+cna_power_get_battery_percent_ext = { get = "PowerInfo::getBatteryPercentProperty()" }
+cna_power_get_seconds_remaining_ext = { get = "PowerInfo::getSecondsRemainingProperty()" }
+cna_system_info_get_logical_cpu_core_count_ext = { get = "SystemInfo::getLogicalCpuCoreCountProperty()" }
+cna_system_info_get_system_ram_megabytes_ext = { get = "SystemInfo::getSystemRamMegabytesProperty()" }
+cna_message_box_get_is_supported_ext = { get = "MessageBox::getIsSupportedProperty()" }
+cna_file_dialog_get_is_supported_ext = { get = "FileDialog::getIsSupportedProperty()" }
+cna_system_tray_get_is_supported_ext = { get = "SystemTray::getIsSupportedProperty()" }
+cna_camera_get_is_supported_ext = { get = "Camera::getIsSupportedProperty()" }
+cna_camera_get_count_ext = { get = "Camera::getAvailableCamerasProperty().size()" }
+
+[locale]
+lookup = "BorrowLocale"
+object = "LocaleInfo"
+arguments = 2
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[locale.routes]
+cna_locale_get_language_size_at_ext = { get = "object.Language.size()" }
+cna_locale_copy_language_at_ext = { copy = "object.Language" }
+cna_locale_get_country_size_at_ext = { get = "object.Country.size()" }
+cna_locale_copy_country_at_ext = { copy = "object.Country" }
+
+[window]
+lookup = "BorrowWindow"
+object = "Microsoft::Xna::Framework::GameWindow*"
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[window.routes]
+cna_display_info_get_content_scale_ext = { get = "DisplayInfo::getContentScaleProperty(*object)" }
+
+[tray]
+lookup = "BorrowTray"
+object = "std::shared_ptr<SystemTrayResource>"
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[tray.routes]
+cna_system_tray_set_entry_checked = { call = "object->value->SetEntryChecked(static_cast<std::size_t>(index), checked)" }
+cna_system_tray_get_entry_checked = { get = "object->value->GetEntryChecked(static_cast<std::size_t>(index))" }
+cna_system_tray_set_entry_enabled = { call = "object->value->SetEntryEnabled(static_cast<std::size_t>(index), enabled)" }
+cna_system_tray_get_entry_enabled = { get = "object->value->GetEntryEnabled(static_cast<std::size_t>(index))" }
+cna_system_tray_destroy = { release = true }
+
+[enumerated_camera]
+lookup = "BorrowEnumeratedCamera"
+object = "CameraDeviceInfo"
+arguments = 2
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[enumerated_camera.routes]
+cna_camera_get_name_size_at_ext = { get = "object.Name.size()" }
+cna_camera_copy_name_at_ext = { copy = "object.Name" }
+
+[camera]
+lookup = "BorrowCamera"
+object = "std::shared_ptr<CameraResource>"
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[camera.routes]
+cna_camera_get_state_ext = { get = "object->value->getStateProperty()" }
+cna_camera_get_frame_width_ext = { get = "object->value->getFrameWidthProperty()" }
+cna_camera_get_frame_height_ext = { get = "object->value->getFrameHeightProperty()" }

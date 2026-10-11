@@ -316,3 +316,13 @@ cna_skinned_effect_create = { result = "CreateEffectHandle(std::make_shared<Skin
 cna_color_matrix_effect_create = { result = "CreateEffectHandle(std::make_shared<ColorMatrixEffect>(*object->value), object->parentGame, out_effect)" }
 cna_pbr_effect_create = { result = "CreateEffectHandle(std::make_shared<PbrEffect>(*object->value), object->parentGame, out_effect)" }
 cna_skinned_pbr_effect_create = { result = "CreateEffectHandle(std::make_shared<SkinnedPbrEffect>(*object->value), object->parentGame, out_effect)" }
+
+[borrowed_graphics_device_cnaext]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+feature = "CNA_CNAEXT"
+unavailable = "ExtensionEffectUnavailable()"
+
+[borrowed_graphics_device_cnaext.routes]
+cna_crt_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::CRTEffect>(*object->value), object->parentGame, out_effect)" }
+cna_depth_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::DepthEffect>(*object->value), object->parentGame, out_effect)" }
