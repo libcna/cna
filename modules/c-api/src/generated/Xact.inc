@@ -450,3 +450,134 @@ CNA_Result cna_audio_engine_create_with_renderer(
         return CreateEngine(game, settings_file, true, look_ahead_ticks, renderer_id, out_engine);
     });
 }
+
+CNA_Result cna_audio_engine_get_renderer_friendly_name_size(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_renderer_friendly_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->getFriendlyNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_copy_renderer_friendly_name(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getFriendlyNameProperty(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_get_renderer_id_size(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_renderer_id_size: out_bytes is null.");
+        }
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->getRendererIdProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_copy_renderer_id(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getRendererIdProperty(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_get_renderer_text_size(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_renderer_text_size: out_bytes is null.");
+        }
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_copy_renderer_text(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_audio_engine_get_renderer_hash_code(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    int32_t* const out_hash_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_renderer_hash_code: out_hash_code is null.");
+        }
+        std::shared_ptr<EngineResource> owner{};
+        const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
+        if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash_code = static_cast<int32_t>(object->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}

@@ -13,3 +13,12 @@ cna_content_manager_get_has_service_provider = { get = "object->value->getServic
 cna_content_manager_refresh_content_manifest = { call = "object->value->RefreshContentManifest()" }
 cna_content_manager_get_manifest_entry_count = { get = "object->value->GetContentManifest().size()" }
 cna_content_manager_get_xnb_reader_usage_count = { get = "SortedReaderUsage(object).size()" }
+
+[manifest_entry]
+lookup = "GetManifestEntry"
+object = "const ContentManifestEntry*"
+owner = "std::shared_ptr<ContentManagerResource>"
+arguments = 2
+
+[manifest_entry.routes]
+cna_content_manager_copy_manifest_relative_path = { copy = "object->relativePath" }

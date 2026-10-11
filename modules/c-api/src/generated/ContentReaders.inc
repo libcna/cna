@@ -340,3 +340,23 @@ CNA_Result cna_content_register_known_unsupported_xnb_readers(void)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_object_dictionary_ext_get_type_name_size(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_get_type_name_size: out_byte_count is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> owner{};
+        const std::any* object{};
+        if (const CNA_Result routeResult = GetDictionaryEntry(dictionary, key, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_byte_count = static_cast<uint64_t>(std::strlen(object->type().name()));
+        return CNA_RESULT_SUCCESS;
+    });
+}

@@ -60,3 +60,18 @@ cna_cue_copy_type_name = { copy = "object->value->GetTypeName()" }
 [calls]
 [calls.routes]
 cna_audio_engine_create_with_renderer = { result = "CreateEngine(game, settings_file, true, look_ahead_ticks, renderer_id, out_engine)" }
+
+[renderer_detail]
+lookup = "GetRendererDetail"
+object = "const Microsoft::Xna::Framework::Audio::RendererDetail*"
+owner = "std::shared_ptr<EngineResource>"
+arguments = 2
+
+[renderer_detail.routes]
+cna_audio_engine_get_renderer_friendly_name_size = { size = "object->getFriendlyNameProperty()" }
+cna_audio_engine_copy_renderer_friendly_name = { copy = "object->getFriendlyNameProperty()" }
+cna_audio_engine_get_renderer_id_size = { size = "object->getRendererIdProperty()" }
+cna_audio_engine_copy_renderer_id = { copy = "object->getRendererIdProperty()" }
+cna_audio_engine_get_renderer_text_size = { size = "object->ToString()" }
+cna_audio_engine_copy_renderer_text = { copy = "object->ToString()" }
+cna_audio_engine_get_renderer_hash_code = { get = "object->GetHashCode()" }

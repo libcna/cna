@@ -83,10 +83,20 @@ A group's `lookup` is an ordinary hand-written function in the family's `.cpp`,
 `CNA_Result Name(<first parameter>, <object>*)`, which receives the route's first parameter
 unconverted — usually a handle, sometimes a struct or string view it validates. Most lookups are
 one line over `LookupHandle`, which records "The <kind> handle is invalid for this call." for a
-null, stale, released or wrong-kind handle. A lookup that only validates
-(`ValidateActiveGameHandle`) is written without `object`, and a group without `lookup` holds the
-routes that need no object: value computations, static queries, commands such as
-`CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's first two parameters (a
+null, stale, released or wrong-kind handle. A lookup that hands back a pointer into a resource it
+must keep alive names that resource as `owner` and is called `Lookup(<first>, &owner, &object)`:
+
+```toml
+[model_camera]
+lookup = "GetModelCamera"                   # CNA_Result GetModelCamera(model, index, &owner, &object)
+object = "const ModelCameraEXT*"
+owner = "std::shared_ptr<ModelResource>"    # keeps the model, and so the camera, alive
+arguments = 2
+```
+
+A lookup that only validates (`ValidateActiveGameHandle`) is written without `object`, and a group
+without `lookup` holds the routes that need no object: value computations, static queries,
+commands such as `CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's first two parameters (a
 handle and an index), and `accepts_null_handle = true` records that the lookup reads the null
 handle as "none" (the contract test then refuses only real handles). A group whose routes exist
 only in builds with an optional module says so, and what the routes answer without it:

@@ -164,3 +164,34 @@ cna_skinned_model_ext_create_default = { result = "CreateSkinnedModelHandle(std:
 [matrix]
 [matrix.routes]
 cna_matrix_create_infinite_perspective_field_of_view_ext = { value = "Microsoft::Xna::Framework::Graphics::CreateInfinitePerspectiveFieldOfViewEXT(field_of_view, aspect_ratio, near_plane_distance)" }
+
+[import_diagnostic]
+lookup = "GetImportDiagnostic"
+object = "const GltfImportDiagnosticEXT*"
+owner = "std::shared_ptr<ModelResource>"
+arguments = 2
+
+[import_diagnostic.routes]
+cna_model_copy_gltf_import_diagnostic_code_ext = { copy = "object->Code" }
+cna_model_copy_gltf_import_diagnostic_subject_ext = { copy = "object->Subject" }
+cna_model_copy_gltf_import_diagnostic_message_ext = { copy = "object->Message" }
+
+[model_camera]
+lookup = "GetModelCamera"
+object = "const ModelCameraEXT*"
+owner = "std::shared_ptr<ModelResource>"
+arguments = 2
+
+[model_camera.routes]
+cna_model_get_camera_name_byte_count_ext = { size = "object->Name" }
+cna_model_copy_camera_name_ext = { copy = "object->Name" }
+
+[model_skin]
+lookup = "GetModelSkin"
+object = "const ModelSkinEXT*"
+owner = "std::shared_ptr<ModelResource>"
+arguments = 2
+
+[model_skin.routes]
+cna_model_get_skin_name_byte_count_ext = { size = "object->Name" }
+cna_model_copy_skin_name_ext = { copy = "object->Name" }

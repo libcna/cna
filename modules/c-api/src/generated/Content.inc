@@ -121,3 +121,21 @@ CNA_Result cna_content_manager_get_xnb_reader_usage_count(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_content_manager_copy_manifest_relative_path(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ContentManagerResource> owner{};
+        const ContentManifestEntry* object{};
+        if (const CNA_Result routeResult = GetManifestEntry(content_manager, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->relativePath, destination, capacity, out_bytes);
+    });
+}

@@ -903,32 +903,6 @@ CNA_Result cna_content_manager_get_manifest_entry(
     });
 }
 
-CNA_Result cna_content_manager_copy_manifest_relative_path(
-    const CNA_Handle contentManagerHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        const ContentManifestEntry* entry = nullptr;
-        if (const CNA_Result result = GetManifestEntry(
-                contentManagerHandle,
-                index,
-                &contentManager,
-                &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            entry->relativePath,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_content_manager_copy_manifest_native_extension(
     const CNA_Handle contentManagerHandle,
     const uint64_t index,

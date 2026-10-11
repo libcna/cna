@@ -58,3 +58,12 @@ cna_enum_type_reader_copy_canonical_name = { result = "CanonicalNameCopy(target_
 [values.routes]
 cna_content_type_reader_manager_clear_type_creators = { call = "ContentTypeReaderManager::ClearTypeCreators()" }
 cna_content_register_known_unsupported_xnb_readers = { call = "Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders()" }
+
+[dictionary_entry]
+lookup = "GetDictionaryEntry"
+object = "const std::any*"
+owner = "std::shared_ptr<ObjectDictionaryResource>"
+arguments = 2
+
+[dictionary_entry.routes]
+cna_object_dictionary_ext_get_type_name_size = { get = "std::strlen(object->type().name())" }

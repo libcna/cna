@@ -30,9 +30,12 @@ Spec format. Each top-level table is one group of routes sharing how they reach 
     cna_basic_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
 
 A lookup receives the route's first parameter -- usually a handle, sometimes a struct or a string
-it validates -- unconverted; ``arguments = 2`` in the group passes it the first two (an index, say). A group without ``lookup`` holds routes that take no handle. A group
-whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. A group whose lookup
-reads the null handle as "none" says ``accepts_null_handle = true``. A group whose routes exist only
+it validates -- unconverted; ``arguments = 2`` in the group passes it the first two (an index,
+say). A lookup that hands back a pointer into a resource it must keep alive names that resource's
+type as ``owner``: it is then called as ``Lookup(<first>, &owner, &object)`` and expressions may
+use ``owner`` too. A group without ``lookup`` holds routes that take no handle. A group whose
+lookup only validates (``ValidateActiveGameHandle``) omits ``object``. A group whose lookup reads
+the null handle as "none" says ``accepts_null_handle = true``. A group whose routes exist only
 when a macro is defined says ``feature = "CNA_DEVICES"`` and ``unavailable = "<C++ result>"``, what
 they return without it; a handle output is cleared there too. Each route is ``name = { <kind> = "<C++>" }``:
 
@@ -262,7 +265,7 @@ class Route:
 
     def _check_names(self) -> None:
         names = {p.name for p in self.params}
-        locals_ = {"object", "routeResult"} | {f"c_{p.name}" for p in self.inputs}
+        locals_ = {"object", "owner", "routeResult"} | {f"c_{p.name}" for p in self.inputs}
         if names & locals_:
             raise self._fail(f"a parameter is named {', '.join(sorted(names & locals_))}, "
                              "which the generated code uses for a local")
@@ -309,6 +312,10 @@ class Route:
         arguments = ", ".join(p.name for p in self.lookup_params)
         if "object" not in self.group:
             return returns_on_failure(f"{lookup}({arguments})", indent)
+        if "owner" in self.group:
+            return ([f"{indent}{self.group['owner']} owner{{}};",
+                      f"{indent}{self.group['object']} object{{}};"]
+                    + returns_on_failure(f"{lookup}({arguments}, &owner, &object)", indent))
         return ([f"{indent}{self.group['object']} object{{}};"]
                 + returns_on_failure(f"{lookup}({arguments}, &object)", indent))
 
@@ -393,13 +400,15 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
     for group_name, group in data.items():
         if not isinstance(group, dict) or "routes" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] has no [{group_name}.routes] table")
-        unknown = set(group) - {"lookup", "object", "arguments", "accepts_null_handle", "feature",
-                                "unavailable", "routes"}
+        unknown = set(group) - {"lookup", "object", "owner", "arguments", "accepts_null_handle",
+                                "feature", "unavailable", "routes"}
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
         if ("object" in group or "arguments" in group) and "lookup" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] names an object or arguments but no lookup")
+        if "owner" in group and "object" not in group:
+            raise SpecError(f"{spec.name}: [{group_name}] names an owner but no object")
         if ("feature" in group) != ("unavailable" in group):
             raise SpecError(f"{spec.name}: [{group_name}] needs both feature and unavailable")
         if "arguments" in group and (not isinstance(group["arguments"], int) or group["arguments"] < 1):

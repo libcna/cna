@@ -1368,3 +1368,131 @@ CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> owner{};
+        const GltfImportDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Code, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> owner{};
+        const GltfImportDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Subject, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_copy_gltf_import_diagnostic_message_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> owner{};
+        const GltfImportDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Message, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_get_camera_name_byte_count_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_camera_name_byte_count_ext: out_byte_count is null.");
+        }
+        std::shared_ptr<ModelResource> owner{};
+        const ModelCameraEXT* object{};
+        if (const CNA_Result routeResult = GetModelCamera(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->Name, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_copy_camera_name_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> owner{};
+        const ModelCameraEXT* object{};
+        if (const CNA_Result routeResult = GetModelCamera(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_get_skin_name_byte_count_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_skin_name_byte_count_ext: out_byte_count is null.");
+        }
+        std::shared_ptr<ModelResource> owner{};
+        const ModelSkinEXT* object{};
+        if (const CNA_Result routeResult = GetModelSkin(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->Name, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_copy_skin_name_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> owner{};
+        const ModelSkinEXT* object{};
+        if (const CNA_Result routeResult = GetModelSkin(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Name, destination, capacity, out_byte_count);
+    });
+}

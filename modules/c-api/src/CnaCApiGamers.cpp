@@ -1028,42 +1028,6 @@ CNA_Result cna_friend_gamer_get_info(
     });
 }
 
-CNA_Result cna_friend_gamer_get_presence_size(
-    const CNA_GamerHandle gamerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The friend presence size output is null.");
-        }
-        std::shared_ptr<GamerResource> gamer;
-        FriendGamer* friendGamer = nullptr;
-        if (const CNA_Result result = BorrowFriend(gamerHandle, &gamer, &friendGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = friendGamer->getPresenceProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_friend_gamer_copy_presence(
-    const CNA_GamerHandle gamerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GamerResource> gamer;
-        FriendGamer* friendGamer = nullptr;
-        if (const CNA_Result result = BorrowFriend(gamerHandle, &gamer, &friendGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(friendGamer->getPresenceProperty(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_gamer_collection_get_at(
     const CNA_GamerCollectionHandle collectionHandle,
     const int32_t index,

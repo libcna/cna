@@ -67,3 +67,18 @@ cna_microphone_start_at = { call = "object->Start()" }
 cna_microphone_stop_at = { call = "object->Stop()" }
 cna_microphone_get_sample_duration_ticks_at = { get = "object->GetSampleDuration(static_cast<SharpRuntime::intcs>(size_in_bytes)) .getTicksProperty()" }
 cna_microphone_get_sample_size_in_bytes_at = { get = "object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks)))" }
+
+[dynamic_instance]
+lookup = "BorrowDynamicInstance"
+object = "DynamicSoundEffectInstance*"
+owner = "std::shared_ptr<SoundEffectInstanceResource>"
+
+[dynamic_instance.routes]
+cna_dynamic_sound_effect_instance_get_pending_buffer_count = { get = "object->getPendingBufferCountProperty()" }
+cna_dynamic_sound_effect_instance_queue_initial_buffers_ext = { call = "object->QueueInitialBuffers()" }
+cna_dynamic_sound_effect_instance_clear_buffers_ext = { call = "object->ClearBuffers()" }
+cna_dynamic_sound_effect_instance_update_ext = { call = "object->Update()" }
+cna_dynamic_sound_effect_instance_get_sample_duration_ticks = { get = "object->GetSampleDuration(static_cast<SharpRuntime::intcs>(size_in_bytes)).getTicksProperty()" }
+cna_dynamic_sound_effect_instance_get_sample_size_in_bytes = { get = "object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks)))" }
+cna_dynamic_sound_effect_instance_get_type_name_size = { size = "object->GetTypeName()" }
+cna_dynamic_sound_effect_instance_copy_type_name = { copy = "object->GetTypeName()" }

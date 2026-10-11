@@ -375,3 +375,38 @@ CNA_Result cna_gamer_collection_destroy(
         return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
+
+CNA_Result cna_friend_gamer_get_presence_size(
+    const CNA_GamerHandle gamer,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_friend_gamer_get_presence_size: out_bytes is null.");
+        }
+        std::shared_ptr<GamerResource> owner{};
+        FriendGamer* object{};
+        if (const CNA_Result routeResult = BorrowFriend(gamer, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->getPresenceProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_friend_gamer_copy_presence(
+    const CNA_GamerHandle gamer,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GamerResource> owner{};
+        FriendGamer* object{};
+        if (const CNA_Result routeResult = BorrowFriend(gamer, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getPresenceProperty(), destination, capacity, out_bytes);
+    });
+}

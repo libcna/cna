@@ -807,26 +807,6 @@ CNA_Result cna_dynamic_sound_effect_instance_create(
     });
 }
 
-CNA_Result cna_dynamic_sound_effect_instance_get_pending_buffer_count(
-    const CNA_Handle instanceHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The pending buffer count output is null.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(dynamicInstance->getPendingBufferCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_dynamic_sound_effect_instance_submit_buffer(
     const CNA_Handle instanceHandle,
     const uint8_t* const bytes,
@@ -903,97 +883,6 @@ CNA_Result cna_dynamic_sound_effect_instance_submit_float_buffer_ext(
     });
 }
 
-CNA_Result cna_dynamic_sound_effect_instance_queue_initial_buffers_ext(
-    const CNA_Handle instanceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dynamicInstance->QueueInitialBuffers();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_clear_buffers_ext(const CNA_Handle instanceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dynamicInstance->ClearBuffers();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_update_ext(const CNA_Handle instanceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dynamicInstance->Update();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_get_sample_duration_ticks(
-    const CNA_Handle instanceHandle,
-    const int32_t sizeInBytes,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sample duration output is null.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks = static_cast<int64_t>(
-            dynamicInstance->GetSampleDuration(static_cast<SharpRuntime::intcs>(sizeInBytes))
-                .getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_get_sample_size_in_bytes(
-    const CNA_Handle instanceHandle,
-    const int64_t durationTicks,
-    int32_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The sample size output is null.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<int32_t>(dynamicInstance->GetSampleSizeInBytes(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks))));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
     const CNA_Handle instanceHandle,
     const CNA_AudioEventCallback callback,
@@ -1021,44 +910,6 @@ CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
         return PublishAudioRegistration(
             std::make_shared<AudioRegistration>(instance, source, token),
             outRegistration);
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_get_type_name_size(
-    const CNA_Handle instanceHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = dynamicInstance->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
-    const CNA_Handle instanceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(dynamicInstance->GetTypeName(), destination, capacity, outBytes);
     });
 }
 

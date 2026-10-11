@@ -5266,24 +5266,5 @@ CNA_Result cna_effect_material_retain_parameter_texture_ext(
     });
 }
 
-CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
-    const CNA_EffectHandle effectHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        EffectMaterial* material = nullptr;
-        if (const CNA_Result result = GetEffectMaterial(effectHandle, &effect, &material);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The retained-texture count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(material->GetRetainedParameterTextureCountEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 // The mechanically regular routes of this family, generated from modules/c-api/spec/Effects.toml.
 #include "generated/Effects.inc"

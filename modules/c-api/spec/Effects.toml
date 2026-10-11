@@ -330,3 +330,11 @@ cna_depth_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::G
 [values]
 [values.routes]
 cna_texture_transform_ext_init = { value = "ToC(TextureTransformEXT{})" }
+
+[effect_material]
+lookup = "GetEffectMaterial"
+object = "EffectMaterial*"
+owner = "std::shared_ptr<EffectResource>"
+
+[effect_material.routes]
+cna_effect_material_get_retained_parameter_texture_count_ext = { get = "object->GetRetainedParameterTextureCountEXT()" }

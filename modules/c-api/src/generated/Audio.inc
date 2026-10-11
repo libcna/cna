@@ -594,3 +594,142 @@ CNA_Result cna_microphone_get_sample_size_in_bytes_at(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_dynamic_sound_effect_instance_get_pending_buffer_count(
+    const CNA_Handle instance,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_get_pending_buffer_count: out_count is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->getPendingBufferCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_queue_initial_buffers_ext(
+    const CNA_Handle instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->QueueInitialBuffers();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_clear_buffers_ext(
+    const CNA_Handle instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->ClearBuffers();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_update_ext(
+    const CNA_Handle instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_sample_duration_ticks(
+    const CNA_Handle instance,
+    const int32_t size_in_bytes,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_get_sample_duration_ticks: out_ticks is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->GetSampleDuration(static_cast<SharpRuntime::intcs>(size_in_bytes)).getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_sample_size_in_bytes(
+    const CNA_Handle instance,
+    const int64_t duration_ticks,
+    int32_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_get_sample_size_in_bytes: out_bytes is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<int32_t>(object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks))));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_type_name_size(
+    const CNA_Handle instance,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
+    const CNA_Handle instance,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> owner{};
+        DynamicSoundEffectInstance* object{};
+        if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_bytes);
+    });
+}

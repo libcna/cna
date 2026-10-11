@@ -1753,27 +1753,6 @@ CNA_Result cna_object_dictionary_ext_get_entry(
     });
 }
 
-CNA_Result cna_object_dictionary_ext_get_type_name_size(
-    const CNA_ObjectDictionaryHandle dictionaryHandle,
-    const CNA_StringView key,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dictionary type-name size output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(std::strlen(value->type().name()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_object_dictionary_ext_copy_type_name(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,

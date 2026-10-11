@@ -3035,60 +3035,6 @@ CNA_Result cna_model_get_gltf_import_diagnostic_ext(
     });
 }
 
-CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(diagnostic->Code, destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(diagnostic->Subject, destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_model_copy_gltf_import_diagnostic_message_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(diagnostic->Message, destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
@@ -4937,45 +4883,6 @@ CNA_Result cna_model_get_camera_ext(
     });
 }
 
-CNA_Result cna_model_get_camera_name_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The Model camera-name byte-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        const ModelCameraEXT* camera = nullptr;
-        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(camera->Name.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_copy_camera_name_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const ModelCameraEXT* camera = nullptr;
-        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            camera->Name, destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_model_add_camera_ext(
     const CNA_ModelHandle modelHandle,
     const CNA_ModelCameraDescriptorEXT* const descriptor)
@@ -5077,45 +4984,6 @@ CNA_Result cna_model_create_skin_skeleton_handle_ext(
             model->skinSkeletons[skinIndex] = std::move(adopted);
         }
         return CreateSkinningDataHandle(model->skinSkeletons[skinIndex], outData);
-    });
-}
-
-CNA_Result cna_model_get_skin_name_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The Model skin-name byte-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        const ModelSkinEXT* skin = nullptr;
-        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(skin->Name.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_copy_skin_name_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const ModelSkinEXT* skin = nullptr;
-        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            skin->Name, destination, capacity, outByteCount);
     });
 }
 

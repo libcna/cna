@@ -2958,3 +2958,22 @@ CNA_Result cna_texture_transform_ext_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
+    const CNA_EffectHandle effect,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_material_get_retained_parameter_texture_count_ext: out_count is null.");
+        }
+        std::shared_ptr<EffectResource> owner{};
+        EffectMaterial* object{};
+        if (const CNA_Result routeResult = GetEffectMaterial(effect, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->GetRetainedParameterTextureCountEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
