@@ -1,8 +1,5 @@
 # CNA Sensors – TODO Roadmap
 
-> **Historical record, not current state.** The current state of CNA and the one authoritative
-> list of known bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
-
 ## Overview
 This document outlines the planned implementation roadmap for sensor support in CNA.
 
@@ -28,49 +25,11 @@ The goal is to extend beyond the original XNA 4.0 capabilities while maintaining
 
 ---
 
-## Phase 1 – Core Sensors (High Priority)
-
-These provide the most practical value for games.
-
-### Gyroscope
-- [ ] `GyroscopeReading`
-- [ ] `Gyroscope : SensorBase<GyroscopeReading>`
-- [ ] Angular velocity (X, Y, Z)
-- [ ] SDL3 integration
-
 ### Compass (Magnetometer)
 - [ ] `CompassReading`
 - [ ] `Compass : SensorBase<CompassReading>`
 - [ ] Heading (degrees)
 - [ ] Optional raw magnetic field vector
-
-### Motion (Combined Sensor)
-- [ ] `MotionReading`
-- [ ] `Motion : SensorBase<MotionReading>`
-- [ ] Combines:
-    - Accelerometer
-    - Gyroscope
-    - Compass (optional)
-- [ ] Provides:
-    - Orientation (Quaternion or Euler)
-    - Gravity vector
-    - Linear acceleration
-
----
-
-## Phase 2 – Secondary Sensors
-
-Useful but not essential for most games.
-
-### Proximity Sensor
-- [ ] `ProximityReading`
-- [ ] `Proximity : SensorBase<ProximityReading>`
-- [ ] Distance / near-far detection
-
-### Light Sensor
-- [ ] `LightReading`
-- [ ] `Light : SensorBase<LightReading>`
-- [ ] Ambient light level (lux)
 
 ### Location (GPS)
 - [ ] `LocationReading`
@@ -80,34 +39,6 @@ Useful but not essential for most games.
     - Altitude
     - Speed
     - Heading
-
----
-
-## Phase 3 – Advanced / Optional Sensors
-
-Only implement if needed.
-
-### Pressure / Barometer
-- [ ] `PressureReading`
-- [ ] `Pressure : SensorBase<PressureReading>`
-
-### Step Counter
-- [ ] `StepCounterReading`
-- [ ] `StepCounter : SensorBase<StepCounterReading>`
-
-### Gravity Sensor
-- [ ] `GravityReading`
-- [ ] `Gravity : SensorBase<GravityReading>`
-
-### Linear Acceleration
-- [ ] `LinearAccelerationReading`
-- [ ] `LinearAcceleration : SensorBase<LinearAccelerationReading>`
-
-### Rotation Vector
-- [ ] `RotationVectorReading`
-- [ ] Quaternion-based orientation
-
----
 
 ## Platform Integration
 
