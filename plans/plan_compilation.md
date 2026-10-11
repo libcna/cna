@@ -2,7 +2,7 @@
 
 > **Status:** ACTIVE — every compilation experiment and the regression-guard implementation are
 > complete. Final COMP-008 acceptance is waiting on unrelated existing OPENGLES3 runtime-test
-> failures recorded below. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an
+> failures recorded below. This plan turns [`../misc/cnacomp.md`](../misc/cnacomp.md) into an
 > executable task sequence.
 >
 > **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
@@ -77,7 +77,7 @@ builds can hide include hygiene and alter which translation units appear expensi
 
 ### Work
 
-- Add a repository-owned benchmark driver under `tools/build/` that records commands and results
+- Add a repository-owned benchmark driver under `../tools/build` that records commands and results
   without deleting arbitrary paths. Disposable build directories must have a fixed
   `cmake-build-benchmark-*` prefix or be created with `mktemp -d`.
 - Measure `dev`, `unit`, and the legacy full integration configuration with GCC and Clang at
@@ -86,7 +86,7 @@ builds can hide include hygiene and alter which translation units appear expensi
   compile/link edge counts, wall time, peak RSS, output size, and build-tree size.
 - Record ccache counters before and after three representative edit/build sequences. Keep direct
   mode enabled. Do not clear the 50 GiB cache and do not change global ccache policy from CMake.
-- Add the concise results and exact reproduction commands to `docs/build-performance.md`.
+- Add the concise results and exact reproduction commands to `../docs/build-performance.md`.
 
 ### Acceptance
 
@@ -108,7 +108,7 @@ builds can hide include hygiene and alter which translation units appear expensi
 
 ### Completion evidence (2026-08-29)
 
-- `tools/build/benchmark_clean_build.py` supports `dev`, `unit`, and legacy `all` profiles, creates
+- `../tools/build/benchmark_clean_build.py` supports `dev`, `unit`, and legacy `all` profiles, creates
   or accepts only a new `cmake-build-benchmark-*` directory, never removes it, and emits the exact
   commands, cache values, tool versions, load averages, configure/build/no-op timings, aggregate
   Linux process-tree RSS, graph size, artifact/tree/cache sizes, and ccache counters as JSON.
@@ -241,13 +241,13 @@ foundation work, but both are now available on the reference host.
 
 ### Acceptance
 
-- Publish the measurement table in `docs/build-performance.md`.
+- Publish the measurement table in `../docs/build-performance.md`.
 - A linker may become a recommended local dependency only if it improves the large test link by at
   least 20% and passes the same tests. The portable default remains valid.
 
 ### Completion evidence (2026-08-29)
 
-- `tools/build/benchmark_final_link.py` extracts exactly one final-link command from an existing
+- `../tools/build/benchmark_final_link.py` extracts exactly one final-link command from an existing
   Ninja graph, runs it directly without rebuilding inputs, samples aggregate Linux process-tree
   RSS, and emits all repetitions plus versions and the exact command as JSON. Five large Debug
   links and seven Release tool links used GCC 14.2.0, GNU ld 2.44, LLD 19.1.7, and Mold 2.37.1.
@@ -334,7 +334,7 @@ foundation work, but both are now available on the reference host.
 
 ### Completion evidence (2026-08-28)
 
-- A repository-owned `tools/build/analyze_clang_time_trace.py` reports text or JSON rankings from
+- A repository-owned `../tools/build/analyze_clang_time_trace.py` reports text or JSON rankings from
   modern Clang begin/end `Source` events and `Total ExecuteCompiler`. Clang 19.1.7 `-ftime-trace`
   ranked `ContentManager.cpp` (13.31 s), `GltfImportCore.cpp` (9.70 s), and `CnbModelCodec.cpp`
   (6.73 s) as the leading content TUs; `ContentReader.hpp` led project headers at 23.71 s across
@@ -430,7 +430,7 @@ foundation work, but both are now available on the reference host.
 
 ### Work
 
-- Consolidate accepted measurements in `docs/build-performance.md` and mark every experiment here
+- Consolidate accepted measurements in `../docs/build-performance.md` and mark every experiment here
   ✅, rejected with evidence, or explicitly deferred.
 - Add a lightweight CI report for configure time, executed compile/link edges, artifact sizes, and
   ccache summary. Use trend reporting before enforcing hard timing thresholds on shared runners.
@@ -449,16 +449,16 @@ foundation work, but both are now available on the reference host.
 
 ### Implementation evidence (2026-08-29)
 
-- `docs/build-performance.md` now starts with a consolidated result table that distinguishes
+- `../docs/build-performance.md` now starts with a consolidated result table that distinguishes
   configure, clean compilation, incremental rebuild, final link, ccache, and structural graph
   evidence. Every retained optional technique names its default or disable path; Split DWARF,
   broad unity/PCH, and default IPO remain explicitly deferred.
-- `tools/build/check_build_performance_policy.py` resolves preset inheritance, checks the documented
+- `../tools/build/check_build_performance_policy.py` resolves preset inheritance, checks the documented
   `dev`, `unit`, `release-modules`, PCH, unity, fast-debug, and IPO values, verifies experimental
   defaults/scope, and rejects routine raw global flag policy. Its only narrow exception is the
   sanitizer flag passed to the standalone C consumer's own out-of-tree build. The check passes on
   the current presets and CMake sources.
-- `tools/build/report_build_performance.py` reads an existing Ninja graph plus the actual CI build
+- `../tools/build/report_build_performance.py` reads an existing Ninja graph plus the actual CI build
   log and `/usr/bin/time` files. It emits configure/build time and GNU-time maximum RSS, graph size,
   executed compile/link edges, selected artifact sizes, and
   direct/preprocessed/miss/uncacheable/cleanup ccache counters as JSON. A local no-op validation
@@ -505,7 +505,7 @@ foundation work, but both are now available on the reference host.
   normalization touches the source argument only, and a `-D`-carried source directory would have
   been a valid fix too — it was rejected because it puts a per-worktree absolute path back on the
   command line and re-fragments the cache this task exists to keep whole.
-- The chosen fix is `tests/support/CNA/TestSupport/TestPaths.hpp`: `RepositoryRoot()` walks up from
+- The chosen fix is `../tests/support/CNA/TestSupport/TestPaths.hpp`: `RepositoryRoot()` walks up from
   the working directory looking for `CHECKLIST.md` beside a `modules/` directory, and two accessors
   build the compiled-effect and fixture directories from it. Nothing reaches the compiler's command
   line, so there is nothing left for path normalization to rewrite.
