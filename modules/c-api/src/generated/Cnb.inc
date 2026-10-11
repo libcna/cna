@@ -134,7 +134,7 @@ CNA_Result cna_cnb_document_get_origin_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(object->value->Origin(), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->Origin(), out_byte_count);
     });
 }
 
@@ -260,7 +260,7 @@ CNA_Result cna_cnb_document_get_metadata_asset_type_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(object->value->Metadata().assetTypeName, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->Metadata().assetTypeName, out_byte_count);
     });
 }
 
@@ -277,7 +277,7 @@ CNA_Result cna_cnb_document_get_metadata_content_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(object->value->Metadata().contentName, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->Metadata().contentName, out_byte_count);
     });
 }
 
@@ -330,7 +330,7 @@ CNA_Result cna_cnb_decode_song_stream_reference_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).streamReference, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).streamReference, out_byte_count);
     });
 }
 
@@ -347,7 +347,7 @@ CNA_Result cna_cnb_decode_song_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).name, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).name, out_byte_count);
     });
 }
 
@@ -364,7 +364,7 @@ CNA_Result cna_cnb_decode_video_stream_reference_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(Cnb::DecodeVideoFromCnb(*object->value).streamReference, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::DecodeVideoFromCnb(*object->value).streamReference, out_byte_count);
     });
 }
 
@@ -493,7 +493,7 @@ CNA_Result cna_cnb_reader_get_context_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(object->value->Context(), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->Context(), out_byte_count);
     });
 }
 
@@ -710,7 +710,7 @@ CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return ReportTextSize(object->value->assetTypeName, out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->assetTypeName, out_byte_count);
     });
 }
 
@@ -1077,7 +1077,7 @@ CNA_Result cna_cnb_get_chunk_id_string_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_get_chunk_id_string_size: out_byte_count is null.");
         }
-        return ReportTextSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), out_byte_count);
     });
 }
 
@@ -1103,7 +1103,7 @@ CNA_Result cna_cnb_get_asset_type_name_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_get_asset_type_name_size: out_byte_count is null.");
         }
-        return ReportTextSize(Cnb::AssetTypeIdToString(asset_type_id), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::AssetTypeIdToString(asset_type_id), out_byte_count);
     });
 }
 
@@ -1129,7 +1129,7 @@ CNA_Result cna_cnb_get_compression_name_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_get_compression_name_size: out_byte_count is null.");
         }
-        return ReportTextSize(Cnb::CnbCompressionToString(ToCodec(codec)), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::CnbCompressionToString(ToCodec(codec)), out_byte_count);
     });
 }
 
@@ -1155,7 +1155,7 @@ CNA_Result cna_cnb_get_texture_format_name_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_get_texture_format_name_size: out_byte_count is null.");
         }
-        return ReportTextSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), out_byte_count);
     });
 }
 
@@ -1289,7 +1289,7 @@ CNA_Result cna_cnb_get_audio_format_name_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_get_audio_format_name_size: out_byte_count is null.");
         }
-        return ReportTextSize(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), out_byte_count);
     });
 }
 
@@ -1315,7 +1315,7 @@ CNA_Result cna_cnb_loader_registry_get_registered_type_name_size(
         if (out_byte_count == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_cnb_loader_registry_get_registered_type_name_size: out_byte_count is null.");
         }
-        return ReportTextSize(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), out_byte_count);
     });
 }
 
@@ -1634,5 +1634,116 @@ CNA_Result cna_cnb_sprite_font_data_set_atlas(
         }
         object->value->atlas = *other->value;
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_get_part_name_size(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_part_name_size: out_byte_count is null.");
+        }
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->name, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_part_name(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_get_part_external_effect_size(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_part_external_effect_size: out_byte_count is null.");
+        }
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->externalEffect, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_part_external_effect(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->externalEffect, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_clear_morph(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, part, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->morph.reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_copy_morph_weights(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_copy_morph_weights: out_value_count is null.");
+        }
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbMorphData* object{};
+        if (const CNA_Result routeResult = GetModelMorph(model, part, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyElements<float>(object->weights, destination, capacity, out_value_count);
     });
 }

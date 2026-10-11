@@ -125,7 +125,7 @@ CNA_Result cna_graphics_renderer_get_current_name_size(
         if (out_bytes == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_current_name_size: out_bytes is null.");
         }
-        return ReportTextSize(CNA::getCurrentGraphicsRendererName(), out_bytes);
+        return CNA::C::Detail::ReportTextSize(CNA::getCurrentGraphicsRendererName(), out_bytes);
     });
 }
 

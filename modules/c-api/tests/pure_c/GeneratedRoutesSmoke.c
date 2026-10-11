@@ -117,6 +117,7 @@ static CNA_CnbByteWriterHandle v_CNA_CnbByteWriterHandle;
 static CNA_CnbChunkId v_CNA_CnbChunkId;
 static CNA_CnbCompression v_CNA_CnbCompression;
 static CNA_CnbDocumentHandle v_CNA_CnbDocumentHandle;
+static CNA_CnbModelDataHandle v_CNA_CnbModelDataHandle;
 static CNA_CnbModelFromCnjHandle v_CNA_CnbModelFromCnjHandle;
 static CNA_CnbReaderHandle v_CNA_CnbReaderHandle;
 static CNA_CnbTextureDataHandle v_CNA_CnbTextureDataHandle;
@@ -400,6 +401,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_texture_format_from_surface_format(v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_texture_format_from_surface_format", "a null out_format");
     failures += expect(cna_cnb_audio_frame_bytes(v_CNA_CnbAudioFormat, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_audio_frame_bytes", "a null out_byte_count");
     failures += expect(cna_cnb_loader_registry_is_registered(v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_is_registered", "a null out_registered");
+    failures += expect(cna_cnb_model_get_part_name_size(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_part_name_size", "a null out_byte_count");
+    failures += expect(cna_cnb_model_get_part_external_effect_size(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_part_external_effect_size", "a null out_byte_count");
+    failures += expect(cna_cnb_model_copy_morph_weights(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_morph_weights", "a null out_value_count");
     failures += expect(cna_color_init_vector4(v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_color_init_vector4", "a null out_color");
     failures += expect(cna_color_from_non_premultiplied_vector4(v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_color_from_non_premultiplied_vector4", "a null out_color");
     failures += expect(cna_color_init_vector3(v_CNA_Vector3, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_color_init_vector3", "a null out_color");
@@ -1766,6 +1770,12 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_animation_clip_copy_keyframes(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_animation_clip_copy_keyframes", what);
     failures += expect(cna_cnb_loader_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_loader_destroy", what);
     failures += expect(cna_cnb_sprite_font_data_set_atlas(handle, v_CNA_CnbTextureDataHandle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_sprite_font_data_set_atlas", what);
+    failures += expect(cna_cnb_model_get_part_name_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_part_name_size", what);
+    failures += expect(cna_cnb_model_copy_part_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_part_name", what);
+    failures += expect(cna_cnb_model_get_part_external_effect_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_part_external_effect_size", what);
+    failures += expect(cna_cnb_model_copy_part_external_effect(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_part_external_effect", what);
+    failures += expect(cna_cnb_model_clear_morph(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_clear_morph", what);
+    failures += expect(cna_cnb_model_copy_morph_weights(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_morph_weights", what);
     failures += expect(cna_content_manager_get_root_directory_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_root_directory_size", what);
     failures += expect(cna_content_manager_unload(handle), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_unload", what);
     failures += expect(cna_content_manager_register_builtin_loaders(handle), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_register_builtin_loaders", what);
@@ -3014,6 +3024,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1838 generated routes\n", failures);
+    printf("%d failed checks across 1844 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

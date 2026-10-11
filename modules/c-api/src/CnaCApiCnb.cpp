@@ -448,6 +448,32 @@ template<typename TElement>
     return CNA_RESULT_SUCCESS;
 }
 
+// The two lookups the part and morph routes generate from: the model handle and an index, with
+// the model kept alive beside the part (or its morph data) the route works on.
+[[nodiscard]] CNA_Result GetModelPart(
+    const CNA_CnbModelDataHandle handle,
+    const uint64_t index,
+    std::shared_ptr<CnbModelResource>* const outModel,
+    Cnb::CnbModelPart** const outPart)
+{
+    if (const CNA_Result result = GetModel(handle, outModel); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return GetPart(*outModel, index, outPart);
+}
+
+[[nodiscard]] CNA_Result GetModelMorph(
+    const CNA_CnbModelDataHandle handle,
+    const uint64_t part,
+    std::shared_ptr<CnbModelResource>* const outModel,
+    Cnb::CnbMorphData** const outMorph)
+{
+    if (const CNA_Result result = GetModel(handle, outModel); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return GetMorph(*outModel, part, outMorph);
+}
+
 /// The eight named texture slots, in the order `CNA_CnbMaterialTextureSlot` declares them.
 [[nodiscard]] std::string* MaterialTextureSlot(
     Cnb::CnbMaterial& material,
@@ -2764,90 +2790,6 @@ CNA_Result cna_cnb_model_set_part(
     });
 }
 
-CNA_Result cna_cnb_model_get_part_name_size(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(part->name, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_copy_part_name(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(part->name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_get_part_external_effect_size(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(part->externalEffect, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_copy_part_external_effect(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(part->externalEffect, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_model_set_part_vertex_bytes(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
@@ -3407,26 +3349,6 @@ CNA_Result cna_cnb_model_set_morph(
     });
 }
 
-CNA_Result cna_cnb_model_clear_morph(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t part)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        target->morph.reset();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_model_add_morph_target(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
@@ -3548,28 +3470,6 @@ CNA_Result cna_cnb_model_set_morph_weights(
         }
         morph->weights.assign(source.begin(), source.end());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_copy_morph_weights(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t part,
-    float* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyElements<float>(morph->weights, destination, capacity, outCount);
     });
 }
 
