@@ -328,6 +328,31 @@ unavailable = "ExtensionEffectUnavailable()"
 cna_crt_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::CRTEffect>(*object->value), object->parentGame, out_effect)" }
 cna_depth_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::DepthEffect>(*object->value), object->parentGame, out_effect)" }
 
+[crt_effect]
+lookup = "GetCrtEffect"
+object = "CNA::Graphics::CRTEffect*"
+owner = "std::shared_ptr<EffectResource>"
+feature = "CNA_CNAEXT"
+unavailable = "ExtensionEffectUnavailable()"
+
+[crt_effect.routes]
+cna_crt_effect_get_scanline_intensity = { get = "object->getScanlineIntensity()" }
+cna_crt_effect_get_curvature = { get = "object->getCurvature()" }
+cna_crt_effect_get_vignette_intensity = { get = "object->getVignetteIntensity()" }
+cna_crt_effect_get_mask_intensity = { get = "object->getMaskIntensity()" }
+cna_crt_effect_get_mask_type = { get = "object->getMaskType()" }
+
+[depth_effect]
+lookup = "GetDepthEffect"
+object = "CNA::Graphics::DepthEffect*"
+owner = "std::shared_ptr<EffectResource>"
+feature = "CNA_CNAEXT"
+unavailable = "ExtensionEffectUnavailable()"
+
+[depth_effect.routes]
+cna_depth_effect_get_mode = { get = "object->getMode()" }
+cna_depth_effect_get_dither_mode = { get = "object->getDitherMode()" }
+
 [values]
 [values.routes]
 cna_texture_transform_ext_init = { value = "ToC(TextureTransformEXT{})" }

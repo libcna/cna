@@ -25,11 +25,14 @@ static CNA_ArtistHandle o_CNA_ArtistHandle;
 static CNA_AsciiQuantizeMode o_CNA_AsciiQuantizeMode;
 static CNA_Bool o_CNA_Bool;
 static CNA_BoundingSphere o_CNA_BoundingSphere;
+static CNA_CRTMaskType o_CNA_CRTMaskType;
 static CNA_CameraState o_CNA_CameraState;
 static CNA_CompareFunction o_CNA_CompareFunction;
 static CNA_CompassReading o_CNA_CompassReading;
+static CNA_DepthEffectMode o_CNA_DepthEffectMode;
 static CNA_DepthFormat o_CNA_DepthFormat;
 static CNA_DisplayOrientation o_CNA_DisplayOrientation;
+static CNA_DitherMode o_CNA_DitherMode;
 static CNA_EffectAnnotationCollectionHandle o_CNA_EffectAnnotationCollectionHandle;
 static CNA_EffectHandle o_CNA_EffectHandle;
 static CNA_EffectParameterCollectionHandle o_CNA_EffectParameterCollectionHandle;
@@ -579,6 +582,13 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_skinned_pbr_effect_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_pbr_effect_create", "a null out_effect");
     failures += expect_unless_compiled_out(cna_crt_effect_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_create", "a null out_effect");
     failures += expect_unless_compiled_out(cna_depth_effect_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_depth_effect_create", "a null out_effect");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_scanline_intensity(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_get_scanline_intensity", "a null out_value");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_curvature(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_get_curvature", "a null out_value");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_vignette_intensity(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_get_vignette_intensity", "a null out_value");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_mask_intensity(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_get_mask_intensity", "a null out_value");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_mask_type(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_crt_effect_get_mask_type", "a null out_mask_type");
+    failures += expect_unless_compiled_out(cna_depth_effect_get_mode(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_depth_effect_get_mode", "a null out_mode");
+    failures += expect_unless_compiled_out(cna_depth_effect_get_dither_mode(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_depth_effect_get_dither_mode", "a null out_dither_mode");
     failures += expect(cna_texture_transform_ext_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_transform_ext_init", "a null out_transform");
     failures += expect(cna_effect_material_get_retained_parameter_texture_count_ext(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_material_get_retained_parameter_texture_count_ext", "a null out_count");
     failures += expect(cna_game_component_get_is_drawable(v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_get_is_drawable", "a null out_drawable");
@@ -1951,6 +1961,13 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_EffectHandle = UINT64_C(0xDEAD);
     failures += expect_unless_compiled_out(cna_depth_effect_create(handle, &o_CNA_EffectHandle), CNA_RESULT_INVALID_HANDLE, "cna_depth_effect_create", what);
     failures += expect_cleared(o_CNA_EffectHandle, "cna_depth_effect_create");
+    failures += expect_unless_compiled_out(cna_crt_effect_get_scanline_intensity(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_crt_effect_get_scanline_intensity", what);
+    failures += expect_unless_compiled_out(cna_crt_effect_get_curvature(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_crt_effect_get_curvature", what);
+    failures += expect_unless_compiled_out(cna_crt_effect_get_vignette_intensity(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_crt_effect_get_vignette_intensity", what);
+    failures += expect_unless_compiled_out(cna_crt_effect_get_mask_intensity(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_crt_effect_get_mask_intensity", what);
+    failures += expect_unless_compiled_out(cna_crt_effect_get_mask_type(handle, &o_CNA_CRTMaskType), CNA_RESULT_INVALID_HANDLE, "cna_crt_effect_get_mask_type", what);
+    failures += expect_unless_compiled_out(cna_depth_effect_get_mode(handle, &o_CNA_DepthEffectMode), CNA_RESULT_INVALID_HANDLE, "cna_depth_effect_get_mode", what);
+    failures += expect_unless_compiled_out(cna_depth_effect_get_dither_mode(handle, &o_CNA_DitherMode), CNA_RESULT_INVALID_HANDLE, "cna_depth_effect_get_dither_mode", what);
     failures += expect(cna_effect_material_get_retained_parameter_texture_count_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_material_get_retained_parameter_texture_count_ext", what);
     failures += expect(cna_effect_annotation_collection_add(handle, v_CNA_EffectAnnotationHandle), CNA_RESULT_INVALID_HANDLE, "cna_effect_annotation_collection_add", what);
     failures += expect(cna_game_component_get_is_drawable(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_component_get_is_drawable", what);
@@ -2868,6 +2885,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1738 generated routes\n", failures);
+    printf("%d failed checks across 1745 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }
