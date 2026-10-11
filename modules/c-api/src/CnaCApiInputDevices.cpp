@@ -2,6 +2,7 @@
 
 #include "CNA/C/input_devices.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/Input/Clipboard.hpp"
@@ -21,9 +22,14 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
+
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using CNA::Input::Clipboard;
 using CNA::Input::InputDeviceInfoEXT;
@@ -36,11 +42,6 @@ using CNA::Input::SensorTypeEXT;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 template<typename T>
 [[nodiscard]] CNA_Result ValidateVersionedStructure(
     const T* const structure,
@@ -48,7 +49,7 @@ template<typename T>
 {
     if (structure == nullptr || structure->struct_size < sizeof(T) ||
         structure->struct_version != StructureVersion) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -56,7 +57,7 @@ template<typename T>
 [[nodiscard]] CNA_Result ToSensorType(const CNA_SensorType type, SensorTypeEXT* const outType)
 {
     if (type > CNA_SENSOR_TYPE_MAXIMUM) {
-        return InvalidInput("The sensor kind identity is undefined.");
+        return InvalidArgument("The sensor kind identity is undefined.");
     }
     *outType = static_cast<SensorTypeEXT>(type);
     return CNA_RESULT_SUCCESS;
@@ -79,28 +80,6 @@ template<typename T>
     mapped.struct_version = StructureVersion;
     mapped.id = info.id;
     return mapped;
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The device text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the device text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result CopyBorrowedText(
@@ -131,7 +110,7 @@ template<typename TInfo, typename TEnumerate>
     }
     const std::vector<TInfo> devices = enumerate();
     if (index >= devices.size()) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     *outInfo = devices[index];
     return CNA_RESULT_SUCCESS;
@@ -145,7 +124,7 @@ template<typename TEnumerate>
     const char* const message)
 {
     if (outCount == nullptr) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
         result != CNA_RESULT_SUCCESS) {
@@ -162,7 +141,7 @@ template<typename TEnumerate>
     CNA_InputDeviceInfo* const outInfo)
 {
     if (outInfo == nullptr) {
-        return InvalidInput("The input-device descriptor output is null.");
+        return InvalidArgument("The input-device descriptor output is null.");
     }
     InputDeviceInfoEXT info;
     if (const CNA_Result result = BorrowEnumerated(
@@ -185,7 +164,7 @@ template<typename TEnumerate>
     uint64_t* const outBytes)
 {
     if (outBytes == nullptr) {
-        return InvalidInput("The input-device name byte-count output is null.");
+        return InvalidArgument("The input-device name byte-count output is null.");
     }
     InputDeviceInfoEXT info;
     if (const CNA_Result result = BorrowEnumerated(
@@ -210,7 +189,7 @@ template<typename TEnumerate>
     uint64_t* const outBytes)
 {
     if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The input-device name output is invalid.");
+        return InvalidArgument("The input-device name output is invalid.");
     }
     InputDeviceInfoEXT info;
     if (const CNA_Result result = BorrowEnumerated(
@@ -283,11 +262,11 @@ private:
     CNA_InputDeviceEventRegistrationHandle* const outRegistration)
 {
     if (outRegistration == nullptr) {
-        return InvalidInput("The input-device registration output is null.");
+        return InvalidArgument("The input-device registration output is null.");
     }
     *outRegistration = CNA_INVALID_HANDLE;
     if (callback == nullptr) {
-        return InvalidInput("The input-device hot-plug callback is null.");
+        return InvalidArgument("The input-device hot-plug callback is null.");
     }
     const auto token = event.Add([callback, context](const std::uint32_t id) {
         callback(id, context);
@@ -328,7 +307,7 @@ using SensorRead = bool (*)(Microsoft::Xna::Framework::Vector3&);
     CNA_Bool* const outAvailable)
 {
     if (outValue == nullptr || outAvailable == nullptr) {
-        return InvalidInput("The sensor reading output is null.");
+        return InvalidArgument("The sensor reading output is null.");
     }
     if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
         result != CNA_RESULT_SUCCESS) {
@@ -354,7 +333,7 @@ CNA_Result cna_sensor_info_init(CNA_SensorInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The sensor descriptor output is null.");
+            return InvalidArgument("The sensor descriptor output is null.");
         }
         *outInfo = MapSensorInfo(SensorInfoEXT());
         return CNA_RESULT_SUCCESS;
@@ -370,7 +349,7 @@ CNA_Result cna_sensor_info_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The sensor descriptor comparison output is null.");
+            return InvalidArgument("The sensor descriptor comparison output is null.");
         }
         if (const CNA_Result result =
                 ValidateVersionedStructure(left, "The first sensor descriptor is invalid.");
@@ -408,7 +387,7 @@ CNA_Result cna_sensor_info_equals(
         }
         nativeLeft.id = left->id;
         nativeRight.id = right->id;
-        *outEqual = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -431,7 +410,7 @@ CNA_Result cna_sensors_get_info_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The sensor descriptor output is null.");
+            return InvalidArgument("The sensor descriptor output is null.");
         }
         SensorInfoEXT info;
         if (const CNA_Result result = BorrowEnumerated(
@@ -455,7 +434,7 @@ CNA_Result cna_sensors_get_name_size_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The sensor name byte-count output is null.");
+            return InvalidArgument("The sensor name byte-count output is null.");
         }
         SensorInfoEXT info;
         if (const CNA_Result result = BorrowEnumerated(
@@ -481,7 +460,7 @@ CNA_Result cna_sensors_copy_name_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The sensor name output is invalid.");
+            return InvalidArgument("The sensor name output is invalid.");
         }
         SensorInfoEXT info;
         if (const CNA_Result result = BorrowEnumerated(
@@ -529,7 +508,7 @@ CNA_Result cna_input_device_info_init(CNA_InputDeviceInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The input-device descriptor output is null.");
+            return InvalidArgument("The input-device descriptor output is null.");
         }
         *outInfo = MapDeviceInfo(InputDeviceInfoEXT());
         return CNA_RESULT_SUCCESS;
@@ -545,7 +524,7 @@ CNA_Result cna_input_device_info_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The input-device comparison output is null.");
+            return InvalidArgument("The input-device comparison output is null.");
         }
         if (const CNA_Result result =
                 ValidateVersionedStructure(left, "The first input-device descriptor is invalid.");
@@ -575,7 +554,7 @@ CNA_Result cna_input_device_info_equals(
         }
         nativeLeft.id = left->id;
         nativeRight.id = right->id;
-        *outEqual = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -798,15 +777,9 @@ CNA_Result cna_input_devices_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DeviceRegistration> resource;
-        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
-            registration,
-            CNA::C::Detail::ObjectKind::InputDeviceEventRegistration,
-            &resource);
+        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::InputDeviceEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The input-device registration handle is invalid for this call.");
+            return getResult;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);
@@ -872,7 +845,7 @@ CNA_Result cna_clipboard_get_text_size(const CNA_Handle gameHandle, uint64_t* co
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The clipboard text byte-count output is null.");
+            return InvalidArgument("The clipboard text byte-count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -891,7 +864,7 @@ CNA_Result cna_clipboard_copy_text(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The clipboard text output is invalid.");
+            return InvalidArgument("The clipboard text output is invalid.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -925,13 +898,13 @@ CNA_Result cna_clipboard_get_has_text(const CNA_Handle gameHandle, CNA_Bool* con
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasText == nullptr) {
-            return InvalidInput("The clipboard text-presence output is null.");
+            return InvalidArgument("The clipboard text-presence output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outHasText = Clipboard::HasTextEXT() ? CNA_TRUE : CNA_FALSE;
+        *outHasText = ToCBool(Clipboard::HasTextEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -944,7 +917,7 @@ CNA_Result cna_power_get_info(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr || outSecondsLeft == nullptr || outPercent == nullptr) {
-            return InvalidInput("The power information output is null.");
+            return InvalidArgument("The power information output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {

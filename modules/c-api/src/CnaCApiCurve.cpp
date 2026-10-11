@@ -2,6 +2,8 @@
 
 #include "CNA/C/curve.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
@@ -20,7 +22,12 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StoreOutput;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Curve;
 using Microsoft::Xna::Framework::CurveContinuity;
 using Microsoft::Xna::Framework::CurveKey;
@@ -84,45 +91,6 @@ using Microsoft::Xna::Framework::CurveTangent;
         "The curve tangent type is invalid.");
 }
 
-[[nodiscard]] CurveKey ToNative(const CNA_CurveKey value)
-{
-    return CurveKey(
-        value.position,
-        value.value,
-        value.tangent_in,
-        value.tangent_out,
-        static_cast<CurveContinuity>(value.continuity));
-}
-
-[[nodiscard]] CNA_CurveKey ToC(const CurveKey& value) noexcept
-{
-    return CNA_CurveKey{
-        value.getPositionProperty(),
-        value.getValueProperty(),
-        value.getTangentInProperty(),
-        value.getTangentOutProperty(),
-        static_cast<CNA_CurveContinuity>(value.getContinuityProperty())};
-}
-
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreOutput(
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
-        }
-        const TValue result = std::forward<TCallable>(callable)();
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 template<typename TValue, typename TCallable>
 [[nodiscard]] CNA_Result StoreValidatedKeyOutput(
     const CNA_CurveKey key,
@@ -175,34 +143,14 @@ template<typename TCallable>
     const CNA_CurveKeyCollectionHandle handle,
     std::shared_ptr<CurveKeyCollection>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::CurveKeyCollection,
-        outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The CurveKeyCollection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::CurveKeyCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result GetCurve(
     const CNA_CurveHandle handle,
     std::shared_ptr<Curve>* const outCurve)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::Curve,
-        outCurve);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The Curve handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::Curve, outCurve);
 }
 
 } // namespace
@@ -424,7 +372,7 @@ CNA_Result cna_curve_key_equals(
         if (validation != CNA_RESULT_SUCCESS) {
             return validation;
         }
-        const CNA_Bool result = ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(ToNative(left).Equals(ToNative(right)));
         *outEqual = result;
         return CNA_RESULT_SUCCESS;
     });
@@ -449,7 +397,7 @@ CNA_Result cna_curve_key_not_equals(
         if (validation != CNA_RESULT_SUCCESS) {
             return validation;
         }
-        const CNA_Bool result = ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(ToNative(left) != ToNative(right));
         *outNotEqual = result;
         return CNA_RESULT_SUCCESS;
     });
@@ -552,7 +500,7 @@ CNA_Result cna_curve_key_collection_get_is_read_only(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool result = collection->getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(collection->getIsReadOnlyProperty());
         *outIsReadOnly = result;
         return CNA_RESULT_SUCCESS;
     });
@@ -684,7 +632,7 @@ CNA_Result cna_curve_key_collection_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool result = collection->Contains(ToNative(key)) ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(collection->Contains(ToNative(key)));
         *outContains = result;
         return CNA_RESULT_SUCCESS;
     });
@@ -778,7 +726,7 @@ CNA_Result cna_curve_key_collection_remove(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool result = collection->Remove(ToNative(key)) ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(collection->Remove(ToNative(key)));
         *outRemoved = result;
         return CNA_RESULT_SUCCESS;
     });
@@ -859,7 +807,7 @@ CNA_Result cna_curve_get_is_constant(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool result = curve->getIsConstantProperty() ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool result = ToCBool(curve->getIsConstantProperty());
         *outIsConstant = result;
         return CNA_RESULT_SUCCESS;
     });

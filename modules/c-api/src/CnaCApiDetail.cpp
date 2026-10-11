@@ -23,6 +23,7 @@ namespace CNA::C::Detail {
 
 namespace {
 
+
 thread_local LastError lastError;
 
 struct PendingException {
@@ -100,6 +101,154 @@ struct ForeignThreadCallQueue final {
 }
 
 } // namespace
+
+std::string_view ObjectKindName(const ObjectKind kind) noexcept
+{
+    switch (kind) {
+        case ObjectKind::Unknown: return "Unknown";
+        case ObjectKind::Runtime: return "Runtime";
+        case ObjectKind::Game: return "Game";
+        case ObjectKind::GraphicsDevice: return "GraphicsDevice";
+        case ObjectKind::Texture2D: return "Texture2D";
+        case ObjectKind::SpriteBatch: return "SpriteBatch";
+        case ObjectKind::EventRegistration: return "EventRegistration";
+        case ObjectKind::ContentManager: return "ContentManager";
+        case ObjectKind::SoundEffect: return "SoundEffect";
+        case ObjectKind::SoundEffectInstance: return "SoundEffectInstance";
+        case ObjectKind::RenderTarget2D: return "RenderTarget2D";
+        case ObjectKind::RenderTargetCube: return "RenderTargetCube";
+        case ObjectKind::SpriteFont: return "SpriteFont";
+        case ObjectKind::CurveKeyCollection: return "CurveKeyCollection";
+        case ObjectKind::Curve: return "Curve";
+        case ObjectKind::VertexDeclaration: return "VertexDeclaration";
+        case ObjectKind::Texture3D: return "Texture3D";
+        case ObjectKind::TextureCube: return "TextureCube";
+        case ObjectKind::VertexBuffer: return "VertexBuffer";
+        case ObjectKind::VertexBufferEventRegistration: return "VertexBufferEventRegistration";
+        case ObjectKind::IndexBuffer: return "IndexBuffer";
+        case ObjectKind::IndexBufferEventRegistration: return "IndexBufferEventRegistration";
+        case ObjectKind::EffectAnnotation: return "EffectAnnotation";
+        case ObjectKind::EffectAnnotationCollection: return "EffectAnnotationCollection";
+        case ObjectKind::EffectParameter: return "EffectParameter";
+        case ObjectKind::EffectParameterCollection: return "EffectParameterCollection";
+        case ObjectKind::EffectPass: return "EffectPass";
+        case ObjectKind::EffectPassCollection: return "EffectPassCollection";
+        case ObjectKind::EffectTechnique: return "EffectTechnique";
+        case ObjectKind::EffectTechniqueCollection: return "EffectTechniqueCollection";
+        case ObjectKind::Effect: return "Effect";
+        case ObjectKind::DirectionalLight: return "DirectionalLight";
+        case ObjectKind::ModelBone: return "ModelBone";
+        case ObjectKind::ModelBoneCollection: return "ModelBoneCollection";
+        case ObjectKind::ModelMeshPart: return "ModelMeshPart";
+        case ObjectKind::ModelMeshPartCollection: return "ModelMeshPartCollection";
+        case ObjectKind::ModelMesh: return "ModelMesh";
+        case ObjectKind::ModelMeshCollection: return "ModelMeshCollection";
+        case ObjectKind::ModelEffectCollection: return "ModelEffectCollection";
+        case ObjectKind::Model: return "Model";
+        case ObjectKind::MorphTargetDataEXT: return "MorphTargetDataEXT";
+        case ObjectKind::SkinnedModelEXT: return "SkinnedModelEXT";
+        case ObjectKind::SkinningData: return "SkinningData";
+        case ObjectKind::AnimationPlayer: return "AnimationPlayer";
+        case ObjectKind::GraphicsDeviceEventRegistration: return "GraphicsDeviceEventRegistration";
+        case ObjectKind::OcclusionQuery: return "OcclusionQuery";
+        case ObjectKind::AsciiPostProcessEffect: return "AsciiPostProcessEffect";
+        case ObjectKind::StorageDevice: return "StorageDevice";
+        case ObjectKind::StorageContainer: return "StorageContainer";
+        case ObjectKind::StorageStream: return "StorageStream";
+        case ObjectKind::StorageDeviceEventRegistration: return "StorageDeviceEventRegistration";
+        case ObjectKind::StorageContainerEventRegistration: return "StorageContainerEventRegistration";
+        case ObjectKind::ContentReader: return "ContentReader";
+        case ObjectKind::ContentTypeReader: return "ContentTypeReader";
+        case ObjectKind::NetworkSessionProperties: return "NetworkSessionProperties";
+        case ObjectKind::NetworkSessionPropertyEnumerator: return "NetworkSessionPropertyEnumerator";
+        case ObjectKind::PacketWriter: return "PacketWriter";
+        case ObjectKind::PacketReader: return "PacketReader";
+        case ObjectKind::NetworkGamer: return "NetworkGamer";
+        case ObjectKind::NetworkMachine: return "NetworkMachine";
+        case ObjectKind::AvailableNetworkSession: return "AvailableNetworkSession";
+        case ObjectKind::AvailableNetworkSessionCollection: return "AvailableNetworkSessionCollection";
+        case ObjectKind::NetworkSession: return "NetworkSession";
+        case ObjectKind::SignedInGamer: return "SignedInGamer";
+        case ObjectKind::NetworkSessionEventRegistration: return "NetworkSessionEventRegistration";
+        case ObjectKind::MouseEventRegistration: return "MouseEventRegistration";
+        case ObjectKind::MouseCursor: return "MouseCursor";
+        case ObjectKind::TextInputEventRegistration: return "TextInputEventRegistration";
+        case ObjectKind::HapticDevice: return "HapticDevice";
+        case ObjectKind::JoystickState: return "JoystickState";
+        case ObjectKind::JoystickEventRegistration: return "JoystickEventRegistration";
+        case ObjectKind::InputDeviceEventRegistration: return "InputDeviceEventRegistration";
+        case ObjectKind::Song: return "Song";
+        case ObjectKind::SongCollection: return "SongCollection";
+        case ObjectKind::MediaLibrary: return "MediaLibrary";
+        case ObjectKind::Album: return "Album";
+        case ObjectKind::AlbumCollection: return "AlbumCollection";
+        case ObjectKind::Artist: return "Artist";
+        case ObjectKind::ArtistCollection: return "ArtistCollection";
+        case ObjectKind::Genre: return "Genre";
+        case ObjectKind::GenreCollection: return "GenreCollection";
+        case ObjectKind::Playlist: return "Playlist";
+        case ObjectKind::PlaylistCollection: return "PlaylistCollection";
+        case ObjectKind::Picture: return "Picture";
+        case ObjectKind::PictureCollection: return "PictureCollection";
+        case ObjectKind::PictureAlbum: return "PictureAlbum";
+        case ObjectKind::PictureAlbumCollection: return "PictureAlbumCollection";
+        case ObjectKind::MediaQueue: return "MediaQueue";
+        case ObjectKind::MediaPlayerEventRegistration: return "MediaPlayerEventRegistration";
+        case ObjectKind::Accelerometer: return "Accelerometer";
+        case ObjectKind::Gyroscope: return "Gyroscope";
+        case ObjectKind::SensorEventRegistration: return "SensorEventRegistration";
+        case ObjectKind::Compass: return "Compass";
+        case ObjectKind::Motion: return "Motion";
+        case ObjectKind::SystemTray: return "SystemTray";
+        case ObjectKind::Camera: return "Camera";
+        case ObjectKind::GameComponent: return "GameComponent";
+        case ObjectKind::GameComponentEventRegistration: return "GameComponentEventRegistration";
+        case ObjectKind::GameEventRegistration: return "GameEventRegistration";
+        case ObjectKind::GraphicsDeviceManager: return "GraphicsDeviceManager";
+        case ObjectKind::AudioEventRegistration: return "AudioEventRegistration";
+        case ObjectKind::Video: return "Video";
+        case ObjectKind::VideoPlayer: return "VideoPlayer";
+        case ObjectKind::AudioEngine: return "AudioEngine";
+        case ObjectKind::AudioCategory: return "AudioCategory";
+        case ObjectKind::WaveBank: return "WaveBank";
+        case ObjectKind::SoundBank: return "SoundBank";
+        case ObjectKind::Cue: return "Cue";
+        case ObjectKind::Gamer: return "Gamer";
+        case ObjectKind::GamerProfile: return "GamerProfile";
+        case ObjectKind::GamerCollection: return "GamerCollection";
+        case ObjectKind::GamerEnumerator: return "GamerEnumerator";
+        case ObjectKind::GamerEventRegistration: return "GamerEventRegistration";
+        case ObjectKind::Achievement: return "Achievement";
+        case ObjectKind::AchievementCollection: return "AchievementCollection";
+        case ObjectKind::PropertyDictionary: return "PropertyDictionary";
+        case ObjectKind::LeaderboardReader: return "LeaderboardReader";
+        case ObjectKind::LeaderboardEntry: return "LeaderboardEntry";
+        case ObjectKind::AvatarDescription: return "AvatarDescription";
+        case ObjectKind::AvatarAnimation: return "AvatarAnimation";
+        case ObjectKind::AvatarRenderer: return "AvatarRenderer";
+        case ObjectKind::ModelAnimationsEXT: return "ModelAnimationsEXT";
+        case ObjectKind::ContentTypeReaderRegistration: return "ContentTypeReaderRegistration";
+        case ObjectKind::OwnedGraphicsDevice: return "OwnedGraphicsDevice";
+        case ObjectKind::RenderTargetEventRegistration: return "RenderTargetEventRegistration";
+        case ObjectKind::DebugDraw: return "DebugDraw";
+        case ObjectKind::CnbDocument: return "CnbDocument";
+        case ObjectKind::CnbReader: return "CnbReader";
+        case ObjectKind::CnbByteWriter: return "CnbByteWriter";
+        case ObjectKind::CnbWriter: return "CnbWriter";
+        case ObjectKind::CnbTextureData: return "CnbTextureData";
+        case ObjectKind::CnbModelData: return "CnbModelData";
+        case ObjectKind::CnbModelFromCnj: return "CnbModelFromCnj";
+        case ObjectKind::CnbSpriteFontData: return "CnbSpriteFontData";
+        case ObjectKind::CnbSoundEffectData: return "CnbSoundEffectData";
+        case ObjectKind::CnbAnimationClip: return "CnbAnimationClip";
+        case ObjectKind::CnbLoader: return "CnbLoader";
+        case ObjectKind::CnjToCnbResult: return "CnjToCnbResult";
+        case ObjectKind::ReflectiveTypeReaderBuilder: return "ReflectiveTypeReaderBuilder";
+        case ObjectKind::ObjectDictionaryEXT: return "ObjectDictionaryEXT";
+        case ObjectKind::Test: return "Test";
+    }
+    return "Unknown";
+}
 
 CNA_ErrorCategory ErrorCategoryForResult(const CNA_Result result) noexcept
 {

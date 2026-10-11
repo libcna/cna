@@ -30,7 +30,11 @@ using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
@@ -44,16 +48,6 @@ using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
 using Microsoft::Xna::Framework::Net::WriteLeaderboardsEventArgs;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
 
 struct NetworkMachineResource final {
     std::shared_ptr<NetworkMachine> value;
@@ -86,31 +80,14 @@ struct NetworkGamerResource final {
     const CNA_Handle handle,
     std::shared_ptr<NetworkGamerResource>* const outGamer)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::NetworkGamer, outGamer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkGamer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::NetworkGamer, outGamer);
 }
 
 [[nodiscard]] CNA_Result GetMachine(
     const CNA_Handle handle,
     std::shared_ptr<NetworkMachineResource>* const outMachine)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::NetworkMachine,
-        outMachine);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkMachine handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::NetworkMachine, outMachine);
 }
 
 template<typename TCallable>
@@ -324,7 +301,7 @@ CNA_Result cna_network_gamer_get_has_left_session(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getHasLeftSessionProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getHasLeftSessionProperty());
             });
     });
 }
@@ -354,7 +331,7 @@ CNA_Result cna_network_gamer_get_has_voice(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getHasVoiceProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getHasVoiceProperty());
             });
     });
 }
@@ -395,7 +372,7 @@ CNA_Result cna_network_gamer_get_is_guest(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsGuestProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsGuestProperty());
             });
     });
 }
@@ -410,7 +387,7 @@ CNA_Result cna_network_gamer_get_is_host(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsHostProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsHostProperty());
             });
     });
 }
@@ -440,7 +417,7 @@ CNA_Result cna_network_gamer_get_is_local(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsLocalProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsLocalProperty());
             });
     });
 }
@@ -455,7 +432,7 @@ CNA_Result cna_network_gamer_get_is_muted_by_local_user(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsMutedByLocalUserProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsMutedByLocalUserProperty());
             });
     });
 }
@@ -470,7 +447,7 @@ CNA_Result cna_network_gamer_get_is_private_slot(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsPrivateSlotProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsPrivateSlotProperty());
             });
     });
 }
@@ -485,7 +462,7 @@ CNA_Result cna_network_gamer_get_is_ready(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsReadyProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsReadyProperty());
             });
     });
 }
@@ -515,7 +492,7 @@ CNA_Result cna_network_gamer_get_is_talking(
             outValue,
             "The gamer state output is null.",
             [outValue](NetworkGamer& gamer) {
-                *outValue = gamer.getIsTalkingProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(gamer.getIsTalkingProperty());
             });
     });
 }
@@ -948,7 +925,7 @@ CNA_Result cna_write_leaderboards_event_info_init(
             WriteLeaderboardsEventArgs::CreateInternal(nullptr, isLeaving != CNA_FALSE);
         (void)arguments.getGamerProperty();
         outInfo->gamer = gamer;
-        outInfo->is_leaving = arguments.getIsLeavingProperty() ? CNA_TRUE : CNA_FALSE;
+        outInfo->is_leaving = ToCBool(arguments.getIsLeavingProperty());
         std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
         return CNA_RESULT_SUCCESS;
     });

@@ -30,7 +30,9 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::ToCBlendState;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCDepthStencilState;
 using CNA::C::Detail::ToCRasterizerState;
 using CNA::C::Detail::ToCSamplerState;
@@ -116,11 +118,6 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     return value <= CNA_TEXTURE_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
 }
 
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
-
 template<typename T>
 [[nodiscard]] bool HasSupportedOutputHeader(const T* const value) noexcept
 {
@@ -192,10 +189,10 @@ CNA_Result ToNativeDepthStencilState(
     if (source == nullptr || destination == nullptr ||
         source->struct_size < sizeof(CNA_DepthStencilState) ||
         source->struct_version != StructureVersion || source->reserved != 0U ||
-        !IsBool(source->depth_buffer_enable) ||
-        !IsBool(source->depth_buffer_write_enable) ||
-        !IsBool(source->stencil_enable) ||
-        !IsBool(source->two_sided_stencil_mode) ||
+        !IsCanonicalBool(source->depth_buffer_enable) ||
+        !IsCanonicalBool(source->depth_buffer_write_enable) ||
+        !IsCanonicalBool(source->stencil_enable) ||
+        !IsCanonicalBool(source->two_sided_stencil_mode) ||
         !IsCompareFunction(source->depth_buffer_function) ||
         !IsCompareFunction(source->stencil_function) ||
         !IsStencilOperation(source->stencil_fail) ||
@@ -245,7 +242,7 @@ CNA_Result ToNativeRasterizerState(
         source->reserved[1] != 0U || !IsCullMode(source->cull_mode) ||
         !IsFillMode(source->fill_mode) || !std::isfinite(source->depth_bias) ||
         !std::isfinite(source->slope_scale_depth_bias) ||
-        !IsBool(source->multi_sample_anti_alias) || !IsBool(source->scissor_test_enable)) {
+        !IsCanonicalBool(source->multi_sample_anti_alias) || !IsCanonicalBool(source->scissor_test_enable)) {
         return InvalidStateDescriptor("The RasterizerState descriptor is invalid.");
     }
 
@@ -322,12 +319,10 @@ void ToCDepthStencilState(
     *destination = CNA_DepthStencilState{
         .struct_size = sizeof(CNA_DepthStencilState),
         .struct_version = StructureVersion,
-        .depth_buffer_enable = source.getDepthBufferEnableProperty() ? CNA_TRUE : CNA_FALSE,
-        .depth_buffer_write_enable = source.getDepthBufferWriteEnableProperty()
-            ? CNA_TRUE : CNA_FALSE,
-        .stencil_enable = source.getStencilEnableProperty() ? CNA_TRUE : CNA_FALSE,
-        .two_sided_stencil_mode = source.getTwoSidedStencilModeProperty()
-            ? CNA_TRUE : CNA_FALSE,
+        .depth_buffer_enable = ToCBool(source.getDepthBufferEnableProperty()),
+        .depth_buffer_write_enable = ToCBool(source.getDepthBufferWriteEnableProperty()),
+        .stencil_enable = ToCBool(source.getStencilEnableProperty()),
+        .two_sided_stencil_mode = ToCBool(source.getTwoSidedStencilModeProperty()),
         .depth_buffer_function = static_cast<CNA_CompareFunction>(
             source.getDepthBufferFunctionProperty()),
         .stencil_function = static_cast<CNA_CompareFunction>(
@@ -361,9 +356,8 @@ void ToCRasterizerState(
         .fill_mode = static_cast<CNA_FillMode>(source.getFillModeProperty()),
         .depth_bias = source.getDepthBiasProperty(),
         .slope_scale_depth_bias = source.getSlopeScaleDepthBiasProperty(),
-        .multi_sample_anti_alias = source.getMultiSampleAntiAliasProperty()
-            ? CNA_TRUE : CNA_FALSE,
-        .scissor_test_enable = source.getScissorTestEnableProperty() ? CNA_TRUE : CNA_FALSE,
+        .multi_sample_anti_alias = ToCBool(source.getMultiSampleAntiAliasProperty()),
+        .scissor_test_enable = ToCBool(source.getScissorTestEnableProperty()),
         .reserved = {0U, 0U}};
 }
 

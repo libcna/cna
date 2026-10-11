@@ -2,6 +2,7 @@
 
 #include "CNA/C/input_joystick.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/Input/JoystickCapabilities.hpp"
@@ -24,9 +25,15 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
+
+using CNA::C::Detail::CopyElements;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using CNA::Input::JoystickCapabilitiesEXT;
 using CNA::Input::JoystickHatPositionEXT;
@@ -38,11 +45,6 @@ using CNA::Input::PowerStateEXT;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 template<typename T>
 [[nodiscard]] CNA_Result ValidateVersionedStructure(
     const T* const structure,
@@ -50,7 +52,7 @@ template<typename T>
 {
     if (structure == nullptr || structure->struct_size < sizeof(T) ||
         structure->struct_version != StructureVersion) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -58,7 +60,7 @@ template<typename T>
 [[nodiscard]] CNA_Result ToJoystickType(const CNA_JoystickType type, JoystickTypeEXT* const outType)
 {
     if (type > CNA_JOYSTICK_TYPE_MAXIMUM) {
-        return InvalidInput("The joystick type identity is undefined.");
+        return InvalidArgument("The joystick type identity is undefined.");
     }
     *outType = static_cast<JoystickTypeEXT>(type);
     return CNA_RESULT_SUCCESS;
@@ -77,7 +79,7 @@ template<typename T>
         return CNA_RESULT_SUCCESS;
     case CNA_POWER_STATE_CHARGING: *outState = PowerStateEXT::Charging; return CNA_RESULT_SUCCESS;
     case CNA_POWER_STATE_CHARGED: *outState = PowerStateEXT::Charged; return CNA_RESULT_SUCCESS;
-    default: return InvalidInput("The power-state identity is undefined.");
+    default: return InvalidArgument("The power-state identity is undefined.");
     }
 }
 
@@ -103,30 +105,8 @@ template<typename T>
     mapped.type = static_cast<CNA_JoystickType>(capabilities.type);
     mapped.power_state = static_cast<CNA_PowerState>(capabilities.powerState);
     mapped.power_percent = static_cast<int32_t>(capabilities.powerPercent);
-    mapped.is_connected = capabilities.isConnected ? CNA_TRUE : CNA_FALSE;
+    mapped.is_connected = ToCBool(capabilities.isConnected);
     return mapped;
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The joystick text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the joystick text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result CopyBorrowedText(
@@ -147,15 +127,9 @@ template<typename T>
     const CNA_JoystickStateHandle handle,
     std::shared_ptr<JoystickStateEXT>* const outState)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
-        handle,
-        CNA::C::Detail::ObjectKind::JoystickState,
-        outState);
+    const CNA_Result result = LookupHandle(handle, CNA::C::Detail::ObjectKind::JoystickState, outState);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The joystick snapshot handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -169,7 +143,7 @@ template<typename TSource, typename TDestination, typename TMap>
     const TMap map)
 {
     if (outCount == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The joystick snapshot copy output is invalid.");
+        return InvalidArgument("The joystick snapshot copy output is invalid.");
     }
     *outCount = static_cast<uint64_t>(source.size());
     if (capacity < static_cast<uint64_t>(source.size())) {
@@ -191,7 +165,7 @@ template<typename TSize>
     const TSize size)
 {
     if (outCount == nullptr) {
-        return InvalidInput("The joystick snapshot count output is null.");
+        return InvalidArgument("The joystick snapshot count output is null.");
     }
     std::shared_ptr<JoystickStateEXT> state;
     if (const CNA_Result result = BorrowState(handle, &state); result != CNA_RESULT_SUCCESS) {
@@ -212,7 +186,7 @@ template<typename TSize>
     }
     const std::vector<JoystickInfoEXT> joysticks = Joysticks::GetJoysticksEXT();
     if (index >= joysticks.size()) {
-        return InvalidInput("The joystick index is out of range.");
+        return InvalidArgument("The joystick index is out of range.");
     }
     *outInfo = joysticks[index];
     return CNA_RESULT_SUCCESS;
@@ -278,11 +252,11 @@ private:
     CNA_JoystickEventRegistrationHandle* const outRegistration)
 {
     if (outRegistration == nullptr) {
-        return InvalidInput("The joystick registration output is null.");
+        return InvalidArgument("The joystick registration output is null.");
     }
     *outRegistration = CNA_INVALID_HANDLE;
     if (callback == nullptr) {
-        return InvalidInput("The joystick hot-plug callback is null.");
+        return InvalidArgument("The joystick hot-plug callback is null.");
     }
     const auto token = event.Add([callback, context](const std::uint32_t id) {
         callback(id, context);
@@ -307,7 +281,7 @@ CNA_Result cna_joystick_info_init(CNA_JoystickInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The joystick descriptor output is null.");
+            return InvalidArgument("The joystick descriptor output is null.");
         }
         *outInfo = MapInfo(JoystickInfoEXT());
         return CNA_RESULT_SUCCESS;
@@ -323,7 +297,7 @@ CNA_Result cna_joystick_info_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The joystick descriptor comparison output is null.");
+            return InvalidArgument("The joystick descriptor comparison output is null.");
         }
         if (const CNA_Result result =
                 ValidateVersionedStructure(left, "The first joystick descriptor is invalid.");
@@ -361,7 +335,7 @@ CNA_Result cna_joystick_info_equals(
         }
         nativeLeft.id = left->id;
         nativeRight.id = right->id;
-        *outEqual = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -370,7 +344,7 @@ CNA_Result cna_joystick_capabilities_init(CNA_JoystickCapabilities* const outCap
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
-            return InvalidInput("The joystick capabilities output is null.");
+            return InvalidArgument("The joystick capabilities output is null.");
         }
         *outCapabilities = MapCapabilities(JoystickCapabilitiesEXT());
         return CNA_RESULT_SUCCESS;
@@ -388,7 +362,7 @@ CNA_Result cna_joystick_capabilities_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The joystick capabilities comparison output is null.");
+            return InvalidArgument("The joystick capabilities comparison output is null.");
         }
         if (const CNA_Result result = ValidateVersionedStructure(
                 left,
@@ -460,7 +434,7 @@ CNA_Result cna_joystick_capabilities_equals(
         nativeRight.hatCount = right->hat_count;
         nativeRight.ballCount = right->ball_count;
         nativeRight.powerPercent = right->power_percent;
-        *outEqual = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -469,7 +443,7 @@ CNA_Result cna_joysticks_get_count(const CNA_Handle gameHandle, uint32_t* const 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The joystick count output is null.");
+            return InvalidArgument("The joystick count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -487,7 +461,7 @@ CNA_Result cna_joysticks_get_info_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The joystick descriptor output is null.");
+            return InvalidArgument("The joystick descriptor output is null.");
         }
         JoystickInfoEXT info;
         if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
@@ -506,7 +480,7 @@ CNA_Result cna_joysticks_get_name_size_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The joystick name byte-count output is null.");
+            return InvalidArgument("The joystick name byte-count output is null.");
         }
         JoystickInfoEXT info;
         if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
@@ -527,7 +501,7 @@ CNA_Result cna_joysticks_copy_name_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The joystick name output is invalid.");
+            return InvalidArgument("The joystick name output is invalid.");
         }
         JoystickInfoEXT info;
         if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
@@ -545,7 +519,7 @@ CNA_Result cna_joysticks_get_capabilities(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
-            return InvalidInput("The joystick capabilities output is null.");
+            return InvalidArgument("The joystick capabilities output is null.");
         }
         JoystickCapabilitiesEXT capabilities;
         if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
@@ -564,7 +538,7 @@ CNA_Result cna_joysticks_get_capabilities_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The joystick device-name byte-count output is null.");
+            return InvalidArgument("The joystick device-name byte-count output is null.");
         }
         JoystickCapabilitiesEXT capabilities;
         if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
@@ -585,7 +559,7 @@ CNA_Result cna_joysticks_copy_capabilities_name(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The joystick device-name output is invalid.");
+            return InvalidArgument("The joystick device-name output is invalid.");
         }
         JoystickCapabilitiesEXT capabilities;
         if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
@@ -603,7 +577,7 @@ CNA_Result cna_joysticks_get_capabilities_guid_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The joystick GUID byte-count output is null.");
+            return InvalidArgument("The joystick GUID byte-count output is null.");
         }
         JoystickCapabilitiesEXT capabilities;
         if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
@@ -624,7 +598,7 @@ CNA_Result cna_joysticks_copy_capabilities_guid(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The joystick GUID output is invalid.");
+            return InvalidArgument("The joystick GUID output is invalid.");
         }
         JoystickCapabilitiesEXT capabilities;
         if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
@@ -642,7 +616,7 @@ CNA_Result cna_joysticks_capture_state(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The joystick snapshot output is null.");
+            return InvalidArgument("The joystick snapshot output is null.");
         }
         *outState = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -724,7 +698,7 @@ CNA_Result cna_joystick_state_copy_buttons(
             destination,
             capacity,
             outCount,
-            [](const bool value) { return value ? CNA_TRUE : CNA_FALSE; });
+            [](const bool value) { return ToCBool(value); });
     });
 }
 
@@ -806,7 +780,7 @@ CNA_Result cna_joystick_state_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The joystick snapshot comparison output is null.");
+            return InvalidArgument("The joystick snapshot comparison output is null.");
         }
         std::shared_ptr<JoystickStateEXT> nativeLeft;
         std::shared_ptr<JoystickStateEXT> nativeRight;
@@ -818,7 +792,7 @@ CNA_Result cna_joystick_state_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = *nativeLeft == *nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(*nativeLeft == *nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -877,15 +851,9 @@ CNA_Result cna_joysticks_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<JoystickRegistration> resource;
-        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
-            registration,
-            CNA::C::Detail::ObjectKind::JoystickEventRegistration,
-            &resource);
+        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::JoystickEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The joystick registration handle is invalid for this call.");
+            return getResult;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);

@@ -31,15 +31,7 @@ CNA_Result GetOwnedTexture3D(
     const CNA_Handle handle,
     std::shared_ptr<Texture3DResource>* const outTexture)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::Texture3D, outTexture);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned Texture3D handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::Texture3D, outTexture);
 }
 
 CNA_Result GetOwnedTextureCube(
@@ -62,13 +54,9 @@ CNA_Result GetOwnedTextureCube(
     }
     if (kind == ObjectKind::TextureCube) {
         std::shared_ptr<TextureCubeResource> texture;
-        if (const CNA_Result result = GetRuntimeHandles().Get(
-                handle, ObjectKind::TextureCube, &texture);
+        if (const CNA_Result result = LookupHandle(handle, ObjectKind::TextureCube, &texture);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned TextureCube handle is invalid for this call.");
+            return result;
         }
         *outTexture = TextureCubeResourceView{
             texture->value,
@@ -79,13 +67,9 @@ CNA_Result GetOwnedTextureCube(
     }
     if (kind == ObjectKind::RenderTargetCube) {
         std::shared_ptr<RenderTargetCubeResource> target;
-        if (const CNA_Result result = GetRuntimeHandles().Get(
-                handle, ObjectKind::RenderTargetCube, &target);
+        if (const CNA_Result result = LookupHandle(handle, ObjectKind::RenderTargetCube, &target);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned RenderTargetCube handle is invalid for this call.");
+            return result;
         }
         *outTexture = TextureCubeResourceView{
             std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::TextureCube>(
@@ -168,9 +152,7 @@ CNA_Result GetOwnedTexture(
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -179,8 +161,11 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture3D;
 using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
 using CNA::C::Detail::TextureCubeResourceView;
@@ -215,16 +200,6 @@ struct TextureCubeTransferView final {
     int elementCount;
     uint64_t requiredElements;
 };
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
 
 [[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
 {
@@ -336,7 +311,7 @@ struct TextureCubeTransferView final {
         transfer->struct_version != StructureVersion ||
         transfer->face > CNA_CUBE_MAP_FACE_NEGATIVE_Z || transfer->level < 0 ||
         transfer->level >= texture.getLevelCountProperty() ||
-        !IsBool(transfer->has_rectangle) || !IsZero(transfer->reserved0, 3U) ||
+        !IsCanonicalBool(transfer->has_rectangle) || !IsZero(transfer->reserved0, 3U) ||
         transfer->reserved1 != 0U || transfer->start_index > max ||
         transfer->element_count > max ||
         transfer->start_index + transfer->element_count > max) {
@@ -495,7 +470,7 @@ CNA_Result cna_texture3d_create(
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_Texture3DCreateInfo) ||
             createInfo->struct_version != StructureVersion ||
-            !IsBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
+            !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
             createInfo->reserved1 != 0U || !IsSurfaceFormat(createInfo->format)) {
             return InvalidArgument("The Texture3D creation configuration is invalid.");
         }
@@ -741,7 +716,7 @@ CNA_Result cna_texturecube_create(
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_TextureCubeCreateInfo) ||
             createInfo->struct_version != StructureVersion ||
-            !IsBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
+            !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
             !IsSurfaceFormat(createInfo->format) || createInfo->reserved1 != 0U) {
             return InvalidArgument("The TextureCube creation configuration is invalid.");
         }
@@ -806,13 +781,9 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<TextureCubeResource> texture;
-        if (const CNA_Result result = GetRuntimeHandles().Get(
-                textureHandle, ObjectKind::TextureCube, &texture);
+        if (const CNA_Result result = LookupHandle(textureHandle, ObjectKind::TextureCube, &texture);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned TextureCube handle is invalid for destruction.");
+            return result;
         }
         if (texture->activeEffectReferenceCount != 0U) {
             return Fail(

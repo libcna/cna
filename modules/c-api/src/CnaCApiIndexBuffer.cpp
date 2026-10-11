@@ -3,6 +3,7 @@
 #include "CNA/C/index_resources.h"
 #include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -19,18 +20,21 @@
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
@@ -38,16 +42,6 @@ using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
 
 [[nodiscard]] bool IsZero(const uint8_t* const values, const std::size_t count) noexcept
 {
@@ -63,14 +57,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     const CNA_IndexBufferHandle handle,
     std::shared_ptr<IndexBufferResource>* const outBuffer)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::IndexBuffer, outBuffer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The IndexBuffer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::IndexBuffer, outBuffer);
 }
 
 [[nodiscard]] CNA_Result ValidateUsable(const IndexBufferResource& resource)
@@ -193,30 +180,6 @@ template<typename TIndex>
     return CNA_RESULT_SUCCESS;
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount,
-    TCallable&& callable)
-{
-    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The index-buffer string output is invalid.");
-    }
-    const std::string value = std::forward<TCallable>(callable)();
-    *outByteCount = static_cast<uint64_t>(value.size());
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination cannot hold the complete index-buffer type name.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 class ContentLostRegistration final {
 public:
     using Token = System::EventHandler<System::EventArgs>::Token;
@@ -268,7 +231,7 @@ CNA_Result cna_index_buffer_create(
             createInfo->index_count <= 0 ||
             createInfo->index_element_size > CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
-            !IsBool(createInfo->dynamic) ||
+            !IsCanonicalBool(createInfo->dynamic) ||
             !IsZero(createInfo->reserved, 3U)) {
             return InvalidArgument("The IndexBuffer creation configuration is invalid.");
         }
@@ -373,9 +336,9 @@ CNA_Result cna_index_buffer_get_info(
             static_cast<CNA_IndexElementSize>(
                 buffer->value->getIndexElementSizeProperty()),
             static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
-            buffer->dynamic ? CNA_TRUE : CNA_FALSE,
+            ToCBool(buffer->dynamic),
             CNA_FALSE,
-            buffer->value->HasRenderer() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(buffer->value->HasRenderer()),
             0U};
         return CNA_RESULT_SUCCESS;
     });
@@ -411,9 +374,7 @@ CNA_Result cna_index_buffer_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return buffer->value->GetTypeName();
-        });
+        return CopyText(buffer->value->GetTypeName(), destination, capacity, outByteCount);
     });
 }
 
@@ -639,15 +600,9 @@ CNA_Result cna_index_buffer_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::IndexBufferEventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::IndexBufferEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The ContentLost registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);

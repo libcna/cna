@@ -29,6 +29,10 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -43,11 +47,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
 
 [[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
 {
@@ -81,11 +80,6 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
         CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT |
         CNA_DISPLAY_ORIENTATION_PORTRAIT;
     return (value & ~Valid) == 0U;
-}
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
 }
 
 template<typename T>
@@ -123,9 +117,9 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     using CNA::C::Detail::ObjectKind;
     ObjectKind kind = ObjectKind::Unknown;
     if (GetRuntimeHandles().GetKind(handle, &kind) == CNA_RESULT_SUCCESS && kind == ObjectKind::Game) {
-        const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Game, outContext);
+        const CNA_Result result = LookupHandle(handle, ObjectKind::Game, outContext);
         if (result != CNA_RESULT_SUCCESS) {
-            return Fail(result, ErrorCategoryForResult(result), "The game handle is invalid for this call.");
+            return result;
         }
         return CNA_RESULT_SUCCESS;
     }
@@ -201,7 +195,7 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     const CNA_SurfaceFormat format,
     std::vector<DisplayMode>* const outModes)
 {
-    if (!IsBool(filterByFormat) || !IsSurfaceFormat(format) || outModes == nullptr) {
+    if (!IsCanonicalBool(filterByFormat) || !IsSurfaceFormat(format) || outModes == nullptr) {
         return InvalidArgument("The display-mode filter is invalid.");
     }
     const DisplayModeCollection& collection = adapter.getSupportedDisplayModesProperty();
@@ -224,8 +218,8 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
         parameters->multi_sample_count >= 0 &&
         IsPresentInterval(parameters->presentation_interval) &&
         IsDisplayOrientation(parameters->display_orientation) &&
-        IsUsage(parameters->render_target_usage) && IsBool(parameters->is_full_screen) &&
-        IsBool(parameters->headless_ext) && parameters->reserved[0] == 0U &&
+        IsUsage(parameters->render_target_usage) && IsCanonicalBool(parameters->is_full_screen) &&
+        IsCanonicalBool(parameters->headless_ext) && parameters->reserved[0] == 0U &&
         parameters->reserved[1] == 0U;
 }
 
@@ -270,8 +264,8 @@ void ToCPresentationParameters(
             source.getDisplayOrientationProperty()),
         .render_target_usage = static_cast<CNA_RenderTargetUsage>(
             source.getRenderTargetUsageProperty()),
-        .is_full_screen = source.getIsFullScreenProperty() ? CNA_TRUE : CNA_FALSE,
-        .headless_ext = source.getHeadlessEXTProperty() ? CNA_TRUE : CNA_FALSE,
+        .is_full_screen = ToCBool(source.getIsFullScreenProperty()),
+        .headless_ext = ToCBool(source.getHeadlessEXTProperty()),
         .reserved = {0U, 0U}};
 }
 
@@ -319,7 +313,7 @@ void ToCPresentationParameters(
     *outSelection = CNA_GraphicsFormatSelection{
         .struct_size = sizeof(CNA_GraphicsFormatSelection),
         .struct_version = StructureVersion,
-        .exact_match = exact ? CNA_TRUE : CNA_FALSE,
+        .exact_match = ToCBool(exact),
         .reserved = {0U, 0U, 0U},
         .format = static_cast<CNA_SurfaceFormat>(selectedFormat),
         .depth_format = static_cast<CNA_DepthFormat>(selectedDepthFormat),
@@ -356,7 +350,7 @@ CNA_Result cna_display_mode_equals(
         const DisplayMode nativeLeft(left->width, left->height, static_cast<SurfaceFormat>(left->format));
         const DisplayMode nativeRight(
             right->width, right->height, static_cast<SurfaceFormat>(right->format));
-        *outEqual = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -399,11 +393,10 @@ CNA_Result cna_graphics_adapter_get_info(
             .struct_size = sizeof(CNA_GraphicsAdapterInfo),
             .struct_version = StructureVersion,
             .adapter_index = adapterIndex,
-            .is_default_adapter = adapter->getIsDefaultAdapterProperty() ? CNA_TRUE : CNA_FALSE,
-            .is_wide_screen = adapter->getIsWideScreenProperty() ? CNA_TRUE : CNA_FALSE,
-            .use_null_device = adapter->getUseNullDeviceProperty() ? CNA_TRUE : CNA_FALSE,
-            .use_reference_device = adapter->getUseReferenceDeviceProperty()
-                ? CNA_TRUE : CNA_FALSE,
+            .is_default_adapter = ToCBool(adapter->getIsDefaultAdapterProperty()),
+            .is_wide_screen = ToCBool(adapter->getIsWideScreenProperty()),
+            .use_null_device = ToCBool(adapter->getUseNullDeviceProperty()),
+            .use_reference_device = ToCBool(adapter->getUseReferenceDeviceProperty()),
             .vendor_id = adapter->getVendorIdProperty(),
             .device_id = adapter->getDeviceIdProperty(),
             .revision = adapter->getRevisionProperty(),
@@ -545,7 +538,7 @@ CNA_Result cna_graphics_adapter_set_device_preferences(
     const CNA_Bool useReferenceDevice)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!IsBool(useNullDevice) || !IsBool(useReferenceDevice)) {
+        if (!IsCanonicalBool(useNullDevice) || !IsCanonicalBool(useReferenceDevice)) {
             return InvalidArgument("The graphics-adapter device preference is invalid.");
         }
         std::shared_ptr<void> context;
@@ -578,8 +571,7 @@ CNA_Result cna_graphics_adapter_is_profile_supported(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = adapter->IsProfileSupported(static_cast<GraphicsProfile>(profile))
-            ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(adapter->IsProfileSupported(static_cast<GraphicsProfile>(profile)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -870,13 +862,9 @@ CNA_Result cna_graphics_device_destroy(const CNA_Handle graphicsDeviceHandle)
 {
     return CallWithExceptionBarrier([&]() {
         std::shared_ptr<CNA::C::Detail::OwnedGraphicsDevice> owned;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
+        const CNA_Result getResult = LookupHandle(graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The handle does not refer to a caller-created GraphicsDevice.");
+            return getResult;
         }
         owned->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(graphicsDeviceHandle);

@@ -45,10 +45,12 @@ using CNA::C::Detail::CreateStandaloneTexture2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
-using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetOwnedTexture2D;
-using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::GetOwnedTexture;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -127,11 +129,6 @@ struct TransferView final {
         case CNA_TEXTURE_DATA_USHORT: return format == SurfaceFormat::UShortEXT;
         default: return false;
     }
-}
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
 }
 
 /// Bytes in one caller element of @p dataType -- the `sizeof(T)` of XNA's `SetData<T>`.
@@ -944,7 +941,7 @@ CNA_Result cna_texture2d_get_storage_info(
         *outInfo = CNA_Texture2DStorageInfo{
             sizeof(CNA_Texture2DStorageInfo),
             StructureVersion,
-            texture->value->HasRenderer() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(texture->value->HasRenderer()),
             texture->value->GetCpuPixelsWeak().expired() ? CNA_FALSE : CNA_TRUE,
             {0U, 0U, 0U, 0U, 0U, 0U}};
         return CNA_RESULT_SUCCESS;

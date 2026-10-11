@@ -4,6 +4,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
@@ -42,14 +43,19 @@ namespace {
 
 using CNA::C::Detail::BorrowNetworkGamer;
 using CNA::C::Detail::BorrowNetworkSessionProperties;
-using CNA::C::Detail::CreateBorrowedNetworkGamer;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateBorrowedNetworkGamer;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::Net::AvailableNetworkSession;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
@@ -70,11 +76,6 @@ using Microsoft::Xna::Framework::Net::QualityOfService;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 struct AvailableSessionResource final {
     std::shared_ptr<AvailableNetworkSession> value;
 };
@@ -82,11 +83,6 @@ struct AvailableSessionResource final {
 struct AvailableSessionCollectionResource final {
     std::shared_ptr<AvailableNetworkSessionCollection> value;
 };
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
 
 // The canonical creation routes hand back a caller-owned raw pointer, so the C resource owns the
 // deletion. Remote gamers the session merely references are retained here as well, because the
@@ -113,71 +109,21 @@ struct NetworkSessionResource final {
     const CNA_Handle handle,
     std::shared_ptr<NetworkSessionResource>* const outSession)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::NetworkSession,
-        outSession);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkSession handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::NetworkSession, outSession);
 }
 
 [[nodiscard]] CNA_Result GetSession(
     const CNA_Handle handle,
     std::shared_ptr<AvailableSessionResource>* const outSession)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::AvailableNetworkSession,
-        outSession);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvailableNetworkSession handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::AvailableNetworkSession, outSession);
 }
 
 [[nodiscard]] CNA_Result GetCollection(
     const CNA_Handle handle,
     std::shared_ptr<AvailableSessionCollectionResource>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::AvailableNetworkSessionCollection,
-        outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvailableNetworkSessionCollection handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    const char* const message)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument(message);
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::AvailableNetworkSessionCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateSessionHandle(
@@ -348,8 +294,7 @@ CNA_Result cna_available_network_session_copy_host_gamertag(
             session->value->getHostGamertagProperty(),
             destination,
             capacity,
-            outBytes,
-            "The host-gamertag output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -398,7 +343,7 @@ CNA_Result cna_available_network_session_get_quality_of_service(
             return result;
         }
         const QualityOfService& quality = session->value->getQualityOfServiceProperty();
-        outValue->is_available = quality.getIsAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+        outValue->is_available = ToCBool(quality.getIsAvailableProperty());
         std::memset(outValue->reserved, 0, sizeof(outValue->reserved));
         outValue->average_roundtrip_ticks =
             static_cast<int64_t>(quality.getAverageRoundtripTimeProperty().getTicksProperty());
@@ -451,7 +396,7 @@ CNA_Result cna_available_network_session_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = (*left->value == *right->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(*left->value == *right->value);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -475,7 +420,7 @@ CNA_Result cna_available_network_session_not_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outNotEqual = (*left->value != *right->value) ? CNA_TRUE : CNA_FALSE;
+        *outNotEqual = ToCBool(*left->value != *right->value);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -511,8 +456,7 @@ CNA_Result cna_available_network_session_copy_connect_address_ext(
             session->value->GetConnectAddress(),
             destination,
             capacity,
-            outBytes,
-            "The connect-address output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -670,7 +614,7 @@ CNA_Result cna_available_network_session_collection_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = collection->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(collection->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -938,7 +882,7 @@ CNA_Result cna_network_session_get_is_disposed(
             outIsDisposed,
             "The disposal output is null.",
             [outIsDisposed](NetworkSession& session) {
-                *outIsDisposed = session.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+                *outIsDisposed = ToCBool(session.getIsDisposedProperty());
             });
     });
 }
@@ -1029,7 +973,7 @@ CNA_Result cna_network_session_get_allow_host_migration(
             outValue,
             "The session state output is null.",
             [outValue](NetworkSession& session) {
-                *outValue = session.getAllowHostMigrationProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(session.getAllowHostMigrationProperty());
             });
     });
 }
@@ -1059,7 +1003,7 @@ CNA_Result cna_network_session_get_allow_join_in_progress(
             outValue,
             "The session state output is null.",
             [outValue](NetworkSession& session) {
-                *outValue = session.getAllowJoinInProgressProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(session.getAllowJoinInProgressProperty());
             });
     });
 }
@@ -1146,7 +1090,7 @@ CNA_Result cna_network_session_get_is_everyone_ready(
             outValue,
             "The session state output is null.",
             [outValue](NetworkSession& session) {
-                *outValue = session.getIsEveryoneReadyProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(session.getIsEveryoneReadyProperty());
             });
     });
 }
@@ -1161,7 +1105,7 @@ CNA_Result cna_network_session_get_is_host(
             outValue,
             "The session state output is null.",
             [outValue](NetworkSession& session) {
-                *outValue = session.getIsHostProperty() ? CNA_TRUE : CNA_FALSE;
+                *outValue = ToCBool(session.getIsHostProperty());
             });
     });
 }
@@ -1366,8 +1310,7 @@ CNA_Result cna_network_session_copy_type_name(
             session->value->GetTypeName(),
             destination,
             capacity,
-            outBytes,
-            "The type-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -2012,7 +1955,7 @@ CNA_Result cna_network_session_subscribe_write_arbitrated_leaderboard(
                 CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
                 const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
                 info.gamer = gamer.Get();
-                info.is_leaving = arguments.getIsLeavingProperty() ? CNA_TRUE : CNA_FALSE;
+                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
                 callback(sessionHandle, &info, context);
             });
         return CreateRegistrationHandle(
@@ -2049,7 +1992,7 @@ CNA_Result cna_network_session_subscribe_write_unarbitrated_leaderboard(
                 CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
                 const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
                 info.gamer = gamer.Get();
-                info.is_leaving = arguments.getIsLeavingProperty() ? CNA_TRUE : CNA_FALSE;
+                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
                 callback(sessionHandle, &info, context);
             });
         return CreateRegistrationHandle(
@@ -2086,7 +2029,7 @@ CNA_Result cna_network_session_subscribe_write_true_skill(
                 CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
                 const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
                 info.gamer = gamer.Get();
-                info.is_leaving = arguments.getIsLeavingProperty() ? CNA_TRUE : CNA_FALSE;
+                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
                 callback(sessionHandle, &info, context);
             });
         return CreateRegistrationHandle(
@@ -2123,7 +2066,7 @@ CNA_Result cna_network_session_subscribe_invite_accepted(
                     &gamer);
                 info.gamer = gamer;
                 info.is_current_session =
-                    arguments.getIsCurrentSessionProperty() ? CNA_TRUE : CNA_FALSE;
+                    ToCBool(arguments.getIsCurrentSessionProperty());
                 callback(&info, context);
                 (void)CNA::C::Detail::ReleaseBorrowedSignedInGamer(gamer);
             });
@@ -2139,15 +2082,9 @@ CNA_Result cna_network_session_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SessionEventRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::NetworkSessionEventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::NetworkSessionEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The session event registration handle is invalid.");
+            return getResult;
         }
         registration->Release();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
@@ -2721,7 +2658,7 @@ CNA_Result cna_local_network_gamer_get_is_data_available(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = gamer->getIsDataAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(gamer->getIsDataAvailableProperty());
         return CNA_RESULT_SUCCESS;
     });
 }

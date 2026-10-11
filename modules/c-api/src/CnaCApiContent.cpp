@@ -5,6 +5,7 @@
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 
@@ -32,19 +33,22 @@ namespace {
 
 using CNA::C::Detail::AddOwnedContentManager;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedContentManager;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -89,42 +93,7 @@ CNA_Handle& BorrowedGameContentHandle()
     const CNA_Handle handle,
     std::shared_ptr<ContentManagerResource>* const outContentManager)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::ContentManager,
-        outContentManager);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned ContentManager handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    const char* const message)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument(message);
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::ContentManager, outContentManager);
 }
 
 [[nodiscard]] CNA_Result CopyAssetName(const CNA_StringView value, std::string* const outValue)
@@ -877,8 +846,7 @@ CNA_Result cna_content_manager_copy_asset_path(
             contentManager->value->BuildAssetPath(assetNameCopy),
             destination,
             capacity,
-            outBytes,
-            "The asset-path output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -928,8 +896,7 @@ CNA_Result cna_content_manager_copy_normalized_key(
             contentManager->value->NormalizeKey(assetNameCopy),
             destination,
             capacity,
-            outBytes,
-            "The normalized-key output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -960,7 +927,7 @@ CNA_Result cna_content_manager_get_has_service_provider(
             return result;
         }
         *outHasServiceProvider =
-            contentManager->value->getServiceProviderProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+            ToCBool(contentManager->value->getServiceProviderProperty() != nullptr);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1077,8 +1044,8 @@ CNA_Result cna_content_manager_get_manifest_entry(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        outEntry->has_xnb = entry->hasXnb ? CNA_TRUE : CNA_FALSE;
-        outEntry->has_cnj = entry->hasCnj ? CNA_TRUE : CNA_FALSE;
+        outEntry->has_xnb = ToCBool(entry->hasXnb);
+        outEntry->has_cnj = ToCBool(entry->hasCnj);
         std::memset(outEntry->reserved, 0, sizeof(outEntry->reserved));
         outEntry->native_extension_count = entry->nativeExtensions.size();
         outEntry->xnb_reader_name_count = entry->xnbReaderNames.size();
@@ -1108,8 +1075,7 @@ CNA_Result cna_content_manager_copy_manifest_relative_path(
             entry->relativePath,
             destination,
             capacity,
-            outBytes,
-            "The manifest relative-path output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -1142,8 +1108,7 @@ CNA_Result cna_content_manager_copy_manifest_native_extension(
             entry->nativeExtensions[static_cast<std::size_t>(extensionIndex)],
             destination,
             capacity,
-            outBytes,
-            "The native-extension output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -1176,8 +1141,7 @@ CNA_Result cna_content_manager_copy_manifest_xnb_reader_name(
             entry->xnbReaderNames[static_cast<std::size_t>(nameIndex)],
             destination,
             capacity,
-            outBytes,
-            "The reader-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -1222,7 +1186,7 @@ CNA_Result cna_content_manager_get_xnb_reader_usage(
                 "The reader-usage index is outside the summary.");
         }
         const ContentManifestReaderUsage& row = usage[static_cast<std::size_t>(index)];
-        outUsage->is_registered = row.isRegistered ? CNA_TRUE : CNA_FALSE;
+        outUsage->is_registered = ToCBool(row.isRegistered);
         std::memset(outUsage->reserved, 0, sizeof(outUsage->reserved));
         outUsage->file_count = static_cast<uint64_t>(row.fileCount);
         return CNA_RESULT_SUCCESS;
@@ -1253,8 +1217,7 @@ CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
             usage[static_cast<std::size_t>(index)].readerName,
             destination,
             capacity,
-            outBytes,
-            "The reader-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 

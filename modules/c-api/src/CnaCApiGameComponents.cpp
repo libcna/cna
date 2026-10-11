@@ -2,6 +2,7 @@
 
 #include "CNA/C/runtime_components.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGameComponentsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -27,11 +28,15 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
+
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::DrawableGameComponent;
 using Microsoft::Xna::Framework::Game;
@@ -44,39 +49,12 @@ using Microsoft::Xna::Framework::IGameComponent;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 [[nodiscard]] CNA_Result NotDrawable()
 {
     return Fail(
         CNA_RESULT_INVALID_STATE,
         CNA_ERROR_CATEGORY_STATE,
         "This game component does not draw.");
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The component text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the component text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_GameTime MakeCGameTime(const GameTime& value) noexcept
@@ -86,7 +64,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
         static_cast<int64_t>(value.getTotalGameTimeProperty().getTicksProperty());
     mapped.elapsed_game_time_ticks =
         static_cast<int64_t>(value.getElapsedGameTimeProperty().getTicksProperty());
-    mapped.is_running_slowly = value.getIsRunningSlowlyProperty() ? CNA_TRUE : CNA_FALSE;
+    mapped.is_running_slowly = ToCBool(value.getIsRunningSlowlyProperty());
     return mapped;
 }
 
@@ -314,13 +292,9 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<ComponentResource>* const outComponent)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::GameComponent, outComponent);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::GameComponent, outComponent);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The game component handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -364,11 +338,11 @@ template<typename TComponent>
     CNA_GameComponentHandle* const outComponent)
 {
     if (outComponent == nullptr) {
-        return InvalidInput("The game component output is null.");
+        return InvalidArgument("The game component output is null.");
     }
     *outComponent = CNA_INVALID_HANDLE;
     if (!ValidCallbacks(callbacks)) {
-        return InvalidInput("The game component callback set is not a valid structure.");
+        return InvalidArgument("The game component callback set is not a valid structure.");
     }
     Game* game = nullptr;
     if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
@@ -464,7 +438,7 @@ CNA_Result cna_game_component_callbacks_init(CNA_GameComponentCallbacks* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCallbacks == nullptr) {
-            return InvalidInput("The component callback output is null.");
+            return InvalidArgument("The component callback output is null.");
         }
         CNA_GameComponentCallbacks callbacks = {};
         callbacks.struct_size = sizeof(CNA_GameComponentCallbacks);
@@ -500,14 +474,14 @@ CNA_Result cna_game_component_get_is_drawable(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDrawable == nullptr) {
-            return InvalidInput("The drawable output is null.");
+            return InvalidArgument("The drawable output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDrawable = resource->drawable != nullptr ? CNA_TRUE : CNA_FALSE;
+        *outDrawable = ToCBool(resource->drawable != nullptr);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -518,7 +492,7 @@ CNA_Result cna_game_component_get_game(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGame == nullptr) {
-            return InvalidInput("The game output is null.");
+            return InvalidArgument("The game output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -539,14 +513,14 @@ CNA_Result cna_game_component_get_enabled(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnabled == nullptr) {
-            return InvalidInput("The enabled output is null.");
+            return InvalidArgument("The enabled output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEnabled = resource->value->getEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outEnabled = ToCBool(resource->value->getEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -576,7 +550,7 @@ CNA_Result cna_game_component_get_update_order(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOrder == nullptr) {
-            return InvalidInput("The update order output is null.");
+            return InvalidArgument("The update order output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -609,7 +583,7 @@ CNA_Result cna_drawable_game_component_get_draw_order(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOrder == nullptr) {
-            return InvalidInput("The draw order output is null.");
+            return InvalidArgument("The draw order output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowDrawable(component, &resource);
@@ -642,14 +616,14 @@ CNA_Result cna_drawable_game_component_get_visible(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVisible == nullptr) {
-            return InvalidInput("The visibility output is null.");
+            return InvalidArgument("The visibility output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowDrawable(component, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outVisible = resource->drawable->getVisibleProperty() ? CNA_TRUE : CNA_FALSE;
+        *outVisible = ToCBool(resource->drawable->getVisibleProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -679,7 +653,7 @@ CNA_Result cna_drawable_game_component_get_graphics_device(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGraphicsDevice == nullptr) {
-            return InvalidInput("The graphics device output is null.");
+            return InvalidArgument("The graphics device output is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
         std::shared_ptr<ComponentResource> resource;
@@ -701,7 +675,7 @@ CNA_Result cna_game_component_compare_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOrder == nullptr) {
-            return InvalidInput("The comparison output is null.");
+            return InvalidArgument("The comparison output is null.");
         }
         std::shared_ptr<ComponentResource> first;
         if (const CNA_Result result = BorrowComponent(component, &first);
@@ -737,7 +711,7 @@ CNA_Result cna_game_component_update(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (gameTime == nullptr) {
-            return InvalidInput("The game time is null.");
+            return InvalidArgument("The game time is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -756,7 +730,7 @@ CNA_Result cna_drawable_game_component_draw(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (gameTime == nullptr) {
-            return InvalidInput("The game time is null.");
+            return InvalidArgument("The game time is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowDrawable(component, &resource);
@@ -788,7 +762,7 @@ CNA_Result cna_game_component_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The type-name size output is null.");
+            return InvalidArgument("The type-name size output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -825,14 +799,14 @@ CNA_Result cna_game_component_subscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The component registration output is null.");
+            return InvalidArgument("The component registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The component event callback is null.");
+            return InvalidArgument("The component event callback is null.");
         }
         if (event > CNA_GAME_COMPONENT_EVENT_MAXIMUM) {
-            return InvalidInput("The component event is not a defined identity.");
+            return InvalidArgument("The component event is not a defined identity.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -875,15 +849,9 @@ CNA_Result cna_game_component_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ComponentRegistrationBase> value;
-        if (const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
-                registration,
-                ObjectKind::GameComponentEventRegistration,
-                &value);
+        if (const CNA_Result result = LookupHandle(registration, ObjectKind::GameComponentEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The component registration handle is invalid for this call.");
+            return result;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);
@@ -932,7 +900,7 @@ CNA_Result cna_game_components_get_count(const CNA_Handle gameHandle, uint64_t* 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The component count output is null.");
+            return InvalidArgument("The component count output is null.");
         }
         GameComponentCollection* components = nullptr;
         if (const CNA_Result result = BorrowComponents(gameHandle, &components);
@@ -951,7 +919,7 @@ CNA_Result cna_game_components_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outComponent == nullptr) {
-            return InvalidInput("The component output is null.");
+            return InvalidArgument("The component output is null.");
         }
         *outComponent = CNA_INVALID_HANDLE;
         GameComponentCollection* components = nullptr;
@@ -1027,7 +995,7 @@ CNA_Result cna_game_components_remove(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRemoved == nullptr) {
-            return InvalidInput("The removal output is null.");
+            return InvalidArgument("The removal output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -1039,7 +1007,7 @@ CNA_Result cna_game_components_remove(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outRemoved = components->Remove(resource->value.get()) ? CNA_TRUE : CNA_FALSE;
+        *outRemoved = ToCBool(components->Remove(resource->value.get()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1083,7 +1051,7 @@ CNA_Result cna_game_components_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The containment output is null.");
+            return InvalidArgument("The containment output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -1095,7 +1063,7 @@ CNA_Result cna_game_components_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = components->Contains(resource->value.get()) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(components->Contains(resource->value.get()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1107,7 +1075,7 @@ CNA_Result cna_game_components_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The index output is null.");
+            return InvalidArgument("The index output is null.");
         }
         std::shared_ptr<ComponentResource> resource;
         if (const CNA_Result result = BorrowComponent(component, &resource);
@@ -1134,11 +1102,11 @@ namespace {
     CNA_GameComponentEventRegistrationHandle* const outRegistration)
 {
     if (outRegistration == nullptr) {
-        return InvalidInput("The component registration output is null.");
+        return InvalidArgument("The component registration output is null.");
     }
     *outRegistration = CNA_INVALID_HANDLE;
     if (callback == nullptr) {
-        return InvalidInput("The component collection callback is null.");
+        return InvalidArgument("The component collection callback is null.");
     }
     GameComponentCollection* components = nullptr;
     if (const CNA_Result result = BorrowComponents(gameHandle, &components);
@@ -1189,7 +1157,7 @@ CNA_Result cna_game_components_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The type-name size output is null.");
+            return InvalidArgument("The type-name size output is null.");
         }
         GameComponentCollection* components = nullptr;
         if (const CNA_Result result = BorrowComponents(gameHandle, &components);
@@ -1224,10 +1192,10 @@ CNA_Result cna_game_services_contains_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPresent == nullptr) {
-            return InvalidInput("The service presence output is null.");
+            return InvalidArgument("The service presence output is null.");
         }
         if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
-            return InvalidInput("The game service is not a defined identity.");
+            return InvalidArgument("The game service is not a defined identity.");
         }
         GameServiceContainer* services = nullptr;
         if (const CNA_Result result = BorrowServices(gameHandle, &services);
@@ -1240,7 +1208,7 @@ CNA_Result cna_game_services_contains_ext(
                   services->GetService<Microsoft::Xna::Framework::IGraphicsDeviceManager>())
             : static_cast<const void*>(
                   services->GetService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>());
-        *outPresent = found != nullptr ? CNA_TRUE : CNA_FALSE;
+        *outPresent = ToCBool(found != nullptr);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1251,7 +1219,7 @@ CNA_Result cna_game_services_remove_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
-            return InvalidInput("The game service is not a defined identity.");
+            return InvalidArgument("The game service is not a defined identity.");
         }
         GameServiceContainer* services = nullptr;
         if (const CNA_Result result = BorrowServices(gameHandle, &services);

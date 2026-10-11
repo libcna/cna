@@ -4,6 +4,8 @@
 #include "CNA/C/graphics_ext.h"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -55,27 +57,33 @@
 
 namespace {
 
-using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
-using CNA::C::Detail::CheckedElementByteCount;
-using CNA::C::Detail::CopyStringView;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::EffectResource;
-using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetOwnedTexture;
-using CNA::C::Detail::GetOwnedTexture2D;
-using CNA::C::Detail::GetOwnedTexture3D;
-using CNA::C::Detail::GetOwnedTextureCube;
-using CNA::C::Detail::GetRuntimeHandles;
-using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::BorrowGameGraphicsDevice;
-using CNA::C::Detail::AddOwnedGraphicsResource;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CheckedElementByteCount;
+using CNA::C::Detail::CopyElements;
+using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetOwnedTexture2D;
+using CNA::C::Detail::GetOwnedTexture3D;
+using CNA::C::Detail::GetOwnedTexture;
+using CNA::C::Detail::GetOwnedTextureCube;
+using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::TextureCubeResourceView;
+using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
@@ -303,44 +311,18 @@ struct EffectState final {
     std::shared_ptr<TechniqueCollectionState> techniques;
 };
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
-
 [[nodiscard]] CNA_Result GetAnnotation(
     const CNA_EffectAnnotationHandle handle,
     std::shared_ptr<AnnotationResource>* const outAnnotation)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectAnnotation, outAnnotation);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The EffectAnnotation handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectAnnotation, outAnnotation);
 }
 
 [[nodiscard]] CNA_Result GetCollection(
     const CNA_EffectAnnotationCollectionHandle handle,
     std::shared_ptr<AnnotationCollectionResource>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectAnnotationCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The EffectAnnotationCollection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectAnnotationCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateAnnotationHandle(
@@ -373,116 +355,18 @@ template<typename TCallable>
     return CNA_RESULT_SUCCESS;
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount,
-    TCallable&& callable)
-{
-    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The EffectAnnotation string output is invalid.");
-    }
-    const std::string value = std::forward<TCallable>(callable)();
-    *outByteCount = static_cast<uint64_t>(value.size());
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination cannot hold the complete EffectAnnotation string.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Vector2 ToC(const Vector2 value) noexcept
-{
-    return CNA_Vector2{value.X, value.Y};
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3 value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Vector4 ToC(const Vector4 value) noexcept
-{
-    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
-}
-
-[[nodiscard]] CNA_Matrix ToC(const Matrix value) noexcept
-{
-    return CNA_Matrix{
-        value.M11, value.M12, value.M13, value.M14,
-        value.M21, value.M22, value.M23, value.M24,
-        value.M31, value.M32, value.M33, value.M34,
-        value.M41, value.M42, value.M43, value.M44};
-}
-
-[[nodiscard]] CNA_Quaternion ToC(const Quaternion value) noexcept
-{
-    return CNA_Quaternion{value.X, value.Y, value.Z, value.W};
-}
-
-[[nodiscard]] Matrix ToNative(const CNA_Matrix value) noexcept
-{
-    return Matrix{
-        value.m11, value.m12, value.m13, value.m14,
-        value.m21, value.m22, value.m23, value.m24,
-        value.m31, value.m32, value.m33, value.m34,
-        value.m41, value.m42, value.m43, value.m44};
-}
-
-[[nodiscard]] Quaternion ToNative(const CNA_Quaternion value) noexcept
-{
-    return Quaternion{value.x, value.y, value.z, value.w};
-}
-
-[[nodiscard]] Vector2 ToNative(const CNA_Vector2 value) noexcept
-{
-    return Vector2{value.x, value.y};
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value) noexcept
-{
-    return Vector3{value.x, value.y, value.z};
-}
-
-[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value) noexcept
-{
-    return Vector4{value.x, value.y, value.z, value.w};
-}
-
 [[nodiscard]] CNA_Result GetParameter(
     const CNA_EffectParameterHandle handle,
     std::shared_ptr<ParameterResource>* const outParameter)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectParameter, outParameter);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The EffectParameter handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectParameter, outParameter);
 }
 
 [[nodiscard]] CNA_Result GetParameterCollection(
     const CNA_EffectParameterCollectionHandle handle,
     std::shared_ptr<ParameterCollectionResource>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectParameterCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The EffectParameterCollection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectParameterCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateParameterHandle(
@@ -615,20 +499,7 @@ template<typename TValue>
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The EffectParameter value-array output is invalid.");
-    }
-    *outCount = static_cast<uint64_t>(values.size());
-    if (capacity < values.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination cannot hold the complete EffectParameter value array.");
-    }
-    if (!values.empty()) {
-        std::memcpy(destination, values.data(), values.size() * sizeof(TValue));
-    }
-    return CNA_RESULT_SUCCESS;
+    return CopyElements<TValue>(values, static_cast<TValue*>(destination), capacity, outCount);
 }
 
 template<typename TNative, typename TC, typename TConvert>
@@ -677,56 +548,28 @@ template<typename TNative, typename TC, typename TConvert>
     const CNA_EffectPassHandle handle,
     std::shared_ptr<PassResource>* const outPass)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectPass, outPass);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The EffectPass handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectPass, outPass);
 }
 
 [[nodiscard]] CNA_Result GetPassCollection(
     const CNA_EffectPassCollectionHandle handle,
     std::shared_ptr<PassCollectionResource>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectPassCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The EffectPassCollection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectPassCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result GetTechnique(
     const CNA_EffectTechniqueHandle handle,
     std::shared_ptr<TechniqueResource>* const outTechnique)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectTechnique, outTechnique);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The EffectTechnique handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectTechnique, outTechnique);
 }
 
 [[nodiscard]] CNA_Result GetTechniqueCollection(
     const CNA_EffectTechniqueCollectionHandle handle,
     std::shared_ptr<TechniqueCollectionResource>* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::EffectTechniqueCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The EffectTechniqueCollection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::EffectTechniqueCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreatePassHandle(
@@ -841,14 +684,7 @@ template<typename TNative, typename TC, typename TConvert>
     const CNA_EffectHandle handle,
     std::shared_ptr<EffectResource>* const outEffect)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::Effect, outEffect);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The Effect handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::Effect, outEffect);
 }
 
 [[nodiscard]] std::shared_ptr<EffectState> GetEffectState(
@@ -1028,14 +864,7 @@ template<typename TInterface>
     const CNA_DirectionalLightHandle handle,
     std::shared_ptr<DirectionalLightResource>* const outLight)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::DirectionalLight, outLight);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The DirectionalLight handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::DirectionalLight, outLight);
 }
 
 [[nodiscard]] CNA_Result CreateDirectionalLightHandle(
@@ -1398,9 +1227,7 @@ CNA_Result cna_effect_annotation_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return annotation->value->getNameProperty();
-        });
+        return CopyText(annotation->value->getNameProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -1432,9 +1259,7 @@ CNA_Result cna_effect_annotation_copy_semantic(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return annotation->value->getSemanticProperty();
-        });
+        return CopyText(annotation->value->getSemanticProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -1451,7 +1276,7 @@ CNA_Result cna_effect_annotation_get_value_boolean(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = annotation->value->GetValueBoolean() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(annotation->value->GetValueBoolean());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1520,9 +1345,7 @@ CNA_Result cna_effect_annotation_copy_value_string(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return annotation->value->GetValueString();
-        });
+        return CopyText(annotation->value->GetValueString(), destination, capacity, outByteCount);
     });
 }
 
@@ -1843,9 +1666,7 @@ CNA_Result cna_effect_parameter_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return parameter->value->getNameProperty();
-        });
+        return CopyText(parameter->value->getNameProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -1877,9 +1698,7 @@ CNA_Result cna_effect_parameter_copy_semantic(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return parameter->value->getSemanticProperty();
-        });
+        return CopyText(parameter->value->getSemanticProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -1978,7 +1797,7 @@ CNA_Result cna_effect_parameter_get_value(
         }
         switch (valueType) {
         case CNA_EFFECT_VALUE_BOOLEAN: {
-            const CNA_Bool value = parameter->value->GetValueBoolean() ? CNA_TRUE : CNA_FALSE;
+            const CNA_Bool value = ToCBool(parameter->value->GetValueBoolean());
             std::memcpy(outValue, &value, sizeof(value));
             return CNA_RESULT_SUCCESS;
         }
@@ -2058,7 +1877,7 @@ CNA_Result cna_effect_parameter_get_values(
             std::vector<CNA_Bool> values;
             values.reserve(nativeValues.size());
             for (const bool value : nativeValues) {
-                values.push_back(value ? CNA_TRUE : CNA_FALSE);
+                values.push_back(ToCBool(value));
             }
             return CopyValues(values, destination, capacity, outCount);
         }
@@ -2364,9 +2183,7 @@ CNA_Result cna_effect_parameter_copy_value_string(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return parameter->value->GetValueString();
-        });
+        return CopyText(parameter->value->GetValueString(), destination, capacity, outByteCount);
     });
 }
 
@@ -2866,9 +2683,7 @@ CNA_Result cna_effect_pass_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return pass->value->getNameProperty();
-        });
+        return CopyText(pass->value->getNameProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -3182,9 +2997,7 @@ CNA_Result cna_effect_technique_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return technique->value->getNameProperty();
-        });
+        return CopyText(technique->value->getNameProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -3903,7 +3716,7 @@ CNA_Result cna_effect_get_is_compiled_ext(
             return result;
         }
         // The runtime itself is renderer-owned implementation, so its presence is what crosses.
-        *outIsCompiled = effect->value->GetCompiledRuntimePtr() != nullptr ? CNA_TRUE : CNA_FALSE;
+        *outIsCompiled = ToCBool(effect->value->GetCompiledRuntimePtr() != nullptr);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3969,9 +3782,7 @@ CNA_Result cna_effect_has_renderer(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outHasRenderer = effect->value->GetEffectRendererPtr() != nullptr
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outHasRenderer = ToCBool(effect->value->GetEffectRendererPtr() != nullptr);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3989,9 +3800,7 @@ CNA_Result cna_effect_is_exact_stock_sprite_effect(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsExact = effect->value->IsExactStockSpriteEffectEXT()
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outIsExact = ToCBool(effect->value->IsExactStockSpriteEffectEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4009,7 +3818,7 @@ CNA_Result cna_shader_effect_is_valid(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsValid = shader->IsEffectValid() ? CNA_TRUE : CNA_FALSE;
+        *outIsValid = ToCBool(shader->IsEffectValid());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4027,7 +3836,7 @@ CNA_Result cna_shader_effect_has_renderer(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outHasRenderer = shader->HasRenderer() ? CNA_TRUE : CNA_FALSE;
+        *outHasRenderer = ToCBool(shader->HasRenderer());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4654,7 +4463,7 @@ CNA_Result cna_directional_light_get_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = light->value->getEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(light->value->getEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4664,7 +4473,7 @@ CNA_Result cna_directional_light_set_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The DirectionalLight enabled value is not a CNA_Bool.");
         }
         std::shared_ptr<DirectionalLightResource> light;
@@ -4859,7 +4668,7 @@ CNA_Result cna_effect_fog_get_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = fog->getFogEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(fog->getFogEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4869,7 +4678,7 @@ CNA_Result cna_effect_fog_set_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The fog-enabled value is not a CNA_Bool.");
         }
         IEffectFog* fog = nullptr;
@@ -5041,7 +4850,7 @@ CNA_Result cna_effect_lights_get_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = lights->getLightingEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(lights->getLightingEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5051,7 +4860,7 @@ CNA_Result cna_effect_lights_set_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The lighting-enabled value is not a CNA_Bool.");
         }
         IEffectLights* lights = nullptr;
@@ -5104,7 +4913,7 @@ CNA_Result cna_basic_effect_get_vertex_color_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = basic->VertexColorEnabled ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(basic->VertexColorEnabled);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5114,7 +4923,7 @@ CNA_Result cna_basic_effect_set_vertex_color_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The vertex-color value is not a CNA_Bool.");
         }
         BasicEffect* basic = nullptr;
@@ -5140,7 +4949,7 @@ CNA_Result cna_basic_effect_get_prefer_per_pixel_lighting(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = basic->getPreferPerPixelLightingProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(basic->getPreferPerPixelLightingProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5150,7 +4959,7 @@ CNA_Result cna_basic_effect_set_prefer_per_pixel_lighting(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The per-pixel-lighting value is not a CNA_Bool.");
         }
         BasicEffect* basic = nullptr;
@@ -5341,7 +5150,7 @@ CNA_Result cna_basic_effect_get_texture_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = basic->getTextureEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(basic->getTextureEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5351,7 +5160,7 @@ CNA_Result cna_basic_effect_set_texture_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The texture-enabled value is not a CNA_Bool.");
         }
         BasicEffect* basic = nullptr;
@@ -5583,7 +5392,7 @@ CNA_Result cna_alpha_test_effect_get_vertex_color_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = alphaTest->getVertexColorEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(alphaTest->getVertexColorEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5593,7 +5402,7 @@ CNA_Result cna_alpha_test_effect_set_vertex_color_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The AlphaTestEffect vertex-color value is not a CNA_Bool.");
         }
         AlphaTestEffect* alphaTest = nullptr;
@@ -5853,7 +5662,7 @@ CNA_Result cna_dual_texture_effect_get_vertex_color_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = dualTexture->getVertexColorEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(dualTexture->getVertexColorEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5863,7 +5672,7 @@ CNA_Result cna_dual_texture_effect_set_vertex_color_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The DualTextureEffect vertex-color value is not a CNA_Bool.");
         }
         DualTextureEffect* dualTexture = nullptr;
@@ -6414,7 +6223,7 @@ CNA_Result cna_skinned_effect_get_prefer_per_pixel_lighting(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = skinned->getPreferPerPixelLightingProperty() ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(skinned->getPreferPerPixelLightingProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6424,7 +6233,7 @@ CNA_Result cna_skinned_effect_set_prefer_per_pixel_lighting(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The SkinnedEffect per-pixel-lighting value is not a CNA_Bool.");
         }
         SkinnedEffect* skinned = nullptr;
@@ -6602,7 +6411,7 @@ CNA_Result cna_skinned_effect_get_vertex_color_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = skinned->VertexColorEnabled ? CNA_TRUE : CNA_FALSE;
+        *outValue = ToCBool(skinned->VertexColorEnabled);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6612,7 +6421,7 @@ CNA_Result cna_skinned_effect_set_vertex_color_enabled(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The SkinnedEffect vertex-color value is not a CNA_Bool.");
         }
         SkinnedEffect* skinned = nullptr;
@@ -7068,7 +6877,7 @@ namespace {
 
 [[nodiscard]] CNA_Bool ToCBoolean(const bool value) noexcept
 {
-    return value ? CNA_TRUE : CNA_FALSE;
+    return ToCBool(value);
 }
 
 [[nodiscard]] CNA_TextureTransformEXT ToC(const TextureTransformEXT& value) noexcept
@@ -7161,7 +6970,7 @@ CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
         const bool enabled = view.pbr != nullptr
             ? view.pbr->VertexColorEnabledEXT
             : view.skinned->VertexColorEnabledEXT;
-        *outEnabled = enabled ? CNA_TRUE : CNA_FALSE;
+        *outEnabled = ToCBool(enabled);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -7171,7 +6980,7 @@ CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
     const CNA_Bool enabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(enabled)) {
+        if (!IsCanonicalBool(enabled)) {
             return InvalidArgument("The vertex-colour-enabled value is not a CNA_Bool.");
         }
         PbrEffectView view;
@@ -7543,7 +7352,7 @@ CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
         }
         if (!IsColorTextureSlot(slot)) {
@@ -7603,7 +7412,7 @@ CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
         }
         PbrEffectView view;
@@ -7727,7 +7536,7 @@ CNA_Result cna_pbr_effect_set_double_sided_ext(
     const CNA_Bool value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsBool(value)) {
+        if (!IsCanonicalBool(value)) {
             return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
         }
         PbrEffectView view;

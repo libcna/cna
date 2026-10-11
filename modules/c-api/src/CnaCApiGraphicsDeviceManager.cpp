@@ -2,6 +2,7 @@
 
 #include "CNA/C/runtime_graphics_manager.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -22,10 +23,15 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
+
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Game;
@@ -42,33 +48,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The manager text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the manager text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 [[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
 {
@@ -134,8 +113,8 @@ void ToCPresentationParameters(
         static_cast<CNA_DisplayOrientation>(source.getDisplayOrientationProperty());
     mapped.render_target_usage =
         static_cast<CNA_RenderTargetUsage>(source.getRenderTargetUsageProperty());
-    mapped.is_full_screen = source.getIsFullScreenProperty() ? CNA_TRUE : CNA_FALSE;
-    mapped.headless_ext = source.getHeadlessEXTProperty() ? CNA_TRUE : CNA_FALSE;
+    mapped.is_full_screen = ToCBool(source.getIsFullScreenProperty());
+    mapped.headless_ext = ToCBool(source.getHeadlessEXTProperty());
     *destination = mapped;
 }
 
@@ -240,15 +219,9 @@ std::vector<std::shared_ptr<void>>& RetiredManagers()
     const CNA_Handle handle,
     std::shared_ptr<ManagerResource>* const outManager)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::GraphicsDeviceManager,
-        outManager);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::GraphicsDeviceManager, outManager);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The graphics device manager handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -323,7 +296,7 @@ CNA_Result cna_graphics_device_information_init(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInformation == nullptr) {
-            return InvalidInput("The device configuration output is null.");
+            return InvalidArgument("The device configuration output is null.");
         }
         const GraphicsDeviceInformation canonical;
         ToCDeviceInformation(canonical, outInformation);
@@ -337,10 +310,10 @@ CNA_Result cna_graphics_device_information_clone(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInformation == nullptr) {
-            return InvalidInput("The device configuration output is null.");
+            return InvalidArgument("The device configuration output is null.");
         }
         if (!IsDeviceInformation(information)) {
-            return InvalidInput("The device configuration is not a valid structure.");
+            return InvalidArgument("The device configuration is not a valid structure.");
         }
         GraphicsDeviceInformation canonical;
         canonical.setAdapterProperty(AdapterAt(information->adapter_index));
@@ -359,7 +332,7 @@ CNA_Result cna_graphics_device_information_get_type_name_size(uint64_t* const ou
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The type-name size output is null.");
+            return InvalidArgument("The type-name size output is null.");
         }
         const GraphicsDeviceInformation canonical;
         *outBytes = canonical.GetTypeName().size();
@@ -384,7 +357,7 @@ CNA_Result cna_graphics_device_manager_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outManager == nullptr) {
-            return InvalidInput("The manager output is null.");
+            return InvalidArgument("The manager output is null.");
         }
         *outManager = CNA_INVALID_HANDLE;
         Game* game = nullptr;
@@ -416,7 +389,7 @@ CNA_Result cna_graphics_device_manager_get_graphics_profile(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outProfile == nullptr) {
-            return InvalidInput("The graphics profile output is null.");
+            return InvalidArgument("The graphics profile output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -434,7 +407,7 @@ CNA_Result cna_graphics_device_manager_set_graphics_profile(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!IsProfile(profile)) {
-            return InvalidInput("The graphics profile is not a defined identity.");
+            return InvalidArgument("The graphics profile is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -452,7 +425,7 @@ CNA_Result cna_graphics_device_manager_get_graphics_device(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGraphicsDevice == nullptr) {
-            return InvalidInput("The graphics device output is null.");
+            return InvalidArgument("The graphics device output is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
         std::shared_ptr<ManagerResource> resource;
@@ -476,14 +449,14 @@ CNA_Result cna_graphics_device_manager_get_is_full_screen(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFullScreen == nullptr) {
-            return InvalidInput("The full-screen output is null.");
+            return InvalidArgument("The full-screen output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outFullScreen = resource->value->getIsFullScreenProperty() ? CNA_TRUE : CNA_FALSE;
+        *outFullScreen = ToCBool(resource->value->getIsFullScreenProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -513,14 +486,14 @@ CNA_Result cna_graphics_device_manager_get_prefer_multi_sampling(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPrefer == nullptr) {
-            return InvalidInput("The multisampling output is null.");
+            return InvalidArgument("The multisampling output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outPrefer = resource->value->getPreferMultiSamplingProperty() ? CNA_TRUE : CNA_FALSE;
+        *outPrefer = ToCBool(resource->value->getPreferMultiSamplingProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -550,7 +523,7 @@ CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_format(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFormat == nullptr) {
-            return InvalidInput("The back-buffer format output is null.");
+            return InvalidArgument("The back-buffer format output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -569,7 +542,7 @@ CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_format(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!IsSurfaceFormat(format)) {
-            return InvalidInput("The back-buffer format is not a defined identity.");
+            return InvalidArgument("The back-buffer format is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -588,7 +561,7 @@ CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_width(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr) {
-            return InvalidInput("The back-buffer width output is null.");
+            return InvalidArgument("The back-buffer width output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -622,7 +595,7 @@ CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_height(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHeight == nullptr) {
-            return InvalidInput("The back-buffer height output is null.");
+            return InvalidArgument("The back-buffer height output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -656,7 +629,7 @@ CNA_Result cna_graphics_device_manager_get_preferred_depth_stencil_format(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFormat == nullptr) {
-            return InvalidInput("The depth format output is null.");
+            return InvalidArgument("The depth format output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -675,7 +648,7 @@ CNA_Result cna_graphics_device_manager_set_preferred_depth_stencil_format(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!IsDepthFormat(format)) {
-            return InvalidInput("The depth format is not a defined identity.");
+            return InvalidArgument("The depth format is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -694,7 +667,7 @@ CNA_Result cna_graphics_device_manager_get_synchronize_with_vertical_retrace(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSynchronize == nullptr) {
-            return InvalidInput("The vertical-retrace output is null.");
+            return InvalidArgument("The vertical-retrace output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -702,7 +675,7 @@ CNA_Result cna_graphics_device_manager_get_synchronize_with_vertical_retrace(
             return result;
         }
         *outSynchronize =
-            resource->value->getSynchronizeWithVerticalRetraceProperty() ? CNA_TRUE : CNA_FALSE;
+            ToCBool(resource->value->getSynchronizeWithVerticalRetraceProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -732,7 +705,7 @@ CNA_Result cna_graphics_device_manager_get_supported_orientations(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOrientations == nullptr) {
-            return InvalidInput("The orientation output is null.");
+            return InvalidArgument("The orientation output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -767,7 +740,7 @@ CNA_Result cna_graphics_device_manager_get_preferred_presentation_mode_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outMode == nullptr) {
-            return InvalidInput("The presentation mode output is null.");
+            return InvalidArgument("The presentation mode output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -786,7 +759,7 @@ CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (mode > CNA_PRESENTATION_MODE_MAXIMUM) {
-            return InvalidInput("The presentation mode is not a defined identity.");
+            return InvalidArgument("The presentation mode is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -844,14 +817,14 @@ CNA_Result cna_graphics_device_manager_begin_draw(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outShouldDraw == nullptr) {
-            return InvalidInput("The draw decision output is null.");
+            return InvalidArgument("The draw decision output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outShouldDraw = resource->value->BeginDraw() ? CNA_TRUE : CNA_FALSE;
+        *outShouldDraw = ToCBool(resource->value->BeginDraw());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -887,7 +860,7 @@ CNA_Result cna_graphics_device_manager_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The type-name size output is null.");
+            return InvalidArgument("The type-name size output is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -924,14 +897,14 @@ CNA_Result cna_graphics_device_manager_subscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The manager registration output is null.");
+            return InvalidArgument("The manager registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The manager event callback is null.");
+            return InvalidArgument("The manager event callback is null.");
         }
         if (event > CNA_GRAPHICS_DEVICE_MANAGER_EVENT_MAXIMUM) {
-            return InvalidInput("The manager event is not a defined identity.");
+            return InvalidArgument("The manager event is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -972,11 +945,11 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The manager registration output is null.");
+            return InvalidArgument("The manager registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The device settings callback is null.");
+            return InvalidArgument("The device settings callback is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);
@@ -1008,11 +981,11 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The manager registration output is null.");
+            return InvalidArgument("The manager registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The device settings callback is null.");
+            return InvalidArgument("The device settings callback is null.");
         }
         std::shared_ptr<ManagerResource> resource;
         if (const CNA_Result result = BorrowManager(manager, &resource);

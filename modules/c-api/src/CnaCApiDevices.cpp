@@ -2,6 +2,7 @@
 
 #include "CNA/C/devices.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
@@ -50,11 +51,16 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
+
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Devices::VibrateController;
 
@@ -66,11 +72,6 @@ static_assert(
 static_assert(
     static_cast<std::underlying_type_t<Microsoft::Devices::DeviceType>>(
         Microsoft::Devices::DeviceType::Emulator) == CNA_DEVICE_TYPE_EMULATOR);
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
 
 #ifndef CNA_DEVICES
 [[nodiscard]] CNA_Result ExtensionUnavailable()
@@ -88,28 +89,6 @@ static_assert(
         CNA_RESULT_INVALID_STATE,
         CNA_ERROR_CATEGORY_STATE,
         "No test backend is installed for this device.");
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The device text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the device text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result BorrowText(
@@ -379,8 +358,6 @@ std::shared_ptr<MessageBoxTestState>& MessageBoxTestStorage()
     return state;
 }
 
-
-
 std::mutex& FileDialogTestMutex()
 {
     static std::mutex mutex;
@@ -543,13 +520,9 @@ struct SystemTrayResource final {
     const CNA_Handle handle,
     std::shared_ptr<SystemTrayResource>* const outTray)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::SystemTray, outTray);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::SystemTray, outTray);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The system tray handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -557,7 +530,7 @@ struct SystemTrayResource final {
 [[nodiscard]] CNA_Result ToMessageBoxType(const CNA_MessageBoxType value, MessageBoxType* const out)
 {
     if (value > CNA_MESSAGE_BOX_TYPE_MAXIMUM) {
-        return InvalidInput("The message box severity is not a defined identity.");
+        return InvalidArgument("The message box severity is not a defined identity.");
     }
     *out = static_cast<MessageBoxType>(value);
     return CNA_RESULT_SUCCESS;
@@ -569,13 +542,13 @@ struct SystemTrayResource final {
     std::vector<FileDialogFilter>* const outFilters)
 {
     if (filterCount != UINT64_C(0) && filters == nullptr) {
-        return InvalidInput("The file dialog filter array is null.");
+        return InvalidArgument("The file dialog filter array is null.");
     }
     for (uint64_t index = UINT64_C(0); index < filterCount; ++index) {
         const CNA_FileDialogFilter& filter = filters[index];
         if (filter.struct_size < sizeof(CNA_FileDialogFilter) ||
             filter.struct_version != StructureVersion) {
-            return InvalidInput("A file dialog filter is not a valid structure.");
+            return InvalidArgument("A file dialog filter is not a valid structure.");
         }
         FileDialogFilter mapped;
         if (const CNA_Result result =
@@ -754,13 +727,9 @@ struct CameraResource final {
     const CNA_Handle handle,
     std::shared_ptr<CameraResource>* const outCamera)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::Camera, outCamera);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::Camera, outCamera);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The camera handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -793,7 +762,7 @@ CNA_Result cna_environment_get_device_type(CNA_DeviceType* const outDeviceType)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDeviceType == nullptr) {
-            return InvalidInput("The environment device-type output is null.");
+            return InvalidArgument("The environment device-type output is null.");
         }
         *outDeviceType = static_cast<CNA_DeviceType>(
             Microsoft::Devices::Environment::getDeviceTypeProperty());
@@ -805,7 +774,7 @@ CNA_Result cna_devices_ext_is_available(CNA_Bool* const outAvailable)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAvailable == nullptr) {
-            return InvalidInput("The device extension availability output is null.");
+            return InvalidArgument("The device extension availability output is null.");
         }
 #ifdef CNA_DEVICES
         *outAvailable = CNA_TRUE;
@@ -880,14 +849,14 @@ CNA_Result cna_vibrate_controller_get_is_supported_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSupported == nullptr) {
-            return InvalidInput("The vibration support output is null.");
+            return InvalidArgument("The vibration support output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         *outSupported =
-            VibrateController::getDefaultProperty()->getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+            ToCBool(VibrateController::getDefaultProperty()->getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -898,7 +867,7 @@ CNA_Result cna_vibrate_controller_get_device_name_size_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The device name size output is null.");
+            return InvalidArgument("The device name size output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -976,7 +945,7 @@ CNA_Result cna_vibrate_controller_get_test_log_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLog == nullptr) {
-            return InvalidInput("The vibration test log output is null.");
+            return InvalidArgument("The vibration test log output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1008,7 +977,7 @@ CNA_Result cna_camera_device_info_init(CNA_CameraDeviceInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The camera descriptor output is null.");
+            return InvalidArgument("The camera descriptor output is null.");
         }
         CNA_CameraDeviceInfo info = {};
         info.struct_size = sizeof(CNA_CameraDeviceInfo);
@@ -1025,7 +994,7 @@ CNA_Result cna_power_get_state_ext(const CNA_Handle gameHandle, CNA_PowerState* 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The power state output is null.");
+            return InvalidArgument("The power state output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1042,7 +1011,7 @@ CNA_Result cna_power_get_battery_percent_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPercent == nullptr) {
-            return InvalidInput("The battery percentage output is null.");
+            return InvalidArgument("The battery percentage output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1059,7 +1028,7 @@ CNA_Result cna_power_get_seconds_remaining_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSeconds == nullptr) {
-            return InvalidInput("The battery seconds output is null.");
+            return InvalidArgument("The battery seconds output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1076,7 +1045,7 @@ CNA_Result cna_system_info_get_logical_cpu_core_count_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The core count output is null.");
+            return InvalidArgument("The core count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1093,7 +1062,7 @@ CNA_Result cna_system_info_get_system_ram_megabytes_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outMegabytes == nullptr) {
-            return InvalidInput("The system memory output is null.");
+            return InvalidArgument("The system memory output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1110,7 +1079,7 @@ CNA_Result cna_locale_get_preferred_count_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The locale count output is null.");
+            return InvalidArgument("The locale count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1132,7 +1101,7 @@ CNA_Result cna_locale_get_language_size_at_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The locale language size output is null.");
+            return InvalidArgument("The locale language size output is null.");
         }
         LocaleInfo locale;
         if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
@@ -1168,7 +1137,7 @@ CNA_Result cna_locale_get_country_size_at_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The locale country size output is null.");
+            return InvalidArgument("The locale country size output is null.");
         }
         LocaleInfo locale;
         if (const CNA_Result result = BorrowLocale(gameHandle, index, &locale);
@@ -1203,7 +1172,7 @@ CNA_Result cna_display_info_get_content_scale_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outScale == nullptr) {
-            return InvalidInput("The content scale output is null.");
+            return InvalidArgument("The content scale output is null.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
@@ -1221,7 +1190,7 @@ CNA_Result cna_display_info_get_safe_area_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outArea == nullptr) {
-            return InvalidInput("The safe area output is null.");
+            return InvalidArgument("The safe area output is null.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = BorrowWindow(gameHandle, &window);
@@ -1246,7 +1215,7 @@ CNA_Result cna_devices_clipboard_set_text_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAccepted == nullptr) {
-            return InvalidInput("The clipboard acceptance output is null.");
+            return InvalidArgument("The clipboard acceptance output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1258,7 +1227,7 @@ CNA_Result cna_devices_clipboard_set_text_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outAccepted = Clipboard::setTextProperty(value) ? CNA_TRUE : CNA_FALSE;
+        *outAccepted = ToCBool(Clipboard::setTextProperty(value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1270,7 +1239,7 @@ CNA_Result cna_url_launcher_open_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOpened == nullptr) {
-            return InvalidInput("The URL acceptance output is null.");
+            return InvalidArgument("The URL acceptance output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1282,9 +1251,9 @@ CNA_Result cna_url_launcher_open_ext(
             return result;
         }
         if (value.empty()) {
-            return InvalidInput("The URL is empty.");
+            return InvalidArgument("The URL is empty.");
         }
-        *outOpened = UrlLauncher::Open(value) ? CNA_TRUE : CNA_FALSE;
+        *outOpened = ToCBool(UrlLauncher::Open(value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1295,13 +1264,13 @@ CNA_Result cna_message_box_get_is_supported_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSupported == nullptr) {
-            return InvalidInput("The message box support output is null.");
+            return InvalidArgument("The message box support output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = MessageBox::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(MessageBox::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1350,7 +1319,7 @@ CNA_Result cna_message_box_show_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outChosen == nullptr) {
-            return InvalidInput("The chosen button output is null.");
+            return InvalidArgument("The chosen button output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1362,7 +1331,7 @@ CNA_Result cna_message_box_show_ext(
             return result;
         }
         if (buttonCount == UINT64_C(0) || buttonLabels == nullptr) {
-            return InvalidInput("A message box with buttons needs at least one label.");
+            return InvalidArgument("A message box with buttons needs at least one label.");
         }
         std::string titleText;
         std::string messageText;
@@ -1431,7 +1400,7 @@ CNA_Result cna_message_box_get_test_log_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLog == nullptr) {
-            return InvalidInput("The message box test log output is null.");
+            return InvalidArgument("The message box test log output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1466,13 +1435,13 @@ CNA_Result cna_file_dialog_get_is_supported_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSupported == nullptr) {
-            return InvalidInput("The file dialog support output is null.");
+            return InvalidArgument("The file dialog support output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = FileDialog::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(FileDialog::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1492,7 +1461,7 @@ CNA_Result cna_file_dialog_show_open_file_ext(
             return result;
         }
         if (onResult == nullptr) {
-            return InvalidInput("The file dialog result handler is null.");
+            return InvalidArgument("The file dialog result handler is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1532,7 +1501,7 @@ CNA_Result cna_file_dialog_show_save_file_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (onResult == nullptr) {
-            return InvalidInput("The file dialog result handler is null.");
+            return InvalidArgument("The file dialog result handler is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1574,7 +1543,7 @@ CNA_Result cna_file_dialog_show_open_folder_ext(
             return result;
         }
         if (onResult == nullptr) {
-            return InvalidInput("The file dialog result handler is null.");
+            return InvalidArgument("The file dialog result handler is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -1621,7 +1590,7 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
             return CNA_RESULT_SUCCESS;
         }
         if (resultCount != UINT64_C(0) && results == nullptr) {
-            return InvalidInput("The file dialog result array is null.");
+            return InvalidArgument("The file dialog result array is null.");
         }
         auto state = std::make_shared<FileDialogTestState>();
         for (uint64_t index = UINT64_C(0); index < resultCount; ++index) {
@@ -1647,13 +1616,13 @@ CNA_Result cna_system_tray_get_is_supported_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSupported == nullptr) {
-            return InvalidInput("The system tray support output is null.");
+            return InvalidArgument("The system tray support output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = SystemTray::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(SystemTray::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1665,7 +1634,7 @@ CNA_Result cna_system_tray_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTray == nullptr) {
-            return InvalidInput("The system tray output is null.");
+            return InvalidArgument("The system tray output is null.");
         }
         *outTray = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -1701,7 +1670,7 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTray == nullptr) {
-            return InvalidInput("The system tray output is null.");
+            return InvalidArgument("The system tray output is null.");
         }
         *outTray = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -1769,7 +1738,7 @@ CNA_Result cna_system_tray_add_entry(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The tray entry index output is null.");
+            return InvalidArgument("The tray entry index output is null.");
         }
         if (const CNA_Result result = ValidateCanonicalBool(checkable, "checkable");
             result != CNA_RESULT_SUCCESS) {
@@ -1857,16 +1826,14 @@ CNA_Result cna_system_tray_get_entry_checked(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outChecked == nullptr) {
-            return InvalidInput("The tray entry check output is null.");
+            return InvalidArgument("The tray entry check output is null.");
         }
         std::shared_ptr<SystemTrayResource> resource;
         if (const CNA_Result result = BorrowTray(tray, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outChecked = resource->value->GetEntryChecked(static_cast<std::size_t>(index))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outChecked = ToCBool(resource->value->GetEntryChecked(static_cast<std::size_t>(index)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1898,16 +1865,14 @@ CNA_Result cna_system_tray_get_entry_enabled(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnabled == nullptr) {
-            return InvalidInput("The tray entry enabled output is null.");
+            return InvalidArgument("The tray entry enabled output is null.");
         }
         std::shared_ptr<SystemTrayResource> resource;
         if (const CNA_Result result = BorrowTray(tray, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEnabled = resource->value->GetEntryEnabled(static_cast<std::size_t>(index))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outEnabled = ToCBool(resource->value->GetEntryEnabled(static_cast<std::size_t>(index)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1968,13 +1933,13 @@ CNA_Result cna_camera_get_is_supported_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSupported == nullptr) {
-            return InvalidInput("The camera support output is null.");
+            return InvalidArgument("The camera support output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = Camera::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(Camera::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1983,7 +1948,7 @@ CNA_Result cna_camera_get_count_ext(const CNA_Handle gameHandle, uint64_t* const
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The camera count output is null.");
+            return InvalidArgument("The camera count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -2001,7 +1966,7 @@ CNA_Result cna_camera_get_info_at_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The camera descriptor output is null.");
+            return InvalidArgument("The camera descriptor output is null.");
         }
         CameraDeviceInfo info;
         if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
@@ -2024,7 +1989,7 @@ CNA_Result cna_camera_get_name_size_at_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The camera name size output is null.");
+            return InvalidArgument("The camera name size output is null.");
         }
         CameraDeviceInfo info;
         if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
@@ -2057,7 +2022,7 @@ CNA_Result cna_camera_create(const CNA_Handle gameHandle, CNA_CameraHandle* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCamera == nullptr) {
-            return InvalidInput("The camera output is null.");
+            return InvalidArgument("The camera output is null.");
         }
         *outCamera = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -2086,7 +2051,7 @@ CNA_Result cna_camera_create_with_test_backend_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCamera == nullptr) {
-            return InvalidInput("The camera output is null.");
+            return InvalidArgument("The camera output is null.");
         }
         *outCamera = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -2118,7 +2083,7 @@ CNA_Result cna_camera_get_state_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The camera state output is null.");
+            return InvalidArgument("The camera state output is null.");
         }
         std::shared_ptr<CameraResource> resource;
         if (const CNA_Result result = BorrowCamera(camera, &resource);
@@ -2136,7 +2101,7 @@ CNA_Result cna_camera_get_frame_width_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr) {
-            return InvalidInput("The camera frame width output is null.");
+            return InvalidArgument("The camera frame width output is null.");
         }
         std::shared_ptr<CameraResource> resource;
         if (const CNA_Result result = BorrowCamera(camera, &resource);
@@ -2154,7 +2119,7 @@ CNA_Result cna_camera_get_frame_height_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHeight == nullptr) {
-            return InvalidInput("The camera frame height output is null.");
+            return InvalidArgument("The camera frame height output is null.");
         }
         std::shared_ptr<CameraResource> resource;
         if (const CNA_Result result = BorrowCamera(camera, &resource);
@@ -2173,7 +2138,7 @@ CNA_Result cna_camera_try_acquire_frame_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAcquired == nullptr) {
-            return InvalidInput("The camera frame output is null.");
+            return InvalidArgument("The camera frame output is null.");
         }
         std::shared_ptr<CameraResource> resource;
         if (const CNA_Result result = BorrowCamera(camera, &resource);
@@ -2185,7 +2150,7 @@ CNA_Result cna_camera_try_acquire_frame_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outAcquired = resource->value->TryAcquireFrame(*texture->value) ? CNA_TRUE : CNA_FALSE;
+        *outAcquired = ToCBool(resource->value->TryAcquireFrame(*texture->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2196,14 +2161,14 @@ CNA_Result cna_camera_set_test_state_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (state > CNA_CAMERA_STATE_MAXIMUM) {
-            return InvalidInput("The camera state is not a defined identity.");
+            return InvalidArgument("The camera state is not a defined identity.");
         }
         // Two identities are defined but no longer reachable for a camera the platform opened: a
         // device that is not open is not handed out at all, so nothing can report closed, and
         // "not supported" is what an absent device answers rather than a state one can be put in.
         // Refusing them keeps this route honest -- every state it accepts reads back unchanged.
         if (state == CNA_CAMERA_STATE_CLOSED || state == CNA_CAMERA_STATE_NOT_SUPPORTED) {
-            return InvalidInput(
+            return InvalidArgument(
                 "The camera state cannot be set to closed or not-supported: the platform reports "
                 "neither for a device it opened.");
         }
@@ -2247,12 +2212,12 @@ CNA_Result cna_camera_set_test_frame_ext(
             return CNA_RESULT_SUCCESS;
         }
         if (width < 0 || height < 0) {
-            return InvalidInput("A camera frame dimension is negative.");
+            return InvalidArgument("A camera frame dimension is negative.");
         }
         const uint64_t expected =
             static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
         if (expected != pixelCount) {
-            return InvalidInput("The camera frame pixel count does not match its dimensions.");
+            return InvalidArgument("The camera frame pixel count does not match its dimensions.");
         }
         std::vector<std::uint8_t> rgba;
         rgba.reserve(static_cast<std::size_t>(pixelCount) * 4U);

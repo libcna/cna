@@ -2,6 +2,8 @@
 
 #include "CNA/C/color.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -15,44 +17,15 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::StoreOutput;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
-
-[[nodiscard]] Color ToNative(const CNA_Color value)
-{
-    return Color(value.r, value.g, value.b, value.a);
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value)
-{
-    return Vector3(value.x, value.y, value.z);
-}
-
-[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value)
-{
-    return Vector4(value.x, value.y, value.z, value.w);
-}
-
-[[nodiscard]] CNA_Color ToC(const Color& value) noexcept
-{
-    return CNA_Color{
-        value.getRProperty(),
-        value.getGProperty(),
-        value.getBProperty(),
-        value.getAProperty()};
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3& value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Vector4 ToC(const Vector4& value) noexcept
-{
-    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
-}
 
 [[nodiscard]] int32_t PremultiplyUnchecked(
     const int32_t component,
@@ -62,54 +35,6 @@ using Microsoft::Xna::Framework::Vector4;
     const uint32_t product =
         std::bit_cast<uint32_t>(component) * std::bit_cast<uint32_t>(alpha);
     return std::bit_cast<int32_t>(product) / 255;
-}
-
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreOutput(
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
-        }
-        const TValue result = std::forward<TCallable>(callable)();
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyFormattedString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string destination or required-byte output is invalid.");
-        }
-        const std::string text = std::forward<TCallable>(callable)();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete formatted color.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 } // namespace
@@ -244,7 +169,7 @@ CNA_Result cna_color_copy_debug_string(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CopyFormattedString(destination, capacity, outByteCount, [=] {
+    return CopyFormattedText(destination, capacity, outByteCount, [=] {
         return ToNative(color).getDebugDisplayStringProperty();
     });
 }
@@ -255,7 +180,7 @@ CNA_Result cna_color_equals(
     CNA_Bool* const outEqual)
 {
     return StoreOutput(outEqual, "The Boolean output is null.", [=] {
-        return ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(ToNative(left).Equals(ToNative(right)));
     });
 }
 
@@ -265,7 +190,7 @@ CNA_Result cna_color_not_equals(
     CNA_Bool* const outNotEqual)
 {
     return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
-        return ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(ToNative(left) != ToNative(right));
     });
 }
 
@@ -311,7 +236,7 @@ CNA_Result cna_color_copy_string(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CopyFormattedString(destination, capacity, outByteCount, [=] {
+    return CopyFormattedText(destination, capacity, outByteCount, [=] {
         return ToNative(color).ToString();
     });
 }

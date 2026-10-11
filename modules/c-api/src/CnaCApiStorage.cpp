@@ -3,6 +3,7 @@
 #include "CNA/C/storage.h"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageContainer.hpp"
@@ -30,10 +31,15 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Storage::StorageContainer;
 using Microsoft::Xna::Framework::Storage::StorageDevice;
@@ -71,16 +77,6 @@ static_assert(NativeOrdinal(PlayerIndex::Four) == CNA_PLAYER_INDEX_FOUR);
 
 constexpr uint32_t FileShareMask = CNA_FILE_SHARE_READ | CNA_FILE_SHARE_WRITE |
     CNA_FILE_SHARE_DELETE | CNA_FILE_SHARE_INHERITABLE;
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
 
 struct StorageDeviceResource final {
     std::shared_ptr<StorageDevice> value;
@@ -152,65 +148,21 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<StorageDeviceResource>* const outDevice)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::StorageDevice, outDevice);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned StorageDevice handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::StorageDevice, outDevice);
 }
 
 [[nodiscard]] CNA_Result GetContainer(
     const CNA_Handle handle,
     std::shared_ptr<StorageContainerResource>* const outContainer)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::StorageContainer,
-        outContainer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned StorageContainer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::StorageContainer, outContainer);
 }
 
 [[nodiscard]] CNA_Result GetStream(
     const CNA_Handle handle,
     std::shared_ptr<StorageStreamResource>* const outStream)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::StorageStream, outStream);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned storage stream handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    const char* const message)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument(message);
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::StorageStream, outStream);
 }
 
 // Every fake-async canonical entry point takes a completion delegate. CNA completes them before
@@ -350,8 +302,7 @@ private:
         names[static_cast<std::size_t>(index)],
         destination,
         capacity,
-        outBytes,
-        "The storage name output buffer is too small.");
+        outBytes);
 }
 
 [[nodiscard]] CNA_Result RelativePath(
@@ -636,8 +587,7 @@ CNA_Result cna_storage_copy_root_ext(
             StorageDevice::GetStorageRootEXT(),
             destination,
             capacity,
-            outBytes,
-            "The storage root output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -734,7 +684,7 @@ CNA_Result cna_storage_device_get_is_connected(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsConnected = device->value->getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsConnected = ToCBool(device->value->getIsConnectedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -812,15 +762,9 @@ CNA_Result cna_storage_device_unsubscribe_device_changed(const CNA_Handle regist
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::StorageDeviceEventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::StorageDeviceEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The DeviceChanged registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
@@ -948,8 +892,7 @@ CNA_Result cna_storage_container_copy_display_name(
             container->value->getDisplayNameProperty(),
             destination,
             capacity,
-            outBytes,
-            "The container display-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -987,8 +930,7 @@ CNA_Result cna_storage_container_copy_type_name(
             container->value->GetTypeName(),
             destination,
             capacity,
-            outBytes,
-            "The container type-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -1005,7 +947,7 @@ CNA_Result cna_storage_container_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = container->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(container->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1092,15 +1034,9 @@ CNA_Result cna_storage_container_unsubscribe_disposing(const CNA_Handle registra
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::StorageContainerEventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::StorageContainerEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The Disposing registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
@@ -1153,7 +1089,7 @@ CNA_Result cna_storage_container_directory_exists(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outExists = container->value->DirectoryExists(path) ? CNA_TRUE : CNA_FALSE;
+        *outExists = ToCBool(container->value->DirectoryExists(path));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1196,7 +1132,7 @@ CNA_Result cna_storage_container_file_exists(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outExists = container->value->FileExists(path) ? CNA_TRUE : CNA_FALSE;
+        *outExists = ToCBool(container->value->FileExists(path));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1560,7 +1496,7 @@ CNA_Result cna_storage_stream_get_can_read(
             outCanRead,
             "The storage stream read-capability output is null.",
             [outCanRead](System::IO::Stream& stream) {
-                *outCanRead = stream.getCanReadProperty() ? CNA_TRUE : CNA_FALSE;
+                *outCanRead = ToCBool(stream.getCanReadProperty());
             });
     });
 }
@@ -1575,7 +1511,7 @@ CNA_Result cna_storage_stream_get_can_write(
             outCanWrite,
             "The storage stream write-capability output is null.",
             [outCanWrite](System::IO::Stream& stream) {
-                *outCanWrite = stream.getCanWriteProperty() ? CNA_TRUE : CNA_FALSE;
+                *outCanWrite = ToCBool(stream.getCanWriteProperty());
             });
     });
 }
@@ -1590,7 +1526,7 @@ CNA_Result cna_storage_stream_get_can_seek(
             outCanSeek,
             "The storage stream seek-capability output is null.",
             [outCanSeek](System::IO::Stream& stream) {
-                *outCanSeek = stream.getCanSeekProperty() ? CNA_TRUE : CNA_FALSE;
+                *outCanSeek = ToCBool(stream.getCanSeekProperty());
             });
     });
 }

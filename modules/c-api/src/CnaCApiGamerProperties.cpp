@@ -3,6 +3,8 @@
 #include "CNA/C/gamer_services.h"
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
@@ -22,10 +24,16 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 
 using Microsoft::Xna::Framework::Color;
@@ -36,29 +44,11 @@ using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
-
 [[nodiscard]] CNA_Result BorrowDictionary(
     const CNA_Handle handle,
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::PropertyDictionary, outDictionary);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned property dictionary handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::PropertyDictionary, outDictionary);
 }
 
 [[nodiscard]] CNA_Result ToNativeText(
@@ -67,33 +57,11 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     std::string* const outText)
 {
     if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     outText->assign(
         view.data == nullptr ? "" : view.data,
         static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result CopyPropertyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The property text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the property text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
     return CNA_RESULT_SUCCESS;
 }
 
@@ -140,7 +108,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 {
     std::any value;
     if (!dictionary.TryGetValue(key, value)) {
-        return InvalidInput("The property dictionary does not hold that key.");
+        return InvalidArgument("The property dictionary does not hold that key.");
     }
     if (KindOf(value) != expectedKind) {
         return InvalidState("The property holds a value of a different kind.");
@@ -201,15 +169,15 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
         static_cast<CNA_GameDifficulty>(defaults.getGameDifficultyProperty()),
         static_cast<CNA_ControllerSensitivity>(defaults.getControllerSensitivityProperty()),
         static_cast<CNA_RacingCameraAngle>(defaults.getRacingCameraAngleProperty()),
-        primary.has_value() ? CNA_TRUE : CNA_FALSE,
-        secondary.has_value() ? CNA_TRUE : CNA_FALSE,
-        defaults.getAutoAimProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getAutoCenterProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getMoveWithRightThumbStickProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getInvertYAxisProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getManualTransmissionProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getAccelerateWithButtonsProperty() ? CNA_TRUE : CNA_FALSE,
-        defaults.getBrakeWithButtonsProperty() ? CNA_TRUE : CNA_FALSE,
+        ToCBool(primary.has_value()),
+        ToCBool(secondary.has_value()),
+        ToCBool(defaults.getAutoAimProperty()),
+        ToCBool(defaults.getAutoCenterProperty()),
+        ToCBool(defaults.getMoveWithRightThumbStickProperty()),
+        ToCBool(defaults.getInvertYAxisProperty()),
+        ToCBool(defaults.getManualTransmissionProperty()),
+        ToCBool(defaults.getAccelerateWithButtonsProperty()),
+        ToCBool(defaults.getBrakeWithButtonsProperty()),
         {0U, 0U, 0U},
         {0U, 0U, 0U, 0U},
         {0U, 0U, 0U, 0U}
@@ -263,7 +231,7 @@ CNA_Result cna_game_defaults_init(CNA_GameDefaults* const outDefaults)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDefaults == nullptr) {
-            return InvalidInput("The GameDefaults output is null.");
+            return InvalidArgument("The GameDefaults output is null.");
         }
         *outDefaults = ToC(GameDefaults::CreateInternal());
         return CNA_RESULT_SUCCESS;
@@ -277,7 +245,7 @@ CNA_Result cna_signed_in_gamer_get_game_defaults(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDefaults == nullptr || outDefaults->struct_size < sizeof(CNA_GameDefaults) ||
             outDefaults->struct_version != StructureVersion) {
-            return InvalidInput("The GameDefaults output structure is invalid.");
+            return InvalidArgument("The GameDefaults output structure is invalid.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -293,7 +261,7 @@ CNA_Result cna_property_dictionary_create_ext(CNA_PropertyDictionaryHandle* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDictionary == nullptr) {
-            return InvalidInput("The property dictionary output handle is null.");
+            return InvalidArgument("The property dictionary output handle is null.");
         }
         // The only constructor is private; the canonical factory with an empty map is how an empty
         // dictionary is made, and the typed setters fill it from there.
@@ -328,7 +296,7 @@ CNA_Result cna_property_dictionary_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The property count output is null.");
+            return InvalidArgument("The property count output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
@@ -346,14 +314,14 @@ CNA_Result cna_property_dictionary_get_is_read_only(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsReadOnly == nullptr) {
-            return InvalidInput("The read-only output is null.");
+            return InvalidArgument("The read-only output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsReadOnly = dictionary->value->getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsReadOnly = ToCBool(dictionary->value->getIsReadOnlyProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -365,7 +333,7 @@ CNA_Result cna_property_dictionary_contains_key(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The containment output is null.");
+            return InvalidArgument("The containment output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -374,7 +342,7 @@ CNA_Result cna_property_dictionary_contains_key(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = dictionary->value->ContainsKey(nativeKey) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(dictionary->value->ContainsKey(nativeKey));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -387,7 +355,7 @@ CNA_Result cna_property_dictionary_try_get_value_kind_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFound == nullptr || outKind == nullptr) {
-            return InvalidInput("The property kind output is invalid.");
+            return InvalidArgument("The property kind output is invalid.");
         }
         *outFound = CNA_FALSE;
         *outKind = CNA_PROPERTY_VALUE_KIND_UNKNOWN;
@@ -415,7 +383,7 @@ CNA_Result cna_property_dictionary_get_date_time_ticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -441,7 +409,7 @@ CNA_Result cna_property_dictionary_get_double(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -466,7 +434,7 @@ CNA_Result cna_property_dictionary_get_int32(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -491,7 +459,7 @@ CNA_Result cna_property_dictionary_get_int64(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -516,7 +484,7 @@ CNA_Result cna_property_dictionary_get_outcome(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOutcome == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -542,7 +510,7 @@ CNA_Result cna_property_dictionary_get_single(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -568,7 +536,7 @@ CNA_Result cna_property_dictionary_get_stream_size_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasStream == nullptr || outBytes == nullptr) {
-            return InvalidInput("The property stream output is invalid.");
+            return InvalidArgument("The property stream output is invalid.");
         }
         *outHasStream = CNA_FALSE;
         *outBytes = UINT64_C(0);
@@ -600,7 +568,7 @@ CNA_Result cna_property_dictionary_get_string_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -637,7 +605,7 @@ CNA_Result cna_property_dictionary_copy_string(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyPropertyText(
+        return CopyText(
             dictionary->value->GetValueString(nativeKey),
             destination,
             capacity,
@@ -652,7 +620,7 @@ CNA_Result cna_property_dictionary_get_time_span_ticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The property value output is null.");
+            return InvalidArgument("The property value output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -750,7 +718,7 @@ CNA_Result cna_property_dictionary_set_outcome(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outcome > CNA_LEADERBOARD_OUTCOME_MAXIMUM) {
-            return InvalidInput("The leaderboard outcome is not a defined identity.");
+            return InvalidArgument("The leaderboard outcome is not a defined identity.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -831,7 +799,7 @@ CNA_Result cna_property_dictionary_remove(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRemoved == nullptr) {
-            return InvalidInput("The removal output is null.");
+            return InvalidArgument("The removal output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         std::string nativeKey;
@@ -840,7 +808,7 @@ CNA_Result cna_property_dictionary_remove(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outRemoved = dictionary->value->Remove(nativeKey) ? CNA_TRUE : CNA_FALSE;
+        *outRemoved = ToCBool(dictionary->value->Remove(nativeKey));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -865,7 +833,7 @@ CNA_Result cna_property_dictionary_get_key_size_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The key size output is null.");
+            return InvalidArgument("The key size output is null.");
         }
         std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
         if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
@@ -874,7 +842,7 @@ CNA_Result cna_property_dictionary_get_key_size_at(
         }
         const std::vector<std::string> keys = dictionary->value->Keys();
         if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
-            return InvalidInput("The key index is outside the property dictionary.");
+            return InvalidArgument("The key index is outside the property dictionary.");
         }
         *outBytes = keys[static_cast<std::size_t>(index)].size();
         return CNA_RESULT_SUCCESS;
@@ -896,9 +864,9 @@ CNA_Result cna_property_dictionary_copy_key_at(
         }
         const std::vector<std::string> keys = dictionary->value->Keys();
         if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
-            return InvalidInput("The key index is outside the property dictionary.");
+            return InvalidArgument("The key index is outside the property dictionary.");
         }
-        return CopyPropertyText(
+        return CopyText(
             keys[static_cast<std::size_t>(index)],
             destination,
             capacity,

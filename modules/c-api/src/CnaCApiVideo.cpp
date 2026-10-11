@@ -2,6 +2,7 @@
 
 #include "CNA/C/video.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -22,11 +23,16 @@ using CNA::C::Detail::CreateGameFrameTexture2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
+
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::MediaState;
@@ -35,33 +41,6 @@ using Microsoft::Xna::Framework::Media::VideoPlayer;
 using Microsoft::Xna::Framework::Media::VideoSoundtrackType;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The video text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the video text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 struct VideoResource final {
     std::unique_ptr<Video> value;
@@ -83,13 +62,9 @@ struct VideoPlayerResource final {
     const CNA_VideoHandle handle,
     std::shared_ptr<VideoResource>* const outVideo)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::Video, outVideo);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::Video, outVideo);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The video handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -98,13 +73,9 @@ struct VideoPlayerResource final {
     const CNA_VideoPlayerHandle handle,
     std::shared_ptr<VideoPlayerResource>* const outPlayer)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::VideoPlayer, outPlayer);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::VideoPlayer, outPlayer);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The video player handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -136,7 +107,7 @@ void InvalidateFrameTexture(VideoPlayerResource& player) noexcept
     VideoSoundtrackType* const outType)
 {
     if (type > CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM) {
-        return InvalidInput("The video soundtrack identity is undefined.");
+        return InvalidArgument("The video soundtrack identity is undefined.");
     }
     *outType = static_cast<VideoSoundtrackType>(type);
     return CNA_RESULT_SUCCESS;
@@ -192,7 +163,7 @@ CNA_Result cna_video_info_init(CNA_VideoInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr) {
-            return InvalidInput("The video metadata output is null.");
+            return InvalidArgument("The video metadata output is null.");
         }
         CNA_VideoInfo info = {};
         info.struct_size = sizeof(CNA_VideoInfo);
@@ -209,7 +180,7 @@ CNA_Result cna_video_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVideo == nullptr) {
-            return InvalidInput("The video output is null.");
+            return InvalidArgument("The video output is null.");
         }
         *outVideo = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> device;
@@ -244,7 +215,7 @@ CNA_Result cna_video_create_with_metadata(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVideo == nullptr) {
-            return InvalidInput("The video output is null.");
+            return InvalidArgument("The video output is null.");
         }
         *outVideo = CNA_INVALID_HANDLE;
         VideoSoundtrackType nativeSoundtrack = VideoSoundtrackType::Music;
@@ -286,7 +257,7 @@ CNA_Result cna_video_create_from_uri_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVideo == nullptr) {
-            return InvalidInput("The video output is null.");
+            return InvalidArgument("The video output is null.");
         }
         *outVideo = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> device;
@@ -312,7 +283,7 @@ CNA_Result cna_video_get_width(const CNA_VideoHandle video, int32_t* const outWi
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr) {
-            return InvalidInput("The video width output is null.");
+            return InvalidArgument("The video width output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outWidth = static_cast<int32_t>(value.getWidthProperty());
@@ -325,7 +296,7 @@ CNA_Result cna_video_get_height(const CNA_VideoHandle video, int32_t* const outH
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHeight == nullptr) {
-            return InvalidInput("The video height output is null.");
+            return InvalidArgument("The video height output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outHeight = static_cast<int32_t>(value.getHeightProperty());
@@ -338,7 +309,7 @@ CNA_Result cna_video_get_frames_per_second(const CNA_VideoHandle video, float* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFps == nullptr) {
-            return InvalidInput("The video frame-rate output is null.");
+            return InvalidArgument("The video frame-rate output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outFps = value.getFramesPerSecondProperty();
@@ -352,7 +323,7 @@ CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const 
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_VideoInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The video metadata structure is invalid.");
+            return InvalidArgument("The video metadata structure is invalid.");
         }
         return ReadVideo(video, [&](const Video& value) {
             outInfo->width = static_cast<int32_t>(value.getWidthProperty());
@@ -369,7 +340,7 @@ CNA_Result cna_video_get_soundtrack_type(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outType == nullptr) {
-            return InvalidInput("The video soundtrack output is null.");
+            return InvalidArgument("The video soundtrack output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outType =
@@ -383,7 +354,7 @@ CNA_Result cna_video_get_duration(const CNA_VideoHandle video, int64_t* const ou
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The video duration output is null.");
+            return InvalidArgument("The video duration output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
@@ -436,7 +407,7 @@ CNA_Result cna_video_get_file_name_size(const CNA_VideoHandle video, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The video file-name byte-count output is null.");
+            return InvalidArgument("The video file-name byte-count output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outBytes = value.getFileNameProperty().size();
@@ -464,12 +435,12 @@ CNA_Result cna_video_get_has_graphics_device(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBound == nullptr) {
-            return InvalidInput("The video device-presence output is null.");
+            return InvalidArgument("The video device-presence output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             // Presence only: a borrowed device handle is valid solely inside the callback that
             // produced it, so handing one back later would be a promise this ABI cannot keep.
-            *outBound = value.getGraphicsDeviceProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+            *outBound = ToCBool(value.getGraphicsDeviceProperty() != nullptr);
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -479,7 +450,7 @@ CNA_Result cna_video_get_type_name_size(const CNA_VideoHandle video, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The video type-name byte-count output is null.");
+            return InvalidArgument("The video type-name byte-count output is null.");
         }
         return ReadVideo(video, [&](const Video& value) {
             *outBytes = value.GetTypeName().size();
@@ -526,7 +497,7 @@ CNA_Result cna_video_player_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPlayer == nullptr) {
-            return InvalidInput("The video player output is null.");
+            return InvalidArgument("The video player output is null.");
         }
         *outPlayer = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -556,14 +527,14 @@ CNA_Result cna_video_player_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The video player disposal-state output is null.");
+            return InvalidArgument("The video player disposal-state output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDisposed = resource->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -574,14 +545,14 @@ CNA_Result cna_video_player_get_is_looped(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLooped == nullptr) {
-            return InvalidInput("The video player loop-state output is null.");
+            return InvalidArgument("The video player loop-state output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outLooped = resource->value->getIsLoopedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outLooped = ToCBool(resource->value->getIsLoopedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -611,14 +582,14 @@ CNA_Result cna_video_player_get_is_muted(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outMuted == nullptr) {
-            return InvalidInput("The video player mute-state output is null.");
+            return InvalidArgument("The video player mute-state output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outMuted = resource->value->getIsMutedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outMuted = ToCBool(resource->value->getIsMutedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -648,7 +619,7 @@ CNA_Result cna_video_player_get_play_position_ticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The video player position output is null.");
+            return InvalidArgument("The video player position output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
@@ -667,7 +638,7 @@ CNA_Result cna_video_player_get_state(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The video player state output is null.");
+            return InvalidArgument("The video player state output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
@@ -686,7 +657,7 @@ CNA_Result cna_video_player_get_video(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVideo == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The video player video output is null.");
+            return InvalidArgument("The video player video output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
@@ -710,7 +681,7 @@ CNA_Result cna_video_player_get_volume(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVolume == nullptr) {
-            return InvalidInput("The video player volume output is null.");
+            return InvalidArgument("The video player volume output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
@@ -742,7 +713,7 @@ CNA_Result cna_video_player_get_frame_ext(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFrame == nullptr || outFrame->struct_size < sizeof(CNA_VideoFrameEXT) ||
             outFrame->struct_version != CNA_VIDEO_FRAME_EXT_STRUCT_VERSION) {
-            return InvalidInput("The video frame descriptor is null or malformed.");
+            return InvalidArgument("The video frame descriptor is null or malformed.");
         }
         outFrame->texture = CNA_INVALID_HANDLE;
         outFrame->generation = 0U;
@@ -785,7 +756,7 @@ CNA_Result cna_video_player_get_texture(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTexture == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The video frame output is null.");
+            return InvalidArgument("The video frame output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
@@ -944,7 +915,7 @@ CNA_Result cna_video_player_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The video player type-name byte-count output is null.");
+            return InvalidArgument("The video player type-name byte-count output is null.");
         }
         std::shared_ptr<VideoPlayerResource> resource;
         if (const CNA_Result result = BorrowPlayerForCall(player, &resource);

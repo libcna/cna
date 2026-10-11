@@ -3,6 +3,8 @@
 #include "CNA/C/vertex_resources.h"
 #include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -30,17 +32,22 @@
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector2;
@@ -62,16 +69,6 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
-
 [[nodiscard]] bool IsZero(const uint8_t* const values, const std::size_t count) noexcept
 {
     for (std::size_t index = 0U; index < count; ++index) {
@@ -82,175 +79,11 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     return true;
 }
 
-[[nodiscard]] Vector2 ToNative(const CNA_Vector2 value) noexcept
-{
-    return Vector2(value.x, value.y);
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value) noexcept
-{
-    return Vector3(value.x, value.y, value.z);
-}
-
-[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value) noexcept
-{
-    return Vector4(value.x, value.y, value.z, value.w);
-}
-
-[[nodiscard]] Color ToNative(const CNA_Color value)
-{
-    return Color(value.r, value.g, value.b, value.a);
-}
-
-[[nodiscard]] CNA_Vector2 ToC(const Vector2& value) noexcept
-{
-    return CNA_Vector2{value.X, value.Y};
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3& value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Vector4 ToC(const Vector4& value) noexcept
-{
-    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
-}
-
-[[nodiscard]] CNA_Color ToC(const Color& value) noexcept
-{
-    return CNA_Color{
-        value.getRProperty(), value.getGProperty(),
-        value.getBProperty(), value.getAProperty()};
-}
-
-[[nodiscard]] VertexPositionColor ToNative(const CNA_VertexPositionColor& value)
-{
-    return VertexPositionColor(ToNative(value.position), ToNative(value.color));
-}
-
-[[nodiscard]] CNA_VertexPositionColor ToC(const VertexPositionColor& value) noexcept
-{
-    return CNA_VertexPositionColor{ToC(value.Position), ToC(value.Color)};
-}
-
-[[nodiscard]] VertexPositionColorTexture ToNative(
-    const CNA_VertexPositionColorTexture& value)
-{
-    return VertexPositionColorTexture(
-        ToNative(value.position), ToNative(value.color), ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] CNA_VertexPositionColorTexture ToC(
-    const VertexPositionColorTexture& value) noexcept
-{
-    return CNA_VertexPositionColorTexture{
-        ToC(value.Position), ToC(value.Color), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] VertexPositionNormalTangentTexture ToNative(
-    const CNA_VertexPositionNormalTangentTexture& value)
-{
-    return VertexPositionNormalTangentTexture(
-        ToNative(value.position), ToNative(value.normal), ToNative(value.tangent),
-        ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTangentTexture ToC(
-    const VertexPositionNormalTangentTexture& value) noexcept
-{
-    return CNA_VertexPositionNormalTangentTexture{
-        ToC(value.Position), ToC(value.Normal), ToC(value.Tangent),
-        ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] VertexPositionNormalTangentTextureSkinned ToNative(
-    const CNA_VertexPositionNormalTangentTextureSkinned& value)
-{
-    return VertexPositionNormalTangentTextureSkinned(
-        ToNative(value.position), ToNative(value.normal), ToNative(value.tangent),
-        ToNative(value.texture_coordinate), ToNative(value.blend_weight),
-        std::array<uint8_t, 4>{
-            value.blend_indices[0], value.blend_indices[1],
-            value.blend_indices[2], value.blend_indices[3]});
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTangentTextureSkinned ToC(
-    const VertexPositionNormalTangentTextureSkinned& value) noexcept
-{
-    return CNA_VertexPositionNormalTangentTextureSkinned{
-        ToC(value.Position), ToC(value.Normal), ToC(value.Tangent),
-        ToC(value.TextureCoordinate), ToC(value.BlendWeight),
-        {value.BlendIndices[0], value.BlendIndices[1],
-         value.BlendIndices[2], value.BlendIndices[3]}};
-}
-
-[[nodiscard]] VertexPositionNormalTexture ToNative(
-    const CNA_VertexPositionNormalTexture& value)
-{
-    return VertexPositionNormalTexture(
-        ToNative(value.position), ToNative(value.normal), ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTexture ToC(
-    const VertexPositionNormalTexture& value) noexcept
-{
-    return CNA_VertexPositionNormalTexture{
-        ToC(value.Position), ToC(value.Normal), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] VertexPositionNormalTextureSkinned ToNative(
-    const CNA_VertexPositionNormalTextureSkinned& value)
-{
-    return VertexPositionNormalTextureSkinned(
-        ToNative(value.position), ToNative(value.normal), ToNative(value.texture_coordinate),
-        ToNative(value.blend_weight),
-        std::array<uint8_t, 4>{
-            value.blend_indices[0], value.blend_indices[1],
-            value.blend_indices[2], value.blend_indices[3]});
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTextureSkinned ToC(
-    const VertexPositionNormalTextureSkinned& value) noexcept
-{
-    return CNA_VertexPositionNormalTextureSkinned{
-        ToC(value.Position), ToC(value.Normal), ToC(value.TextureCoordinate),
-        ToC(value.BlendWeight),
-        {value.BlendIndices[0], value.BlendIndices[1],
-         value.BlendIndices[2], value.BlendIndices[3]}};
-}
-
-[[nodiscard]] VertexPositionTexture ToNative(const CNA_VertexPositionTexture& value)
-{
-    return VertexPositionTexture(ToNative(value.position), ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] CNA_VertexPositionTexture ToC(const VertexPositionTexture& value) noexcept
-{
-    return CNA_VertexPositionTexture{ToC(value.Position), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] CNA_VertexElement ToC(const VertexElement& value) noexcept
-{
-    return CNA_VertexElement{
-        value.getOffsetProperty(),
-        static_cast<CNA_VertexElementFormat>(value.getVertexElementFormatProperty()),
-        static_cast<CNA_VertexElementUsage>(value.getVertexElementUsageProperty()),
-        value.getUsageIndexProperty()};
-}
-
 [[nodiscard]] CNA_Result GetBuffer(
     const CNA_VertexBufferHandle handle,
     std::shared_ptr<VertexBufferResource>* const outBuffer)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::VertexBuffer, outBuffer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The VertexBuffer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::VertexBuffer, outBuffer);
 }
 
 [[nodiscard]] CNA_Result ValidateUsable(const VertexBufferResource& resource)
@@ -463,30 +296,6 @@ template<typename TC, typename TNative>
     }
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount,
-    TCallable&& callable)
-{
-    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The vertex-buffer string output is invalid.");
-    }
-    const std::string value = std::forward<TCallable>(callable)();
-    *outByteCount = static_cast<uint64_t>(value.size());
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination cannot hold the complete vertex-buffer type name.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 class ContentLostRegistration final {
 public:
     using Token = System::EventHandler<System::EventArgs>::Token;
@@ -537,7 +346,7 @@ CNA_Result cna_vertex_buffer_create(
             createInfo->struct_version != StructureVersion ||
             createInfo->vertex_count <= 0 ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
-            !IsBool(createInfo->dynamic) ||
+            !IsCanonicalBool(createInfo->dynamic) ||
             !IsZero(createInfo->reserved, 7U)) {
             return InvalidArgument("The VertexBuffer creation configuration is invalid.");
         }
@@ -567,15 +376,9 @@ CNA_Result cna_vertex_buffer_create(
                 *graphicsDevice->value, createInfo->vertex_count);
         } else {
             std::shared_ptr<VertexDeclaration> declaration;
-            const CNA_Result declarationResult = GetRuntimeHandles().Get(
-                createInfo->vertex_declaration,
-                ObjectKind::VertexDeclaration,
-                &declaration);
+            const CNA_Result declarationResult = LookupHandle(createInfo->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
             if (declarationResult != CNA_RESULT_SUCCESS) {
-                return Fail(
-                    declarationResult,
-                    ErrorCategoryForResult(declarationResult),
-                    "The VertexDeclaration handle is invalid for VertexBuffer creation.");
+                return declarationResult;
             }
             const auto usage = static_cast<BufferUsage>(createInfo->buffer_usage);
             if (dynamic) {
@@ -655,9 +458,9 @@ CNA_Result cna_vertex_buffer_get_info(
             StructureVersion,
             buffer->value->getVertexCountProperty(),
             static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
-            buffer->dynamic ? CNA_TRUE : CNA_FALSE,
+            ToCBool(buffer->dynamic),
             CNA_FALSE,
-            buffer->value->HasRenderer() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(buffer->value->HasRenderer()),
             0U,
             declaration.getVertexStrideProperty(),
             static_cast<uint64_t>(declaration.GetVertexElements().size())};
@@ -726,9 +529,7 @@ CNA_Result cna_vertex_buffer_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyString(destination, capacity, outByteCount, [&]() {
-            return buffer->value->GetTypeName();
-        });
+        return CopyText(buffer->value->GetTypeName(), destination, capacity, outByteCount);
     });
 }
 
@@ -1059,15 +860,9 @@ CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::VertexBufferEventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::VertexBufferEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The ContentLost registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);

@@ -5,6 +5,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
@@ -32,6 +33,7 @@ namespace {
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateOwnedCanonicalGameComponent;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -40,9 +42,12 @@ using CNA::C::Detail::GetOwnedSpriteBatchValue;
 using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -52,16 +57,6 @@ using Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher;
 using Microsoft::Xna::Framework::GamerServices::Guide;
 using Microsoft::Xna::Framework::GamerServices::MessageBoxIcon;
 using Microsoft::Xna::Framework::GamerServices::NotificationPosition;
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
 
 // The canonical begin routes hand back a raw operation the caller owns and must delete, and only one
 // of each kind may be pending at a time. Since no operation object crosses this ABI, the C layer
@@ -134,35 +129,13 @@ private:
     Token token_;
 };
 
-[[nodiscard]] CNA_Result CopyGuideText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The guide text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the guide text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] CNA_Result ToNativeText(
     const CNA_StringView view,
     const char* const message,
     std::string* const outText)
 {
     if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     outText->assign(
         view.data == nullptr ? "" : view.data,
@@ -184,7 +157,7 @@ private:
 [[nodiscard]] CNA_Result ValidateBoolean(const CNA_Bool value, const char* const message)
 {
     if (value != CNA_FALSE && value != CNA_TRUE) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -194,7 +167,7 @@ private:
 [[nodiscard]] CNA_Result ValidatePlayer(const CNA_PlayerIndex player, PlayerIndex* const outPlayer)
 {
     if (!TryMapPlayerIndex(player, outPlayer)) {
-        return InvalidInput("The player index is not a defined identity.");
+        return InvalidArgument("The player index is not a defined identity.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -210,7 +183,7 @@ private:
     std::vector<Gamer*>* const outRecipients)
 {
     if (recipients == nullptr && count != UINT64_C(0)) {
-        return InvalidInput("The recipient array is null.");
+        return InvalidArgument("The recipient array is null.");
     }
     outRecipients->reserve(static_cast<std::size_t>(count));
     for (uint64_t index = UINT64_C(0); index < count; ++index) {
@@ -278,9 +251,9 @@ CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* const outIsEnabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsEnabled == nullptr) {
-            return InvalidInput("The screen-saver output is null.");
+            return InvalidArgument("The screen-saver output is null.");
         }
-        *outIsEnabled = Guide::getIsScreenSaverEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsEnabled = ToCBool(Guide::getIsScreenSaverEnabledProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -305,9 +278,9 @@ CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* const outIsTrialMode)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsTrialMode == nullptr) {
-            return InvalidInput("The trial-mode output is null.");
+            return InvalidArgument("The trial-mode output is null.");
         }
-        *outIsTrialMode = Guide::getIsTrialModeProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsTrialMode = ToCBool(Guide::getIsTrialModeProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -316,9 +289,9 @@ CNA_Result cna_guide_get_is_visible(CNA_Bool* const outIsVisible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsVisible == nullptr) {
-            return InvalidInput("The guide-visibility output is null.");
+            return InvalidArgument("The guide-visibility output is null.");
         }
-        *outIsVisible = Guide::getIsVisibleProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsVisible = ToCBool(Guide::getIsVisibleProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -327,7 +300,7 @@ CNA_Result cna_guide_get_notification_position(CNA_NotificationPosition* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPosition == nullptr) {
-            return InvalidInput("The notification-position output is null.");
+            return InvalidArgument("The notification-position output is null.");
         }
         *outPosition = static_cast<CNA_NotificationPosition>(Guide::getNotificationPositionProperty());
         return CNA_RESULT_SUCCESS;
@@ -338,7 +311,7 @@ CNA_Result cna_guide_set_notification_position(const CNA_NotificationPosition po
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (position > CNA_NOTIFICATION_POSITION_MAXIMUM) {
-            return InvalidInput("The notification position is not a defined identity.");
+            return InvalidArgument("The notification position is not a defined identity.");
         }
         Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position));
         return CNA_RESULT_SUCCESS;
@@ -349,9 +322,9 @@ CNA_Result cna_guide_get_simulate_trial_mode(CNA_Bool* const outSimulate)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSimulate == nullptr) {
-            return InvalidInput("The simulate-trial-mode output is null.");
+            return InvalidArgument("The simulate-trial-mode output is null.");
         }
-        *outSimulate = Guide::getSimulateTrialModeProperty() ? CNA_TRUE : CNA_FALSE;
+        *outSimulate = ToCBool(Guide::getSimulateTrialModeProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -438,7 +411,7 @@ CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The keyboard-input size output is null.");
+            return InvalidArgument("The keyboard-input size output is null.");
         }
         if (PendingKeyboardInput() == nullptr) {
             return InvalidState("No keyboard input has been started.");
@@ -457,7 +430,7 @@ CNA_Result cna_guide_end_show_keyboard_input(
         if (PendingKeyboardInput() == nullptr) {
             return InvalidState("No keyboard input has been started.");
         }
-        return CopyGuideText(
+        return CopyText(
             KeyboardInputAnswer(),
             destination,
             capacity,
@@ -469,9 +442,9 @@ CNA_Result cna_guide_get_has_pending_keyboard_input_ext(CNA_Bool* const outHasPe
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasPending == nullptr) {
-            return InvalidInput("The pending keyboard-input output is null.");
+            return InvalidArgument("The pending keyboard-input output is null.");
         }
-        *outHasPending = Guide::getHasPendingKeyboardInputEXTProperty() ? CNA_TRUE : CNA_FALSE;
+        *outHasPending = ToCBool(Guide::getHasPendingKeyboardInputEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -480,13 +453,13 @@ CNA_Result cna_guide_was_keyboard_input_canceled_ext(CNA_Bool* const outWasCance
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWasCanceled == nullptr) {
-            return InvalidInput("The keyboard-cancellation output is null.");
+            return InvalidArgument("The keyboard-cancellation output is null.");
         }
         if (PendingKeyboardInput() == nullptr) {
             return InvalidState("No keyboard input has been started.");
         }
         *outWasCanceled =
-            Guide::WasKeyboardInputCanceledEXT(PendingKeyboardInput().get()) ? CNA_TRUE : CNA_FALSE;
+            ToCBool(Guide::WasKeyboardInputCanceledEXT(PendingKeyboardInput().get()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -495,7 +468,7 @@ CNA_Result cna_guide_get_pending_keyboard_input_title_size_ext(uint64_t* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The pending title size output is null.");
+            return InvalidArgument("The pending title size output is null.");
         }
         *outBytes = Guide::GetPendingKeyboardInputTitleForTestingEXT().size();
         return CNA_RESULT_SUCCESS;
@@ -508,7 +481,7 @@ CNA_Result cna_guide_copy_pending_keyboard_input_title_ext(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyGuideText(
+        return CopyText(
             Guide::GetPendingKeyboardInputTitleForTestingEXT(),
             destination,
             capacity,
@@ -520,7 +493,7 @@ CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The pending description size output is null.");
+            return InvalidArgument("The pending description size output is null.");
         }
         *outBytes = Guide::GetPendingKeyboardInputDescriptionForTestingEXT().size();
         return CNA_RESULT_SUCCESS;
@@ -533,7 +506,7 @@ CNA_Result cna_guide_copy_pending_keyboard_input_description_ext(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyGuideText(
+        return CopyText(
             Guide::GetPendingKeyboardInputDescriptionForTestingEXT(),
             destination,
             capacity,
@@ -545,7 +518,7 @@ CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(uint64_t* 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The pending display-text size output is null.");
+            return InvalidArgument("The pending display-text size output is null.");
         }
         *outBytes = Guide::GetPendingKeyboardInputDisplayTextForTestingEXT().size();
         return CNA_RESULT_SUCCESS;
@@ -558,7 +531,7 @@ CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyGuideText(
+        return CopyText(
             Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(),
             destination,
             capacity,
@@ -630,10 +603,10 @@ CNA_Result cna_guide_begin_show_message_box(
             return result;
         }
         if (icon > CNA_MESSAGE_BOX_ICON_MAXIMUM) {
-            return InvalidInput("The message-box icon is not a defined identity.");
+            return InvalidArgument("The message-box icon is not a defined identity.");
         }
         if (buttons == nullptr && buttonCount != UINT64_C(0)) {
-            return InvalidInput("The message-box button array is null.");
+            return InvalidArgument("The message-box button array is null.");
         }
         std::string nativeTitle;
         std::string nativeText;
@@ -681,7 +654,7 @@ CNA_Result cna_guide_end_show_message_box(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasChoice == nullptr || outButtonIndex == nullptr) {
-            return InvalidInput("The message-box answer output is invalid.");
+            return InvalidArgument("The message-box answer output is invalid.");
         }
         *outHasChoice = CNA_FALSE;
         if (PendingMessageBox() == nullptr) {
@@ -701,9 +674,9 @@ CNA_Result cna_guide_get_has_pending_message_box_ext(CNA_Bool* const outHasPendi
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasPending == nullptr) {
-            return InvalidInput("The pending message-box output is null.");
+            return InvalidArgument("The pending message-box output is null.");
         }
-        *outHasPending = Guide::getHasPendingMessageBoxEXTProperty() ? CNA_TRUE : CNA_FALSE;
+        *outHasPending = ToCBool(Guide::getHasPendingMessageBoxEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -712,7 +685,7 @@ CNA_Result cna_guide_get_pending_message_box_focus_button_ext(int32_t* const out
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFocusButton == nullptr) {
-            return InvalidInput("The focus-button output is null.");
+            return InvalidArgument("The focus-button output is null.");
         }
         if (!Guide::getHasPendingMessageBoxEXTProperty()) {
             return InvalidState("No message box is currently pending.");
@@ -1010,9 +983,9 @@ CNA_Result cna_gamer_services_dispatcher_get_is_initialized(CNA_Bool* const outI
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsInitialized == nullptr) {
-            return InvalidInput("The dispatcher initialization output is null.");
+            return InvalidArgument("The dispatcher initialization output is null.");
         }
-        *outIsInitialized = GamerServicesDispatcher::getIsInitializedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsInitialized = ToCBool(GamerServicesDispatcher::getIsInitializedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1021,7 +994,7 @@ CNA_Result cna_gamer_services_dispatcher_get_window_handle(uint64_t* const outWi
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWindowHandle == nullptr) {
-            return InvalidInput("The window-handle output is null.");
+            return InvalidArgument("The window-handle output is null.");
         }
         *outWindowHandle =
             static_cast<uint64_t>(GamerServicesDispatcher::getWindowHandleProperty());
@@ -1063,9 +1036,9 @@ CNA_Result cna_gamer_services_dispatcher_update_async(CNA_Bool* const outDidWork
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDidWork == nullptr) {
-            return InvalidInput("The dispatcher work output is null.");
+            return InvalidArgument("The dispatcher work output is null.");
         }
-        *outDidWork = GamerServicesDispatcher::UpdateAsync() ? CNA_TRUE : CNA_FALSE;
+        *outDidWork = ToCBool(GamerServicesDispatcher::UpdateAsync());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1074,7 +1047,7 @@ CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(uint64_t* con
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The freed-gamer count output is null.");
+            return InvalidArgument("The freed-gamer count output is null.");
         }
         *outCount = static_cast<uint64_t>(GamerServicesDispatcher::GetFreedGamerCountForTesting());
         return CNA_RESULT_SUCCESS;
@@ -1088,11 +1061,11 @@ CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The gamer registration output is null.");
+            return InvalidArgument("The gamer registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The gamer event callback is null.");
+            return InvalidArgument("The gamer event callback is null.");
         }
         auto* const source = &GamerServicesDispatcher::InstallingTitleUpdate;
         const auto token = source->Add(
@@ -1109,7 +1082,7 @@ CNA_Result cna_gamer_services_component_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outComponent == nullptr) {
-            return InvalidInput("The component output handle is null.");
+            return InvalidArgument("The component output handle is null.");
         }
         *outComponent = CNA_INVALID_HANDLE;
         Microsoft::Xna::Framework::Game* game = nullptr;

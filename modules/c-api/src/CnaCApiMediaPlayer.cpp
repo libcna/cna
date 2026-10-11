@@ -2,6 +2,7 @@
 
 #include "CNA/C/media_player.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiMediaDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -24,6 +25,7 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -35,6 +37,10 @@ using CNA::C::Media::Detail::SongResource;
 
 namespace {
 
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
+
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::MediaQueue;
 using Microsoft::Xna::Framework::Media::MediaState;
@@ -43,33 +49,6 @@ using Microsoft::Xna::Framework::Media::SongCollection;
 using Microsoft::Xna::Framework::Media::VisualizationData;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The media player text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the media player text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 // The queue is one process-lifetime object owned by the player, so a handle to it is a view: the
 // resource points at the singleton and owns nothing.
@@ -176,11 +155,11 @@ private:
     CNA_MediaPlayerEventRegistrationHandle* const outRegistration)
 {
     if (outRegistration == nullptr) {
-        return InvalidInput("The media player registration output is null.");
+        return InvalidArgument("The media player registration output is null.");
     }
     *outRegistration = CNA_INVALID_HANDLE;
     if (callback == nullptr) {
-        return InvalidInput("The media player event callback is null.");
+        return InvalidArgument("The media player event callback is null.");
     }
     const auto token = event.Add(
         [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
@@ -206,10 +185,10 @@ CNA_Result cna_media_player_get_game_has_control(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasControl == nullptr) {
-            return InvalidInput("The media player control-state output is null.");
+            return InvalidArgument("The media player control-state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outHasControl = MediaPlayer::getGameHasControlProperty() ? CNA_TRUE : CNA_FALSE;
+            *outHasControl = ToCBool(MediaPlayer::getGameHasControlProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -219,10 +198,10 @@ CNA_Result cna_media_player_get_is_muted(const CNA_Handle gameHandle, CNA_Bool* 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outMuted == nullptr) {
-            return InvalidInput("The media player mute-state output is null.");
+            return InvalidArgument("The media player mute-state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outMuted = MediaPlayer::getIsMutedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outMuted = ToCBool(MediaPlayer::getIsMutedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -248,10 +227,10 @@ CNA_Result cna_media_player_get_is_repeating(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRepeating == nullptr) {
-            return InvalidInput("The media player repeat-state output is null.");
+            return InvalidArgument("The media player repeat-state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outRepeating = MediaPlayer::getIsRepeatingProperty() ? CNA_TRUE : CNA_FALSE;
+            *outRepeating = ToCBool(MediaPlayer::getIsRepeatingProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -279,10 +258,10 @@ CNA_Result cna_media_player_get_is_shuffled(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outShuffled == nullptr) {
-            return InvalidInput("The media player shuffle-state output is null.");
+            return InvalidArgument("The media player shuffle-state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outShuffled = MediaPlayer::getIsShuffledProperty() ? CNA_TRUE : CNA_FALSE;
+            *outShuffled = ToCBool(MediaPlayer::getIsShuffledProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -308,7 +287,7 @@ CNA_Result cna_media_player_get_play_position_ticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The media player position output is null.");
+            return InvalidArgument("The media player position output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             *outTicks = static_cast<int64_t>(
@@ -324,7 +303,7 @@ CNA_Result cna_media_player_get_state(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The media player state output is null.");
+            return InvalidArgument("The media player state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             *outState = static_cast<CNA_MediaState>(MediaPlayer::getStateProperty());
@@ -337,7 +316,7 @@ CNA_Result cna_media_player_get_volume(const CNA_Handle gameHandle, float* const
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVolume == nullptr) {
-            return InvalidInput("The media player volume output is null.");
+            return InvalidArgument("The media player volume output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             *outVolume = MediaPlayer::getVolumeProperty();
@@ -363,11 +342,11 @@ CNA_Result cna_media_player_get_is_visualization_enabled(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnabled == nullptr) {
-            return InvalidInput("The visualization-state output is null.");
+            return InvalidArgument("The visualization-state output is null.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             *outEnabled =
-                MediaPlayer::getIsVisualizationEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+                ToCBool(MediaPlayer::getIsVisualizationEnabledProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -396,7 +375,7 @@ CNA_Result cna_media_player_get_visualization_data(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (data == nullptr || data->struct_size < sizeof(CNA_VisualizationData) ||
             data->struct_version != StructureVersion) {
-            return InvalidInput("The visualization data structure is invalid.");
+            return InvalidArgument("The visualization data structure is invalid.");
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             VisualizationData native;
@@ -426,7 +405,7 @@ CNA_Result cna_media_player_get_queue(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outQueue == nullptr) {
-            return InvalidInput("The media queue output is null.");
+            return InvalidArgument("The media queue output is null.");
         }
         *outQueue = CNA_INVALID_HANDLE;
         return WithGame(gameHandle, [&]() -> CNA_Result {
@@ -569,18 +548,16 @@ CNA_Result cna_media_player_detect_song_ended_by_elapsed_time_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnded == nullptr) {
-            return InvalidInput("The song-ended output is null.");
+            return InvalidArgument("The song-ended output is null.");
         }
         std::shared_ptr<SongResource> resource;
         if (const CNA_Result result = BorrowSong(song, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEnded = MediaPlayer::DetectSongEndedByElapsedTime(
+        *outEnded = ToCBool(MediaPlayer::DetectSongEndedByElapsedTime(
                         resource->value,
-                        System::TimeSpan(static_cast<SharpRuntime::longcs>(elapsedTicks)))
-            ? CNA_TRUE
-            : CNA_FALSE;
+                        System::TimeSpan(static_cast<SharpRuntime::longcs>(elapsedTicks))));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -620,15 +597,9 @@ CNA_Result cna_media_player_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<PlayerRegistration> resource;
-        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
-            registration,
-            ObjectKind::MediaPlayerEventRegistration,
-            &resource);
+        const CNA_Result getResult = LookupHandle(registration, ObjectKind::MediaPlayerEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The media player registration handle is invalid for this call.");
+            return getResult;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);
@@ -668,7 +639,7 @@ CNA_Result cna_media_queue_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The media queue count output is null.");
+            return InvalidArgument("The media queue count output is null.");
         }
         std::shared_ptr<MediaQueueResource> resource;
         if (const CNA_Result result = BorrowQueue(queue, &resource);
@@ -686,7 +657,7 @@ CNA_Result cna_media_queue_get_active_song_index(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The media queue index output is null.");
+            return InvalidArgument("The media queue index output is null.");
         }
         std::shared_ptr<MediaQueueResource> resource;
         if (const CNA_Result result = BorrowQueue(queue, &resource);
@@ -721,7 +692,7 @@ CNA_Result cna_media_queue_get_active_song(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The active song output is null.");
+            return InvalidArgument("The active song output is null.");
         }
         std::shared_ptr<MediaQueueResource> resource;
         if (const CNA_Result result = BorrowQueue(queue, &resource);
@@ -749,7 +720,7 @@ CNA_Result cna_media_queue_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr) {
-            return InvalidInput("The media queue song output is null.");
+            return InvalidArgument("The media queue song output is null.");
         }
         *outSong = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaQueueResource> resource;
@@ -758,7 +729,7 @@ CNA_Result cna_media_queue_get_at(
             return result;
         }
         if (index < 0 || index >= static_cast<int32_t>(resource->value->getCountProperty())) {
-            return InvalidInput("The media queue index is out of range.");
+            return InvalidArgument("The media queue index is out of range.");
         }
         const Song* const song = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
         if (song == nullptr) {
@@ -832,7 +803,7 @@ CNA_Result cna_media_queue_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The media queue type-name byte-count output is null.");
+            return InvalidArgument("The media queue type-name byte-count output is null.");
         }
         std::shared_ptr<MediaQueueResource> resource;
         if (const CNA_Result result = BorrowQueue(queue, &resource);

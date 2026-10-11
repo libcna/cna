@@ -3,6 +3,8 @@
 #include "CNA/C/audio.h"
 #include "CnaCApiAudioDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -31,14 +33,19 @@ namespace {
 using CNA::C::Detail::AddOwnedAudioResource;
 using CNA::C::Detail::AudioRegistration;
 using CNA::C::Detail::AudioRegistrationBase;
-using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::RemoveOwnedAudioResource;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
@@ -63,17 +70,7 @@ struct SoundEffectInstanceResource final {
     const CNA_Handle handle,
     std::shared_ptr<SoundEffectResource>* const outSoundEffect)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::SoundEffect,
-        outSoundEffect);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned SoundEffect handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SoundEffect, outSoundEffect);
 }
 
 // CBIND-154: fire-and-forget playback from any thread. XNA's SoundEffect.Play answered on every
@@ -102,17 +99,7 @@ struct SoundEffectInstanceResource final {
     const CNA_Handle handle,
     std::shared_ptr<SoundEffectInstanceResource>* const outInstance)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::SoundEffectInstance,
-        outInstance);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned SoundEffectInstance handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SoundEffectInstance, outInstance);
 }
 
 [[nodiscard]] bool TryMapChannels(
@@ -132,19 +119,9 @@ struct SoundEffectInstanceResource final {
     return static_cast<CNA_SoundState>(state);
 }
 
-[[nodiscard]] CNA_Vector3 ToC(const Microsoft::Xna::Framework::Vector3& value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
 [[nodiscard]] bool IsFinite(const CNA_Vector3 value) noexcept
 {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
-[[nodiscard]] Microsoft::Xna::Framework::Vector3 ToNativeVector(const CNA_Vector3 value) noexcept
-{
-    return Microsoft::Xna::Framework::Vector3{value.x, value.y, value.z};
 }
 
 [[nodiscard]] CNA_Result ToNativeListener(
@@ -165,10 +142,10 @@ struct SoundEffectInstanceResource final {
             CNA_ERROR_CATEGORY_ARGUMENT,
             "The AudioListener vectors must be finite.");
     }
-    outListener->setForwardProperty(ToNativeVector(value->forward));
-    outListener->setPositionProperty(ToNativeVector(value->position));
-    outListener->setUpProperty(ToNativeVector(value->up));
-    outListener->setVelocityProperty(ToNativeVector(value->velocity));
+    outListener->setForwardProperty(ToNative(value->forward));
+    outListener->setPositionProperty(ToNative(value->position));
+    outListener->setUpProperty(ToNative(value->up));
+    outListener->setVelocityProperty(ToNative(value->velocity));
     return CNA_RESULT_SUCCESS;
 }
 
@@ -197,10 +174,10 @@ struct SoundEffectInstanceResource final {
             "The AudioEmitter vectors must be finite.");
     }
     outEmitter->setDopplerScaleProperty(value->doppler_scale);
-    outEmitter->setForwardProperty(ToNativeVector(value->forward));
-    outEmitter->setPositionProperty(ToNativeVector(value->position));
-    outEmitter->setUpProperty(ToNativeVector(value->up));
-    outEmitter->setVelocityProperty(ToNativeVector(value->velocity));
+    outEmitter->setForwardProperty(ToNative(value->forward));
+    outEmitter->setPositionProperty(ToNative(value->position));
+    outEmitter->setUpProperty(ToNative(value->up));
+    outEmitter->setVelocityProperty(ToNative(value->velocity));
     return CNA_RESULT_SUCCESS;
 }
 
@@ -528,7 +505,7 @@ CNA_Result cna_sound_effect_instance_get_info(
             sizeof(CNA_SoundEffectInstanceInfo),
             StructureVersion,
             MapSoundState(instance->value->getStateProperty()),
-            instance->value->getIsLoopedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(instance->value->getIsLoopedProperty()),
             {0U, 0U, 0U},
             instance->value->getVolumeProperty(),
             instance->value->getPitchProperty(),
@@ -661,28 +638,6 @@ namespace {
 [[nodiscard]] CNA_Result AudioInvalidInput(const char* const message)
 {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyAudioText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return AudioInvalidInput("The audio text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the audio text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 // Every creation route publishes its handle the same way, so the ownership bookkeeping stays in one
@@ -852,7 +807,7 @@ CNA_Result cna_sound_effect_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDisposed = soundEffect->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outDisposed = ToCBool(soundEffect->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -887,7 +842,7 @@ CNA_Result cna_sound_effect_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAudioText(soundEffect->value->getNameProperty(), destination, capacity, outBytes);
+        return CopyText(soundEffect->value->getNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -1033,7 +988,7 @@ CNA_Result cna_sound_effect_play(const CNA_Handle soundEffectHandle, CNA_Bool* c
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outPlayed = soundEffect->value->Play() ? CNA_TRUE : CNA_FALSE;
+        *outPlayed = ToCBool(soundEffect->value->Play());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1056,7 +1011,7 @@ CNA_Result cna_sound_effect_play_with_settings(
         }
         // Pan is range-checked by the canonical route and pitch is clamped; the asymmetry is
         // reported rather than evened out here.
-        *outPlayed = soundEffect->value->Play(volume, pitch, pan) ? CNA_TRUE : CNA_FALSE;
+        *outPlayed = ToCBool(soundEffect->value->Play(volume, pitch, pan));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1137,7 +1092,7 @@ CNA_Result cna_sound_effect_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAudioText(soundEffect->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(soundEffect->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1154,7 +1109,7 @@ CNA_Result cna_sound_effect_instance_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDisposed = instance->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outDisposed = ToCBool(instance->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1189,7 +1144,7 @@ CNA_Result cna_sound_effect_instance_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAudioText(instance->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(instance->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1541,7 +1496,7 @@ CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAudioText(dynamicInstance->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(dynamicInstance->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1549,15 +1504,9 @@ CNA_Result cna_audio_unsubscribe_ext(const CNA_Handle registration)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<AudioRegistrationBase> value;
-        if (const CNA_Result result = GetRuntimeHandles().Get(
-                registration,
-                ObjectKind::AudioEventRegistration,
-                &value);
+        if (const CNA_Result result = LookupHandle(registration, ObjectKind::AudioEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The audio registration handle is invalid for this call.");
+            return result;
         }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registration);
         if (releaseResult != CNA_RESULT_SUCCESS) {
@@ -1647,7 +1596,7 @@ CNA_Result cna_microphone_copy_name_at(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAudioText(microphone->Name, destination, capacity, outBytes);
+        return CopyText(microphone->Name, destination, capacity, outBytes);
     });
 }
 
@@ -1702,7 +1651,7 @@ CNA_Result cna_microphone_get_is_headset_at(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outHeadset = microphone->getIsHeadsetProperty() ? CNA_TRUE : CNA_FALSE;
+        *outHeadset = ToCBool(microphone->getIsHeadsetProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1924,7 +1873,7 @@ CNA_Result cna_microphone_copy_type_name(
             return result;
         }
         static const std::string typeName = "Microsoft.Xna.Framework.Audio.Microphone";
-        return CopyAudioText(typeName, destination, capacity, outBytes);
+        return CopyText(typeName, destination, capacity, outBytes);
     });
 }
 

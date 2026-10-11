@@ -3,6 +3,7 @@
 #include "CNA/C/gamer_services.h"
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/Achievement.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
@@ -18,10 +19,14 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -41,61 +46,18 @@ struct AchievementCollectionResource final {
     std::shared_ptr<AchievementCollection> value;
 };
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 [[nodiscard]] CNA_Result BorrowAchievement(
     const CNA_Handle handle,
     std::shared_ptr<AchievementResource>* const outAchievement)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::Achievement, outAchievement);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned Achievement handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::Achievement, outAchievement);
 }
 
 [[nodiscard]] CNA_Result BorrowCollection(
     const CNA_Handle handle,
     std::shared_ptr<AchievementCollectionResource>* const outCollection)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::AchievementCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned achievement collection handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result CopyAchievementText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The achievement text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the achievement text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::AchievementCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result ToNativeText(
@@ -104,7 +66,7 @@ struct AchievementCollectionResource final {
     std::string* const outText)
 {
     if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     outText->assign(
         view.data == nullptr ? "" : view.data,
@@ -169,7 +131,7 @@ CNA_Result cna_achievement_create_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAchievement == nullptr) {
-            return InvalidInput("The Achievement output handle is null.");
+            return InvalidArgument("The Achievement output handle is null.");
         }
         *outAchievement = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateCanonicalBool(displayBeforeEarned, "display_before_earned");
@@ -235,7 +197,7 @@ CNA_Result cna_achievement_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AchievementInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The Achievement info output structure is invalid.");
+            return InvalidArgument("The Achievement info output structure is invalid.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -246,9 +208,9 @@ CNA_Result cna_achievement_get_info(
             sizeof(CNA_AchievementInfo),
             StructureVersion,
             static_cast<int32_t>(achievement->value->getGamerScoreProperty()),
-            achievement->value->getDisplayBeforeEarnedProperty() ? CNA_TRUE : CNA_FALSE,
-            achievement->value->getEarnedOnlineProperty() ? CNA_TRUE : CNA_FALSE,
-            achievement->value->getIsEarnedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(achievement->value->getDisplayBeforeEarnedProperty()),
+            ToCBool(achievement->value->getEarnedOnlineProperty()),
+            ToCBool(achievement->value->getIsEarnedProperty()),
             0U,
             static_cast<int64_t>(achievement->value->getEarnedDateTimeProperty().getTicksProperty())
         };
@@ -263,7 +225,7 @@ CNA_Result cna_achievement_get_key_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The achievement key size output is null.");
+            return InvalidArgument("The achievement key size output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -287,7 +249,7 @@ CNA_Result cna_achievement_copy_key(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAchievementText(
+        return CopyText(
             achievement->value->getKeyProperty(),
             destination,
             capacity,
@@ -301,7 +263,7 @@ CNA_Result cna_achievement_get_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The achievement name size output is null.");
+            return InvalidArgument("The achievement name size output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -325,7 +287,7 @@ CNA_Result cna_achievement_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAchievementText(
+        return CopyText(
             achievement->value->getNameProperty(),
             destination,
             capacity,
@@ -339,7 +301,7 @@ CNA_Result cna_achievement_get_description_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The achievement description size output is null.");
+            return InvalidArgument("The achievement description size output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -363,7 +325,7 @@ CNA_Result cna_achievement_copy_description(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAchievementText(
+        return CopyText(
             achievement->value->getDescriptionProperty(),
             destination,
             capacity,
@@ -377,7 +339,7 @@ CNA_Result cna_achievement_get_how_to_earn_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The achievement how-to-earn size output is null.");
+            return InvalidArgument("The achievement how-to-earn size output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -401,7 +363,7 @@ CNA_Result cna_achievement_copy_how_to_earn(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyAchievementText(
+        return CopyText(
             achievement->value->getHowToEarnProperty(),
             destination,
             capacity,
@@ -415,7 +377,7 @@ CNA_Result cna_achievement_get_picture_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The achievement picture size output is null.");
+            return InvalidArgument("The achievement picture size output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
@@ -432,7 +394,7 @@ CNA_Result cna_achievement_get_picture_size(
 CNA_Result cna_achievement_copy_picture(const CNA_AchievementHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if(!outBytes||(!destination&&capacity))return InvalidInput("The picture output is invalid.");
+        if(!outBytes||(!destination&&capacity))return InvalidArgument("The picture output is invalid.");
         std::shared_ptr<AchievementResource> achievement;
         if(const auto result=BorrowAchievement(handle,&achievement);result!=CNA_RESULT_SUCCESS)return result;
         std::unique_ptr<System::IO::Stream> picture(achievement->value->GetPicture());
@@ -447,7 +409,7 @@ CNA_Result cna_achievement_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The achievement equality output is null.");
+            return InvalidArgument("The achievement equality output is null.");
         }
         std::shared_ptr<AchievementResource> achievement;
         std::shared_ptr<AchievementResource> other;
@@ -460,7 +422,7 @@ CNA_Result cna_achievement_equals(
             return result;
         }
         // Both canonical equality operators are this one answer; inequality is its negation.
-        *outEquals = (*achievement->value == *other->value) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(*achievement->value == *other->value);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -472,11 +434,11 @@ CNA_Result cna_achievement_collection_create_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCollection == nullptr) {
-            return InvalidInput("The achievement collection output handle is null.");
+            return InvalidArgument("The achievement collection output handle is null.");
         }
         *outCollection = CNA_INVALID_HANDLE;
         if (achievements == nullptr && count != UINT64_C(0)) {
-            return InvalidInput("The achievement array is null.");
+            return InvalidArgument("The achievement array is null.");
         }
         std::vector<Achievement> values;
         values.reserve(static_cast<std::size_t>(count));
@@ -521,7 +483,7 @@ CNA_Result cna_achievement_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The collection count output is null.");
+            return InvalidArgument("The collection count output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -539,14 +501,14 @@ CNA_Result cna_achievement_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsDisposed == nullptr) {
-            return InvalidInput("The collection disposal output is null.");
+            return InvalidArgument("The collection disposal output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = collection->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(collection->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -557,14 +519,14 @@ CNA_Result cna_achievement_collection_get_is_read_only(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsReadOnly == nullptr) {
-            return InvalidInput("The collection read-only output is null.");
+            return InvalidArgument("The collection read-only output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsReadOnly = collection->value->getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsReadOnly = ToCBool(collection->value->getIsReadOnlyProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -576,7 +538,7 @@ CNA_Result cna_achievement_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAchievement == nullptr) {
-            return InvalidInput("The Achievement output handle is null.");
+            return InvalidArgument("The Achievement output handle is null.");
         }
         *outAchievement = CNA_INVALID_HANDLE;
         std::shared_ptr<AchievementCollectionResource> collection;
@@ -598,7 +560,7 @@ CNA_Result cna_achievement_collection_get_by_key(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAchievement == nullptr) {
-            return InvalidInput("The Achievement output handle is null.");
+            return InvalidArgument("The Achievement output handle is null.");
         }
         *outAchievement = CNA_INVALID_HANDLE;
         std::string nativeKey;
@@ -622,7 +584,7 @@ CNA_Result cna_achievement_collection_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The collection index output is null.");
+            return InvalidArgument("The collection index output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         std::shared_ptr<AchievementResource> achievement;
@@ -646,7 +608,7 @@ CNA_Result cna_achievement_collection_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The collection containment output is null.");
+            return InvalidArgument("The collection containment output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         std::shared_ptr<AchievementResource> achievement;
@@ -658,7 +620,7 @@ CNA_Result cna_achievement_collection_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = collection->value->Contains(*achievement->value) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(collection->value->Contains(*achievement->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -726,7 +688,7 @@ CNA_Result cna_achievement_collection_remove(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRemoved == nullptr) {
-            return InvalidInput("The collection removal output is null.");
+            return InvalidArgument("The collection removal output is null.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         std::shared_ptr<AchievementResource> achievement;
@@ -738,7 +700,7 @@ CNA_Result cna_achievement_collection_remove(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outRemoved = collection->value->Remove(*achievement->value) ? CNA_TRUE : CNA_FALSE;
+        *outRemoved = ToCBool(collection->value->Remove(*achievement->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -766,10 +728,10 @@ CNA_Result cna_achievement_collection_copy_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The collection copy output is invalid.");
+            return InvalidArgument("The collection copy output is invalid.");
         }
         if (index < 0) {
-            return InvalidInput("The destination index is negative.");
+            return InvalidArgument("The destination index is negative.");
         }
         std::shared_ptr<AchievementCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -811,7 +773,7 @@ CNA_Result cna_signed_in_gamer_get_achievements(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAchievements == nullptr) {
-            return InvalidInput("The achievement collection output handle is null.");
+            return InvalidArgument("The achievement collection output handle is null.");
         }
         *outAchievements = CNA_INVALID_HANDLE;
         SignedInGamer* gamer = nullptr;

@@ -2,6 +2,7 @@
 
 #include "CNA/C/cnb.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
@@ -47,6 +48,7 @@ using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateBuffer;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -55,68 +57,19 @@ namespace Cnb = CNA::Content::Cnb;
 
 namespace {
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result NotSupported(const std::string& message)
-{
-    return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, message);
-}
+using CNA::C::Detail::CopyBytes;
+using CNA::C::Detail::CopyElements;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::ReportTextSize;
+using CNA::C::Detail::ToCBool;
 
 /// The count half of every count/copy pair in this family.
-[[nodiscard]] CNA_Result ReportSize(const std::string_view value, uint64_t* const outBytes)
-{
-    if (outBytes == nullptr) {
-        return InvalidArgument("The byte-count output is null.");
-    }
-    *outBytes = static_cast<uint64_t>(value.size());
-    return CNA_RESULT_SUCCESS;
-}
 
 /// The copy half. No terminator, `out_bytes` always written, and a short capacity writes nothing.
-[[nodiscard]] CNA_Result CopyText(
-    const std::string_view value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The text output is invalid.");
-    }
-    *outBytes = static_cast<uint64_t>(value.size());
-    if (capacity < static_cast<uint64_t>(value.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 /// The same shape for bytes rather than text.
-[[nodiscard]] CNA_Result CopyBytes(
-    const std::vector<uint8_t>& value,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    *outBytes = static_cast<uint64_t>(value.size());
-    if (capacity < static_cast<uint64_t>(value.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the produced bytes.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 /**
  * Validates a caller-supplied byte range and narrows its count to the host's own size type.
@@ -250,10 +203,9 @@ struct CnbWriterResource final {
     const CNA_CnbDocumentHandle handle,
     std::shared_ptr<CnbDocumentResource>* const outDocument)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbDocument, outDocument);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbDocument, outDocument);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB document handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -262,9 +214,9 @@ struct CnbWriterResource final {
     const CNA_CnbReaderHandle handle,
     std::shared_ptr<CnbReaderResource>* const outReader)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::CnbReader, outReader);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbReader, outReader);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB reader handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -273,11 +225,9 @@ struct CnbWriterResource final {
     const CNA_CnbByteWriterHandle handle,
     std::shared_ptr<CnbByteWriterResource>* const outWriter)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbByteWriter, outWriter);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbByteWriter, outWriter);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB byte-writer handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -286,9 +236,9 @@ struct CnbWriterResource final {
     const CNA_CnbWriterHandle handle,
     std::shared_ptr<CnbWriterResource>* const outWriter)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::CnbWriter, outWriter);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbWriter, outWriter);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB writer handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -360,11 +310,9 @@ struct CnbTextureDataResource final {
     const CNA_CnbTextureDataHandle handle,
     std::shared_ptr<CnbTextureDataResource>* const outTexture)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbTextureData, outTexture);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbTextureData, outTexture);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB texture handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -390,7 +338,6 @@ struct CnbTextureDataResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-
 /// CBIND-109: the model graph. One handle for the whole of it; its nodes are reached by index.
 struct CnbModelResource final {
     std::shared_ptr<Cnb::CnbModelData> value;
@@ -406,9 +353,9 @@ struct CnbModelFromCnjResource final {
     const CNA_CnbModelDataHandle handle,
     std::shared_ptr<CnbModelResource>* const outModel)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::CnbModelData, outModel);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbModelData, outModel);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB model handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -417,11 +364,9 @@ struct CnbModelFromCnjResource final {
     const CNA_CnbModelFromCnjHandle handle,
     std::shared_ptr<CnbModelFromCnjResource>* const outResult)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbModelFromCnj, outResult);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbModelFromCnj, outResult);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB model compile handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -455,29 +400,6 @@ template<typename TStruct>
     if (value->struct_size < static_cast<uint32_t>(sizeof(TStruct)) ||
         value->struct_version != version) {
         return InvalidArgument(what);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
-/// The copy half of a count/copy pair whose element is a float rather than a byte or a character.
-[[nodiscard]] CNA_Result CopyFloats(
-    const std::vector<float>& value,
-    float* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The float output is invalid.");
-    }
-    *outCount = static_cast<uint64_t>(value.size());
-    if (capacity < static_cast<uint64_t>(value.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the float count.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size() * sizeof(float));
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -615,8 +537,8 @@ void ReadPartInfo(const Cnb::CnbModelPart& part, CNA_CnbModelPartInfo* const inf
     info->primitive_topology = part.primitiveTopology;
     info->primitive_count = part.primitiveCount;
     info->effect_kind = static_cast<CNA_CnbEffectKind>(part.effectKind);
-    info->vertex_color_enabled = part.vertexColorEnabled ? CNA_TRUE : CNA_FALSE;
-    info->unlit = part.unlit ? CNA_TRUE : CNA_FALSE;
+    info->vertex_color_enabled = ToCBool(part.vertexColorEnabled);
+    info->unlit = ToCBool(part.unlit);
     info->reserved[0] = 0U;
     info->reserved[1] = 0U;
 }
@@ -628,7 +550,6 @@ constexpr double MaxTimeSpanSeconds = 922337203685.0;
 {
     return std::isfinite(value) && value >= -MaxTimeSpanSeconds && value <= MaxTimeSpanSeconds;
 }
-
 
 /// CBIND-110: the compiled font. A handle because it owns its atlas as well as its glyph table.
 struct CnbSpriteFontResource final {
@@ -649,10 +570,9 @@ struct CnbAnimationClipResource final {
     const CNA_CnbSpriteFontDataHandle handle,
     std::shared_ptr<CnbSpriteFontResource>* const outFont)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbSpriteFontData, outFont);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbSpriteFontData, outFont);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB font handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -661,10 +581,9 @@ struct CnbAnimationClipResource final {
     const CNA_CnbSoundEffectDataHandle handle,
     std::shared_ptr<CnbSoundEffectResource>* const outSound)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbSoundEffectData, outSound);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbSoundEffectData, outSound);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB sound handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -673,10 +592,9 @@ struct CnbAnimationClipResource final {
     const CNA_CnbAnimationClipHandle handle,
     std::shared_ptr<CnbAnimationClipResource>* const outClip)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnbAnimationClip, outClip);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbAnimationClip, outClip);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB clip handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -834,7 +752,6 @@ struct CnbAnimationClipResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-
 /// CBIND-111: a resolved loader is a **copy** of the registered function, so it is an object.
 struct CnbLoaderResource final {
     CNA::Content::CnbLoaderRegistry::LoaderFn value;
@@ -849,9 +766,9 @@ struct CnjToCnbResultResource final {
     const CNA_CnbLoaderHandle handle,
     std::shared_ptr<CnbLoaderResource>* const outLoader)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::CnbLoader, outLoader);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbLoader, outLoader);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), "The CNB loader handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -860,11 +777,9 @@ struct CnjToCnbResultResource final {
     const CNA_CnjToCnbResultHandle handle,
     std::shared_ptr<CnjToCnbResultResource>* const outResult)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::CnjToCnbResult, outResult);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::CnjToCnbResult, outResult);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNJ compile handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1023,7 +938,7 @@ CNA_Result cna_cnb_get_chunk_id_string_size(
     uint64_t* const outByteCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), outByteCount);
+        return ReportTextSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), outByteCount);
     });
 }
 
@@ -1047,7 +962,7 @@ CNA_Result cna_cnb_is_well_formed_chunk_id(
         if (outWellFormed == nullptr) {
             return InvalidArgument("The chunk-identifier output is null.");
         }
-        *outWellFormed = Cnb::IsWellFormedChunkId(Cnb::CnbChunkId{id}) ? CNA_TRUE : CNA_FALSE;
+        *outWellFormed = ToCBool(Cnb::IsWellFormedChunkId(Cnb::CnbChunkId{id}));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1083,7 +998,7 @@ CNA_Result cna_cnb_is_custom_asset_type_id(
         if (outCustom == nullptr) {
             return InvalidArgument("The asset-type classification output is null.");
         }
-        *outCustom = Cnb::IsCustomAssetTypeId(assetTypeId) ? CNA_TRUE : CNA_FALSE;
+        *outCustom = ToCBool(Cnb::IsCustomAssetTypeId(assetTypeId));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1093,7 +1008,7 @@ CNA_Result cna_cnb_get_asset_type_name_size(
     uint64_t* const outByteCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(Cnb::AssetTypeIdToString(assetTypeId), outByteCount);
+        return ReportTextSize(Cnb::AssetTypeIdToString(assetTypeId), outByteCount);
     });
 }
 
@@ -1122,7 +1037,7 @@ CNA_Result cna_cnb_get_logical_name_problem_size(
         const std::string_view view(
             logicalName.data == nullptr ? "" : logicalName.data,
             static_cast<std::size_t>(logicalName.byte_length));
-        return ReportSize(Cnb::CnbLogicalNameProblem(view), outByteCount);
+        return ReportTextSize(Cnb::CnbLogicalNameProblem(view), outByteCount);
     });
 }
 
@@ -1226,7 +1141,7 @@ CNA_Result cna_cnb_crc32c_uses_hardware(CNA_Bool* const outUsesHardware)
         if (outUsesHardware == nullptr) {
             return InvalidArgument("The hardware-path output is null.");
         }
-        *outUsesHardware = Cnb::Crc32cUsesHardwareEXT() ? CNA_TRUE : CNA_FALSE;
+        *outUsesHardware = ToCBool(Cnb::Crc32cUsesHardwareEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1258,7 +1173,7 @@ CNA_Result cna_cnb_is_compression_supported(
         if (outSupported == nullptr) {
             return InvalidArgument("The compression-support output is null.");
         }
-        *outSupported = Cnb::IsCnbCompressionSupported(ToCodec(codec)) ? CNA_TRUE : CNA_FALSE;
+        *outSupported = ToCBool(Cnb::IsCnbCompressionSupported(ToCodec(codec)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1268,7 +1183,7 @@ CNA_Result cna_cnb_get_compression_name_size(
     uint64_t* const outByteCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(Cnb::CnbCompressionToString(ToCodec(codec)), outByteCount);
+        return ReportTextSize(Cnb::CnbCompressionToString(ToCodec(codec)), outByteCount);
     });
 }
 
@@ -1396,7 +1311,7 @@ CNA_Result cna_cnb_chunk_entry_is_mandatory(
         }
         Cnb::CnbChunkEntry native;
         native.flags = entry->flags;
-        *outMandatory = native.IsMandatory() ? CNA_TRUE : CNA_FALSE;
+        *outMandatory = ToCBool(native.IsMandatory());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1415,7 +1330,7 @@ CNA_Result cna_cnb_has_magic(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outHasMagic = Cnb::CnbDocument::HasMagic(span) ? CNA_TRUE : CNA_FALSE;
+        *outHasMagic = ToCBool(Cnb::CnbDocument::HasMagic(span));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1535,7 +1450,7 @@ CNA_Result cna_cnb_document_get_origin_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(document->value->Origin(), outByteCount);
+        return ReportTextSize(document->value->Origin(), outByteCount);
     });
 }
 
@@ -1810,7 +1725,7 @@ CNA_Result cna_cnb_document_find_single(
             document->value->FindSingle(Cnb::CnbChunkId{type});
         // Absence is an ordinary answer, never a failure, so it is reported beside the value and
         // the value is left alone -- the availability convention every optional query here uses.
-        *outFound = found.has_value() ? CNA_TRUE : CNA_FALSE;
+        *outFound = ToCBool(found.has_value());
         if (found.has_value()) {
             *outIndex = static_cast<uint64_t>(*found);
         }
@@ -1884,7 +1799,7 @@ CNA_Result cna_cnb_document_get_metadata(
             return InvalidArgument("The metadata structure is not a known size and version.");
         }
         const Cnb::CnbMetadata& metadata = document->value->Metadata();
-        outMetadata->present = metadata.present ? CNA_TRUE : CNA_FALSE;
+        outMetadata->present = ToCBool(metadata.present);
         outMetadata->reserved[0] = 0U;
         outMetadata->reserved[1] = 0U;
         outMetadata->reserved[2] = 0U;
@@ -1903,7 +1818,7 @@ CNA_Result cna_cnb_document_get_metadata_asset_type_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(document->value->Metadata().assetTypeName, outByteCount);
+        return ReportTextSize(document->value->Metadata().assetTypeName, outByteCount);
     });
 }
 
@@ -1934,7 +1849,7 @@ CNA_Result cna_cnb_document_get_metadata_content_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(document->value->Metadata().contentName, outByteCount);
+        return ReportTextSize(document->value->Metadata().contentName, outByteCount);
     });
 }
 
@@ -2033,7 +1948,7 @@ CNA_Result cna_cnb_document_get_external_reference_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(
+        return ReportTextSize(
             document->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName,
             outByteCount);
     });
@@ -2232,7 +2147,7 @@ CNA_Result cna_cnb_reader_get_context_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(reader->value->Context(), outByteCount);
+        return ReportTextSize(reader->value->Context(), outByteCount);
     });
 }
 
@@ -2451,7 +2366,7 @@ CNA_Result cna_cnb_is_well_formed_utf8(
         const std::string_view view(
             text.data == nullptr ? "" : text.data,
             static_cast<std::size_t>(text.byte_length));
-        *outWellFormed = Cnb::CnbByteReader::IsWellFormedUtf8(view) ? CNA_TRUE : CNA_FALSE;
+        *outWellFormed = ToCBool(Cnb::CnbByteReader::IsWellFormedUtf8(view));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2980,7 +2895,7 @@ CNA_Result cna_cnb_is_known_texture_format(const uint32_t value, CNA_Bool* const
         if (outKnown == nullptr) {
             return InvalidArgument("The format-known output is null.");
         }
-        *outKnown = Cnb::IsKnownCnbTextureFormat(value) ? CNA_TRUE : CNA_FALSE;
+        *outKnown = ToCBool(Cnb::IsKnownCnbTextureFormat(value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2990,7 +2905,7 @@ CNA_Result cna_cnb_get_texture_format_name_size(
     uint64_t* const outByteCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), outByteCount);
+        return ReportTextSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), outByteCount);
     });
 }
 
@@ -3016,7 +2931,7 @@ CNA_Result cna_cnb_is_block_compressed_texture_format(
             return InvalidArgument("The block-compression output is null.");
         }
         *outBlockCompressed =
-            Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format)) ? CNA_TRUE : CNA_FALSE;
+            ToCBool(Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3396,7 +3311,7 @@ CNA_Result cna_cnb_texture_data_select_representation(
         // The canonical function reports "none" by returning the list size. In C that would be a
         // sentinel a caller has to know to compare against, so it becomes the availability pair
         // every optional query in this ABI uses.
-        *outFound = chosen < data.representations.size() ? CNA_TRUE : CNA_FALSE;
+        *outFound = ToCBool(chosen < data.representations.size());
         if (*outFound == CNA_TRUE) {
             *outIndex = static_cast<uint64_t>(chosen);
         }
@@ -3626,10 +3541,10 @@ CNA_Result cna_cnb_model_get_info(
         outInfo->mesh_count = static_cast<uint64_t>(data.meshes.size());
         outInfo->animation_count = static_cast<uint64_t>(data.animations.size());
         outInfo->light_count = static_cast<uint64_t>(data.lights.size());
-        outInfo->has_skeleton = data.skeleton.has_value() ? CNA_TRUE : CNA_FALSE;
+        outInfo->has_skeleton = ToCBool(data.skeleton.has_value());
         outInfo->applies_gltf_lighting_policy =
-            data.appliesGltfLightingPolicy ? CNA_TRUE : CNA_FALSE;
-        outInfo->has_bone_hierarchy = data.hasBoneHierarchy ? CNA_TRUE : CNA_FALSE;
+            ToCBool(data.appliesGltfLightingPolicy);
+        outInfo->has_bone_hierarchy = ToCBool(data.hasBoneHierarchy);
         outInfo->reserved = 0U;
         return CNA_RESULT_SUCCESS;
     });
@@ -3745,7 +3660,7 @@ CNA_Result cna_cnb_model_get_bone_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(model->value->bones[static_cast<std::size_t>(index)].name, outBytes);
+        return ReportTextSize(model->value->bones[static_cast<std::size_t>(index)].name, outBytes);
     });
 }
 
@@ -3772,7 +3687,6 @@ CNA_Result cna_cnb_model_copy_bone_name(
             destination, capacity, outBytes);
     });
 }
-
 
 CNA_Result cna_cnb_model_add_part(
     const CNA_CnbModelDataHandle modelHandle,
@@ -3887,7 +3801,7 @@ CNA_Result cna_cnb_model_get_part_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(part->name, outBytes);
+        return ReportTextSize(part->name, outBytes);
     });
 }
 
@@ -3929,7 +3843,7 @@ CNA_Result cna_cnb_model_get_part_external_effect_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(part->externalEffect, outBytes);
+        return ReportTextSize(part->externalEffect, outBytes);
     });
 }
 
@@ -4094,7 +4008,7 @@ CNA_Result cna_cnb_model_get_material(
         outInfo->occlusion_strength = material.occlusionStrength;
         outInfo->alpha_cutoff = material.alphaCutoff;
         outInfo->alpha_mode = material.alphaMode;
-        outInfo->double_sided = material.doubleSided ? CNA_TRUE : CNA_FALSE;
+        outInfo->double_sided = ToCBool(material.doubleSided);
         outInfo->reserved[0] = 0U;
         outInfo->reserved[1] = 0U;
         outInfo->reserved[2] = 0U;
@@ -4163,7 +4077,7 @@ CNA_Result cna_cnb_model_get_material_texture_size(
         if (name == nullptr) {
             return InvalidArgument("The material texture slot is not a named slot.");
         }
-        return ReportSize(*name, outBytes);
+        return ReportTextSize(*name, outBytes);
     });
 }
 
@@ -4379,7 +4293,7 @@ CNA_Result cna_cnb_model_get_material_sampler(
         outSampler->filter = sampler.filter;
         outSampler->address_u = sampler.addressU;
         outSampler->address_v = sampler.addressV;
-        outSampler->declared = sampler.declared ? CNA_TRUE : CNA_FALSE;
+        outSampler->declared = ToCBool(sampler.declared);
         outSampler->reserved[0] = 0U;
         outSampler->reserved[1] = 0U;
         outSampler->reserved[2] = 0U;
@@ -4439,7 +4353,7 @@ CNA_Result cna_cnb_model_has_morph(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outPresent = target->morph.has_value() ? CNA_TRUE : CNA_FALSE;
+        *outPresent = ToCBool(target->morph.has_value());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4471,10 +4385,10 @@ CNA_Result cna_cnb_model_get_morph(
         outInfo->target_count = static_cast<uint64_t>(morph->targets.size());
         outInfo->weight_count = static_cast<uint64_t>(morph->weights.size());
         outInfo->weight_track_key_count = static_cast<uint64_t>(morph->weightTrackKeys.size());
-        outInfo->recompute_flat_normals = morph->recomputeFlatNormals ? CNA_TRUE : CNA_FALSE;
+        outInfo->recompute_flat_normals = ToCBool(morph->recomputeFlatNormals);
         outInfo->weight_track_step_interpolation =
-            morph->weightTrackStepInterpolation ? CNA_TRUE : CNA_FALSE;
-        outInfo->weight_track_cubic_spline = morph->weightTrackCubicSpline ? CNA_TRUE : CNA_FALSE;
+            ToCBool(morph->weightTrackStepInterpolation);
+        outInfo->weight_track_cubic_spline = ToCBool(morph->weightTrackCubicSpline);
         std::memset(outInfo->reserved2, 0, sizeof(outInfo->reserved2));
         return CNA_RESULT_SUCCESS;
     });
@@ -4627,7 +4541,7 @@ CNA_Result cna_cnb_model_copy_morph_target_deltas(
         if (source == nullptr) {
             return InvalidArgument("The morph delta stream is not a named stream.");
         }
-        return CopyFloats(*source, destination, capacity, outCount);
+        return CopyElements<float>(*source, destination, capacity, outCount);
     });
 }
 
@@ -4676,7 +4590,7 @@ CNA_Result cna_cnb_model_copy_morph_weights(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyFloats(morph->weights, destination, capacity, outCount);
+        return CopyElements<float>(morph->weights, destination, capacity, outCount);
     });
 }
 
@@ -4802,7 +4716,7 @@ CNA_Result cna_cnb_model_copy_morph_weight_key_values(
         if (source == nullptr) {
             return InvalidArgument("The morph key stream is not a named stream.");
         }
-        return CopyFloats(*source, destination, capacity, outCount);
+        return CopyElements<float>(*source, destination, capacity, outCount);
     });
 }
 
@@ -4888,7 +4802,7 @@ CNA_Result cna_cnb_model_get_mesh_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(model->value->meshes[static_cast<std::size_t>(index)].name, outBytes);
+        return ReportTextSize(model->value->meshes[static_cast<std::size_t>(index)].name, outBytes);
     });
 }
 
@@ -5230,7 +5144,7 @@ CNA_Result cna_cnb_model_get_animation_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(model->value->animations[static_cast<std::size_t>(index)].name, outBytes);
+        return ReportTextSize(model->value->animations[static_cast<std::size_t>(index)].name, outBytes);
     });
 }
 
@@ -5589,7 +5503,7 @@ CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(
+        return ReportTextSize(
             compiled->value->absorbedFiles[static_cast<std::size_t>(index)], outBytes);
     });
 }
@@ -5654,7 +5568,7 @@ CNA_Result cna_cnb_model_from_cnj_get_external_reference_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(
+        return ReportTextSize(
             compiled->value->externalReferences[static_cast<std::size_t>(index)], outBytes);
     });
 }
@@ -5798,7 +5712,7 @@ CNA_Result cna_cnb_sprite_font_data_get_info(
         outInfo->default_character = data.defaultCharacter.has_value()
             ? static_cast<CNA_Char16>(data.defaultCharacter.value())
             : static_cast<CNA_Char16>(0);
-        outInfo->has_default_character = data.defaultCharacter.has_value() ? CNA_TRUE : CNA_FALSE;
+        outInfo->has_default_character = ToCBool(data.defaultCharacter.has_value());
         std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
         return CNA_RESULT_SUCCESS;
     });
@@ -6026,7 +5940,7 @@ CNA_Result cna_cnb_get_audio_format_name_size(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(
+        return ReportTextSize(
             Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), outBytes);
     });
 }
@@ -6247,7 +6161,7 @@ CNA_Result cna_cnb_decode_song_stream_reference_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(Cnb::DecodeSongFromCnb(*document->value).streamReference, outBytes);
+        return ReportTextSize(Cnb::DecodeSongFromCnb(*document->value).streamReference, outBytes);
     });
 }
 
@@ -6279,7 +6193,7 @@ CNA_Result cna_cnb_decode_song_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(Cnb::DecodeSongFromCnb(*document->value).name, outBytes);
+        return ReportTextSize(Cnb::DecodeSongFromCnb(*document->value).name, outBytes);
     });
 }
 
@@ -6375,7 +6289,7 @@ CNA_Result cna_cnb_decode_video_stream_reference_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(Cnb::DecodeVideoFromCnb(*document->value).streamReference, outBytes);
+        return ReportTextSize(Cnb::DecodeVideoFromCnb(*document->value).streamReference, outBytes);
     });
 }
 
@@ -6406,10 +6320,9 @@ CNA_Result cna_cnb_encode_curve(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<Microsoft::Xna::Framework::Curve> curve;
-        if (const CNA_Result result =
-                GetRuntimeHandles().Get(curveHandle, ObjectKind::Curve, &curve);
+        if (const CNA_Result result = LookupHandle(curveHandle, ObjectKind::Curve, &curve);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(result, ErrorCategoryForResult(result), "The Curve handle is invalid.");
+            return result;
         }
         if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
             return InvalidArgument("The encoded curve output is invalid.");
@@ -6697,7 +6610,7 @@ CNA_Result cna_cnb_loader_registry_remove(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         const bool removed = CNA::Content::CnbLoaderRegistry::Remove(assetTypeId);
         if (outRemoved != nullptr) {
-            *outRemoved = removed ? CNA_TRUE : CNA_FALSE;
+            *outRemoved = ToCBool(removed);
         }
         return CNA_RESULT_SUCCESS;
     });
@@ -6720,7 +6633,7 @@ CNA_Result cna_cnb_loader_registry_is_registered(
             return InvalidArgument("The registration output is null.");
         }
         *outRegistered =
-            CNA::Content::CnbLoaderRegistry::IsRegistered(assetTypeId) ? CNA_TRUE : CNA_FALSE;
+            ToCBool(CNA::Content::CnbLoaderRegistry::IsRegistered(assetTypeId));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6738,7 +6651,7 @@ CNA_Result cna_cnb_loader_registry_find(
         std::optional<CNA::Content::CnbLoaderRegistry::LoaderFn> found =
             CNA::Content::CnbLoaderRegistry::Find(assetTypeId);
         if (outFound != nullptr) {
-            *outFound = found.has_value() ? CNA_TRUE : CNA_FALSE;
+            *outFound = ToCBool(found.has_value());
         }
         if (!found.has_value()) {
             return CNA_RESULT_SUCCESS;
@@ -6752,7 +6665,7 @@ CNA_Result cna_cnb_loader_registry_get_registered_type_name_size(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(
+        return ReportTextSize(
             CNA::Content::CnbLoaderRegistry::RegisteredTypeName(assetTypeId), outBytes);
     });
 }
@@ -7079,7 +6992,7 @@ CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(compiled->value->assetTypeName, outBytes);
+        return ReportTextSize(compiled->value->assetTypeName, outBytes);
     });
 }
 
@@ -7153,7 +7066,7 @@ CNA_Result cna_cnb_cnj_result_get_absorbed_file_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(
+        return ReportTextSize(
             compiled->value->absorbedFiles[static_cast<std::size_t>(index)], outBytes);
     });
 }
@@ -7218,7 +7131,7 @@ CNA_Result cna_cnb_cnj_result_get_external_reference_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(
+        return ReportTextSize(
             compiled->value->externalReferences[static_cast<std::size_t>(index)], outBytes);
     });
 }

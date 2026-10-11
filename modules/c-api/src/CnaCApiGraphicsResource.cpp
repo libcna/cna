@@ -24,22 +24,24 @@
 
 namespace {
 
-using CNA::C::Detail::BorrowGameGraphicsDevice;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BorrowGameGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Graphics::GraphicsResource;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
@@ -340,7 +342,7 @@ CNA_Result cna_graphics_resource_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool disposed = resource.value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool disposed = ToCBool(resource.value->getIsDisposedProperty());
         *outIsDisposed = disposed;
         return CNA_RESULT_SUCCESS;
     });
@@ -548,15 +550,9 @@ CNA_Result cna_graphics_resource_unsubscribe_disposing(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DisposingRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::EventRegistration,
-            &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::EventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The graphics-resource event-registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);

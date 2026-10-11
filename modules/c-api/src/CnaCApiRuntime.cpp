@@ -20,17 +20,19 @@
 
 namespace {
 
-using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
-using CNA::C::Detail::HasOwnedGraphicsResources;
 using CNA::C::Detail::HandleRegistry;
+using CNA::C::Detail::HasOwnedGraphicsResources;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateStringView;
 using Microsoft::Xna::Framework::Game;
 using Microsoft::Xna::Framework::GameTime;
@@ -73,7 +75,7 @@ struct RuntimeState final {
     return CNA_GameTime{
         .total_game_time_ticks = value.getTotalGameTimeProperty().getTicksProperty(),
         .elapsed_game_time_ticks = value.getElapsedGameTimeProperty().getTicksProperty(),
-        .is_running_slowly = value.getIsRunningSlowlyProperty() ? CNA_TRUE : CNA_FALSE,
+        .is_running_slowly = ToCBool(value.getIsRunningSlowlyProperty()),
         .reserved = {0U, 0U, 0U, 0U, 0U, 0U, 0U}
     };
 }
@@ -465,14 +467,7 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<CGame>* const outGame)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Game, outGame);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The CNA game handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::Game, outGame);
 }
 
 [[nodiscard]] CNA_Result GetCallableGame(
@@ -786,7 +781,7 @@ CNA_Result cna_game_run_frame_ext(const CNA_Handle gameHandle, CNA_Bool* const o
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outRunning = game->RunFrameEXT() ? CNA_TRUE : CNA_FALSE;
+        *outRunning = ToCBool(game->RunFrameEXT());
         return game->GetCallbackFailure();
     });
 }

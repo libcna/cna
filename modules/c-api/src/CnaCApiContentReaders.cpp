@@ -4,6 +4,7 @@
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -40,11 +41,15 @@ using CNA::C::Detail::BorrowedContentManager;
 using CNA::C::Detail::BorrowedStorageStream;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseStorageStream;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -66,11 +71,6 @@ static_assert(
         static_cast<std::underlying_type_t<UnsupportedContentReaderReason>>(
             UnsupportedContentReaderReason::CompiledPlatformShaderBytecode)) ==
     CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE);
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
 
 // The canonical reader keeps raw pointers to both the stream and the manager, so the C resource
 // keeps the borrow records that own them and gives them back only when the handle is released.
@@ -105,51 +105,14 @@ struct ContentTypeReaderResource final {
     const CNA_Handle handle,
     std::shared_ptr<ContentReaderResource>* const outReader)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::ContentReader, outReader);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned ContentReader handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::ContentReader, outReader);
 }
 
 [[nodiscard]] CNA_Result GetTypeReader(
     const CNA_Handle handle,
     std::shared_ptr<ContentTypeReaderResource>* const outTypeReader)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::ContentTypeReader,
-        outTypeReader);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned content type-reader handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    const char* const message)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument(message);
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::ContentTypeReader, outTypeReader);
 }
 
 [[nodiscard]] CNA_Result CopyReaderName(const CNA_StringView value, std::string* const outValue)
@@ -324,8 +287,7 @@ CNA_Result cna_content_reader_copy_asset_name(
             reader->value->getAssetNameProperty(),
             destination,
             capacity,
-            outBytes,
-            "The asset-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -512,7 +474,7 @@ CNA_Result cna_content_reader_read_object_tag(
             "The object-presence output is null.",
             [outHasValue](ContentReader& reader) {
                 const std::any value = reader.ReadObject();
-                *outHasValue = value.has_value() ? CNA_TRUE : CNA_FALSE;
+                *outHasValue = ToCBool(value.has_value());
             });
     });
 }
@@ -761,15 +723,7 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<ForeignReaderRegistration>* const outRegistration)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::ContentTypeReaderRegistration, outRegistration);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned content type-reader registration handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::ContentTypeReaderRegistration, outRegistration);
 }
 
 } // namespace
@@ -892,7 +846,7 @@ CNA_Result cna_content_type_reader_manager_get_is_registered(
             return result;
         }
         *outIsRegistered =
-            ContentTypeReaderManager::IsRegistered(canonicalNameCopy) ? CNA_TRUE : CNA_FALSE;
+            ToCBool(ContentTypeReaderManager::IsRegistered(canonicalNameCopy));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -971,9 +925,7 @@ CNA_Result cna_content_type_reader_get_can_deserialize_into_existing_object(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = typeReader->value->getCanDeserializeIntoExistingObjectProperty()
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outValue = ToCBool(typeReader->value->getCanDeserializeIntoExistingObjectProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1012,8 +964,7 @@ CNA_Result cna_content_type_reader_copy_target_type_name(
             typeReader->value->getTargetTypeNameProperty(),
             destination,
             capacity,
-            outBytes,
-            "The target type-name output buffer is invalid or too small.");
+            outBytes);
     });
 }
 
@@ -1049,9 +1000,7 @@ CNA_Result cna_content_type_reader_supports_version(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outValue = typeReader->value->SupportsVersion(static_cast<int>(serializedVersion))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outValue = ToCBool(typeReader->value->SupportsVersion(static_cast<int>(serializedVersion)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1092,7 +1041,7 @@ CNA_Result cna_content_type_reader_read_untyped(
             return result;
         }
         const std::any value = typeReader->value->ReadUntyped(*reader->value, std::any{});
-        *outHasValue = value.has_value() ? CNA_TRUE : CNA_FALSE;
+        *outHasValue = ToCBool(value.has_value());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1346,12 +1295,9 @@ struct ReflectiveBuilderResource final {
     const CNA_ReflectiveTypeReaderBuilderHandle handle,
     std::shared_ptr<ReflectiveBuilderResource>* const outBuilder)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::ReflectiveTypeReaderBuilder, outBuilder);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::ReflectiveTypeReaderBuilder, outBuilder);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The reflective type-reader builder handle is invalid.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1829,7 +1775,7 @@ void WriteDictionaryElement(
 {
     switch (kind) {
     case CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN: {
-        const CNA_Bool value = *static_cast<const bool*>(source) ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool value = ToCBool(*static_cast<const bool*>(source));
         std::memcpy(destination, &value, sizeof(value));
         break;
     }
@@ -1927,11 +1873,9 @@ template <typename T>
     const CNA_ObjectDictionaryHandle handle,
     std::shared_ptr<ObjectDictionaryResource>* const outDictionary)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::ObjectDictionaryEXT, outDictionary);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::ObjectDictionaryEXT, outDictionary);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The object-dictionary handle is invalid.");
+        return result;
     }
     if (!(*outDictionary)->value) {
         return Fail(
@@ -2007,8 +1951,7 @@ CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
             return result;
         }
         return CopyText(
-            dictionary->value->GetTypeName(), destination, capacity, outBytes,
-            "The destination capacity is smaller than the dictionary runtime type name.");
+            dictionary->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -2050,7 +1993,7 @@ CNA_Result cna_object_dictionary_ext_contains_key(
             return Fail(
                 result, ErrorCategoryForResult(result), "The dictionary key is not valid UTF-8.");
         }
-        *outContains = dictionary->value->ContainsKey(keyText) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(dictionary->value->ContainsKey(keyText));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2140,7 +2083,7 @@ CNA_Result cna_object_dictionary_ext_get_entry(
         outEntry->struct_size = static_cast<uint32_t>(sizeof(CNA_ObjectDictionaryEntry));
         outEntry->struct_version = UINT32_C(1);
         outEntry->kind = shape.kind;
-        outEntry->is_array = shape.isArray ? CNA_TRUE : CNA_FALSE;
+        outEntry->is_array = ToCBool(shape.isArray);
         outEntry->element_count = shape.elementCount;
         return CNA_RESULT_SUCCESS;
     });

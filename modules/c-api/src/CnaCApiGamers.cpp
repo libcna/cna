@@ -5,6 +5,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
@@ -31,13 +32,18 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::GamerRegistration;
-using CNA::C::Detail::GamerRegistrationBase;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GamerRegistration;
+using CNA::C::Detail::GamerRegistrationBase;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -81,16 +87,6 @@ struct GamerEnumeratorResource final {
     std::shared_ptr<GamerCollectionResource> collection;
     int position = -1;
 };
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
 
 [[nodiscard]] CNA_Result GetGamerResource(
     const CNA_Handle handle,
@@ -167,67 +163,21 @@ struct GamerEnumeratorResource final {
     const CNA_Handle handle,
     std::shared_ptr<GamerProfileResource>* const outProfile)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::GamerProfile, outProfile);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned GamerProfile handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::GamerProfile, outProfile);
 }
 
 [[nodiscard]] CNA_Result BorrowCollection(
     const CNA_Handle handle,
     std::shared_ptr<GamerCollectionResource>* const outCollection)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::GamerCollection, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned gamer collection handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::GamerCollection, outCollection);
 }
 
 [[nodiscard]] CNA_Result BorrowEnumerator(
     const CNA_Handle handle,
     std::shared_ptr<GamerEnumeratorResource>* const outEnumerator)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::GamerEnumerator, outEnumerator);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned gamer enumerator handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Result CopyGamerText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The gamer text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the gamer text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::GamerEnumerator, outEnumerator);
 }
 
 [[nodiscard]] CNA_Result ToNativeText(
@@ -236,7 +186,7 @@ struct GamerEnumeratorResource final {
     std::string* const outText)
 {
     if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     outText->assign(
         view.data == nullptr ? "" : view.data,
@@ -340,7 +290,7 @@ CNA_Result CreateBorrowedGamer(
     CNA_Handle* const outGamer)
 {
     if (value == nullptr || outGamer == nullptr) {
-        return InvalidInput("The borrowed Gamer factory arguments are invalid.");
+        return InvalidArgument("The borrowed Gamer factory arguments are invalid.");
     }
     *outGamer = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<GamerResource>();
@@ -360,7 +310,7 @@ CNA_Result CreateBorrowedGamer(
 CNA_Result BorrowAnyGamer(const CNA_Handle handle, Gamer** const outGamer)
 {
     if (outGamer == nullptr) {
-        return InvalidInput("The borrowed Gamer output is null.");
+        return InvalidArgument("The borrowed Gamer output is null.");
     }
     *outGamer = nullptr;
     return BorrowGamerBase(handle, outGamer);
@@ -372,7 +322,7 @@ CNA_Result cna_gamer_presence_init(CNA_GamerPresence* const outPresence)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPresence == nullptr) {
-            return InvalidInput("The GamerPresence output is null.");
+            return InvalidArgument("The GamerPresence output is null.");
         }
         const GamerPresence presence = GamerPresence::CreateInternal();
         const CNA_GamerPresence value = {
@@ -414,7 +364,7 @@ CNA_Result cna_gamer_get_display_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The display-name size output is null.");
+            return InvalidArgument("The display-name size output is null.");
         }
         Gamer* gamer = nullptr;
         if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
@@ -438,7 +388,7 @@ CNA_Result cna_gamer_copy_display_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(gamer->getDisplayNameProperty(), destination, capacity, outBytes);
+        return CopyText(gamer->getDisplayNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -467,7 +417,7 @@ CNA_Result cna_gamer_get_gamertag_size(const CNA_GamerHandle gamerHandle, uint64
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The gamertag size output is null.");
+            return InvalidArgument("The gamertag size output is null.");
         }
         Gamer* gamer = nullptr;
         if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
@@ -491,7 +441,7 @@ CNA_Result cna_gamer_copy_gamertag(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(gamer->getGamertagProperty(), destination, capacity, outBytes);
+        return CopyText(gamer->getGamertagProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -499,7 +449,7 @@ CNA_Result cna_gamer_get_text_size(const CNA_GamerHandle gamerHandle, uint64_t* 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The gamer text size output is null.");
+            return InvalidArgument("The gamer text size output is null.");
         }
         Gamer* gamer = nullptr;
         if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
@@ -523,7 +473,7 @@ CNA_Result cna_gamer_copy_text(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(gamer->ToString(), destination, capacity, outBytes);
+        return CopyText(gamer->ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -533,14 +483,14 @@ CNA_Result cna_gamer_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsDisposed == nullptr) {
-            return InvalidInput("The gamer disposal output is null.");
+            return InvalidArgument("The gamer disposal output is null.");
         }
         Gamer* gamer = nullptr;
         if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = gamer->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(gamer->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -549,7 +499,7 @@ CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTag == nullptr) {
-            return InvalidInput("The gamer tag output is null.");
+            return InvalidArgument("The gamer tag output is null.");
         }
         Gamer* gamer = nullptr;
         if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
@@ -584,7 +534,7 @@ CNA_Result cna_gamer_get_profile(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outProfile == nullptr) {
-            return InvalidInput("The GamerProfile output handle is null.");
+            return InvalidArgument("The GamerProfile output handle is null.");
         }
         *outProfile = CNA_INVALID_HANDLE;
         Gamer* gamer = nullptr;
@@ -621,7 +571,7 @@ CNA_Result cna_gamer_get_from_gamertag(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGamer == nullptr) {
-            return InvalidInput("The Gamer output handle is null.");
+            return InvalidArgument("The Gamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
         std::string nativeGamertag;
@@ -663,7 +613,7 @@ CNA_Result cna_gamer_get_partner_token_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The partner-token size output is null.");
+            return InvalidArgument("The partner-token size output is null.");
         }
         std::string nativeAudienceUri;
         if (const CNA_Result result =
@@ -689,7 +639,7 @@ CNA_Result cna_gamer_copy_partner_token(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(
+        return CopyText(
             Gamer::GetPartnerToken(nativeAudienceUri),
             destination,
             capacity,
@@ -724,12 +674,12 @@ CNA_Result cna_gamer_get_signed_in_gamer_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGamer == nullptr) {
-            return InvalidInput("The signed-in gamer output handle is null.");
+            return InvalidArgument("The signed-in gamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
         SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
         if (collection == nullptr || index < 0 || index >= collection->getCountProperty()) {
-            return InvalidInput("The signed-in gamer position is outside the collection.");
+            return InvalidArgument("The signed-in gamer position is outside the collection.");
         }
         SignedInGamer* const gamer = (*collection)[static_cast<int>(index)];
         if (gamer == nullptr) {
@@ -750,7 +700,7 @@ CNA_Result cna_gamer_signed_in_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The signed-in gamer index output is null.");
+            return InvalidArgument("The signed-in gamer index output is null.");
         }
         *outIndex = INT32_C(-1);
         SignedInGamer* gamer = nullptr;
@@ -775,7 +725,7 @@ CNA_Result cna_gamer_signed_in_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The signed-in gamer containment output is null.");
+            return InvalidArgument("The signed-in gamer containment output is null.");
         }
         *outContains = CNA_FALSE;
         SignedInGamer* gamer = nullptr;
@@ -784,7 +734,7 @@ CNA_Result cna_gamer_signed_in_contains(
             return result;
         }
         SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
-        *outContains = (collection != nullptr && collection->Contains(gamer)) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(collection != nullptr && collection->Contains(gamer));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -796,12 +746,12 @@ CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasGamer == nullptr || outGamer == nullptr) {
-            return InvalidInput("The signed-in gamer output is invalid.");
+            return InvalidArgument("The signed-in gamer output is invalid.");
         }
         *outHasGamer = CNA_FALSE;
         PlayerIndex nativeIndex = PlayerIndex::One;
         if (!TryMapPlayerIndex(playerIndex, &nativeIndex)) {
-            return InvalidInput("The player index is not a defined identity.");
+            return InvalidArgument("The player index is not a defined identity.");
         }
         SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
         SignedInGamer* const gamer = collection == nullptr ? nullptr : (*collection)[nativeIndex];
@@ -823,14 +773,14 @@ CNA_Result cna_signed_in_gamer_get_is_guest(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsGuest == nullptr) {
-            return InvalidInput("The guest output is null.");
+            return InvalidArgument("The guest output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsGuest = gamer->getIsGuestProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsGuest = ToCBool(gamer->getIsGuestProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -841,14 +791,14 @@ CNA_Result cna_signed_in_gamer_get_is_signed_in_to_live(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsSignedInToLive == nullptr) {
-            return InvalidInput("The online sign-in output is null.");
+            return InvalidArgument("The online sign-in output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsSignedInToLive = gamer->getIsSignedInToLiveProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsSignedInToLive = ToCBool(gamer->getIsSignedInToLiveProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -859,7 +809,7 @@ CNA_Result cna_signed_in_gamer_get_party_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPartySize == nullptr) {
-            return InvalidInput("The party-size output is null.");
+            return InvalidArgument("The party-size output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -894,7 +844,7 @@ CNA_Result cna_signed_in_gamer_get_player_index(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPlayerIndex == nullptr) {
-            return InvalidInput("The player-index output is null.");
+            return InvalidArgument("The player-index output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -913,7 +863,7 @@ CNA_Result cna_signed_in_gamer_get_presence(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPresence == nullptr || outPresence->struct_size < sizeof(CNA_GamerPresence) ||
             outPresence->struct_version != StructureVersion) {
-            return InvalidInput("The GamerPresence output structure is invalid.");
+            return InvalidArgument("The GamerPresence output structure is invalid.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -939,10 +889,10 @@ CNA_Result cna_signed_in_gamer_set_presence(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (presence == nullptr || presence->struct_size < sizeof(CNA_GamerPresence) ||
             presence->struct_version != StructureVersion) {
-            return InvalidInput("The GamerPresence structure is invalid.");
+            return InvalidArgument("The GamerPresence structure is invalid.");
         }
         if (presence->presence_mode > CNA_GAMER_PRESENCE_MODE_MAXIMUM) {
-            return InvalidInput("The gamer presence mode is not a defined identity.");
+            return InvalidArgument("The gamer presence mode is not a defined identity.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -986,7 +936,7 @@ CNA_Result cna_signed_in_gamer_get_privileges(
         if (outPrivileges == nullptr ||
             outPrivileges->struct_size < sizeof(CNA_GamerPrivileges) ||
             outPrivileges->struct_version != StructureVersion) {
-            return InvalidInput("The GamerPrivileges output structure is invalid.");
+            return InvalidArgument("The GamerPrivileges output structure is invalid.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -1000,10 +950,10 @@ CNA_Result cna_signed_in_gamer_get_privileges(
             static_cast<CNA_GamerPrivilegeSetting>(privileges.getAllowCommunicationProperty()),
             static_cast<CNA_GamerPrivilegeSetting>(privileges.getAllowProfileViewingProperty()),
             static_cast<CNA_GamerPrivilegeSetting>(privileges.getAllowUserCreatedContentProperty()),
-            privileges.getAllowOnlineSessionsProperty() ? CNA_TRUE : CNA_FALSE,
-            privileges.getAllowPremiumContentProperty() ? CNA_TRUE : CNA_FALSE,
-            privileges.getAllowPurchaseContentProperty() ? CNA_TRUE : CNA_FALSE,
-            privileges.getAllowTradeContentProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(privileges.getAllowOnlineSessionsProperty()),
+            ToCBool(privileges.getAllowPremiumContentProperty()),
+            ToCBool(privileges.getAllowPurchaseContentProperty()),
+            ToCBool(privileges.getAllowTradeContentProperty()),
             {0U, 0U, 0U, 0U}
         };
         *outPrivileges = value;
@@ -1018,7 +968,7 @@ CNA_Result cna_signed_in_gamer_is_friend(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsFriend == nullptr) {
-            return InvalidInput("The friendship output is null.");
+            return InvalidArgument("The friendship output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -1030,7 +980,7 @@ CNA_Result cna_signed_in_gamer_is_friend(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsFriend = gamer->IsFriend(other) ? CNA_TRUE : CNA_FALSE;
+        *outIsFriend = ToCBool(gamer->IsFriend(other));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1042,7 +992,7 @@ CNA_Result cna_signed_in_gamer_is_headset(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsHeadset == nullptr) {
-            return InvalidInput("The headset output is null.");
+            return InvalidArgument("The headset output is null.");
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -1052,12 +1002,10 @@ CNA_Result cna_signed_in_gamer_is_headset(
         const std::vector<Microphone*>& microphones = Microphone::getAllProperty();
         if (microphoneIndex >= static_cast<uint64_t>(microphones.size()) ||
             microphones[static_cast<std::size_t>(microphoneIndex)] == nullptr) {
-            return InvalidInput("The microphone index is outside the capture-device list.");
+            return InvalidArgument("The microphone index is outside the capture-device list.");
         }
         *outIsHeadset =
-            gamer->IsHeadset(*microphones[static_cast<std::size_t>(microphoneIndex)])
-                ? CNA_TRUE
-                : CNA_FALSE;
+            ToCBool(gamer->IsHeadset(*microphones[static_cast<std::size_t>(microphoneIndex)]));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1068,7 +1016,7 @@ CNA_Result cna_signed_in_gamer_get_friends(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFriends == nullptr) {
-            return InvalidInput("The friend-collection output handle is null.");
+            return InvalidArgument("The friend-collection output handle is null.");
         }
         *outFriends = CNA_INVALID_HANDLE;
         SignedInGamer* gamer = nullptr;
@@ -1137,11 +1085,11 @@ CNA_Result cna_signed_in_gamer_subscribe_signed_in_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The gamer registration output is null.");
+            return InvalidArgument("The gamer registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The gamer event callback is null.");
+            return InvalidArgument("The gamer event callback is null.");
         }
         auto* const source = &SignedInGamer::SignedIn;
         const auto token = source->Add(
@@ -1161,11 +1109,11 @@ CNA_Result cna_signed_in_gamer_subscribe_signed_out_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The gamer registration output is null.");
+            return InvalidArgument("The gamer registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The gamer event callback is null.");
+            return InvalidArgument("The gamer event callback is null.");
         }
         auto* const source = &SignedInGamer::SignedOut;
         const auto token = source->Add(
@@ -1182,15 +1130,9 @@ CNA_Result cna_gamer_unsubscribe_ext(const CNA_Handle registration)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<GamerRegistrationBase> value;
-        if (const CNA_Result result = GetRuntimeHandles().Get(
-                registration,
-                ObjectKind::GamerEventRegistration,
-                &value);
+        if (const CNA_Result result = LookupHandle(registration, ObjectKind::GamerEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The gamer registration handle is invalid for this call.");
+            return result;
         }
         const CNA_Result result = GetRuntimeHandles().Release(registration);
         if (result != CNA_RESULT_SUCCESS) {
@@ -1210,7 +1152,7 @@ CNA_Result cna_gamer_profile_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_GamerProfileInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The GamerProfile info output structure is invalid.");
+            return InvalidArgument("The GamerProfile info output structure is invalid.");
         }
         std::shared_ptr<GamerProfileResource> profile;
         if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
@@ -1225,7 +1167,7 @@ CNA_Result cna_gamer_profile_get_info(
             static_cast<int32_t>(profile->value->getTitlesPlayedProperty()),
             static_cast<int32_t>(profile->value->getTotalAchievementsProperty()),
             profile->value->getReputationProperty(),
-            profile->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(profile->value->getIsDisposedProperty()),
             {0U, 0U, 0U}
         };
         *outInfo = info;
@@ -1239,7 +1181,7 @@ CNA_Result cna_gamer_profile_get_motto_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The motto size output is null.");
+            return InvalidArgument("The motto size output is null.");
         }
         std::shared_ptr<GamerProfileResource> profile;
         if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
@@ -1263,7 +1205,7 @@ CNA_Result cna_gamer_profile_copy_motto(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(profile->value->getMottoProperty(), destination, capacity, outBytes);
+        return CopyText(profile->value->getMottoProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -1273,7 +1215,7 @@ CNA_Result cna_gamer_profile_get_region_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The region-name size output is null.");
+            return InvalidArgument("The region-name size output is null.");
         }
         std::shared_ptr<GamerProfileResource> profile;
         if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
@@ -1297,7 +1239,7 @@ CNA_Result cna_gamer_profile_copy_region_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(
+        return CopyText(
             profile->value->getRegionProperty().getNameProperty(),
             destination,
             capacity,
@@ -1312,7 +1254,7 @@ CNA_Result cna_gamer_profile_get_picture_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasPicture == nullptr || outBytes == nullptr) {
-            return InvalidInput("The gamer-picture output is invalid.");
+            return InvalidArgument("The gamer-picture output is invalid.");
         }
         *outHasPicture = CNA_FALSE;
         *outBytes = UINT64_C(0);
@@ -1334,7 +1276,7 @@ CNA_Result cna_gamer_profile_get_picture_size(
 CNA_Result cna_gamer_profile_copy_picture(const CNA_GamerProfileHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if(!outBytes||(!destination&&capacity))return InvalidInput("The picture output is invalid.");
+        if(!outBytes||(!destination&&capacity))return InvalidArgument("The picture output is invalid.");
         std::shared_ptr<GamerProfileResource> profile;
         if(const auto result=BorrowProfile(handle,&profile);result!=CNA_RESULT_SUCCESS)return result;
         std::unique_ptr<System::IO::Stream> picture(profile->value->GetGamerPicture());
@@ -1375,7 +1317,7 @@ CNA_Result cna_friend_gamer_create_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGamer == nullptr) {
-            return InvalidInput("The Gamer output handle is null.");
+            return InvalidArgument("The Gamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateCanonicalBool(isOnline, "is_online");
@@ -1435,11 +1377,11 @@ CNA_Result cna_friend_collection_create_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCollection == nullptr) {
-            return InvalidInput("The friend-collection output handle is null.");
+            return InvalidArgument("The friend-collection output handle is null.");
         }
         *outCollection = CNA_INVALID_HANDLE;
         if (friends == nullptr && count != UINT64_C(0)) {
-            return InvalidInput("The friend array is null.");
+            return InvalidArgument("The friend array is null.");
         }
         const auto resource = std::make_shared<GamerCollectionResource>();
         std::vector<FriendGamer*> nativeFriends;
@@ -1476,7 +1418,7 @@ CNA_Result cna_friend_gamer_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_FriendGamerInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The FriendGamer info output structure is invalid.");
+            return InvalidArgument("The FriendGamer info output structure is invalid.");
         }
         std::shared_ptr<GamerResource> gamer;
         FriendGamer* friendGamer = nullptr;
@@ -1487,18 +1429,18 @@ CNA_Result cna_friend_gamer_get_info(
         const CNA_FriendGamerInfo info = {
             sizeof(CNA_FriendGamerInfo),
             StructureVersion,
-            friendGamer->getFriendRequestReceivedFromProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getFriendRequestSentToProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getHasVoiceProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getInviteAcceptedProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getInviteReceivedFromProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getInviteRejectedProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getInviteSentToProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getIsAwayProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getIsBusyProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getIsJoinableProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getIsOnlineProperty() ? CNA_TRUE : CNA_FALSE,
-            friendGamer->getIsPlayingProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(friendGamer->getFriendRequestReceivedFromProperty()),
+            ToCBool(friendGamer->getFriendRequestSentToProperty()),
+            ToCBool(friendGamer->getHasVoiceProperty()),
+            ToCBool(friendGamer->getInviteAcceptedProperty()),
+            ToCBool(friendGamer->getInviteReceivedFromProperty()),
+            ToCBool(friendGamer->getInviteRejectedProperty()),
+            ToCBool(friendGamer->getInviteSentToProperty()),
+            ToCBool(friendGamer->getIsAwayProperty()),
+            ToCBool(friendGamer->getIsBusyProperty()),
+            ToCBool(friendGamer->getIsJoinableProperty()),
+            ToCBool(friendGamer->getIsOnlineProperty()),
+            ToCBool(friendGamer->getIsPlayingProperty()),
             {0U, 0U, 0U, 0U}
         };
         *outInfo = info;
@@ -1512,7 +1454,7 @@ CNA_Result cna_friend_gamer_get_presence_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The friend presence size output is null.");
+            return InvalidArgument("The friend presence size output is null.");
         }
         std::shared_ptr<GamerResource> gamer;
         FriendGamer* friendGamer = nullptr;
@@ -1538,7 +1480,7 @@ CNA_Result cna_friend_gamer_copy_presence(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyGamerText(friendGamer->getPresenceProperty(), destination, capacity, outBytes);
+        return CopyText(friendGamer->getPresenceProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -1548,7 +1490,7 @@ CNA_Result cna_gamer_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The collection count output is null.");
+            return InvalidArgument("The collection count output is null.");
         }
         std::shared_ptr<GamerCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -1567,7 +1509,7 @@ CNA_Result cna_gamer_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGamer == nullptr) {
-            return InvalidInput("The collection element output handle is null.");
+            return InvalidArgument("The collection element output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
         std::shared_ptr<GamerCollectionResource> collection;
@@ -1595,7 +1537,7 @@ CNA_Result cna_gamer_collection_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The collection index output is null.");
+            return InvalidArgument("The collection index output is null.");
         }
         std::shared_ptr<GamerCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -1620,7 +1562,7 @@ CNA_Result cna_gamer_collection_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The collection containment output is null.");
+            return InvalidArgument("The collection containment output is null.");
         }
         std::shared_ptr<GamerCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -1633,7 +1575,7 @@ CNA_Result cna_gamer_collection_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = collection->friends->Contains(friendGamer) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(collection->friends->Contains(friendGamer));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1647,10 +1589,10 @@ CNA_Result cna_gamer_collection_copy_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The collection copy output is invalid.");
+            return InvalidArgument("The collection copy output is invalid.");
         }
         if (index < 0) {
-            return InvalidInput("The destination index is negative.");
+            return InvalidArgument("The destination index is negative.");
         }
         std::shared_ptr<GamerCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
@@ -1746,7 +1688,7 @@ CNA_Result cna_gamer_collection_create_enumerator(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnumerator == nullptr) {
-            return InvalidInput("The enumerator output handle is null.");
+            return InvalidArgument("The enumerator output handle is null.");
         }
         *outEnumerator = CNA_INVALID_HANDLE;
         std::shared_ptr<GamerCollectionResource> collection;
@@ -1775,7 +1717,7 @@ CNA_Result cna_gamer_enumerator_move_next(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasCurrent == nullptr) {
-            return InvalidInput("The enumerator advance output is null.");
+            return InvalidArgument("The enumerator advance output is null.");
         }
         std::shared_ptr<GamerEnumeratorResource> enumerator;
         if (const CNA_Result result = BorrowEnumerator(enumeratorHandle, &enumerator);
@@ -1791,7 +1733,7 @@ CNA_Result cna_gamer_enumerator_move_next(
         }
         const bool hasCurrent = cursor.MoveNext();
         ++enumerator->position;
-        *outHasCurrent = hasCurrent ? CNA_TRUE : CNA_FALSE;
+        *outHasCurrent = ToCBool(hasCurrent);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1802,7 +1744,7 @@ CNA_Result cna_gamer_enumerator_get_current(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGamer == nullptr) {
-            return InvalidInput("The enumerator element output handle is null.");
+            return InvalidArgument("The enumerator element output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
         std::shared_ptr<GamerEnumeratorResource> enumerator;
@@ -1872,14 +1814,14 @@ CNA_Result cna_friend_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsDisposed == nullptr) {
-            return InvalidInput("The collection disposal output is null.");
+            return InvalidArgument("The collection disposal output is null.");
         }
         std::shared_ptr<GamerCollectionResource> collection;
         if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = collection->friends->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(collection->friends->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }

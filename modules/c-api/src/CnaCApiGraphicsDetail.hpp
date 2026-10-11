@@ -12,7 +12,6 @@
 namespace Microsoft::Xna::Framework::Graphics {
 class ModelMeshPart;
 class SkinnedModelEXT;
-struct VertexElement;
 class SpriteBatch;
 class Effect;
 class OcclusionQuery;
@@ -193,13 +192,6 @@ struct TextureCubeResourceView final {
 [[nodiscard]] CNA_Result GetOwnedModelMeshPartValue(
     CNA_Handle handle,
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>* outPart);
-
-// CBIND-092B. The instanced renderer publishes two static vertex declarations a caller has to
-// reproduce byte for byte. Sharing the conversion rather than repeating it is the point: two
-// copies of a four-field mapping drift, and the drift would show up as an instance stream that
-// almost works.
-[[nodiscard]] CNA_VertexElement ToCVertexElement(
-    const Microsoft::Xna::Framework::Graphics::VertexElement& value) noexcept;
 
 } // namespace CNA::C::Detail
 

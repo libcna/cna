@@ -3,6 +3,7 @@
 #include "CNA/C/net.h"
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -39,7 +40,12 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetLastError;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
@@ -100,16 +106,6 @@ static_assert(NativeOrdinal(SendDataOptions::ReliableInOrder) ==
     CNA_SEND_DATA_OPTIONS_RELIABLE_IN_ORDER);
 static_assert(NativeOrdinal(SendDataOptions::Chat) == CNA_SEND_DATA_OPTIONS_CHAT);
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result InvalidState(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
-}
-
 struct NetworkSessionPropertiesResource final {
     std::unique_ptr<NetworkSessionProperties> value;
     std::size_t activeEnumerators = 0U;
@@ -162,62 +158,28 @@ struct PacketReaderResource final {
     const CNA_Handle handle,
     std::shared_ptr<NetworkSessionPropertiesResource>* const outProperties)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::NetworkSessionProperties,
-        outProperties);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkSessionProperties handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::NetworkSessionProperties, outProperties);
 }
 
 [[nodiscard]] CNA_Result GetEnumerator(
     const CNA_Handle handle,
     std::shared_ptr<PropertyEnumeratorResource>* const outEnumerator)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::NetworkSessionPropertyEnumerator,
-        outEnumerator);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned session-property enumerator handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::NetworkSessionPropertyEnumerator, outEnumerator);
 }
 
 [[nodiscard]] CNA_Result GetWriter(
     const CNA_Handle handle,
     std::shared_ptr<PacketWriterResource>* const outWriter)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::PacketWriter, outWriter);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned PacketWriter handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::PacketWriter, outWriter);
 }
 
 [[nodiscard]] CNA_Result GetReader(
     const CNA_Handle handle,
     std::shared_ptr<PacketReaderResource>* const outReader)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::PacketReader, outReader);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned PacketReader handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::PacketReader, outReader);
 }
 
 [[nodiscard]] std::optional<int> ToNative(const CNA_OptionalInt32 value)
@@ -230,7 +192,7 @@ struct PacketReaderResource final {
 
 void StoreOptional(const std::optional<int>& value, CNA_OptionalInt32* const outValue)
 {
-    outValue->has_value = value.has_value() ? CNA_TRUE : CNA_FALSE;
+    outValue->has_value = ToCBool(value.has_value());
     outValue->reserved[0] = 0U;
     outValue->reserved[1] = 0U;
     outValue->reserved[2] = 0U;
@@ -245,7 +207,7 @@ void StoreOptional(const std::optional<int>& value, CNA_OptionalInt32* const out
         outValue->struct_version != StructureVersion) {
         return InvalidArgument("The quality-of-service output structure is invalid.");
     }
-    outValue->is_available = value.getIsAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+    outValue->is_available = ToCBool(value.getIsAvailableProperty());
     std::memset(outValue->reserved, 0, sizeof(outValue->reserved));
     outValue->average_roundtrip_ticks =
         static_cast<int64_t>(value.getAverageRoundtripTimeProperty().getTicksProperty());
@@ -290,15 +252,6 @@ template<typename TCallable>
 [[nodiscard]] Color ToNativeColor(const CNA_Color value)
 {
     return Color(value.r, value.g, value.b, value.a);
-}
-
-[[nodiscard]] Matrix ToNativeMatrix(const CNA_Matrix& value)
-{
-    return Matrix(
-        value.m11, value.m12, value.m13, value.m14,
-        value.m21, value.m22, value.m23, value.m24,
-        value.m31, value.m32, value.m33, value.m34,
-        value.m41, value.m42, value.m43, value.m44);
 }
 
 void StoreMatrix(const Matrix& value, CNA_Matrix* const outValue)
@@ -442,7 +395,7 @@ CNA_Result cna_net_get_last_join_error(
         // Reading the record must not itself clear it, so the diagnostic stays inspectable in the
         // same order as the rest of the per-thread error information.
         const CNA::C::Detail::LastError& error = GetLastError();
-        *outHasJoinError = error.hasJoinError ? CNA_TRUE : CNA_FALSE;
+        *outHasJoinError = ToCBool(error.hasJoinError);
         *outJoinError = error.hasJoinError
             ? static_cast<CNA_NetworkSessionJoinError>(error.joinError)
             : CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_NOT_FOUND;
@@ -505,7 +458,7 @@ CNA_Result cna_network_session_properties_get_is_read_only(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsReadOnly = properties->value->getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsReadOnly = ToCBool(properties->value->getIsReadOnlyProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -635,7 +588,7 @@ CNA_Result cna_network_session_properties_remove(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outRemoved = properties->value->Remove(ToNative(value)) ? CNA_TRUE : CNA_FALSE;
+        *outRemoved = ToCBool(properties->value->Remove(ToNative(value)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -654,7 +607,7 @@ CNA_Result cna_network_session_properties_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = properties->value->Contains(ToNative(value)) ? CNA_TRUE : CNA_FALSE;
+        *outContains = ToCBool(properties->value->Contains(ToNative(value)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -764,7 +717,7 @@ CNA_Result cna_network_session_property_enumerator_move_next(
             return result;
         }
         enumerator->hasCurrent = enumerator->value->MoveNext();
-        *outHasCurrent = enumerator->hasCurrent ? CNA_TRUE : CNA_FALSE;
+        *outHasCurrent = ToCBool(enumerator->hasCurrent);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -930,7 +883,7 @@ CNA_Result cna_packet_writer_write_matrix(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return WriterCommand(writerHandle, [&value](PacketWriter& writer) {
-            writer.Write(ToNativeMatrix(value));
+            writer.Write(ToNative(value));
         });
     });
 }

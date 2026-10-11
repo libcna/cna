@@ -2,6 +2,7 @@
 
 #include "CNA/C/media_library.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiMediaDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
@@ -35,6 +36,7 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Media::Detail::BorrowMediaChild;
@@ -45,6 +47,11 @@ using CNA::C::Media::Detail::SongCollectionResource;
 using CNA::C::Media::Detail::SongResource;
 
 namespace {
+
+using CNA::C::Detail::CopyBytes;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Media::Album;
 using Microsoft::Xna::Framework::Media::AlbumCollection;
@@ -62,55 +69,6 @@ using Microsoft::Xna::Framework::Media::Playlist;
 using Microsoft::Xna::Framework::Media::PlaylistCollection;
 using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::SongCollection;
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The media library text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the media library text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result CopyBytes(
-    const std::vector<uint8_t>& value,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The media library image output is invalid.");
-    }
-    *outBytes = static_cast<uint64_t>(value.size());
-    if (capacity < static_cast<uint64_t>(value.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the image.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 // One trait per mapped canonical type, so every route below is one line of type-specific code over
 // the same borrow/publish machinery rather than four near-identical copies.
@@ -192,13 +150,9 @@ template<typename TValue>
     const CNA_MediaLibraryHandle handle,
     std::shared_ptr<MediaLibraryResource>* const outLibrary)
 {
-    const CNA_Result result =
-        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::MediaLibrary, outLibrary);
+    const CNA_Result result = LookupHandle(handle, ObjectKind::MediaLibrary, outLibrary);
     if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The media library handle is invalid for this call.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -240,7 +194,7 @@ template<typename TCollection, typename TElement>
     CNA_Handle* const outElement)
 {
     if (outElement == nullptr) {
-        return InvalidInput("The collection element output is null.");
+        return InvalidArgument("The collection element output is null.");
     }
     *outElement = CNA_INVALID_HANDLE;
     std::shared_ptr<MediaChildResource<TCollection>> resource;
@@ -249,7 +203,7 @@ template<typename TCollection, typename TElement>
         return result;
     }
     if (index < 0 || index >= static_cast<int32_t>(resource->value->getCountProperty())) {
-        return InvalidInput("The collection index is out of range.");
+        return InvalidArgument("The collection index is out of range.");
     }
     TElement* const element = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
     return PublishChildOf<TElement, TCollection>(resource, element, outElement);
@@ -276,7 +230,7 @@ CNA_Result cna_album_get_name_size(const CNA_AlbumHandle album, uint64_t* const 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The album name byte-count output is null.");
+            return InvalidArgument("The album name byte-count output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
             *outBytes = value.getNameProperty().size();
@@ -303,10 +257,10 @@ CNA_Result cna_album_get_is_disposed(const CNA_AlbumHandle album, CNA_Bool* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The album disposal-state output is null.");
+            return InvalidArgument("The album disposal-state output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -336,7 +290,7 @@ CNA_Result cna_album_get_hash_code(const CNA_AlbumHandle album, int32_t* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The album hash output is null.");
+            return InvalidArgument("The album hash output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -349,7 +303,7 @@ CNA_Result cna_album_get_type_name_size(const CNA_AlbumHandle album, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The album type-name byte-count output is null.");
+            return InvalidArgument("The album type-name byte-count output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
             *outBytes = value.GetTypeName().size();
@@ -377,7 +331,7 @@ CNA_Result cna_album_get_songs(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSongs == nullptr) {
-            return InvalidInput("The song collection output is null.");
+            return InvalidArgument("The song collection output is null.");
         }
         *outSongs = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Album>> resource;
@@ -397,7 +351,7 @@ CNA_Result cna_album_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The album comparison output is null.");
+            return InvalidArgument("The album comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<Album>> nativeLeft;
         std::shared_ptr<MediaChildResource<Album>> nativeRight;
@@ -409,7 +363,7 @@ CNA_Result cna_album_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -420,7 +374,7 @@ CNA_Result cna_album_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The album collection count output is null.");
+            return InvalidArgument("The album collection count output is null.");
         }
         return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -445,10 +399,10 @@ CNA_Result cna_album_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The album collection disposal-state output is null.");
+            return InvalidArgument("The album collection disposal-state output is null.");
         }
         return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -481,7 +435,7 @@ CNA_Result cna_album_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The album collection type-name byte-count output is null.");
+            return InvalidArgument("The album collection type-name byte-count output is null.");
         }
         return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -507,7 +461,7 @@ CNA_Result cna_artist_get_name_size(const CNA_ArtistHandle artist, uint64_t* con
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The artist name byte-count output is null.");
+            return InvalidArgument("The artist name byte-count output is null.");
         }
         return Read<Artist>(artist, [&](const Artist& value) {
             *outBytes = value.getNameProperty().size();
@@ -534,10 +488,10 @@ CNA_Result cna_artist_get_is_disposed(const CNA_ArtistHandle artist, CNA_Bool* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The artist disposal-state output is null.");
+            return InvalidArgument("The artist disposal-state output is null.");
         }
         return Read<Artist>(artist, [&](const Artist& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -567,7 +521,7 @@ CNA_Result cna_artist_get_hash_code(const CNA_ArtistHandle artist, int32_t* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The artist hash output is null.");
+            return InvalidArgument("The artist hash output is null.");
         }
         return Read<Artist>(artist, [&](const Artist& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -580,7 +534,7 @@ CNA_Result cna_artist_get_type_name_size(const CNA_ArtistHandle artist, uint64_t
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The artist type-name byte-count output is null.");
+            return InvalidArgument("The artist type-name byte-count output is null.");
         }
         return Read<Artist>(artist, [&](const Artist& value) {
             *outBytes = value.GetTypeName().size();
@@ -608,7 +562,7 @@ CNA_Result cna_artist_get_songs(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSongs == nullptr) {
-            return InvalidInput("The song collection output is null.");
+            return InvalidArgument("The song collection output is null.");
         }
         *outSongs = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Artist>> resource;
@@ -628,7 +582,7 @@ CNA_Result cna_artist_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The artist comparison output is null.");
+            return InvalidArgument("The artist comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<Artist>> nativeLeft;
         std::shared_ptr<MediaChildResource<Artist>> nativeRight;
@@ -640,7 +594,7 @@ CNA_Result cna_artist_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -651,7 +605,7 @@ CNA_Result cna_artist_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The artist collection count output is null.");
+            return InvalidArgument("The artist collection count output is null.");
         }
         return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -676,10 +630,10 @@ CNA_Result cna_artist_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The artist collection disposal-state output is null.");
+            return InvalidArgument("The artist collection disposal-state output is null.");
         }
         return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -712,7 +666,7 @@ CNA_Result cna_artist_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The artist collection type-name byte-count output is null.");
+            return InvalidArgument("The artist collection type-name byte-count output is null.");
         }
         return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -738,7 +692,7 @@ CNA_Result cna_genre_get_name_size(const CNA_GenreHandle genre, uint64_t* const 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The genre name byte-count output is null.");
+            return InvalidArgument("The genre name byte-count output is null.");
         }
         return Read<Genre>(genre, [&](const Genre& value) {
             *outBytes = value.getNameProperty().size();
@@ -765,10 +719,10 @@ CNA_Result cna_genre_get_is_disposed(const CNA_GenreHandle genre, CNA_Bool* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The genre disposal-state output is null.");
+            return InvalidArgument("The genre disposal-state output is null.");
         }
         return Read<Genre>(genre, [&](const Genre& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -798,7 +752,7 @@ CNA_Result cna_genre_get_hash_code(const CNA_GenreHandle genre, int32_t* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The genre hash output is null.");
+            return InvalidArgument("The genre hash output is null.");
         }
         return Read<Genre>(genre, [&](const Genre& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -811,7 +765,7 @@ CNA_Result cna_genre_get_type_name_size(const CNA_GenreHandle genre, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The genre type-name byte-count output is null.");
+            return InvalidArgument("The genre type-name byte-count output is null.");
         }
         return Read<Genre>(genre, [&](const Genre& value) {
             *outBytes = value.GetTypeName().size();
@@ -839,7 +793,7 @@ CNA_Result cna_genre_get_songs(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSongs == nullptr) {
-            return InvalidInput("The song collection output is null.");
+            return InvalidArgument("The song collection output is null.");
         }
         *outSongs = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Genre>> resource;
@@ -859,7 +813,7 @@ CNA_Result cna_genre_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The genre comparison output is null.");
+            return InvalidArgument("The genre comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<Genre>> nativeLeft;
         std::shared_ptr<MediaChildResource<Genre>> nativeRight;
@@ -871,7 +825,7 @@ CNA_Result cna_genre_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -882,7 +836,7 @@ CNA_Result cna_genre_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The genre collection count output is null.");
+            return InvalidArgument("The genre collection count output is null.");
         }
         return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -907,10 +861,10 @@ CNA_Result cna_genre_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The genre collection disposal-state output is null.");
+            return InvalidArgument("The genre collection disposal-state output is null.");
         }
         return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -943,7 +897,7 @@ CNA_Result cna_genre_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The genre collection type-name byte-count output is null.");
+            return InvalidArgument("The genre collection type-name byte-count output is null.");
         }
         return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -969,7 +923,7 @@ CNA_Result cna_playlist_get_name_size(const CNA_PlaylistHandle playlist, uint64_
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The playlist name byte-count output is null.");
+            return InvalidArgument("The playlist name byte-count output is null.");
         }
         return Read<Playlist>(playlist, [&](const Playlist& value) {
             *outBytes = value.getNameProperty().size();
@@ -996,10 +950,10 @@ CNA_Result cna_playlist_get_is_disposed(const CNA_PlaylistHandle playlist, CNA_B
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The playlist disposal-state output is null.");
+            return InvalidArgument("The playlist disposal-state output is null.");
         }
         return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -1029,7 +983,7 @@ CNA_Result cna_playlist_get_hash_code(const CNA_PlaylistHandle playlist, int32_t
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The playlist hash output is null.");
+            return InvalidArgument("The playlist hash output is null.");
         }
         return Read<Playlist>(playlist, [&](const Playlist& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -1042,7 +996,7 @@ CNA_Result cna_playlist_get_type_name_size(const CNA_PlaylistHandle playlist, ui
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The playlist type-name byte-count output is null.");
+            return InvalidArgument("The playlist type-name byte-count output is null.");
         }
         return Read<Playlist>(playlist, [&](const Playlist& value) {
             *outBytes = value.GetTypeName().size();
@@ -1070,7 +1024,7 @@ CNA_Result cna_playlist_get_songs(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSongs == nullptr) {
-            return InvalidInput("The song collection output is null.");
+            return InvalidArgument("The song collection output is null.");
         }
         *outSongs = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Playlist>> resource;
@@ -1090,7 +1044,7 @@ CNA_Result cna_playlist_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The playlist comparison output is null.");
+            return InvalidArgument("The playlist comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<Playlist>> nativeLeft;
         std::shared_ptr<MediaChildResource<Playlist>> nativeRight;
@@ -1102,7 +1056,7 @@ CNA_Result cna_playlist_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1113,7 +1067,7 @@ CNA_Result cna_playlist_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The playlist collection count output is null.");
+            return InvalidArgument("The playlist collection count output is null.");
         }
         return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -1138,10 +1092,10 @@ CNA_Result cna_playlist_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The playlist collection disposal-state output is null.");
+            return InvalidArgument("The playlist collection disposal-state output is null.");
         }
         return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -1174,7 +1128,7 @@ CNA_Result cna_playlist_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The playlist collection type-name byte-count output is null.");
+            return InvalidArgument("The playlist collection type-name byte-count output is null.");
         }
         return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -1202,7 +1156,7 @@ CNA_Result cna_media_library_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLibrary == nullptr) {
-            return InvalidInput("The media library output is null.");
+            return InvalidArgument("The media library output is null.");
         }
         *outLibrary = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -1232,7 +1186,7 @@ CNA_Result cna_media_library_create_from_source(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLibrary == nullptr) {
-            return InvalidInput("The media library output is null.");
+            return InvalidArgument("The media library output is null.");
         }
         *outLibrary = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -1251,7 +1205,7 @@ CNA_Result cna_media_library_create_from_source(
             owned.emplace_back(source);
         }
         if (static_cast<std::size_t>(sourceIndex) >= owned.size()) {
-            return InvalidInput("The media source index is out of range.");
+            return InvalidArgument("The media source index is out of range.");
         }
         auto resource = std::make_shared<MediaLibraryResource>();
         resource->value =
@@ -1276,14 +1230,14 @@ CNA_Result cna_media_library_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The media library disposal-state output is null.");
+            return InvalidArgument("The media library disposal-state output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDisposed = resource->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1326,7 +1280,7 @@ CNA_Result cna_media_library_get_media_source_type(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outType == nullptr) {
-            return InvalidInput("The media source kind output is null.");
+            return InvalidArgument("The media source kind output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -1351,7 +1305,7 @@ CNA_Result cna_media_library_get_media_source_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The media source name byte-count output is null.");
+            return InvalidArgument("The media source name byte-count output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -1403,7 +1357,7 @@ template<typename TCollection, typename TGet>
     const char* const message)
 {
     if (outCollection == nullptr) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     *outCollection = CNA_INVALID_HANDLE;
     std::shared_ptr<MediaLibraryResource> resource;
@@ -1499,7 +1453,7 @@ CNA_Result cna_media_library_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The media library type-name byte-count output is null.");
+            return InvalidArgument("The media library type-name byte-count output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -1539,7 +1493,7 @@ template<typename TOwner, typename TValue, typename TGet>
     const TGet get)
 {
     if (outValue == nullptr || outAvailable == nullptr) {
-        return InvalidInput("The optional media object output is null.");
+        return InvalidArgument("The optional media object output is null.");
     }
     std::shared_ptr<MediaChildResource<TOwner>> resource;
     if (const CNA_Result result = Borrow<TOwner>(ownerHandle, &resource);
@@ -1593,7 +1547,7 @@ CNA_Result cna_album_get_duration(const CNA_AlbumHandle album, int64_t* const ou
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The album duration output is null.");
+            return InvalidArgument("The album duration output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
             *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
@@ -1606,10 +1560,10 @@ CNA_Result cna_album_get_has_art(const CNA_AlbumHandle album, CNA_Bool* const ou
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHasArt == nullptr) {
-            return InvalidInput("The album art-presence output is null.");
+            return InvalidArgument("The album art-presence output is null.");
         }
         return Read<Album>(album, [&](const Album& value) {
-            *outHasArt = value.getHasArtProperty() ? CNA_TRUE : CNA_FALSE;
+            *outHasArt = ToCBool(value.getHasArtProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -1619,7 +1573,7 @@ CNA_Result cna_album_get_art_size(const CNA_AlbumHandle album, uint64_t* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The album art byte-count output is null.");
+            return InvalidArgument("The album art byte-count output is null.");
         }
         std::shared_ptr<MediaChildResource<Album>> resource;
         if (const CNA_Result result = Borrow<Album>(album, &resource);
@@ -1661,7 +1615,7 @@ CNA_Result cna_album_get_thumbnail_size(const CNA_AlbumHandle album, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The album thumbnail byte-count output is null.");
+            return InvalidArgument("The album thumbnail byte-count output is null.");
         }
         std::shared_ptr<MediaChildResource<Album>> resource;
         if (const CNA_Result result = Borrow<Album>(album, &resource);
@@ -1705,7 +1659,7 @@ CNA_Result cna_artist_get_albums(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAlbums == nullptr) {
-            return InvalidInput("The album collection output is null.");
+            return InvalidArgument("The album collection output is null.");
         }
         *outAlbums = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Artist>> resource;
@@ -1724,7 +1678,7 @@ CNA_Result cna_genre_get_albums(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAlbums == nullptr) {
-            return InvalidInput("The album collection output is null.");
+            return InvalidArgument("The album collection output is null.");
         }
         *outAlbums = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<Genre>> resource;
@@ -1741,7 +1695,7 @@ CNA_Result cna_playlist_get_duration(const CNA_PlaylistHandle playlist, int64_t*
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The playlist duration output is null.");
+            return InvalidArgument("The playlist duration output is null.");
         }
         return Read<Playlist>(playlist, [&](const Playlist& value) {
             *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
@@ -1796,7 +1750,7 @@ CNA_Result cna_picture_get_name_size(const CNA_PictureHandle handle, uint64_t* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture name byte-count output is null.");
+            return InvalidArgument("The picture name byte-count output is null.");
         }
         return Read<Picture>(handle, [&](const Picture& value) {
             *outBytes = value.getNameProperty().size();
@@ -1823,10 +1777,10 @@ CNA_Result cna_picture_get_is_disposed(const CNA_PictureHandle handle, CNA_Bool*
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The picture disposal-state output is null.");
+            return InvalidArgument("The picture disposal-state output is null.");
         }
         return Read<Picture>(handle, [&](const Picture& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -1859,7 +1813,7 @@ CNA_Result cna_picture_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The picture comparison output is null.");
+            return InvalidArgument("The picture comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<Picture>> nativeLeft;
         std::shared_ptr<MediaChildResource<Picture>> nativeRight;
@@ -1871,7 +1825,7 @@ CNA_Result cna_picture_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1880,7 +1834,7 @@ CNA_Result cna_picture_get_hash_code(const CNA_PictureHandle handle, int32_t* co
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The picture hash output is null.");
+            return InvalidArgument("The picture hash output is null.");
         }
         return Read<Picture>(handle, [&](const Picture& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -1893,7 +1847,7 @@ CNA_Result cna_picture_get_type_name_size(const CNA_PictureHandle handle, uint64
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture type-name byte-count output is null.");
+            return InvalidArgument("The picture type-name byte-count output is null.");
         }
         return Read<Picture>(handle, [&](const Picture& value) {
             *outBytes = value.GetTypeName().size();
@@ -1919,7 +1873,7 @@ CNA_Result cna_picture_album_get_name_size(const CNA_PictureAlbumHandle handle, 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture album name byte-count output is null.");
+            return InvalidArgument("The picture album name byte-count output is null.");
         }
         return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
             *outBytes = value.getNameProperty().size();
@@ -1946,10 +1900,10 @@ CNA_Result cna_picture_album_get_is_disposed(const CNA_PictureAlbumHandle handle
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The picture album disposal-state output is null.");
+            return InvalidArgument("The picture album disposal-state output is null.");
         }
         return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -1982,7 +1936,7 @@ CNA_Result cna_picture_album_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The picture album comparison output is null.");
+            return InvalidArgument("The picture album comparison output is null.");
         }
         std::shared_ptr<MediaChildResource<PictureAlbum>> nativeLeft;
         std::shared_ptr<MediaChildResource<PictureAlbum>> nativeRight;
@@ -1994,7 +1948,7 @@ CNA_Result cna_picture_album_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2003,7 +1957,7 @@ CNA_Result cna_picture_album_get_hash_code(const CNA_PictureAlbumHandle handle, 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The picture album hash output is null.");
+            return InvalidArgument("The picture album hash output is null.");
         }
         return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -2016,7 +1970,7 @@ CNA_Result cna_picture_album_get_type_name_size(const CNA_PictureAlbumHandle han
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture album type-name byte-count output is null.");
+            return InvalidArgument("The picture album type-name byte-count output is null.");
         }
         return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
             *outBytes = value.GetTypeName().size();
@@ -2042,7 +1996,7 @@ CNA_Result cna_picture_collection_get_count(const CNA_PictureCollectionHandle co
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The collection count output is null.");
+            return InvalidArgument("The collection count output is null.");
         }
         return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -2067,10 +2021,10 @@ CNA_Result cna_picture_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The collection disposal-state output is null.");
+            return InvalidArgument("The collection disposal-state output is null.");
         }
         return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -2102,7 +2056,7 @@ CNA_Result cna_picture_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The collection type-name byte-count output is null.");
+            return InvalidArgument("The collection type-name byte-count output is null.");
         }
         return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -2128,7 +2082,7 @@ CNA_Result cna_picture_album_collection_get_count(const CNA_PictureAlbumCollecti
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The collection count output is null.");
+            return InvalidArgument("The collection count output is null.");
         }
         return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
             *outCount = static_cast<int32_t>(value.getCountProperty());
@@ -2153,10 +2107,10 @@ CNA_Result cna_picture_album_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The collection disposal-state output is null.");
+            return InvalidArgument("The collection disposal-state output is null.");
         }
         return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -2188,7 +2142,7 @@ CNA_Result cna_picture_album_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The collection type-name byte-count output is null.");
+            return InvalidArgument("The collection type-name byte-count output is null.");
         }
         return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
             *outBytes = value.GetTypeName().size();
@@ -2216,7 +2170,7 @@ CNA_Result cna_picture_get_token_size_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture token byte-count output is null.");
+            return InvalidArgument("The picture token byte-count output is null.");
         }
         return Read<Picture>(picture, [&](const Picture& value) {
             *outBytes = value.getTokenEXT().size();
@@ -2258,7 +2212,7 @@ CNA_Result cna_picture_get_date_unix_ticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outUnixTicks == nullptr) {
-            return InvalidInput("The picture date output is null.");
+            return InvalidArgument("The picture date output is null.");
         }
         return Read<Picture>(picture, [&](const Picture& value) {
             // A point in time, not a duration: the ABI's 100-nanosecond tick counted from the Unix
@@ -2278,7 +2232,7 @@ CNA_Result cna_picture_get_width(const CNA_PictureHandle picture, int32_t* const
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr) {
-            return InvalidInput("The picture width output is null.");
+            return InvalidArgument("The picture width output is null.");
         }
         return Read<Picture>(picture, [&](const Picture& value) {
             *outWidth = static_cast<int32_t>(value.getWidthProperty());
@@ -2291,7 +2245,7 @@ CNA_Result cna_picture_get_height(const CNA_PictureHandle picture, int32_t* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHeight == nullptr) {
-            return InvalidInput("The picture height output is null.");
+            return InvalidArgument("The picture height output is null.");
         }
         return Read<Picture>(picture, [&](const Picture& value) {
             *outHeight = static_cast<int32_t>(value.getHeightProperty());
@@ -2304,7 +2258,7 @@ CNA_Result cna_picture_get_image_size(const CNA_PictureHandle picture, uint64_t*
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture image byte-count output is null.");
+            return InvalidArgument("The picture image byte-count output is null.");
         }
         std::shared_ptr<MediaChildResource<Picture>> resource;
         if (const CNA_Result result = Borrow<Picture>(picture, &resource);
@@ -2348,7 +2302,7 @@ CNA_Result cna_picture_get_thumbnail_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The picture thumbnail byte-count output is null.");
+            return InvalidArgument("The picture thumbnail byte-count output is null.");
         }
         std::shared_ptr<MediaChildResource<Picture>> resource;
         if (const CNA_Result result = Borrow<Picture>(picture, &resource);
@@ -2406,7 +2360,7 @@ CNA_Result cna_picture_album_get_albums(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAlbums == nullptr) {
-            return InvalidInput("The picture album collection output is null.");
+            return InvalidArgument("The picture album collection output is null.");
         }
         *outAlbums = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
@@ -2431,7 +2385,7 @@ CNA_Result cna_picture_album_get_pictures(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPictures == nullptr) {
-            return InvalidInput("The picture collection output is null.");
+            return InvalidArgument("The picture collection output is null.");
         }
         *outPictures = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
@@ -2483,7 +2437,7 @@ CNA_Result cna_media_library_get_root_picture_album(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAlbum == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The root picture album output is null.");
+            return InvalidArgument("The root picture album output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -2517,7 +2471,7 @@ CNA_Result cna_media_library_get_picture_from_token(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPicture == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The picture lookup output is null.");
+            return InvalidArgument("The picture lookup output is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -2584,11 +2538,11 @@ CNA_Result cna_media_library_save_picture(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPicture == nullptr) {
-            return InvalidInput("The saved picture output is null.");
+            return InvalidArgument("The saved picture output is null.");
         }
         *outPicture = CNA_INVALID_HANDLE;
         if (imageData == nullptr && imageByteCount != UINT64_C(0)) {
-            return InvalidInput("The image buffer is null.");
+            return InvalidArgument("The image buffer is null.");
         }
         std::shared_ptr<MediaLibraryResource> resource;
         if (const CNA_Result result = BorrowLibraryResource(library, &resource);
@@ -2621,7 +2575,7 @@ CNA_Result cna_media_library_save_picture_from_stream(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPicture == nullptr) {
-            return InvalidInput("The saved picture output is null.");
+            return InvalidArgument("The saved picture output is null.");
         }
         *outPicture = CNA_INVALID_HANDLE;
         std::shared_ptr<MediaLibraryResource> resource;

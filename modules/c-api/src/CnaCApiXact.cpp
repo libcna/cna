@@ -3,6 +3,8 @@
 #include "CNA/C/xact.h"
 #include "CnaCApiAudioDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -25,14 +27,16 @@ namespace {
 
 using CNA::C::Detail::AddOwnedAudioResource;
 using CNA::C::Detail::AudioRegistration;
-using CNA::C::Detail::AudioRegistrationBase;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::RemoveOwnedAudioResource;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
@@ -150,28 +154,6 @@ template<typename TResource>
         outCue);
 }
 
-[[nodiscard]] CNA_Result CopyXactText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return XactInvalidInput("The XACT text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the XACT text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] CNA_Result ToNativeText(
     const CNA_StringView view,
     const char* const message,
@@ -205,11 +187,6 @@ template<typename TResource>
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
-[[nodiscard]] Microsoft::Xna::Framework::Vector3 ToNativeVector(const CNA_Vector3 value) noexcept
-{
-    return Microsoft::Xna::Framework::Vector3{value.x, value.y, value.z};
-}
-
 // The emitter and the listener are values the caller fills in, so every XACT route that positions
 // something validates them exactly the way the sound-effect-instance routes do.
 [[nodiscard]] CNA_Result ToNativePosition(
@@ -229,15 +206,15 @@ template<typename TResource>
         !IsFinite(emitter->velocity)) {
         return XactInvalidInput("The AudioEmitter structure is invalid.");
     }
-    outListener->setForwardProperty(ToNativeVector(listener->forward));
-    outListener->setPositionProperty(ToNativeVector(listener->position));
-    outListener->setUpProperty(ToNativeVector(listener->up));
-    outListener->setVelocityProperty(ToNativeVector(listener->velocity));
+    outListener->setForwardProperty(ToNative(listener->forward));
+    outListener->setPositionProperty(ToNative(listener->position));
+    outListener->setUpProperty(ToNative(listener->up));
+    outListener->setVelocityProperty(ToNative(listener->velocity));
     outEmitter->setDopplerScaleProperty(emitter->doppler_scale);
-    outEmitter->setForwardProperty(ToNativeVector(emitter->forward));
-    outEmitter->setPositionProperty(ToNativeVector(emitter->position));
-    outEmitter->setUpProperty(ToNativeVector(emitter->up));
-    outEmitter->setVelocityProperty(ToNativeVector(emitter->velocity));
+    outEmitter->setForwardProperty(ToNative(emitter->forward));
+    outEmitter->setPositionProperty(ToNative(emitter->position));
+    outEmitter->setUpProperty(ToNative(emitter->up));
+    outEmitter->setVelocityProperty(ToNative(emitter->velocity));
     return CNA_RESULT_SUCCESS;
 }
 
@@ -395,7 +372,7 @@ CNA_Result cna_audio_engine_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = engine->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(engine->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -454,7 +431,7 @@ CNA_Result cna_audio_engine_copy_renderer_friendly_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(detail->getFriendlyNameProperty(), destination, capacity, outBytes);
+        return CopyText(detail->getFriendlyNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -494,7 +471,7 @@ CNA_Result cna_audio_engine_copy_renderer_id(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(detail->getRendererIdProperty(), destination, capacity, outBytes);
+        return CopyText(detail->getRendererIdProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -534,7 +511,7 @@ CNA_Result cna_audio_engine_copy_renderer_text(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(detail->ToString(), destination, capacity, outBytes);
+        return CopyText(detail->ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -583,7 +560,7 @@ CNA_Result cna_audio_engine_renderers_equal(
         }
         // The canonical inequality operator is the negation of this one answer, so both operators
         // and the equality method are the same route here.
-        *outEquals = (*first == *second) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(*first == *second);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -681,7 +658,7 @@ CNA_Result cna_audio_engine_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(engine->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(engine->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -803,7 +780,7 @@ CNA_Result cna_audio_category_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(category->value->getNameProperty(), destination, capacity, outBytes);
+        return CopyText(category->value->getNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -889,7 +866,7 @@ CNA_Result cna_audio_category_equals(
         }
         // Categories compare by name alone, so two categories from two engines can be equal. Both
         // canonical equality operators are this one answer; inequality is its negation.
-        *outEquals = (*category->value == *other->value) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(*category->value == *other->value);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1028,7 +1005,7 @@ CNA_Result cna_wave_bank_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = waveBank->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(waveBank->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1046,7 +1023,7 @@ CNA_Result cna_wave_bank_get_is_prepared(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsPrepared = waveBank->value->getIsPreparedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsPrepared = ToCBool(waveBank->value->getIsPreparedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1064,7 +1041,7 @@ CNA_Result cna_wave_bank_get_is_in_use(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsInUse = waveBank->value->getIsInUseProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsInUse = ToCBool(waveBank->value->getIsInUseProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1099,7 +1076,7 @@ CNA_Result cna_wave_bank_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(waveBank->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(waveBank->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1212,7 +1189,7 @@ CNA_Result cna_sound_bank_get_is_disposed(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDisposed = soundBank->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsDisposed = ToCBool(soundBank->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1230,7 +1207,7 @@ CNA_Result cna_sound_bank_get_is_in_use(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsInUse = soundBank->value->getIsInUseProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsInUse = ToCBool(soundBank->value->getIsInUseProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1350,7 +1327,7 @@ CNA_Result cna_sound_bank_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(soundBank->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(soundBank->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1418,14 +1395,14 @@ CNA_Result cna_cue_get_info(const CNA_Handle cueHandle, CNA_CueInfo* const outIn
         const CNA_CueInfo info = {
             sizeof(CNA_CueInfo),
             StructureVersion,
-            cue->value->getIsCreatedProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsPausedProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsPlayingProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsPreparedProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsPreparingProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsStoppedProperty() ? CNA_TRUE : CNA_FALSE,
-            cue->value->getIsStoppingProperty() ? CNA_TRUE : CNA_FALSE
+            ToCBool(cue->value->getIsCreatedProperty()),
+            ToCBool(cue->value->getIsDisposedProperty()),
+            ToCBool(cue->value->getIsPausedProperty()),
+            ToCBool(cue->value->getIsPlayingProperty()),
+            ToCBool(cue->value->getIsPreparedProperty()),
+            ToCBool(cue->value->getIsPreparingProperty()),
+            ToCBool(cue->value->getIsStoppedProperty()),
+            ToCBool(cue->value->getIsStoppingProperty())
         };
         *outInfo = info;
         return CNA_RESULT_SUCCESS;
@@ -1460,7 +1437,7 @@ CNA_Result cna_cue_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(cue->value->getNameProperty(), destination, capacity, outBytes);
+        return CopyText(cue->value->getNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -1621,7 +1598,7 @@ CNA_Result cna_cue_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyXactText(cue->value->GetTypeName(), destination, capacity, outBytes);
+        return CopyText(cue->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 

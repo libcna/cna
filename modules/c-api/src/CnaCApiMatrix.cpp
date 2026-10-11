@@ -2,6 +2,8 @@
 
 #include "CNA/C/matrix.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -16,35 +18,16 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::StoreOutput;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Plane;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
-
-[[nodiscard]] Matrix ToNative(const CNA_Matrix value)
-{
-    return Matrix(
-        value.m11, value.m12, value.m13, value.m14,
-        value.m21, value.m22, value.m23, value.m24,
-        value.m31, value.m32, value.m33, value.m34,
-        value.m41, value.m42, value.m43, value.m44);
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value)
-{
-    return Vector3(value.x, value.y, value.z);
-}
-
-[[nodiscard]] Quaternion ToNative(const CNA_Quaternion value)
-{
-    return Quaternion(value.x, value.y, value.z, value.w);
-}
-
-[[nodiscard]] Plane ToNative(const CNA_Plane value)
-{
-    return Plane(ToNative(value.normal), value.d);
-}
 
 [[nodiscard]] std::optional<Vector3> ToNativeOptional(const CNA_Vector3* const value)
 {
@@ -52,44 +35,6 @@ using Microsoft::Xna::Framework::Vector3;
         return std::nullopt;
     }
     return ToNative(*value);
-}
-
-[[nodiscard]] CNA_Matrix ToC(const Matrix value) noexcept
-{
-    return CNA_Matrix{
-        value.M11, value.M12, value.M13, value.M14,
-        value.M21, value.M22, value.M23, value.M24,
-        value.M31, value.M32, value.M33, value.M34,
-        value.M41, value.M42, value.M43, value.M44};
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3 value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Quaternion ToC(const Quaternion value) noexcept
-{
-    return CNA_Quaternion{value.X, value.Y, value.Z, value.W};
-}
-
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreOutput(
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
-        }
-        const TValue result = std::forward<TCallable>(callable)();
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 template<typename TCallable>
@@ -107,35 +52,6 @@ template<typename TCallable>
         Matrix native = ToNative(*value);
         std::forward<TCallable>(callable)(native);
         *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyFormattedString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string destination or required-byte output is invalid.");
-        }
-        const std::string text = std::forward<TCallable>(callable)();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete formatted value.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -320,7 +236,7 @@ CNA_Result cna_matrix_decompose(
         *outScale = ToC(scale);
         *outRotation = ToC(rotation);
         *outTranslation = ToC(translation);
-        *outDecomposed = decomposed ? CNA_TRUE : CNA_FALSE;
+        *outDecomposed = ToCBool(decomposed);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -340,7 +256,7 @@ CNA_Result cna_matrix_equals(
     CNA_Bool* const outEqual)
 {
     return StoreOutput(outEqual, "The Boolean output is null.", [=] {
-        return ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(ToNative(left).Equals(ToNative(right)));
     });
 }
 
@@ -350,7 +266,7 @@ CNA_Result cna_matrix_not_equals(
     CNA_Bool* const outNotEqual)
 {
     return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
-        return ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(ToNative(left) != ToNative(right));
     });
 }
 
@@ -378,7 +294,7 @@ CNA_Result cna_matrix_copy_string(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CopyFormattedString(destination, capacity, outBytes, [=] {
+    return CopyFormattedText(destination, capacity, outBytes, [=] {
         return ToNative(value).ToString();
     });
 }

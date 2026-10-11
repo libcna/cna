@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/C/graphics_ext.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/DebugDraw.hpp"
@@ -15,6 +16,9 @@
 #include <utility>
 #include <vector>
 namespace {
+
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 namespace Ext = CNA::Graphics;
 using namespace CNA::C::Detail;
 using Microsoft::Xna::Framework::BoundingBox;
@@ -53,11 +57,6 @@ CNA_Result WithMap(CNA_Handle h, ObjectKind k, const char *name, F &&body) {
 }
 #define CNA_WITH_DEBUG(handle, body)                                           \
   WithMap<DebugDrawResource>(handle, ObjectKind::DebugDraw, "DebugDraw", body)
-Vector3 ToNativeVector3(CNA_Vector3 v) { return {v.x, v.y, v.z}; }
-Matrix ToNativeMatrix(CNA_Matrix v) {
-  return Matrix(v.m11, v.m12, v.m13, v.m14, v.m21, v.m22, v.m23, v.m24, v.m31,
-                v.m32, v.m33, v.m34, v.m41, v.m42, v.m43, v.m44);
-}
 CNA_Vector3 Vec3(float x, float y, float z) { return {x, y, z}; }
 Microsoft::Xna::Framework::Color ToNativeColour(CNA_Color v) {
   return {v.r, v.g, v.b, v.a};
@@ -71,7 +70,7 @@ CNA_Result ToNativeBounds(const CNA_BoundingBox *in, BoundingBox *out) {
   if (!in)
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
                 "Box is null.");
-  *out = BoundingBox(ToNativeVector3(in->min), ToNativeVector3(in->max));
+  *out = BoundingBox(ToNative(in->min), ToNative(in->max));
   return CNA_RESULT_SUCCESS;
 }
 template <class T>
@@ -143,7 +142,7 @@ CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
           return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
                       "A matrix is null.");
         }
-        d->value->begin(ToNativeMatrix(*view), ToNativeMatrix(*projection));
+        d->value->begin(ToNative(*view), ToNative(*projection));
         return CNA_RESULT_SUCCESS;
       });
 }
@@ -174,7 +173,7 @@ CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
           return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
                       "An endpoint is null.");
         }
-        d->value->addLine(ToNativeVector3(*from), ToNativeVector3(*to),
+        d->value->addLine(ToNative(*from), ToNative(*to),
                           ToNativeColour(colour));
         return CNA_RESULT_SUCCESS;
       });
@@ -208,7 +207,7 @@ CNA_Result cna_debug_draw_add_sphere(const CNA_DebugDrawHandle debug,
         }
         // Clamped by the canonical body, not refused here: a debug shape drawn
         // with too few or absurdly many segments is still a debug shape.
-        d->value->addSphere(ToNativeVector3(*centre), radius,
+        d->value->addSphere(ToNative(*centre), radius,
                             ToNativeColour(colour), static_cast<int>(segments));
         return CNA_RESULT_SUCCESS;
       });
@@ -223,7 +222,7 @@ CNA_Result cna_debug_draw_add_bounding_sphere(
           return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
                       "The sphere is null.");
         }
-        const BoundingSphere native(ToNativeVector3(sphere->center),
+        const BoundingSphere native(ToNative(sphere->center),
                                     sphere->radius);
         d->value->addSphere(native, ToNativeColour(colour),
                             static_cast<int>(segments));
@@ -237,7 +236,7 @@ CNA_Result cna_debug_draw_add_frustum(const CNA_DebugDrawHandle debug,
   return CNA_WITH_DEBUG(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         d->value->addFrustum(Microsoft::Xna::Framework::BoundingFrustum(
-                                 ToNativeMatrix(frustum.matrix)),
+                                 ToNative(frustum.matrix)),
                              ToNativeColour(colour));
         return CNA_RESULT_SUCCESS;
       });
@@ -253,7 +252,7 @@ CNA_Result cna_debug_draw_add_cross(const CNA_DebugDrawHandle debug,
             result != CNA_RESULT_SUCCESS) {
           return result;
         }
-        d->value->addCross(ToNativeVector3(*position), size,
+        d->value->addCross(ToNative(*position), size,
                            ToNativeColour(colour));
         return CNA_RESULT_SUCCESS;
       });
@@ -264,9 +263,7 @@ CNA_Result cna_debug_draw_is_depth_tested(const CNA_DebugDrawHandle debug,
   return CNA_WITH_DEBUG(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         return StoreValue(outDepthTested,
-                          static_cast<CNA_Bool>(d->value->isDepthTested()
-                                                    ? CNA_TRUE
-                                                    : CNA_FALSE));
+                          static_cast<CNA_Bool>(ToCBool(d->value->isDepthTested())));
       });
 }
 

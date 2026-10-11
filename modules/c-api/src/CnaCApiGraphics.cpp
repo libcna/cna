@@ -42,23 +42,23 @@
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetOwnedSpriteFont;
-using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNativeBlendState;
 using CNA::C::Detail::ToNativeDepthStencilState;
 using CNA::C::Detail::ToNativeRasterizerState;
@@ -424,17 +424,7 @@ static_assert(
     const CNA_Handle handle,
     std::shared_ptr<SpriteBatchResource>* const outSpriteBatch)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::SpriteBatch,
-        outSpriteBatch);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned SpriteBatch handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SpriteBatch, outSpriteBatch);
 }
 
 void ReleaseBatchTextureReferences(SpriteBatchResource& spriteBatch) noexcept
@@ -747,9 +737,7 @@ CNA_Result cna_graphics_device_supports_capability(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outSupported = graphicsDevice->value->SupportsCapability(nativeCapability)
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outSupported = ToCBool(graphicsDevice->value->SupportsCapability(nativeCapability));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -804,7 +792,7 @@ CNA_Result cna_graphics_device_get_renderer_limit_ext(
         }
         const CNA::RendererLimitValue value =
             graphicsDevice->value->GetRendererLimitEXT(nativeLimit);
-        *outKnown = value.known ? CNA_TRUE : CNA_FALSE;
+        *outKnown = ToCBool(value.known);
         *outValue = value.known ? value.value : UINT64_C(0);
         return CNA_RESULT_SUCCESS;
     });
@@ -1534,13 +1522,9 @@ CNA_Result cna_sprite_batch_begin_with_effect(
         Microsoft::Xna::Framework::Graphics::Effect* nativeEffect = nullptr;
         std::shared_ptr<EffectResource> effect;
         if (effectHandle != CNA_INVALID_HANDLE) {
-            const CNA_Result effectResult =
-                GetRuntimeHandles().Get(effectHandle, ObjectKind::Effect, &effect);
+            const CNA_Result effectResult = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
             if (effectResult != CNA_RESULT_SUCCESS) {
-                return Fail(
-                    effectResult,
-                    ErrorCategoryForResult(effectResult),
-                    "The Effect handle is invalid for this call.");
+                return effectResult;
             }
             if (effect->parentGame != spriteBatch->parentGame) {
                 return Fail(

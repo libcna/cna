@@ -4,6 +4,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
@@ -31,7 +32,12 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -64,73 +70,25 @@ struct AvatarRendererResource final {
     std::shared_ptr<AvatarDescriptionResource> description;
 };
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 [[nodiscard]] CNA_Result BorrowDescription(
     const CNA_Handle handle,
     std::shared_ptr<AvatarDescriptionResource>* const outDescription)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::AvatarDescription, outDescription);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvatarDescription handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::AvatarDescription, outDescription);
 }
 
 [[nodiscard]] CNA_Result BorrowAnimation(
     const CNA_Handle handle,
     std::shared_ptr<AvatarAnimationResource>* const outAnimation)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::AvatarAnimation, outAnimation);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvatarAnimation handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::AvatarAnimation, outAnimation);
 }
 
 [[nodiscard]] CNA_Result BorrowRenderer(
     const CNA_Handle handle,
     std::shared_ptr<AvatarRendererResource>* const outRenderer)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::AvatarRenderer, outRenderer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvatarRenderer handle is invalid for this call.");
-}
-
-[[nodiscard]] CNA_Matrix ToC(const Matrix& value) noexcept
-{
-    CNA_Matrix out;
-    out.m11 = value.M11; out.m12 = value.M12; out.m13 = value.M13; out.m14 = value.M14;
-    out.m21 = value.M21; out.m22 = value.M22; out.m23 = value.M23; out.m24 = value.M24;
-    out.m31 = value.M31; out.m32 = value.M32; out.m33 = value.M33; out.m34 = value.M34;
-    out.m41 = value.M41; out.m42 = value.M42; out.m43 = value.M43; out.m44 = value.M44;
-    return out;
-}
-
-[[nodiscard]] Matrix ToNative(const CNA_Matrix& value) noexcept
-{
-    return Matrix(
-        value.m11, value.m12, value.m13, value.m14,
-        value.m21, value.m22, value.m23, value.m24,
-        value.m31, value.m32, value.m33, value.m34,
-        value.m41, value.m42, value.m43, value.m44);
+    return LookupHandle(handle, ObjectKind::AvatarRenderer, outRenderer);
 }
 
 [[nodiscard]] bool IsFinite(const CNA_Vector3 value) noexcept
@@ -158,14 +116,14 @@ struct AvatarRendererResource final {
 {
     if (expression == nullptr || expression->struct_size < sizeof(CNA_AvatarExpression) ||
         expression->struct_version != StructureVersion) {
-        return InvalidInput("The AvatarExpression structure is invalid.");
+        return InvalidArgument("The AvatarExpression structure is invalid.");
     }
     if (expression->mouth > CNA_AVATAR_MOUTH_MAXIMUM ||
         expression->left_eye > CNA_AVATAR_EYE_MAXIMUM ||
         expression->right_eye > CNA_AVATAR_EYE_MAXIMUM ||
         expression->left_eyebrow > CNA_AVATAR_EYEBROW_MAXIMUM ||
         expression->right_eyebrow > CNA_AVATAR_EYEBROW_MAXIMUM) {
-        return InvalidInput("The AvatarExpression holds an undefined identity.");
+        return InvalidArgument("The AvatarExpression holds an undefined identity.");
     }
     outExpression->setMouthProperty(static_cast<AvatarMouth>(expression->mouth));
     outExpression->setLeftEyeProperty(static_cast<AvatarEye>(expression->left_eye));
@@ -198,7 +156,7 @@ CNA_Result cna_avatar_expression_init(CNA_AvatarExpression* const outExpression)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outExpression == nullptr) {
-            return InvalidInput("The AvatarExpression output is null.");
+            return InvalidArgument("The AvatarExpression output is null.");
         }
         *outExpression = ToC(AvatarExpression{});
         return CNA_RESULT_SUCCESS;
@@ -212,11 +170,11 @@ CNA_Result cna_avatar_description_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDescription == nullptr) {
-            return InvalidInput("The AvatarDescription output handle is null.");
+            return InvalidArgument("The AvatarDescription output handle is null.");
         }
         *outDescription = CNA_INVALID_HANDLE;
         if (description == nullptr && byteCount != UINT64_C(0)) {
-            return InvalidInput("The description byte array is null.");
+            return InvalidArgument("The description byte array is null.");
         }
         const std::vector<SharpRuntime::bytecs> bytes(
             description,
@@ -229,7 +187,7 @@ CNA_Result cna_avatar_description_create_random(CNA_AvatarDescriptionHandle* con
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDescription == nullptr) {
-            return InvalidInput("The AvatarDescription output handle is null.");
+            return InvalidArgument("The AvatarDescription output handle is null.");
         }
         *outDescription = CNA_INVALID_HANDLE;
         return PublishDescription(AvatarDescription::CreateRandom(), outDescription);
@@ -242,11 +200,11 @@ CNA_Result cna_avatar_description_create_random_for_body_type(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDescription == nullptr) {
-            return InvalidInput("The AvatarDescription output handle is null.");
+            return InvalidArgument("The AvatarDescription output handle is null.");
         }
         *outDescription = CNA_INVALID_HANDLE;
         if (bodyType > CNA_AVATAR_BODY_TYPE_MAXIMUM) {
-            return InvalidInput("The avatar body type is not a defined identity.");
+            return InvalidArgument("The avatar body type is not a defined identity.");
         }
         return PublishDescription(
             AvatarDescription::CreateRandom(static_cast<AvatarBodyType>(bodyType)),
@@ -262,7 +220,7 @@ CNA_Result cna_avatar_description_get_from_gamer(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDescription == nullptr) {
-            return InvalidInput("The AvatarDescription output handle is null.");
+            return InvalidArgument("The AvatarDescription output handle is null.");
         }
         *outDescription = CNA_INVALID_HANDLE;
         Gamer* gamer = nullptr;
@@ -312,7 +270,7 @@ CNA_Result cna_avatar_description_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarDescriptionInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The AvatarDescription info output structure is invalid.");
+            return InvalidArgument("The AvatarDescription info output structure is invalid.");
         }
         std::shared_ptr<AvatarDescriptionResource> description;
         if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
@@ -325,7 +283,7 @@ CNA_Result cna_avatar_description_get_info(
             static_cast<CNA_AvatarBodyType>(description->value->getBodyTypeProperty()),
             description->value->getHeightProperty(),
             static_cast<uint64_t>(description->value->getDescriptionProperty().size()),
-            description->value->getIsValidProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(description->value->getIsValidProperty()),
             {0U, 0U, 0U, 0U, 0U, 0U, 0U}
         };
         *outInfo = info;
@@ -341,7 +299,7 @@ CNA_Result cna_avatar_description_copy_description(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The description output buffer is invalid.");
+            return InvalidArgument("The description output buffer is invalid.");
         }
         std::shared_ptr<AvatarDescriptionResource> description;
         if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
@@ -371,11 +329,11 @@ CNA_Result cna_avatar_description_subscribe_changed_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The registration output is null.");
+            return InvalidArgument("The registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The avatar event callback is null.");
+            return InvalidArgument("The avatar event callback is null.");
         }
         // AvatarDescription.Changed is an instance event, so the subscription names one
         // description rather than a process-wide source.
@@ -410,11 +368,11 @@ CNA_Result cna_avatar_animation_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAnimation == nullptr) {
-            return InvalidInput("The AvatarAnimation output handle is null.");
+            return InvalidArgument("The AvatarAnimation output handle is null.");
         }
         *outAnimation = CNA_INVALID_HANDLE;
         if (preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM) {
-            return InvalidInput("The avatar animation preset is not a defined identity.");
+            return InvalidArgument("The avatar animation preset is not a defined identity.");
         }
         const auto resource = std::make_shared<AvatarAnimationResource>();
         resource->value =
@@ -458,7 +416,7 @@ CNA_Result cna_avatar_animation_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarAnimationInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The AvatarAnimation info output structure is invalid.");
+            return InvalidArgument("The AvatarAnimation info output structure is invalid.");
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -469,7 +427,7 @@ CNA_Result cna_avatar_animation_get_info(
             sizeof(CNA_AvatarAnimationInfo),
             StructureVersion,
             static_cast<int32_t>(animation->value->getBoneTransformsProperty().getCountProperty()),
-            animation->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(animation->value->getIsDisposedProperty()),
             {0U, 0U, 0U},
             static_cast<int64_t>(animation->value->getCurrentPositionProperty().getTicksProperty()),
             static_cast<int64_t>(animation->value->getLengthProperty().getTicksProperty())
@@ -502,7 +460,7 @@ CNA_Result cna_avatar_animation_get_expression(
         if (outExpression == nullptr ||
             outExpression->struct_size < sizeof(CNA_AvatarExpression) ||
             outExpression->struct_version != StructureVersion) {
-            return InvalidInput("The AvatarExpression output structure is invalid.");
+            return InvalidArgument("The AvatarExpression output structure is invalid.");
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -521,7 +479,7 @@ CNA_Result cna_avatar_animation_update(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (loop != CNA_FALSE && loop != CNA_TRUE) {
-            return InvalidInput("The animation loop flag is invalid.");
+            return InvalidArgument("The animation loop flag is invalid.");
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -540,7 +498,7 @@ CNA_Result cna_avatar_animation_get_bone_transform_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTransform == nullptr) {
-            return InvalidInput("The bone transform output is null.");
+            return InvalidArgument("The bone transform output is null.");
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -549,7 +507,7 @@ CNA_Result cna_avatar_animation_get_bone_transform_at(
         }
         const auto transforms = animation->value->getBoneTransformsProperty();
         if (index < 0 || index >= transforms.getCountProperty()) {
-            return InvalidInput("The bone index is outside the animation's skeleton.");
+            return InvalidArgument("The bone index is outside the animation's skeleton.");
         }
         *outTransform = ToC(transforms[static_cast<int>(index)]);
         return CNA_RESULT_SUCCESS;
@@ -563,11 +521,11 @@ CNA_Result cna_avatar_renderer_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRenderer == nullptr) {
-            return InvalidInput("The AvatarRenderer output handle is null.");
+            return InvalidArgument("The AvatarRenderer output handle is null.");
         }
         *outRenderer = CNA_INVALID_HANDLE;
         if (useLoadingEffect != CNA_FALSE && useLoadingEffect != CNA_TRUE) {
-            return InvalidInput("The loading-effect flag is invalid.");
+            return InvalidArgument("The loading-effect flag is invalid.");
         }
         std::shared_ptr<AvatarDescriptionResource> description;
         if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
@@ -618,7 +576,7 @@ CNA_Result cna_avatar_renderer_get_info(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarRendererInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return InvalidInput("The AvatarRenderer info output structure is invalid.");
+            return InvalidArgument("The AvatarRenderer info output structure is invalid.");
         }
         std::shared_ptr<AvatarRendererResource> renderer;
         if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
@@ -629,7 +587,7 @@ CNA_Result cna_avatar_renderer_get_info(
             sizeof(CNA_AvatarRendererInfo),
             StructureVersion,
             static_cast<CNA_AvatarRendererState>(renderer->value->getStateProperty()),
-            renderer->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(renderer->value->getIsDisposedProperty()),
             {0U, 0U, 0U}
         };
         *outInfo = info;
@@ -725,7 +683,7 @@ CNA_Result cna_avatar_renderer_set_lighting(
         if ((lightColor != nullptr && !IsFinite(*lightColor)) ||
             (lightDirection != nullptr && !IsFinite(*lightDirection)) ||
             (ambientLightColor != nullptr && !IsFinite(*ambientLightColor))) {
-            return InvalidInput("The lighting vectors must be finite.");
+            return InvalidArgument("The lighting vectors must be finite.");
         }
         std::shared_ptr<AvatarRendererResource> renderer;
         if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
@@ -755,7 +713,7 @@ CNA_Result cna_avatar_renderer_get_parent_bone_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outParentIndex == nullptr) {
-            return InvalidInput("The parent-bone output is null.");
+            return InvalidArgument("The parent-bone output is null.");
         }
         std::shared_ptr<AvatarRendererResource> renderer;
         if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
@@ -764,7 +722,7 @@ CNA_Result cna_avatar_renderer_get_parent_bone_at(
         }
         const auto parents = renderer->value->getParentBonesProperty();
         if (index < 0 || index >= parents.getCountProperty()) {
-            return InvalidInput("The bone index is outside the avatar skeleton.");
+            return InvalidArgument("The bone index is outside the avatar skeleton.");
         }
         *outParentIndex = static_cast<int32_t>(parents[static_cast<int>(index)]);
         return CNA_RESULT_SUCCESS;
@@ -778,7 +736,7 @@ CNA_Result cna_avatar_renderer_get_bind_pose_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTransform == nullptr) {
-            return InvalidInput("The bind-pose output is null.");
+            return InvalidArgument("The bind-pose output is null.");
         }
         std::shared_ptr<AvatarRendererResource> renderer;
         if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
@@ -787,7 +745,7 @@ CNA_Result cna_avatar_renderer_get_bind_pose_at(
         }
         const auto bindPose = renderer->value->getBindPoseProperty();
         if (index < 0 || index >= bindPose.getCountProperty()) {
-            return InvalidInput("The bone index is outside the avatar skeleton.");
+            return InvalidArgument("The bone index is outside the avatar skeleton.");
         }
         *outTransform = ToC(bindPose[static_cast<int>(index)]);
         return CNA_RESULT_SUCCESS;
@@ -824,7 +782,7 @@ CNA_Result cna_avatar_renderer_draw_bones(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (bones == nullptr && boneCount != UINT64_C(0)) {
-            return InvalidInput("The bone array is null.");
+            return InvalidArgument("The bone array is null.");
         }
         AvatarExpression nativeExpression;
         if (const CNA_Result result = ToNativeExpression(expression, &nativeExpression);

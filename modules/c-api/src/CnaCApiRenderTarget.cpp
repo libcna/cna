@@ -25,9 +25,7 @@
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
@@ -37,10 +35,14 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -53,11 +55,6 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
 std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> activeBindings;
-
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
 
 [[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
 {
@@ -77,11 +74,6 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 [[nodiscard]] bool IsCubeFace(const CNA_CubeMapFace value) noexcept
 {
     return value <= CNA_CUBE_MAP_FACE_NEGATIVE_Z;
-}
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
 }
 
 [[nodiscard]] CNA_Result GetRenderTarget2D(
@@ -106,15 +98,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
     const CNA_Handle handle,
     std::shared_ptr<RenderTargetCubeResource>* const outTarget)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::RenderTargetCube, outTarget);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned RenderTargetCube handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::RenderTargetCube, outTarget);
 }
 
 [[nodiscard]] CNA_Result CreateRenderTargetCubeHandle(
@@ -350,8 +334,8 @@ CNA_Result cna_render_target_usage_preserves_contents(
         if (outPreserves == nullptr || !IsUsage(usage)) {
             return InvalidArgument("The render-target usage query is invalid.");
         }
-        *outPreserves = RenderTargetUsagePreservesContentsEXT(
-            static_cast<RenderTargetUsage>(usage)) ? CNA_TRUE : CNA_FALSE;
+        *outPreserves = ToCBool(RenderTargetUsagePreservesContentsEXT(
+            static_cast<RenderTargetUsage>(usage)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -372,7 +356,7 @@ CNA_Result cna_render_target2d_create(
             createInfo->height == 0U ||
             createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-            !IsBool(createInfo->mip_map) || createInfo->reserved0[0] != 0U ||
+            !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved0[0] != 0U ||
             createInfo->reserved0[1] != 0U || createInfo->reserved0[2] != 0U ||
             !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
             createInfo->multi_sample_count < 0 || !IsUsage(createInfo->usage) ||
@@ -416,7 +400,7 @@ CNA_Result cna_render_target_cube_create(
             createInfo->struct_size < sizeof(CNA_RenderTargetCubeCreateInfo) ||
             createInfo->struct_version != StructureVersion || createInfo->size == 0U ||
             createInfo->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-            !IsBool(createInfo->mip_map) || createInfo->reserved[0] != 0U ||
+            !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
             !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
             createInfo->multi_sample_count < 0 || !IsUsage(createInfo->usage)) {
@@ -480,9 +464,8 @@ CNA_Result cna_render_target_get_info(
                 .multi_sample_count = target->getMultiSampleCountProperty(),
                 .usage = static_cast<CNA_RenderTargetUsage>(
                     target->getRenderTargetUsageProperty()),
-                .is_content_lost = target->getIsContentLostProperty() ? CNA_TRUE : CNA_FALSE,
-                .renderer_available = target->GetRenderTargetRenderer() != nullptr
-                    ? CNA_TRUE : CNA_FALSE,
+                .is_content_lost = ToCBool(target->getIsContentLostProperty()),
+                .renderer_available = ToCBool(target->GetRenderTargetRenderer() != nullptr),
                 .reserved = {0U, 0U}};
             return CNA_RESULT_SUCCESS;
         }
@@ -506,9 +489,8 @@ CNA_Result cna_render_target_get_info(
                 .multi_sample_count = target.getMultiSampleCountProperty(),
                 .usage = static_cast<CNA_RenderTargetUsage>(
                     target.getRenderTargetUsageProperty()),
-                .is_content_lost = target.getIsContentLostProperty() ? CNA_TRUE : CNA_FALSE,
-                .renderer_available = target.GetRenderTargetCubeRenderer() != nullptr
-                    ? CNA_TRUE : CNA_FALSE,
+                .is_content_lost = ToCBool(target.getIsContentLostProperty()),
+                .renderer_available = ToCBool(target.GetRenderTargetCubeRenderer() != nullptr),
                 .reserved = {0U, 0U}};
             return CNA_RESULT_SUCCESS;
         }
@@ -772,13 +754,9 @@ CNA_Result cna_render_target_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<RenderTargetContentLostRegistration> registration;
-        const CNA_Result getResult = GetRuntimeHandles().Get(
-            registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                ErrorCategoryForResult(getResult),
-                "The ContentLost registration handle is invalid.");
+            return getResult;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);

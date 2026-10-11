@@ -2,6 +2,8 @@
 
 #include "CNA/C/packed_vectors.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
@@ -30,18 +32,12 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::StoreOutput;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Vector4;
 using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
-
-[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value) noexcept
-{
-    return Vector4(value.x, value.y, value.z, value.w);
-}
-
-[[nodiscard]] CNA_Vector4 ToC(const Vector4& value) noexcept
-{
-    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
-}
 
 [[nodiscard]] bool IsValidFormat(const CNA_PackedVectorFormat format) noexcept
 {
@@ -267,25 +263,6 @@ template<typename TPackedVector>
     return CNA_RESULT_SUCCESS;
 }
 
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreOutput(
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
-        }
-        const TValue result = std::forward<TCallable>(callable)();
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 } // namespace
 
 CNA_Result cna_packed_vector_pack(
@@ -367,8 +344,7 @@ CNA_Result cna_packed_vector_equals(
         if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool equal = CompareForFormat(format, left, right, false) ?
-            CNA_TRUE : CNA_FALSE;
+        const CNA_Bool equal = ToCBool(CompareForFormat(format, left, right, false));
         *outEqual = equal;
         return CNA_RESULT_SUCCESS;
     });
@@ -399,8 +375,7 @@ CNA_Result cna_packed_vector_not_equals(
         if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool notEqual = CompareForFormat(format, left, right, true) ?
-            CNA_TRUE : CNA_FALSE;
+        const CNA_Bool notEqual = ToCBool(CompareForFormat(format, left, right, true));
         *outNotEqual = notEqual;
         return CNA_RESULT_SUCCESS;
     });

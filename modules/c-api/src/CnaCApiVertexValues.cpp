@@ -2,6 +2,8 @@
 
 #include "CNA/C/vertex_values.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -21,7 +23,11 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
@@ -37,175 +43,6 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTangentTextureSki
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTextureSkinned;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
-
-[[nodiscard]] Vector2 ToNative(const CNA_Vector2 value) noexcept
-{
-    return Vector2(value.x, value.y);
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value) noexcept
-{
-    return Vector3(value.x, value.y, value.z);
-}
-
-[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value) noexcept
-{
-    return Vector4(value.x, value.y, value.z, value.w);
-}
-
-[[nodiscard]] Color ToNative(const CNA_Color value)
-{
-    return Color(value.r, value.g, value.b, value.a);
-}
-
-[[nodiscard]] CNA_Vector2 ToC(const Vector2& value) noexcept
-{
-    return CNA_Vector2{value.X, value.Y};
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3& value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Vector4 ToC(const Vector4& value) noexcept
-{
-    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
-}
-
-[[nodiscard]] CNA_Color ToC(const Color& value) noexcept
-{
-    return CNA_Color{
-        value.getRProperty(),
-        value.getGProperty(),
-        value.getBProperty(),
-        value.getAProperty()};
-}
-
-[[nodiscard]] VertexPositionColor ToNative(const CNA_VertexPositionColor& value)
-{
-    return VertexPositionColor(ToNative(value.position), ToNative(value.color));
-}
-
-[[nodiscard]] VertexPositionColorTexture ToNative(
-    const CNA_VertexPositionColorTexture& value)
-{
-    return VertexPositionColorTexture(
-        ToNative(value.position),
-        ToNative(value.color),
-        ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] VertexPositionNormalTangentTexture ToNative(
-    const CNA_VertexPositionNormalTangentTexture& value)
-{
-    return VertexPositionNormalTangentTexture(
-        ToNative(value.position),
-        ToNative(value.normal),
-        ToNative(value.tangent),
-        ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] VertexPositionNormalTangentTextureSkinned ToNative(
-    const CNA_VertexPositionNormalTangentTextureSkinned& value)
-{
-    return VertexPositionNormalTangentTextureSkinned(
-        ToNative(value.position),
-        ToNative(value.normal),
-        ToNative(value.tangent),
-        ToNative(value.texture_coordinate),
-        ToNative(value.blend_weight),
-        std::array<uint8_t, 4>{
-            value.blend_indices[0],
-            value.blend_indices[1],
-            value.blend_indices[2],
-            value.blend_indices[3]});
-}
-
-[[nodiscard]] VertexPositionNormalTexture ToNative(
-    const CNA_VertexPositionNormalTexture& value)
-{
-    return VertexPositionNormalTexture(
-        ToNative(value.position),
-        ToNative(value.normal),
-        ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] VertexPositionNormalTextureSkinned ToNative(
-    const CNA_VertexPositionNormalTextureSkinned& value)
-{
-    return VertexPositionNormalTextureSkinned(
-        ToNative(value.position),
-        ToNative(value.normal),
-        ToNative(value.texture_coordinate),
-        ToNative(value.blend_weight),
-        std::array<uint8_t, 4>{
-            value.blend_indices[0],
-            value.blend_indices[1],
-            value.blend_indices[2],
-            value.blend_indices[3]});
-}
-
-[[nodiscard]] VertexPositionTexture ToNative(const CNA_VertexPositionTexture& value)
-{
-    return VertexPositionTexture(ToNative(value.position), ToNative(value.texture_coordinate));
-}
-
-[[nodiscard]] CNA_VertexPositionColor ToC(const VertexPositionColor& value) noexcept
-{
-    return CNA_VertexPositionColor{ToC(value.Position), ToC(value.Color)};
-}
-
-[[nodiscard]] CNA_VertexPositionColorTexture ToC(
-    const VertexPositionColorTexture& value) noexcept
-{
-    return CNA_VertexPositionColorTexture{
-        ToC(value.Position), ToC(value.Color), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTangentTexture ToC(
-    const VertexPositionNormalTangentTexture& value) noexcept
-{
-    return CNA_VertexPositionNormalTangentTexture{
-        ToC(value.Position), ToC(value.Normal), ToC(value.Tangent), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTangentTextureSkinned ToC(
-    const VertexPositionNormalTangentTextureSkinned& value) noexcept
-{
-    return CNA_VertexPositionNormalTangentTextureSkinned{
-        ToC(value.Position),
-        ToC(value.Normal),
-        ToC(value.Tangent),
-        ToC(value.TextureCoordinate),
-        ToC(value.BlendWeight),
-        {value.BlendIndices[0], value.BlendIndices[1],
-         value.BlendIndices[2], value.BlendIndices[3]}};
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTexture ToC(
-    const VertexPositionNormalTexture& value) noexcept
-{
-    return CNA_VertexPositionNormalTexture{
-        ToC(value.Position), ToC(value.Normal), ToC(value.TextureCoordinate)};
-}
-
-[[nodiscard]] CNA_VertexPositionNormalTextureSkinned ToC(
-    const VertexPositionNormalTextureSkinned& value) noexcept
-{
-    return CNA_VertexPositionNormalTextureSkinned{
-        ToC(value.Position),
-        ToC(value.Normal),
-        ToC(value.TextureCoordinate),
-        ToC(value.BlendWeight),
-        {value.BlendIndices[0], value.BlendIndices[1],
-         value.BlendIndices[2], value.BlendIndices[3]}};
-}
-
-[[nodiscard]] CNA_VertexPositionTexture ToC(const VertexPositionTexture& value) noexcept
-{
-    return CNA_VertexPositionTexture{ToC(value.Position), ToC(value.TextureCoordinate)};
-}
 
 [[nodiscard]] bool IsValidVertexType(const CNA_VertexType type) noexcept
 {
@@ -402,50 +239,12 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
     return true;
 }
 
-[[nodiscard]] CNA_VertexElement ToC(const VertexElement& value) noexcept
-{
-    return CNA_VertexElement{
-        value.getOffsetProperty(),
-        static_cast<CNA_VertexElementFormat>(value.getVertexElementFormatProperty()),
-        static_cast<CNA_VertexElementUsage>(value.getVertexElementUsageProperty()),
-        value.getUsageIndexProperty()};
-}
-
 [[nodiscard]] CNA_Result InvalidVertexElement() noexcept
 {
     return Fail(
         CNA_RESULT_INVALID_ARGUMENT,
         CNA_ERROR_CATEGORY_ARGUMENT,
         "A vertex element contains an invalid format or usage identity.");
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyFormattedString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string output buffer is invalid.");
-        }
-        const std::string text = std::forward<TCallable>(callable)();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete formatted value.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 } // namespace
@@ -486,8 +285,7 @@ CNA_Result cna_vertex_value_equals(
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool equal = CompareVertexValues(type, *left, *right, false) ?
-            CNA_TRUE : CNA_FALSE;
+        const CNA_Bool equal = ToCBool(CompareVertexValues(type, *left, *right, false));
         *outEqual = equal;
         return CNA_RESULT_SUCCESS;
     });
@@ -509,8 +307,7 @@ CNA_Result cna_vertex_value_not_equals(
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Bool notEqual = CompareVertexValues(type, *left, *right, true) ?
-            CNA_TRUE : CNA_FALSE;
+        const CNA_Bool notEqual = ToCBool(CompareVertexValues(type, *left, *right, true));
         *outNotEqual = notEqual;
         return CNA_RESULT_SUCCESS;
     });
@@ -574,7 +371,7 @@ CNA_Result cna_vertex_value_copy_string(
     if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    return CopyFormattedString(destination, capacity, outByteCount, [=] {
+    return CopyFormattedText(destination, capacity, outByteCount, [=] {
         return VertexString(type, *value);
     });
 }
@@ -654,7 +451,7 @@ CNA_Result cna_vertex_element_equals(
         if (!TryToNative(left, &nativeLeft) || !TryToNative(right, &nativeRight)) {
             return InvalidVertexElement();
         }
-        const CNA_Bool equal = nativeLeft == nativeRight ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool equal = ToCBool(nativeLeft == nativeRight);
         *outEqual = equal;
         return CNA_RESULT_SUCCESS;
     });
@@ -677,7 +474,7 @@ CNA_Result cna_vertex_element_not_equals(
         if (!TryToNative(left, &nativeLeft) || !TryToNative(right, &nativeRight)) {
             return InvalidVertexElement();
         }
-        const CNA_Bool notEqual = nativeLeft != nativeRight ? CNA_TRUE : CNA_FALSE;
+        const CNA_Bool notEqual = ToCBool(nativeLeft != nativeRight);
         *outNotEqual = notEqual;
         return CNA_RESULT_SUCCESS;
     });
@@ -735,7 +532,7 @@ CNA_Result cna_vertex_element_copy_string(
     if (!TryToNative(value, &native)) {
         return InvalidVertexElement();
     }
-    return CopyFormattedString(destination, capacity, outByteCount, [&] {
+    return CopyFormattedText(destination, capacity, outByteCount, [&] {
         return native.ToString();
     });
 }

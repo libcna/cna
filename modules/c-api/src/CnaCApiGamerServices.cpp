@@ -25,6 +25,8 @@ using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -33,11 +35,6 @@ using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
 
 struct SignedInGamerResource final {
     std::shared_ptr<SignedInGamer> value;
@@ -57,14 +54,7 @@ std::vector<std::shared_ptr<SignedInGamerResource>>& PublishedGamers()
     const CNA_Handle handle,
     std::shared_ptr<SignedInGamerResource>* const outGamer)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::SignedInGamer, outGamer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned SignedInGamer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SignedInGamer, outGamer);
 }
 
 } // namespace

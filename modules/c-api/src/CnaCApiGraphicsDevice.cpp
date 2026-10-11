@@ -2,6 +2,8 @@
 
 #include "CNA/C/graphics_device.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -74,24 +76,28 @@ static_assert(
 static_assert(
     NativeGraphics::TextureCollection::MaxTextures == CNA_TEXTURE_COLLECTION_MAX_TEXTURES);
 
-using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
-using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
-using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::IndexBufferResource;
-using CNA::C::Detail::VertexBufferResource;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::ToC;
+using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToNative;
+using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
@@ -118,103 +124,6 @@ using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] Matrix ToNative(const CNA_Matrix value)
-{
-    return Matrix(
-        value.m11, value.m12, value.m13, value.m14,
-        value.m21, value.m22, value.m23, value.m24,
-        value.m31, value.m32, value.m33, value.m34,
-        value.m41, value.m42, value.m43, value.m44);
-}
-
-[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value)
-{
-    return Vector3(value.x, value.y, value.z);
-}
-
-[[nodiscard]] Rectangle ToNative(const CNA_Rectangle value)
-{
-    return Rectangle(value.x, value.y, value.width, value.height);
-}
-
-[[nodiscard]] Viewport ToNative(const CNA_Viewport value)
-{
-    Viewport viewport(value.x, value.y, value.width, value.height);
-    viewport.setMinDepthProperty(value.min_depth);
-    viewport.setMaxDepthProperty(value.max_depth);
-    return viewport;
-}
-
-[[nodiscard]] CNA_Vector3 ToC(const Vector3 value) noexcept
-{
-    return CNA_Vector3{value.X, value.Y, value.Z};
-}
-
-[[nodiscard]] CNA_Rectangle ToC(const Rectangle value) noexcept
-{
-    return CNA_Rectangle{value.X, value.Y, value.Width, value.Height};
-}
-
-[[nodiscard]] CNA_Viewport ToC(const Viewport& value)
-{
-    return CNA_Viewport{
-        value.getXProperty(),
-        value.getYProperty(),
-        value.getWidthProperty(),
-        value.getHeightProperty(),
-        value.getMinDepthProperty(),
-        value.getMaxDepthProperty()};
-}
-
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreOutput(
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
-        }
-        const TValue result = std::forward<TCallable>(callable)();
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyFormattedString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string destination or required-byte output is invalid.");
-        }
-
-        const std::string text = std::forward<TCallable>(callable)();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete formatted value.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 template<typename TValue, typename TCallable>
 [[nodiscard]] CNA_Result DeviceQuery(
@@ -439,30 +348,14 @@ struct DeviceBindingState final {
     const CNA_VertexBufferHandle handle,
     std::shared_ptr<VertexBufferResource>* const outBuffer)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::VertexBuffer, outBuffer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The VertexBuffer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::VertexBuffer, outBuffer);
 }
 
 [[nodiscard]] CNA_Result GetIndexBuffer(
     const CNA_IndexBufferHandle handle,
     std::shared_ptr<IndexBufferResource>* const outBuffer)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::IndexBuffer, outBuffer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The IndexBuffer handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::IndexBuffer, outBuffer);
 }
 
 [[nodiscard]] CNA_VertexBufferHandle RecordedVertexBufferHandle(
@@ -638,13 +531,9 @@ struct UserPrimitiveRequest final {
 
     std::shared_ptr<VertexDeclaration> declaration;
     if (primitives->vertex_declaration != CNA_INVALID_HANDLE) {
-        const CNA_Result result = GetRuntimeHandles().Get(
-            primitives->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
+        const CNA_Result result = LookupHandle(primitives->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
         if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The VertexDeclaration handle is invalid for this call.");
+            return result;
         }
     }
 
@@ -870,15 +759,7 @@ void DrawUserIndexedPrimitivesNative(
     const CNA_Handle handle,
     std::shared_ptr<OcclusionQueryResource>* const outQuery)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::OcclusionQuery, outQuery);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The OcclusionQuery handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::OcclusionQuery, outQuery);
 }
 
 template<typename TCallable>
@@ -1139,7 +1020,7 @@ CNA_Result cna_viewport_copy_string(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CopyFormattedString(destination, capacity, outBytes, [=] {
+    return CopyFormattedText(destination, capacity, outBytes, [=] {
         return ToNative(value).ToString();
     });
 }
@@ -1149,7 +1030,7 @@ CNA_Result cna_graphics_device_get_is_disposed(
     CNA_Bool* const outIsDisposed)
 {
     return DeviceQuery(graphicsDeviceHandle, outIsDisposed, [](GraphicsDevice& device) {
-        return device.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(device.getIsDisposedProperty());
     });
 }
 
@@ -1329,7 +1210,7 @@ CNA_Result cna_graphics_device_copy_type_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyFormattedString(destination, capacity, outBytes, [&] {
+        return CopyFormattedText(destination, capacity, outBytes, [&] {
             return graphicsDevice->value->GetTypeName();
         });
     });
@@ -1430,7 +1311,7 @@ CNA_Result cna_graphics_device_subscribe_resource_created(
                 info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceCreatedEventInfo));
                 info.struct_version = StructureVersion;
                 info.has_resource =
-                    args.getResourceProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+                    ToCBool(args.getResourceProperty() != nullptr);
                 callback(graphicsDeviceHandle, &info, context);
             });
         return StoreRegistration(
@@ -1466,7 +1347,7 @@ CNA_Result cna_graphics_device_subscribe_resource_destroyed(
                 CNA_ResourceDestroyedEventInfo info = {};
                 info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceDestroyedEventInfo));
                 info.struct_version = StructureVersion;
-                info.has_tag = args.getTagProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+                info.has_tag = ToCBool(args.getTagProperty() != nullptr);
                 info.name = ToStringView(&args.getNameProperty());
                 callback(graphicsDeviceHandle, &info, context);
             });
@@ -1481,15 +1362,9 @@ CNA_Result cna_graphics_device_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DeviceRegistration> registration;
-        const CNA_Result result = GetRuntimeHandles().Get(
-            registrationHandle,
-            ObjectKind::GraphicsDeviceEventRegistration,
-            &registration);
+        const CNA_Result result = LookupHandle(registrationHandle, ObjectKind::GraphicsDeviceEventRegistration, &registration);
         if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The graphics-device event-registration handle is invalid.");
+            return result;
         }
         registration->Unsubscribe();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
@@ -1532,7 +1407,7 @@ CNA_Result cna_graphics_device_get_texture(
         const Texture* const nativeTexture = collection[static_cast<int>(slot)];
         outInfo->struct_size = static_cast<uint32_t>(sizeof(CNA_TextureSlotInfo));
         outInfo->struct_version = StructureVersion;
-        outInfo->bound = nativeTexture != nullptr ? CNA_TRUE : CNA_FALSE;
+        outInfo->bound = ToCBool(nativeTexture != nullptr);
         std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
         outInfo->texture = CNA_INVALID_HANDLE;
         if (nativeTexture == nullptr) {
@@ -2233,13 +2108,9 @@ CNA_Result cna_graphics_device_set_current_effect(
         }
         std::shared_ptr<EffectResource> effect;
         if (effectHandle != CNA_INVALID_HANDLE) {
-            const CNA_Result result =
-                GetRuntimeHandles().Get(effectHandle, ObjectKind::Effect, &effect);
+            const CNA_Result result = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
             if (result != CNA_RESULT_SUCCESS) {
-                return Fail(
-                    result,
-                    ErrorCategoryForResult(result),
-                    "The Effect handle is invalid for this call.");
+                return result;
             }
         }
 
@@ -2330,7 +2201,7 @@ CNA_Result cna_occlusion_query_get_is_complete(
     CNA_Bool* const outIsComplete)
 {
     return OcclusionQueryValue(occlusionQueryHandle, outIsComplete, [](OcclusionQuery& query) {
-        return query.getIsCompleteProperty() ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(query.getIsCompleteProperty());
     });
 }
 
@@ -2350,7 +2221,7 @@ CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
     CNA_Bool* const outIsPrecise)
 {
     return OcclusionQueryValue(occlusionQueryHandle, outIsPrecise, [](OcclusionQuery& query) {
-        return query.isPixelCountPreciseEXT() ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(query.isPixelCountPreciseEXT());
     });
 }
 
@@ -2359,7 +2230,7 @@ CNA_Result cna_occlusion_query_has_renderer(
     CNA_Bool* const outHasRenderer)
 {
     return OcclusionQueryValue(occlusionQueryHandle, outHasRenderer, [](OcclusionQuery& query) {
-        return query.HasRenderer() ? CNA_TRUE : CNA_FALSE;
+        return ToCBool(query.HasRenderer());
     });
 }
 
@@ -2403,10 +2274,8 @@ CNA_Result cna_graphics_device_supports_surface_format_as_render_target_ext(
 {
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outSupported, [format](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return device.SupportsSurfaceFormatAsRenderTargetEXT(
-                       static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format))
-                ? CNA_TRUE
-                : CNA_FALSE;
+            return ToCBool(device.SupportsSurfaceFormatAsRenderTargetEXT(
+                       static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format)));
         });
 }
 
@@ -2415,7 +2284,7 @@ CNA_Result cna_graphics_device_executes_shader_effect_source_ext(
 {
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outExecutes, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return device.ExecutesShaderEffectSourceEXT() ? CNA_TRUE : CNA_FALSE;
+            return ToCBool(device.ExecutesShaderEffectSourceEXT());
         });
 }
 
@@ -2424,7 +2293,7 @@ CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
 {
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outSupported, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return device.SupportsImageBasedLightingEXT() ? CNA_TRUE : CNA_FALSE;
+            return ToCBool(device.SupportsImageBasedLightingEXT());
         });
 }
 
@@ -2465,9 +2334,7 @@ CNA_Result cna_graphics_device_set_display_color_space_ext(
     // ordinary answer, not a caller mistake.
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outChanged, [space](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space))
-                ? CNA_TRUE
-                : CNA_FALSE;
+            return ToCBool(device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space)));
         });
 }
 
@@ -2480,10 +2347,8 @@ CNA_Result cna_graphics_device_supports_display_color_space_ext(
     }
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outSupported, [space](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return device.SupportsDisplayColorSpaceEXT(
-                       static_cast<CNA::DisplayColorSpace>(space))
-                ? CNA_TRUE
-                : CNA_FALSE;
+            return ToCBool(device.SupportsDisplayColorSpaceEXT(
+                       static_cast<CNA::DisplayColorSpace>(space)));
         });
 }
 

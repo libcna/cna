@@ -2,6 +2,7 @@
 
 #include "CNA/C/media.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 #include "CnaCApiMediaDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -25,39 +26,16 @@ using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ToCBool;
+
 using Microsoft::Xna::Framework::Media::MediaSource;
 using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::SongCollection;
 using Microsoft::Xna::Framework::Media::VisualizationData;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
-[[nodiscard]] CNA_Result CopyText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-        return InvalidInput("The media text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the media text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 // The canonical enumeration hands back raw `new`-ed sources its caller must delete. This owns that
 // list for the length of one call so no ownership — and no leak — crosses the ABI.
@@ -101,7 +79,7 @@ template<typename TRead>
     }
     const OwnedMediaSources sources;
     if (static_cast<std::size_t>(index) >= sources.Count()) {
-        return InvalidInput("The media source index is out of range.");
+        return InvalidArgument("The media source index is out of range.");
     }
     return read(*sources.At(static_cast<std::size_t>(index)));
 }
@@ -171,7 +149,7 @@ CNA_Result cna_visualization_data_init(CNA_VisualizationData* const outData)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outData == nullptr) {
-            return InvalidInput("The visualization data output is null.");
+            return InvalidArgument("The visualization data output is null.");
         }
         const VisualizationData native;
         CNA_VisualizationData data = {};
@@ -193,7 +171,7 @@ CNA_Result cna_visualization_data_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The visualization type-name byte-count output is null.");
+            return InvalidArgument("The visualization type-name byte-count output is null.");
         }
         const VisualizationData native;
         *outBytes = native.GetTypeName().size();
@@ -218,7 +196,7 @@ CNA_Result cna_media_source_get_available_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The media source count output is null.");
+            return InvalidArgument("The media source count output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -237,7 +215,7 @@ CNA_Result cna_media_source_get_type_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outType == nullptr) {
-            return InvalidInput("The media source kind output is null.");
+            return InvalidArgument("The media source kind output is null.");
         }
         return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
             *outType = static_cast<CNA_MediaSourceType>(source.getMediaSourceTypeProperty());
@@ -253,7 +231,7 @@ CNA_Result cna_media_source_get_name_size_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The media source name byte-count output is null.");
+            return InvalidArgument("The media source name byte-count output is null.");
         }
         return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
             *outBytes = source.getNameProperty().size();
@@ -271,7 +249,7 @@ CNA_Result cna_media_source_copy_name_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The media source name output is invalid.");
+            return InvalidArgument("The media source name output is invalid.");
         }
         return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
             // The canonical string conversion returns the display name unchanged, so one route
@@ -288,7 +266,7 @@ CNA_Result cna_media_source_get_type_name_size_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The media source type-name byte-count output is null.");
+            return InvalidArgument("The media source type-name byte-count output is null.");
         }
         return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
             *outBytes = source.GetTypeName().size();
@@ -306,7 +284,7 @@ CNA_Result cna_media_source_copy_type_name_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The media source type-name output is invalid.");
+            return InvalidArgument("The media source type-name output is invalid.");
         }
         return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
             return CopyText(source.GetTypeName(), destination, capacity, outBytes);
@@ -338,7 +316,7 @@ CNA_Result cna_song_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr) {
-            return InvalidInput("The song output is null.");
+            return InvalidArgument("The song output is null.");
         }
         *outSong = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -375,7 +353,7 @@ CNA_Result cna_song_create_with_duration(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr) {
-            return InvalidInput("The song output is null.");
+            return InvalidArgument("The song output is null.");
         }
         *outSong = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -416,7 +394,7 @@ CNA_Result cna_song_create_from_uri(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr) {
-            return InvalidInput("The song output is null.");
+            return InvalidArgument("The song output is null.");
         }
         *outSong = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -448,7 +426,7 @@ CNA_Result cna_song_get_name_size(const CNA_SongHandle song, uint64_t* const out
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The song name byte-count output is null.");
+            return InvalidArgument("The song name byte-count output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outBytes = value.getNameProperty().size();
@@ -465,7 +443,7 @@ CNA_Result cna_song_copy_name(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The song name output is invalid.");
+            return InvalidArgument("The song name output is invalid.");
         }
         return ReadSong(song, [&](const Song& value) {
             // The canonical string conversion returns the display name unchanged, so one route
@@ -479,7 +457,7 @@ CNA_Result cna_song_get_handle_text_size_ext(const CNA_SongHandle song, uint64_t
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The song handle-text byte-count output is null.");
+            return InvalidArgument("The song handle-text byte-count output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outBytes = value.getHandle().size();
@@ -496,7 +474,7 @@ CNA_Result cna_song_copy_handle_text_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The song handle-text output is invalid.");
+            return InvalidArgument("The song handle-text output is invalid.");
         }
         return ReadSong(song, [&](const Song& value) {
             return CopyText(value.getHandle(), destination, capacity, outBytes);
@@ -508,7 +486,7 @@ CNA_Result cna_song_get_duration(const CNA_SongHandle song, int64_t* const outTi
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTicks == nullptr) {
-            return InvalidInput("The song duration output is null.");
+            return InvalidArgument("The song duration output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
@@ -535,10 +513,10 @@ CNA_Result cna_song_get_is_protected(const CNA_SongHandle song, CNA_Bool* const 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outProtected == nullptr) {
-            return InvalidInput("The song protection output is null.");
+            return InvalidArgument("The song protection output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
-            *outProtected = value.getIsProtectedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outProtected = ToCBool(value.getIsProtectedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -548,10 +526,10 @@ CNA_Result cna_song_get_is_rated(const CNA_SongHandle song, CNA_Bool* const outR
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRated == nullptr) {
-            return InvalidInput("The song rating-presence output is null.");
+            return InvalidArgument("The song rating-presence output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
-            *outRated = value.getIsRatedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outRated = ToCBool(value.getIsRatedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -561,7 +539,7 @@ CNA_Result cna_song_get_play_count(const CNA_SongHandle song, int32_t* const out
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPlayCount == nullptr) {
-            return InvalidInput("The song play-count output is null.");
+            return InvalidArgument("The song play-count output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outPlayCount = static_cast<int32_t>(value.getPlayCountProperty());
@@ -587,7 +565,7 @@ CNA_Result cna_song_get_rating(const CNA_SongHandle song, int32_t* const outRati
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRating == nullptr) {
-            return InvalidInput("The song rating output is null.");
+            return InvalidArgument("The song rating output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outRating = static_cast<int32_t>(value.getRatingProperty());
@@ -600,7 +578,7 @@ CNA_Result cna_song_get_track_number(const CNA_SongHandle song, int32_t* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTrackNumber == nullptr) {
-            return InvalidInput("The song track-number output is null.");
+            return InvalidArgument("The song track-number output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outTrackNumber = static_cast<int32_t>(value.getTrackNumberProperty());
@@ -613,10 +591,10 @@ CNA_Result cna_song_get_is_disposed(const CNA_SongHandle song, CNA_Bool* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The song disposal-state output is null.");
+            return InvalidArgument("The song disposal-state output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
-            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
     });
@@ -661,7 +639,7 @@ CNA_Result cna_song_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The song comparison output is null.");
+            return InvalidArgument("The song comparison output is null.");
         }
         std::shared_ptr<SongResource> nativeLeft;
         std::shared_ptr<SongResource> nativeRight;
@@ -673,7 +651,7 @@ CNA_Result cna_song_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -682,7 +660,7 @@ CNA_Result cna_song_get_hash_code(const CNA_SongHandle song, int32_t* const outH
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The song hash output is null.");
+            return InvalidArgument("The song hash output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outHash = static_cast<int32_t>(value.GetHashCode());
@@ -695,7 +673,7 @@ CNA_Result cna_song_get_type_name_size(const CNA_SongHandle song, uint64_t* cons
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The song type-name byte-count output is null.");
+            return InvalidArgument("The song type-name byte-count output is null.");
         }
         return ReadSong(song, [&](const Song& value) {
             *outBytes = value.GetTypeName().size();
@@ -712,7 +690,7 @@ CNA_Result cna_song_copy_type_name(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The song type-name output is invalid.");
+            return InvalidArgument("The song type-name output is invalid.");
         }
         return ReadSong(song, [&](const Song& value) {
             return CopyText(value.GetTypeName(), destination, capacity, outBytes);
@@ -728,11 +706,11 @@ CNA_Result cna_song_collection_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCollection == nullptr) {
-            return InvalidInput("The song collection output is null.");
+            return InvalidArgument("The song collection output is null.");
         }
         *outCollection = CNA_INVALID_HANDLE;
         if (songs == nullptr && count != UINT64_C(0)) {
-            return InvalidInput("The song array is null.");
+            return InvalidArgument("The song array is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -768,7 +746,7 @@ CNA_Result cna_song_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSong == nullptr) {
-            return InvalidInput("The song output is null.");
+            return InvalidArgument("The song output is null.");
         }
         *outSong = CNA_INVALID_HANDLE;
         std::shared_ptr<SongCollectionResource> resource;
@@ -778,7 +756,7 @@ CNA_Result cna_song_collection_get_at(
         }
         if (index < 0 ||
             index >= static_cast<int32_t>(resource->value->getCountProperty())) {
-            return InvalidInput("The song index is out of range.");
+            return InvalidArgument("The song index is out of range.");
         }
         Song* const element = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
         // A C-built collection retains its songs, so the new handle shares the existing resource
@@ -803,7 +781,7 @@ CNA_Result cna_song_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The song collection count output is null.");
+            return InvalidArgument("The song collection count output is null.");
         }
         std::shared_ptr<SongCollectionResource> resource;
         if (const CNA_Result result = BorrowSongCollection(collection, &resource);
@@ -821,14 +799,14 @@ CNA_Result cna_song_collection_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDisposed == nullptr) {
-            return InvalidInput("The song collection disposal-state output is null.");
+            return InvalidArgument("The song collection disposal-state output is null.");
         }
         std::shared_ptr<SongCollectionResource> resource;
         if (const CNA_Result result = BorrowSongCollection(collection, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outDisposed = resource->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -871,7 +849,7 @@ CNA_Result cna_song_collection_get_type_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The song collection type-name byte-count output is null.");
+            return InvalidArgument("The song collection type-name byte-count output is null.");
         }
         std::shared_ptr<SongCollectionResource> resource;
         if (const CNA_Result result = BorrowSongCollection(collection, &resource);
@@ -891,7 +869,7 @@ CNA_Result cna_song_collection_copy_type_name(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The song collection type-name output is invalid.");
+            return InvalidArgument("The song collection type-name output is invalid.");
         }
         std::shared_ptr<SongCollectionResource> resource;
         if (const CNA_Result result = BorrowSongCollection(collection, &resource);

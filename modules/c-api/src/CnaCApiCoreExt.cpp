@@ -3,6 +3,7 @@
 #include "CNA/C/core_ext.h"
 #include "CNA/AssemblyInfo.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "CNA/DesktopOS.hpp"
 #include "CNA/GraphicsBackendCategory.hpp"
@@ -32,10 +33,10 @@ using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReportTextSize;
+using CNA::C::Detail::ToCBool;
 
 [[nodiscard]] CNA_Result MapLogLevel(const CNA_LogLevel level, CNA::LogLevel* const outLevel)
 {
@@ -345,37 +346,6 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
     }
 }
 
-[[nodiscard]] CNA_Result ReportSize(const std::string_view value, uint64_t* const outBytes)
-{
-    if (outBytes == nullptr) {
-        return InvalidArgument("The byte-count output is null.");
-    }
-    *outBytes = static_cast<uint64_t>(value.size());
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result CopyName(
-    const std::string_view value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidArgument("The name output is invalid.");
-    }
-    *outBytes = static_cast<uint64_t>(value.size());
-    if (capacity < static_cast<uint64_t>(value.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the name.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_logger_log(
@@ -630,7 +600,7 @@ CNA_Result cna_graphics_backend_category_get_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(CNA::toStringView(nativeCategory), outBytes);
+        return ReportTextSize(CNA::toStringView(nativeCategory), outBytes);
     });
 }
 
@@ -646,7 +616,7 @@ CNA_Result cna_graphics_backend_category_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyName(CNA::toStringView(nativeCategory), destination, capacity, outBytes);
+        return CopyText(CNA::toStringView(nativeCategory), destination, capacity, outBytes);
     });
 }
 
@@ -690,7 +660,7 @@ CNA_Result cna_graphics_backend_maturity_get_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportSize(CNA::toStringView(nativeMaturity), outBytes);
+        return ReportTextSize(CNA::toStringView(nativeMaturity), outBytes);
     });
 }
 
@@ -706,7 +676,7 @@ CNA_Result cna_graphics_backend_maturity_copy_name(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyName(CNA::toStringView(nativeMaturity), destination, capacity, outBytes);
+        return CopyText(CNA::toStringView(nativeMaturity), destination, capacity, outBytes);
     });
 }
 
@@ -793,7 +763,7 @@ CNA_Result cna_platform_get_is_apple_ext(CNA_Bool* const outApple)
         if (outApple == nullptr) {
             return InvalidArgument("The Apple-platform output is null.");
         }
-        *outApple = CNA::isApplePlatform() ? CNA_TRUE : CNA_FALSE;
+        *outApple = ToCBool(CNA::isApplePlatform());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -804,7 +774,7 @@ CNA_Result cna_platform_get_is_mobile_ext(CNA_Bool* const outMobile)
         if (outMobile == nullptr) {
             return InvalidArgument("The mobile-platform output is null.");
         }
-        *outMobile = CNA::isMobilePlatform() ? CNA_TRUE : CNA_FALSE;
+        *outMobile = ToCBool(CNA::isMobilePlatform());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -826,7 +796,7 @@ CNA_Result cna_platform_copy_current_name_ext(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyName(CNA::getCurrentPlatformName(), destination, capacity, outBytes);
+        return CopyText(CNA::getCurrentPlatformName(), destination, capacity, outBytes);
     });
 }
 
@@ -940,7 +910,7 @@ CNA_Result cna_graphics_renderer_get_is_latched_ext(CNA_Bool* const outLatched)
         if (outLatched == nullptr) {
             return InvalidArgument("The latched output is null.");
         }
-        *outLatched = CNA::GraphicsRendererSelection::IsLatched() ? CNA_TRUE : CNA_FALSE;
+        *outLatched = ToCBool(CNA::GraphicsRendererSelection::IsLatched());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -995,7 +965,7 @@ CNA_Result cna_graphics_renderer_get_is_available_ext(
             return result;
         }
         *outAvailable =
-            CNA::GraphicsRendererSelection::IsAvailable(nativeType) ? CNA_TRUE : CNA_FALSE;
+            ToCBool(CNA::GraphicsRendererSelection::IsAvailable(nativeType));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1049,7 +1019,7 @@ CNA_Result cna_graphics_renderer_get_automatic_fallback_ext(CNA_Bool* const outE
         if (outEnabled == nullptr) {
             return InvalidArgument("The fallback-enabled output is null.");
         }
-        *outEnabled = CNA::GraphicsRendererSelection::IsFallbackEnabled() ? CNA_TRUE : CNA_FALSE;
+        *outEnabled = ToCBool(CNA::GraphicsRendererSelection::IsFallbackEnabled());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1117,7 +1087,7 @@ CNA_Result cna_graphics_renderer_fallback_copy_message_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyName(record->message, destination, capacity, outBytes);
+        return CopyText(record->message, destination, capacity, outBytes);
     });
 }
 
@@ -1154,7 +1124,7 @@ CNA_Result cna_graphics_renderer_fallback_reason_copy_name_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyName(
+        return CopyText(
             CNA::getGraphicsRendererFallbackReasonName(nativeReason),
             destination,
             capacity,
@@ -1215,7 +1185,7 @@ CNA_Result cna_graphics_renderer_get_current_type(CNA_GraphicsRendererType* cons
 CNA_Result cna_graphics_renderer_get_current_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportSize(CNA::getCurrentGraphicsRendererName(), outBytes);
+        return ReportTextSize(CNA::getCurrentGraphicsRendererName(), outBytes);
     });
 }
 
@@ -1225,7 +1195,7 @@ CNA_Result cna_graphics_renderer_copy_current_name(
     uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyName(
+        return CopyText(
             CNA::getCurrentGraphicsRendererName(),
             destination,
             capacity,

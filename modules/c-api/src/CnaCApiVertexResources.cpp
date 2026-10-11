@@ -2,6 +2,7 @@
 
 #include "CNA/C/vertex_resources.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -23,7 +24,9 @@ using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ToC;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
@@ -138,30 +141,11 @@ static_assert(sizeof(int) == sizeof(int32_t));
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_VertexElement ToC(const VertexElement& value) noexcept
-{
-    return CNA_VertexElement{
-        value.getOffsetProperty(),
-        static_cast<CNA_VertexElementFormat>(value.getVertexElementFormatProperty()),
-        static_cast<CNA_VertexElementUsage>(value.getVertexElementUsageProperty()),
-        value.getUsageIndexProperty()};
-}
-
 [[nodiscard]] CNA_Result GetDeclaration(
     const CNA_VertexDeclarationHandle handle,
     std::shared_ptr<VertexDeclaration>* const outDeclaration)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle,
-        ObjectKind::VertexDeclaration,
-        outDeclaration);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The VertexDeclaration handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::VertexDeclaration, outDeclaration);
 }
 
 [[nodiscard]] CNA_Result RegisterDeclaration(
@@ -211,18 +195,6 @@ template<typename TCallable>
 }
 
 } // namespace
-
-namespace CNA::C::Detail {
-
-// CBIND-092B. Declared in CnaCApiGraphicsDetail.hpp so the engine layer can describe the instanced
-// renderer's static declarations with the same mapping this file already uses.
-CNA_VertexElement ToCVertexElement(
-    const Microsoft::Xna::Framework::Graphics::VertexElement& value) noexcept
-{
-    return ToC(value);
-}
-
-} // namespace CNA::C::Detail
 
 CNA_Result cna_vertex_declaration_create_empty(
     CNA_VertexDeclarationHandle* const outDeclaration)

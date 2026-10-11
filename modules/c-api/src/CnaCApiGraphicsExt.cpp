@@ -22,15 +22,16 @@
 #include "System/IDisposable.hpp"
 
 using CNA::C::Detail::AsciiEffectResource;
+using CNA::C::Detail::LookupHandle;
 #include <type_traits>
 #endif
 
 namespace {
 
-using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 
 // Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
 // compiles this without using it. The routes stay exported either way, which is the point.
@@ -59,15 +60,14 @@ template<typename TValue>
 
 #ifdef CNA_CNAEXT
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -106,15 +106,7 @@ static_assert(
     const CNA_Handle handle,
     std::shared_ptr<AsciiEffectResource>* const outEffect)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::AsciiPostProcessEffect, outEffect);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The AsciiPostProcessEffect handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::AsciiPostProcessEffect, outEffect);
 }
 
 #endif // CNA_CNAEXT
@@ -216,7 +208,7 @@ CNA_Result cna_image_based_light_ext_is_valid(
                 CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
                     CNA_RESULT_SUCCESS;
         }
-        return StoreValue(outValid, static_cast<CNA_Bool>(complete ? CNA_TRUE : CNA_FALSE));
+        return StoreValue(outValid, static_cast<CNA_Bool>(ToCBool(complete)));
     });
 }
 

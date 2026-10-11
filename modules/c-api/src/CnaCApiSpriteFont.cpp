@@ -20,9 +20,7 @@
 
 namespace {
 
-using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
-using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
@@ -30,10 +28,14 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
-using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
@@ -41,29 +43,11 @@ using Microsoft::Xna::Framework::Graphics::SpriteFont;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
-{
-    return value == CNA_FALSE || value == CNA_TRUE;
-}
-
-[[nodiscard]] CNA_Result InvalidArgument(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 [[nodiscard]] CNA_Result GetSpriteFont(
     const CNA_Handle handle,
     std::shared_ptr<SpriteFontResource>* const outSpriteFont)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(
-        handle, ObjectKind::SpriteFont, outSpriteFont);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned SpriteFont handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SpriteFont, outSpriteFont);
 }
 
 } // namespace
@@ -80,7 +64,7 @@ CNA_Result cna_sprite_font_create(
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_SpriteFontCreateInfo) ||
             createInfo->struct_version != StructureVersion || !std::isfinite(createInfo->spacing) ||
-            !IsBool(createInfo->has_default_character) || createInfo->reserved[0] != 0U ||
+            !IsCanonicalBool(createInfo->has_default_character) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
             createInfo->reserved[3] != 0U || createInfo->reserved[4] != 0U) {
             return InvalidArgument("The SpriteFont creation configuration is invalid.");
@@ -204,7 +188,7 @@ CNA_Result cna_sprite_font_get_info(
             .default_character = defaultCharacter.has_value()
                 ? static_cast<CNA_Char16>(defaultCharacter.value())
                 : static_cast<CNA_Char16>(0U),
-            .has_default_character = defaultCharacter.has_value() ? CNA_TRUE : CNA_FALSE,
+            .has_default_character = ToCBool(defaultCharacter.has_value()),
             .reserved = {0U, 0U, 0U, 0U, 0U}};
         return CNA_RESULT_SUCCESS;
     });
@@ -306,7 +290,7 @@ CNA_Result cna_sprite_font_set_default_character(
     const CNA_Char16 value)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!IsBool(hasValue)) {
+        if (!IsCanonicalBool(hasValue)) {
             return InvalidArgument("The SpriteFont default-character presence flag is invalid.");
         }
         std::shared_ptr<SpriteFontResource> spriteFont;
@@ -412,15 +396,7 @@ CNA_Result GetOwnedSpriteFont(
     const CNA_Handle handle,
     std::shared_ptr<SpriteFontResource>* const outSpriteFont)
 {
-    const CNA_Result result =
-        GetRuntimeHandles().Get(handle, ObjectKind::SpriteFont, outSpriteFont);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The SpriteFont handle is invalid for this call.");
+    return LookupHandle(handle, ObjectKind::SpriteFont, outSpriteFont);
 }
 
 } // namespace CNA::C::Detail

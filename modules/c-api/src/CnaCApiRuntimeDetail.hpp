@@ -37,8 +37,6 @@ struct OwnedGraphicsDevice final {
     std::shared_ptr<BorrowedGraphicsDevice> view;
 };
 
-[[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
-
 [[nodiscard]] CNA_Result ValidateActiveGameHandle(CNA_Handle handle);
 
 [[nodiscard]] CNA_Result GetBorrowedGraphicsDevice(

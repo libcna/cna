@@ -9,6 +9,7 @@
 #include "CNA/C/input_touch.h"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -60,7 +61,11 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -359,7 +364,7 @@ template<typename T>
     const CNA_GamePadState snapshot = {
         sizeof(CNA_GamePadState),
         StructureVersion,
-        nativeState.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+        ToCBool(nativeState.getIsConnectedProperty()),
         {0U, 0U, 0U},
         nativeState.getPacketNumberProperty(),
         CollectPressedButtons(nativeState),
@@ -429,7 +434,7 @@ CNA_Result cna_keyboard_state_is_key_down(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDown = IsKeyDown(*state, key) ? CNA_TRUE : CNA_FALSE;
+        *outIsDown = ToCBool(IsKeyDown(*state, key));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -622,7 +627,7 @@ CNA_Result cna_gamepad_state_is_button_down(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsDown = (state->pressed_buttons & buttons) == buttons ? CNA_TRUE : CNA_FALSE;
+        *outIsDown = ToCBool((state->pressed_buttons & buttons) == buttons);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -643,7 +648,7 @@ CNA_Result cna_gamepad_state_is_button_up(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outIsUp = (state->pressed_buttons & buttons) != buttons ? CNA_TRUE : CNA_FALSE;
+        *outIsUp = ToCBool((state->pressed_buttons & buttons) != buttons);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -675,7 +680,7 @@ CNA_Result cna_touch_get_capabilities(
         const CNA_TouchCapabilities capabilities = {
             sizeof(CNA_TouchCapabilities),
             StructureVersion,
-            nativeCapabilities.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(nativeCapabilities.getIsConnectedProperty()),
             {0U, 0U, 0U},
             static_cast<uint32_t>(maximumTouchCount)
         };
@@ -711,7 +716,7 @@ CNA_Result cna_touch_get_state(
         CNA_TouchState snapshot = {};
         snapshot.struct_size = sizeof(CNA_TouchState);
         snapshot.struct_version = StructureVersion;
-        snapshot.is_connected = nativeState.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE;
+        snapshot.is_connected = ToCBool(nativeState.getIsConnectedProperty());
         snapshot.touch_count = static_cast<uint32_t>(nativeCount);
         for (uint32_t index = 0U; index < snapshot.touch_count; ++index) {
             snapshot.touches[index] = MapTouchLocation(nativeState[index]);
@@ -804,7 +809,7 @@ namespace {
 
 [[nodiscard]] CNA_Bool Flag(const bool value) noexcept
 {
-    return value ? CNA_TRUE : CNA_FALSE;
+    return ToCBool(value);
 }
 
 [[nodiscard]] CNA_GamePadCapabilities SnapshotCapabilities(const GamePadCapabilities& value)
@@ -902,15 +907,10 @@ namespace {
 constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     CNA_GAMEPAD_BUTTON_DPAD_DOWN | CNA_GAMEPAD_BUTTON_DPAD_LEFT | CNA_GAMEPAD_BUTTON_DPAD_RIGHT;
 
-[[nodiscard]] CNA_Result InvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
-
 [[nodiscard]] CNA_Result ValidateMask(const CNA_GamePadButtonFlags mask)
 {
     if ((mask & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
-        return InvalidInput("The gamepad button mask contains an undefined bit.");
+        return InvalidArgument("The gamepad button mask contains an undefined bit.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -921,7 +921,7 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     CNA_GamePadButtonFlags* const outMask)
 {
     if (buttons == nullptr && count != 0U) {
-        return InvalidInput("The gamepad button array is invalid.");
+        return InvalidArgument("The gamepad button array is invalid.");
     }
     CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
     for (uint64_t index = 0U; index < count; ++index) {
@@ -1028,7 +1028,7 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     CNA_GamePadState snapshot = {
         sizeof(CNA_GamePadState),
         StructureVersion,
-        native.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+        ToCBool(native.getIsConnectedProperty()),
         {0U, 0U, 0U},
         native.getPacketNumberProperty(),
         CollectPressedButtons(native),
@@ -1048,35 +1048,13 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     return ValidateVersionedStructure(state, "The gamepad snapshot is invalid.");
 }
 
-[[nodiscard]] CNA_Result CopyStateText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidInput("The gamepad snapshot text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the gamepad snapshot text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_gamepad_buttons_init(CNA_GamePadButtonFlags* const outButtons)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outButtons == nullptr) {
-            return InvalidInput("The gamepad button-set output is null.");
+            return InvalidArgument("The gamepad button-set output is null.");
         }
         *outButtons = MaskFromNamedButtons(GamePadButtons());
         return CNA_RESULT_SUCCESS;
@@ -1089,7 +1067,7 @@ CNA_Result cna_gamepad_buttons_init_from_mask(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outButtons == nullptr) {
-            return InvalidInput("The gamepad button-set output is null.");
+            return InvalidArgument("The gamepad button-set output is null.");
         }
         if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1106,7 +1084,7 @@ CNA_Result cna_gamepad_buttons_init_from_button_array(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outButtons == nullptr) {
-            return InvalidInput("The gamepad button-set output is null.");
+            return InvalidArgument("The gamepad button-set output is null.");
         }
         CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
         if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
@@ -1125,7 +1103,7 @@ CNA_Result cna_gamepad_buttons_is_pressed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsPressed == nullptr) {
-            return InvalidInput("The gamepad button-state output is null.");
+            return InvalidArgument("The gamepad button-state output is null.");
         }
         if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1135,7 +1113,7 @@ CNA_Result cna_gamepad_buttons_is_pressed(
         }
         bool handled = false;
         const bool pressed = NamedButtonIsPressed(NativeButtons(buttons), button, &handled);
-        *outIsPressed = (handled ? pressed : (buttons & button) == button) ? CNA_TRUE : CNA_FALSE;
+        *outIsPressed = ToCBool(handled ? pressed : (buttons & button) == button);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1147,9 +1125,9 @@ CNA_Result cna_gamepad_buttons_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The gamepad button-set comparison output is null.");
+            return InvalidArgument("The gamepad button-set comparison output is null.");
         }
-        *outEquals = NativeButtons(left).Equals(NativeButtons(right)) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(NativeButtons(left).Equals(NativeButtons(right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1161,9 +1139,9 @@ CNA_Result cna_gamepad_buttons_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outNotEquals == nullptr) {
-            return InvalidInput("The gamepad button-set comparison output is null.");
+            return InvalidArgument("The gamepad button-set comparison output is null.");
         }
-        *outNotEquals = NativeButtons(left) != NativeButtons(right) ? CNA_TRUE : CNA_FALSE;
+        *outNotEquals = ToCBool(NativeButtons(left) != NativeButtons(right));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1174,7 +1152,7 @@ CNA_Result cna_gamepad_buttons_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The gamepad button-set hash output is null.");
+            return InvalidArgument("The gamepad button-set hash output is null.");
         }
         *outHash = static_cast<int32_t>(NativeButtons(buttons).GetHashCode());
         return CNA_RESULT_SUCCESS;
@@ -1185,7 +1163,7 @@ CNA_Result cna_gamepad_dpad_init(CNA_GamePadButtonFlags* const outDPad)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDPad == nullptr) {
-            return InvalidInput("The directional-pad output is null.");
+            return InvalidArgument("The directional-pad output is null.");
         }
         *outDPad = CNA_GAMEPAD_BUTTON_NONE;
         return CNA_RESULT_SUCCESS;
@@ -1201,7 +1179,7 @@ CNA_Result cna_gamepad_dpad_init_from_states(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDPad == nullptr) {
-            return InvalidInput("The directional-pad output is null.");
+            return InvalidArgument("The directional-pad output is null.");
         }
         if (const CNA_Result result = ValidateCanonicalBool(up, "up");
             result != CNA_RESULT_SUCCESS) {
@@ -1236,7 +1214,7 @@ CNA_Result cna_gamepad_dpad_init_from_button_array(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDPad == nullptr) {
-            return InvalidInput("The directional-pad output is null.");
+            return InvalidArgument("The directional-pad output is null.");
         }
         CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
         if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
@@ -1255,11 +1233,11 @@ CNA_Result cna_gamepad_dpad_is_pressed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsPressed == nullptr) {
-            return InvalidInput("The directional-pad state output is null.");
+            return InvalidArgument("The directional-pad state output is null.");
         }
         if (button != CNA_GAMEPAD_BUTTON_DPAD_UP && button != CNA_GAMEPAD_BUTTON_DPAD_DOWN &&
             button != CNA_GAMEPAD_BUTTON_DPAD_LEFT && button != CNA_GAMEPAD_BUTTON_DPAD_RIGHT) {
-            return InvalidInput("The requested button is not a directional-pad direction.");
+            return InvalidArgument("The requested button is not a directional-pad direction.");
         }
         const GamePadDPad native = NativeDPad(dpad);
         ButtonState state = ButtonState::Released;
@@ -1269,7 +1247,7 @@ CNA_Result cna_gamepad_dpad_is_pressed(
             case CNA_GAMEPAD_BUTTON_DPAD_LEFT: state = native.getLeftProperty(); break;
             default: state = native.getRightProperty(); break;
         }
-        *outIsPressed = state == ButtonState::Pressed ? CNA_TRUE : CNA_FALSE;
+        *outIsPressed = ToCBool(state == ButtonState::Pressed);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1281,9 +1259,9 @@ CNA_Result cna_gamepad_dpad_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The directional-pad comparison output is null.");
+            return InvalidArgument("The directional-pad comparison output is null.");
         }
-        *outEquals = NativeDPad(left).Equals(NativeDPad(right)) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(NativeDPad(left).Equals(NativeDPad(right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1295,9 +1273,9 @@ CNA_Result cna_gamepad_dpad_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outNotEquals == nullptr) {
-            return InvalidInput("The directional-pad comparison output is null.");
+            return InvalidArgument("The directional-pad comparison output is null.");
         }
-        *outNotEquals = NativeDPad(left) != NativeDPad(right) ? CNA_TRUE : CNA_FALSE;
+        *outNotEquals = ToCBool(NativeDPad(left) != NativeDPad(right));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1308,7 +1286,7 @@ CNA_Result cna_gamepad_dpad_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The directional-pad hash output is null.");
+            return InvalidArgument("The directional-pad hash output is null.");
         }
         *outHash = static_cast<int32_t>(NativeDPad(dpad).GetHashCode());
         return CNA_RESULT_SUCCESS;
@@ -1319,7 +1297,7 @@ CNA_Result cna_gamepad_thumb_sticks_init(CNA_GamePadThumbSticks* const outThumbS
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outThumbSticks == nullptr) {
-            return InvalidInput("The thumbstick output is null.");
+            return InvalidArgument("The thumbstick output is null.");
         }
         const GamePadThumbSticks native;
         outThumbSticks->left = {
@@ -1341,7 +1319,7 @@ CNA_Result cna_gamepad_thumb_sticks_init_from_positions(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outThumbSticks == nullptr) {
-            return InvalidInput("The thumbstick input or output is null.");
+            return InvalidArgument("The thumbstick input or output is null.");
         }
         const GamePadThumbSticks native(
             Vector2(left->x, left->y),
@@ -1365,11 +1343,9 @@ CNA_Result cna_gamepad_thumb_sticks_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outEquals == nullptr) {
-            return InvalidInput("The thumbstick comparison input or output is null.");
+            return InvalidArgument("The thumbstick comparison input or output is null.");
         }
-        *outEquals = NativeThumbSticks(*left).Equals(NativeThumbSticks(*right))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outEquals = ToCBool(NativeThumbSticks(*left).Equals(NativeThumbSticks(*right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1381,11 +1357,9 @@ CNA_Result cna_gamepad_thumb_sticks_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outNotEquals == nullptr) {
-            return InvalidInput("The thumbstick comparison input or output is null.");
+            return InvalidArgument("The thumbstick comparison input or output is null.");
         }
-        *outNotEquals = NativeThumbSticks(*left) != NativeThumbSticks(*right)
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outNotEquals = ToCBool(NativeThumbSticks(*left) != NativeThumbSticks(*right));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1396,7 +1370,7 @@ CNA_Result cna_gamepad_thumb_sticks_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (thumbSticks == nullptr || outHash == nullptr) {
-            return InvalidInput("The thumbstick hash input or output is null.");
+            return InvalidArgument("The thumbstick hash input or output is null.");
         }
         *outHash = static_cast<int32_t>(NativeThumbSticks(*thumbSticks).GetHashCode());
         return CNA_RESULT_SUCCESS;
@@ -1407,7 +1381,7 @@ CNA_Result cna_gamepad_triggers_init(CNA_GamePadTriggers* const outTriggers)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTriggers == nullptr) {
-            return InvalidInput("The trigger output is null.");
+            return InvalidArgument("The trigger output is null.");
         }
         const GamePadTriggers native;
         outTriggers->left = native.getLeftProperty();
@@ -1423,7 +1397,7 @@ CNA_Result cna_gamepad_triggers_init_from_positions(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTriggers == nullptr) {
-            return InvalidInput("The trigger output is null.");
+            return InvalidArgument("The trigger output is null.");
         }
         const GamePadTriggers native(left, right);
         outTriggers->left = native.getLeftProperty();
@@ -1439,9 +1413,9 @@ CNA_Result cna_gamepad_triggers_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outEquals == nullptr) {
-            return InvalidInput("The trigger comparison input or output is null.");
+            return InvalidArgument("The trigger comparison input or output is null.");
         }
-        *outEquals = NativeTriggers(*left).Equals(NativeTriggers(*right)) ? CNA_TRUE : CNA_FALSE;
+        *outEquals = ToCBool(NativeTriggers(*left).Equals(NativeTriggers(*right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1453,9 +1427,9 @@ CNA_Result cna_gamepad_triggers_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outNotEquals == nullptr) {
-            return InvalidInput("The trigger comparison input or output is null.");
+            return InvalidArgument("The trigger comparison input or output is null.");
         }
-        *outNotEquals = NativeTriggers(*left) != NativeTriggers(*right) ? CNA_TRUE : CNA_FALSE;
+        *outNotEquals = ToCBool(NativeTriggers(*left) != NativeTriggers(*right));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1466,7 +1440,7 @@ CNA_Result cna_gamepad_triggers_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (triggers == nullptr || outHash == nullptr) {
-            return InvalidInput("The trigger hash input or output is null.");
+            return InvalidArgument("The trigger hash input or output is null.");
         }
         *outHash = static_cast<int32_t>(NativeTriggers(*triggers).GetHashCode());
         return CNA_RESULT_SUCCESS;
@@ -1477,7 +1451,7 @@ CNA_Result cna_gamepad_state_init(CNA_GamePadState* const outState)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The gamepad snapshot output is null.");
+            return InvalidArgument("The gamepad snapshot output is null.");
         }
         *outState = SnapshotState(GamePadState());
         return CNA_RESULT_SUCCESS;
@@ -1493,7 +1467,7 @@ CNA_Result cna_gamepad_state_init_from_components(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (thumbSticks == nullptr || triggers == nullptr || outState == nullptr) {
-            return InvalidInput("The gamepad snapshot input or output is null.");
+            return InvalidArgument("The gamepad snapshot input or output is null.");
         }
         if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1525,7 +1499,7 @@ CNA_Result cna_gamepad_state_init_from_values(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (leftThumbStick == nullptr || rightThumbStick == nullptr || outState == nullptr) {
-            return InvalidInput("The gamepad snapshot input or output is null.");
+            return InvalidArgument("The gamepad snapshot input or output is null.");
         }
         CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
         if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
@@ -1551,7 +1525,7 @@ CNA_Result cna_gamepad_state_get_buttons(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outButtons == nullptr) {
-            return InvalidInput("The gamepad button-set output is null.");
+            return InvalidArgument("The gamepad button-set output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1567,7 +1541,7 @@ CNA_Result cna_gamepad_state_get_dpad(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDPad == nullptr) {
-            return InvalidInput("The directional-pad output is null.");
+            return InvalidArgument("The directional-pad output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1583,7 +1557,7 @@ CNA_Result cna_gamepad_state_get_thumb_sticks(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outThumbSticks == nullptr) {
-            return InvalidInput("The thumbstick output is null.");
+            return InvalidArgument("The thumbstick output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1600,7 +1574,7 @@ CNA_Result cna_gamepad_state_get_triggers(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTriggers == nullptr) {
-            return InvalidInput("The trigger output is null.");
+            return InvalidArgument("The trigger output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1631,7 +1605,7 @@ CNA_Result cna_gamepad_state_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The gamepad snapshot comparison output is null.");
+            return InvalidArgument("The gamepad snapshot comparison output is null.");
         }
         if (const CNA_Result result = ValidateState(left); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1639,7 +1613,7 @@ CNA_Result cna_gamepad_state_equals(
         if (const CNA_Result result = ValidateState(right); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEquals = left->is_connected == right->is_connected &&
+        *outEquals = ToCBool(left->is_connected == right->is_connected &&
                 left->packet_number == right->packet_number &&
                 left->pressed_buttons == right->pressed_buttons &&
                 NativeThumbSticks({left->analog.left_thumb_stick, left->analog.right_thumb_stick})
@@ -1647,9 +1621,7 @@ CNA_Result cna_gamepad_state_equals(
                         {right->analog.left_thumb_stick, right->analog.right_thumb_stick})) &&
                 NativeTriggers({left->analog.left_trigger, left->analog.right_trigger})
                     .Equals(NativeTriggers(
-                        {right->analog.left_trigger, right->analog.right_trigger}))
-            ? CNA_TRUE
-            : CNA_FALSE;
+                        {right->analog.left_trigger, right->analog.right_trigger})));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1666,7 +1638,7 @@ CNA_Result cna_gamepad_state_not_equals(
             return result;
         }
         if (outNotEquals == nullptr) {
-            return InvalidInput("The gamepad snapshot comparison output is null.");
+            return InvalidArgument("The gamepad snapshot comparison output is null.");
         }
         *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
         return CNA_RESULT_SUCCESS;
@@ -1679,7 +1651,7 @@ CNA_Result cna_gamepad_state_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The gamepad snapshot hash output is null.");
+            return InvalidArgument("The gamepad snapshot hash output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1698,7 +1670,7 @@ CNA_Result cna_gamepad_state_get_string_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The gamepad snapshot text output is null.");
+            return InvalidArgument("The gamepad snapshot text output is null.");
         }
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1718,7 +1690,7 @@ CNA_Result cna_gamepad_state_copy_string(
         if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyStateText(GamePadState().ToString(), destination, capacity, outBytes);
+        return CopyText(GamePadState().ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -1733,7 +1705,7 @@ using Microsoft::Xna::Framework::Vector3;
     PlayerIndex* const outPlayerIndex)
 {
     if (!TryMapPlayerIndex(playerIndex, outPlayerIndex)) {
-        return InvalidInput("The gamepad player index is invalid.");
+        return InvalidArgument("The gamepad player index is invalid.");
     }
     return ValidateActiveGameHandle(gameHandle);
 }
@@ -1784,28 +1756,6 @@ using Microsoft::Xna::Framework::Vector3;
     return CNA_POWER_STATE_UNKNOWN;
 }
 
-[[nodiscard]] CNA_Result CopyDeviceText(
-    const std::string& value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-        return InvalidInput("The gamepad text output is invalid.");
-    }
-    *outBytes = value.size();
-    if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the gamepad text.");
-    }
-    if (!value.empty()) {
-        std::memcpy(destination, value.data(), value.size());
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 using DeviceTextRoute = std::string (*)(PlayerIndex);
 
 [[nodiscard]] CNA_Result ReportDeviceTextSize(
@@ -1815,7 +1765,7 @@ using DeviceTextRoute = std::string (*)(PlayerIndex);
     uint64_t* const outBytes)
 {
     if (outBytes == nullptr) {
-        return InvalidInput("The gamepad text size output is null.");
+        return InvalidArgument("The gamepad text size output is null.");
     }
     PlayerIndex nativePlayerIndex = PlayerIndex::One;
     if (const CNA_Result result = BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
@@ -1839,7 +1789,7 @@ using DeviceTextRoute = std::string (*)(PlayerIndex);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    return CopyDeviceText(route(nativePlayerIndex), destination, capacity, outBytes);
+    return CopyText(route(nativePlayerIndex), destination, capacity, outBytes);
 }
 
 } // namespace
@@ -1851,10 +1801,10 @@ CNA_Result cna_gamepad_exclude_axis_dead_zone(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return InvalidInput("The dead-zone output is null.");
+            return InvalidArgument("The dead-zone output is null.");
         }
         if (!std::isfinite(value) || !std::isfinite(deadZone)) {
-            return InvalidInput("The dead-zone input is not finite.");
+            return InvalidArgument("The dead-zone input is not finite.");
         }
         *outValue = GamePad::ExcludeAxisDeadZone(value, deadZone);
         return CNA_RESULT_SUCCESS;
@@ -1870,7 +1820,7 @@ CNA_Result cna_gamepad_set_vibration(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
-            return InvalidInput("The vibration output is null.");
+            return InvalidArgument("The vibration output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -1878,9 +1828,7 @@ CNA_Result cna_gamepad_set_vibration(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outApplied = GamePad::SetVibration(nativePlayerIndex, leftMotor, rightMotor)
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outApplied = ToCBool(GamePad::SetVibration(nativePlayerIndex, leftMotor, rightMotor));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1911,7 +1859,7 @@ CNA_Result cna_gamepad_set_trigger_vibration_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
-            return InvalidInput("The trigger-vibration output is null.");
+            return InvalidArgument("The trigger-vibration output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -1920,9 +1868,7 @@ CNA_Result cna_gamepad_set_trigger_vibration_ext(
             return result;
         }
         *outApplied =
-            GamePad::SetTriggerVibrationEXT(nativePlayerIndex, leftTrigger, rightTrigger)
-            ? CNA_TRUE
-            : CNA_FALSE;
+            ToCBool(GamePad::SetTriggerVibrationEXT(nativePlayerIndex, leftTrigger, rightTrigger));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1935,7 +1881,7 @@ CNA_Result cna_gamepad_get_gyro_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGyro == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The gyroscope output is null.");
+            return InvalidArgument("The gyroscope output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -1964,7 +1910,7 @@ CNA_Result cna_gamepad_get_accelerometer_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAcceleration == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The accelerometer output is null.");
+            return InvalidArgument("The accelerometer output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -1992,7 +1938,7 @@ CNA_Result cna_gamepad_get_player_index_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The device player-index output is null.");
+            return InvalidArgument("The device player-index output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2013,7 +1959,7 @@ CNA_Result cna_gamepad_set_player_index_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
-            return InvalidInput("The device player-index output is null.");
+            return InvalidArgument("The device player-index output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2021,9 +1967,7 @@ CNA_Result cna_gamepad_set_player_index_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outApplied = GamePad::SetPlayerIndexEXT(nativePlayerIndex, static_cast<int>(index))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outApplied = ToCBool(GamePad::SetPlayerIndexEXT(nativePlayerIndex, static_cast<int>(index)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2036,7 +1980,7 @@ CNA_Result cna_gamepad_get_power_info_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr || outPercent == nullptr) {
-            return InvalidInput("The power-info output is null.");
+            return InvalidArgument("The power-info output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2059,7 +2003,7 @@ CNA_Result cna_gamepad_get_button_label_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLabel == nullptr) {
-            return InvalidInput("The button-label output is null.");
+            return InvalidArgument("The button-label output is null.");
         }
         if (const CNA_Result result = ValidateMask(button); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2195,7 +2139,7 @@ CNA_Result cna_gamepad_get_firmware_version_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVersion == nullptr) {
-            return InvalidInput("The firmware-version output is null.");
+            return InvalidArgument("The firmware-version output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2215,7 +2159,7 @@ CNA_Result cna_gamepad_get_steam_handle_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHandle == nullptr) {
-            return InvalidInput("The Steam-handle output is null.");
+            return InvalidArgument("The Steam-handle output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2235,7 +2179,7 @@ CNA_Result cna_gamepad_get_connection_state_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The connection-state output is null.");
+            return InvalidArgument("The connection-state output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2255,7 +2199,7 @@ CNA_Result cna_gamepad_get_touchpad_count_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The touchpad-count output is null.");
+            return InvalidArgument("The touchpad-count output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2276,7 +2220,7 @@ CNA_Result cna_gamepad_get_touchpad_finger_count_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The touchpad finger-count output is null.");
+            return InvalidArgument("The touchpad finger-count output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2300,7 +2244,7 @@ CNA_Result cna_gamepad_get_touchpad_finger_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outFinger == nullptr || outAvailable == nullptr) {
-            return InvalidInput("The touchpad finger output is null.");
+            return InvalidArgument("The touchpad finger output is null.");
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (const CNA_Result result =
@@ -2320,7 +2264,7 @@ CNA_Result cna_gamepad_get_touchpad_finger_ext(
                 x,
                 y,
                 pressure)) {
-            outFinger->is_down = down ? CNA_TRUE : CNA_FALSE;
+            outFinger->is_down = ToCBool(down);
             outFinger->reserved[0] = UINT8_C(0);
             outFinger->reserved[1] = UINT8_C(0);
             outFinger->reserved[2] = UINT8_C(0);
@@ -2340,7 +2284,7 @@ namespace {
 [[nodiscard]] CNA_Result ValidateKey(const CNA_Key key)
 {
     if (key >= KeyboardSlotCount) {
-        return InvalidInput("The key identity is outside the canonical 256-slot range.");
+        return InvalidArgument("The key identity is outside the canonical 256-slot range.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -2384,7 +2328,7 @@ using KeyTextRoute = std::string (*)(Keys);
     uint64_t* const outBytes)
 {
     if (outBytes == nullptr) {
-        return InvalidInput("The key text size output is null.");
+        return InvalidArgument("The key text size output is null.");
     }
     if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
         return result;
@@ -2412,7 +2356,7 @@ using KeyTextRoute = std::string (*)(Keys);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    return CopyDeviceText(route(static_cast<Keys>(key)), destination, capacity, outBytes);
+    return CopyText(route(static_cast<Keys>(key)), destination, capacity, outBytes);
 }
 
 using KeyLookupRoute = Keys (*)(const std::string&);
@@ -2424,7 +2368,7 @@ using KeyLookupRoute = Keys (*)(const std::string&);
     CNA_Key* const outKey)
 {
     if (outKey == nullptr) {
-        return InvalidInput("The key identity output is null.");
+        return InvalidArgument("The key identity output is null.");
     }
     std::string text;
     if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, true, &text);
@@ -2448,7 +2392,7 @@ CNA_Result cna_keyboard_state_init(CNA_KeyboardState* const outState)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The keyboard snapshot output is null.");
+            return InvalidArgument("The keyboard snapshot output is null.");
         }
         *outState = SnapshotKeyboard(KeyboardState());
         return CNA_RESULT_SUCCESS;
@@ -2462,10 +2406,10 @@ CNA_Result cna_keyboard_state_init_from_keys(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The keyboard snapshot output is null.");
+            return InvalidArgument("The keyboard snapshot output is null.");
         }
         if (keys == nullptr && count != 0U) {
-            return InvalidInput("The key array is invalid.");
+            return InvalidArgument("The key array is invalid.");
         }
         // The canonical constructors silently drop a key outside the 256-slot bit field; C refuses
         // instead, so a caller can never lose a key without being told.
@@ -2489,7 +2433,7 @@ CNA_Result cna_keyboard_state_get_key_state(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outKeyState == nullptr) {
-            return InvalidInput("The key-state output is null.");
+            return InvalidArgument("The key-state output is null.");
         }
         if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2513,7 +2457,7 @@ CNA_Result cna_keyboard_state_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The keyboard comparison output is null.");
+            return InvalidArgument("The keyboard comparison output is null.");
         }
         if (const CNA_Result result = ValidateKeyboardState(left);
             result != CNA_RESULT_SUCCESS) {
@@ -2523,9 +2467,7 @@ CNA_Result cna_keyboard_state_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEquals = NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outEquals = ToCBool(NativeKeyboardState(*left).Equals(NativeKeyboardState(*right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2542,7 +2484,7 @@ CNA_Result cna_keyboard_state_not_equals(
             return result;
         }
         if (outNotEquals == nullptr) {
-            return InvalidInput("The keyboard comparison output is null.");
+            return InvalidArgument("The keyboard comparison output is null.");
         }
         *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
         return CNA_RESULT_SUCCESS;
@@ -2555,7 +2497,7 @@ CNA_Result cna_keyboard_state_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The keyboard hash output is null.");
+            return InvalidArgument("The keyboard hash output is null.");
         }
         if (const CNA_Result result = ValidateKeyboardState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -2572,7 +2514,7 @@ CNA_Result cna_keyboard_state_get_string_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The keyboard text output is null.");
+            return InvalidArgument("The keyboard text output is null.");
         }
         if (const CNA_Result result = ValidateKeyboardState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -2594,7 +2536,7 @@ CNA_Result cna_keyboard_state_copy_string(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyDeviceText(KeyboardState().ToString(), destination, capacity, outBytes);
+        return CopyText(KeyboardState().ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -2626,7 +2568,7 @@ CNA_Result cna_keyboard_get_key_from_scancode_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outKey == nullptr) {
-            return InvalidInput("The key identity output is null.");
+            return InvalidArgument("The key identity output is null.");
         }
         if (const CNA_Result result = ValidateKey(scancode); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2647,7 +2589,7 @@ CNA_Result cna_keyboard_get_mod_state_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outModifiers == nullptr) {
-            return InvalidInput("The modifier-state output is null.");
+            return InvalidArgument("The modifier-state output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -2801,7 +2743,7 @@ constexpr CNA_MouseButtonFlags MouseButtonMask = CNA_MOUSE_BUTTON_LEFT | CNA_MOU
 [[nodiscard]] CNA_Result ValidateMouseButtons(const CNA_MouseButtonFlags buttons)
 {
     if ((buttons & ~MouseButtonMask) != 0U) {
-        return InvalidInput("The mouse button mask contains an undefined bit.");
+        return InvalidArgument("The mouse button mask contains an undefined bit.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -2841,7 +2783,7 @@ CNA_Result cna_mouse_state_init(CNA_MouseState* const outState)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The mouse snapshot output is null.");
+            return InvalidArgument("The mouse snapshot output is null.");
         }
         *outState = SnapshotMouse(MouseState());
         return CNA_RESULT_SUCCESS;
@@ -2857,7 +2799,7 @@ CNA_Result cna_mouse_state_init_from_values(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The mouse snapshot output is null.");
+            return InvalidArgument("The mouse snapshot output is null.");
         }
         if (const CNA_Result result = ValidateMouseButtons(pressedButtons);
             result != CNA_RESULT_SUCCESS) {
@@ -2886,7 +2828,7 @@ CNA_Result cna_mouse_state_init_from_values_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The mouse snapshot output is null.");
+            return InvalidArgument("The mouse snapshot output is null.");
         }
         if (const CNA_Result result = ValidateMouseButtons(pressedButtons);
             result != CNA_RESULT_SUCCESS) {
@@ -2908,7 +2850,7 @@ CNA_Result cna_mouse_state_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return InvalidInput("The mouse comparison output is null.");
+            return InvalidArgument("The mouse comparison output is null.");
         }
         if (const CNA_Result result = ValidateMouseState(left); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2916,9 +2858,7 @@ CNA_Result cna_mouse_state_equals(
         if (const CNA_Result result = ValidateMouseState(right); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEquals = NativeMouseState(*left).Equals(NativeMouseState(*right))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outEquals = ToCBool(NativeMouseState(*left).Equals(NativeMouseState(*right)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2935,7 +2875,7 @@ CNA_Result cna_mouse_state_not_equals(
             return result;
         }
         if (outNotEquals == nullptr) {
-            return InvalidInput("The mouse comparison output is null.");
+            return InvalidArgument("The mouse comparison output is null.");
         }
         *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
         return CNA_RESULT_SUCCESS;
@@ -2948,7 +2888,7 @@ CNA_Result cna_mouse_state_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The mouse hash output is null.");
+            return InvalidArgument("The mouse hash output is null.");
         }
         if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2964,7 +2904,7 @@ CNA_Result cna_mouse_state_get_string_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return InvalidInput("The mouse text output is null.");
+            return InvalidArgument("The mouse text output is null.");
         }
         if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2984,7 +2924,7 @@ CNA_Result cna_mouse_state_copy_string(
         if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return CopyDeviceText(
+        return CopyText(
             NativeMouseState(*state).ToString(),
             destination,
             capacity,
@@ -2996,7 +2936,7 @@ CNA_Result cna_mouse_get_window_handle(const CNA_Handle gameHandle, uint64_t* co
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWindow == nullptr) {
-            return InvalidInput("The mouse window-handle output is null.");
+            return InvalidArgument("The mouse window-handle output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -3037,13 +2977,13 @@ CNA_Result cna_mouse_get_is_relative_mouse_mode_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnabled == nullptr) {
-            return InvalidInput("The relative-mode output is null.");
+            return InvalidArgument("The relative-mode output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEnabled = Mouse::getIsRelativeMouseModeEXTProperty() ? CNA_TRUE : CNA_FALSE;
+        *outEnabled = ToCBool(Mouse::getIsRelativeMouseModeEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3073,7 +3013,7 @@ CNA_Result cna_mouse_set_capture_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
-            return InvalidInput("The mouse capture output is null.");
+            return InvalidArgument("The mouse capture output is null.");
         }
         if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
             result != CNA_RESULT_SUCCESS) {
@@ -3083,7 +3023,7 @@ CNA_Result cna_mouse_set_capture_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outApplied = Mouse::SetCaptureEXT(enabled != CNA_FALSE) ? CNA_TRUE : CNA_FALSE;
+        *outApplied = ToCBool(Mouse::SetCaptureEXT(enabled != CNA_FALSE));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3095,7 +3035,7 @@ CNA_Result cna_mouse_get_global_position_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outX == nullptr || outY == nullptr) {
-            return InvalidInput("The global-position output is null.");
+            return InvalidArgument("The global-position output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -3118,15 +3058,13 @@ CNA_Result cna_mouse_warp_global_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outApplied == nullptr) {
-            return InvalidInput("The mouse warp output is null.");
+            return InvalidArgument("The mouse warp output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outApplied = Mouse::WarpGlobalEXT(static_cast<int>(x), static_cast<int>(y))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outApplied = ToCBool(Mouse::WarpGlobalEXT(static_cast<int>(x), static_cast<int>(y)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3138,11 +3076,11 @@ CNA_Result cna_mouse_subscribe_clicked_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The mouse registration output is null.");
+            return InvalidArgument("The mouse registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The mouse clicked callback is null.");
+            return InvalidArgument("The mouse clicked callback is null.");
         }
         const auto token = Mouse::ClickedEXT.Add([callback, context](const int button) {
             callback(static_cast<int32_t>(button), context);
@@ -3167,15 +3105,9 @@ CNA_Result cna_mouse_unsubscribe_clicked_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<MouseClickedRegistration> resource;
-        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
-            registration,
-            CNA::C::Detail::ObjectKind::MouseEventRegistration,
-            &resource);
+        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::MouseEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                CNA::C::Detail::ErrorCategoryForResult(getResult),
-                "The mouse clicked registration handle is invalid for this call.");
+            return getResult;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);
@@ -3245,17 +3177,7 @@ struct MouseCursorResource final {
     const CNA_MouseCursorHandle handle,
     std::shared_ptr<MouseCursorResource>* const outResource)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
-        handle,
-        CNA::C::Detail::ObjectKind::MouseCursor,
-        outResource);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        CNA::C::Detail::ErrorCategoryForResult(result),
-        "The MouseCursor handle is invalid for this call.");
+    return LookupHandle(handle, CNA::C::Detail::ObjectKind::MouseCursor, outResource);
 }
 
 [[nodiscard]] CNA_Result BorrowStockCursor(
@@ -3290,7 +3212,7 @@ struct MouseCursorResource final {
             *outCursor = &MouseCursor::getWaitArrowProperty();
             break;
         default:
-            return InvalidInput("The requested stock cursor is not a canonical identity.");
+            return InvalidArgument("The requested stock cursor is not a canonical identity.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -3301,7 +3223,7 @@ CNA_Result cna_mouse_cursor_create_ext(CNA_MouseCursorHandle* const outCursor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCursor == nullptr) {
-            return InvalidInput("The MouseCursor output handle is null.");
+            return InvalidArgument("The MouseCursor output handle is null.");
         }
         *outCursor = CNA_INVALID_HANDLE;
         auto resource = std::make_shared<MouseCursorResource>();
@@ -3318,7 +3240,7 @@ CNA_Result cna_mouse_cursor_get_stock_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCursor == nullptr) {
-            return InvalidInput("The MouseCursor output handle is null.");
+            return InvalidArgument("The MouseCursor output handle is null.");
         }
         *outCursor = CNA_INVALID_HANDLE;
         MouseCursor* stockCursor = nullptr;
@@ -3345,7 +3267,7 @@ CNA_Result cna_mouse_cursor_create_from_texture2d(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCursor == nullptr) {
-            return InvalidInput("The MouseCursor output handle is null.");
+            return InvalidArgument("The MouseCursor output handle is null.");
         }
         *outCursor = CNA_INVALID_HANDLE;
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -3519,7 +3441,7 @@ private:
     // refuses instead, so a consumer is told about a bad identity rather than getting a different
     // keyboard than it asked for.
     if (value > CNA_TEXT_INPUT_TYPE_MAXIMUM) {
-        return InvalidInput("The text input type identity is undefined.");
+        return InvalidArgument("The text input type identity is undefined.");
     }
     *outType = static_cast<TextInputTypeEXT>(value);
     return CNA_RESULT_SUCCESS;
@@ -3534,11 +3456,11 @@ CNA_Result cna_text_input_subscribe_text_input_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The text-input registration output is null.");
+            return InvalidArgument("The text-input registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The text-input callback is null.");
+            return InvalidArgument("The text-input callback is null.");
         }
         const auto token = TextInputEXT::TextInput.Add([callback, context](const charcs value) {
             callback(static_cast<uint16_t>(value), context);
@@ -3557,11 +3479,11 @@ CNA_Result cna_text_input_subscribe_text_editing_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The text-editing registration output is null.");
+            return InvalidArgument("The text-editing registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The text-editing callback is null.");
+            return InvalidArgument("The text-editing callback is null.");
         }
         const auto token = TextInputEXT::TextEditing.Add(
             [callback, context](const std::string& text, const int start, const int length) {
@@ -3588,11 +3510,11 @@ CNA_Result cna_text_input_subscribe_text_editing_candidates_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return InvalidInput("The text-editing candidates registration output is null.");
+            return InvalidArgument("The text-editing candidates registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return InvalidInput("The text-editing candidates callback is null.");
+            return InvalidArgument("The text-editing candidates callback is null.");
         }
         const auto token = TextInputEXT::TextEditingCandidatesEXT.Add(
             [callback, context](
@@ -3611,7 +3533,7 @@ CNA_Result cna_text_input_subscribe_text_editing_candidates_ext(
                     views.empty() ? nullptr : views.data(),
                     static_cast<int32_t>(views.size()),
                     static_cast<int32_t>(selected),
-                    horizontal ? CNA_TRUE : CNA_FALSE,
+                    ToCBool(horizontal),
                     {0U, 0U, 0U}
                 };
                 callback(&info, context);
@@ -3627,15 +3549,9 @@ CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<TextInputRegistration> resource;
-        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
-            registration,
-            CNA::C::Detail::ObjectKind::TextInputEventRegistration,
-            &resource);
+        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::TextInputEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                getResult,
-                CNA::C::Detail::ErrorCategoryForResult(getResult),
-                "The text-input registration handle is invalid for this call.");
+            return getResult;
         }
         const CNA_Result releaseResult =
             CNA::C::Detail::GetRuntimeHandles().Release(registration);
@@ -3705,10 +3621,10 @@ CNA_Result cna_text_input_raise_text_editing_candidates_ext(
             return result;
         }
         if (candidateCount < 0) {
-            return InvalidInput("The candidate count is negative.");
+            return InvalidArgument("The candidate count is negative.");
         }
         if (candidates == nullptr && candidateCount != 0) {
-            return InvalidInput("The candidate array is null.");
+            return InvalidArgument("The candidate array is null.");
         }
         std::vector<std::string> copied;
         copied.reserve(static_cast<std::size_t>(candidateCount));
@@ -3742,7 +3658,7 @@ CNA_Result cna_text_input_get_window_handle_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWindow == nullptr) {
-            return InvalidInput("The text-input window-handle output is null.");
+            return InvalidArgument("The text-input window-handle output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -3771,13 +3687,13 @@ CNA_Result cna_text_input_is_active_ext(const CNA_Handle gameHandle, CNA_Bool* c
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outActive == nullptr) {
-            return InvalidInput("The text-input active output is null.");
+            return InvalidArgument("The text-input active output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outActive = TextInputEXT::IsTextInputActive() ? CNA_TRUE : CNA_FALSE;
+        *outActive = ToCBool(TextInputEXT::IsTextInputActive());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3788,13 +3704,13 @@ CNA_Result cna_text_input_is_screen_keyboard_shown_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outShown == nullptr) {
-            return InvalidInput("The screen-keyboard output is null.");
+            return InvalidArgument("The screen-keyboard output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outShown = TextInputEXT::IsScreenKeyboardShown() ? CNA_TRUE : CNA_FALSE;
+        *outShown = ToCBool(TextInputEXT::IsScreenKeyboardShown());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3806,15 +3722,13 @@ CNA_Result cna_text_input_is_screen_keyboard_shown_for_window_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outShown == nullptr) {
-            return InvalidInput("The screen-keyboard output is null.");
+            return InvalidArgument("The screen-keyboard output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outShown = TextInputEXT::IsScreenKeyboardShown(static_cast<std::uintptr_t>(window))
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outShown = ToCBool(TextInputEXT::IsScreenKeyboardShown(static_cast<std::uintptr_t>(window)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3905,7 +3819,7 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
 [[nodiscard]] CNA_Result ValidateGestureType(const CNA_GestureType gestures) noexcept
 {
     if ((gestures & ~CNA_GESTURE_TYPE_ALL) != 0U) {
-        return InvalidInput("The gesture type contains an undefined bit.");
+        return InvalidArgument("The gesture type contains an undefined bit.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -3915,11 +3829,11 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     const char* const message) noexcept
 {
     if (location == nullptr) {
-        return InvalidInput(message);
+        return InvalidArgument(message);
     }
     if (!IsValidTouchLocationState(location->state) ||
         !IsValidTouchLocationState(location->previous_state)) {
-        return InvalidInput("The touch location carries an undefined state.");
+        return InvalidArgument("The touch location carries an undefined state.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -3929,7 +3843,7 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     // The canonical constructors store any value; C refuses one outside the documented range so a
     // snapshot can never claim a pressure its own contract excludes. NaN fails both comparisons.
     if (!(pressure >= 0.0F && pressure <= 1.0F)) {
-        return InvalidInput("The touch pressure is outside the range zero through one.");
+        return InvalidArgument("The touch pressure is outside the range zero through one.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -4000,7 +3914,7 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     CNA_GestureSample* const outSample)
 {
     if (outSample == nullptr) {
-        return InvalidInput("The gesture-sample output is null.");
+        return InvalidArgument("The gesture-sample output is null.");
     }
     if (const CNA_Result result = ValidateGestureType(gestureType);
         result != CNA_RESULT_SUCCESS) {
@@ -4031,10 +3945,10 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     CNA_TouchLocation* const outLocation)
 {
     if (outLocation == nullptr) {
-        return InvalidInput("The touch-location output is null.");
+        return InvalidArgument("The touch-location output is null.");
     }
     if (!IsValidTouchLocationState(state) || !IsValidTouchLocationState(previousState)) {
-        return InvalidInput("The touch location state is undefined.");
+        return InvalidArgument("The touch location state is undefined.");
     }
     if (const CNA_Result result = ValidatePressure(pressure);
         result != CNA_RESULT_SUCCESS) {
@@ -4054,7 +3968,7 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     const bool copy)
 {
     if (outBytes == nullptr) {
-        return InvalidInput("The touch-location text byte-count output is null.");
+        return InvalidArgument("The touch-location text byte-count output is null.");
     }
     if (const CNA_Result result =
             ValidateTouchLocationValue(location, "The touch location is null.");
@@ -4066,7 +3980,7 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
         *outBytes = text.size();
         return CNA_RESULT_SUCCESS;
     }
-    return CopyDeviceText(text, destination, capacity, outBytes);
+    return CopyText(text, destination, capacity, outBytes);
 }
 
 } // namespace
@@ -4075,7 +3989,7 @@ CNA_Result cna_gesture_sample_init(CNA_GestureSample* const outSample)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSample == nullptr) {
-            return InvalidInput("The gesture-sample output is null.");
+            return InvalidArgument("The gesture-sample output is null.");
         }
         *outSample = MapGestureSample(GestureSample());
         return CNA_RESULT_SUCCESS;
@@ -4134,13 +4048,13 @@ CNA_Result cna_touch_capabilities_init(CNA_TouchCapabilities* const outCapabilit
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
-            return InvalidInput("The touch-capabilities output is null.");
+            return InvalidArgument("The touch-capabilities output is null.");
         }
         const TouchPanelCapabilities nativeCapabilities;
         *outCapabilities = CNA_TouchCapabilities{
             sizeof(CNA_TouchCapabilities),
             StructureVersion,
-            nativeCapabilities.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+            ToCBool(nativeCapabilities.getIsConnectedProperty()),
             {0U, 0U, 0U},
             static_cast<uint32_t>(nativeCapabilities.getMaximumTouchCountProperty())
         };
@@ -4155,19 +4069,19 @@ CNA_Result cna_touch_capabilities_init_from_values_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
-            return InvalidInput("The touch-capabilities output is null.");
+            return InvalidArgument("The touch-capabilities output is null.");
         }
         if (const CNA_Result result = ValidateCanonicalBool(isConnected, "is_connected");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (maximumTouchCount < 0) {
-            return InvalidInput("The maximum touch count is negative.");
+            return InvalidArgument("The maximum touch count is negative.");
         }
         *outCapabilities = CNA_TouchCapabilities{
             sizeof(CNA_TouchCapabilities),
             StructureVersion,
-            isConnected != CNA_FALSE ? CNA_TRUE : CNA_FALSE,
+            ToCBool(isConnected != CNA_FALSE),
             {0U, 0U, 0U},
             static_cast<uint32_t>(maximumTouchCount)
         };
@@ -4179,7 +4093,7 @@ CNA_Result cna_touch_location_init(CNA_TouchLocation* const outLocation)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLocation == nullptr) {
-            return InvalidInput("The touch-location output is null.");
+            return InvalidArgument("The touch-location output is null.");
         }
         *outLocation = MapTouchLocation(TouchLocation());
         return CNA_RESULT_SUCCESS;
@@ -4271,7 +4185,7 @@ CNA_Result cna_touch_location_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return InvalidInput("The touch-location equality output is null.");
+            return InvalidArgument("The touch-location equality output is null.");
         }
         if (const CNA_Result result =
                 ValidateTouchLocationValue(left, "The first touch location is null.");
@@ -4283,7 +4197,7 @@ CNA_Result cna_touch_location_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEqual = TouchLocationsEqual(*left, *right) ? CNA_TRUE : CNA_FALSE;
+        *outEqual = ToCBool(TouchLocationsEqual(*left, *right));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4294,7 +4208,7 @@ CNA_Result cna_touch_location_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return InvalidInput("The touch-location hash output is null.");
+            return InvalidArgument("The touch-location hash output is null.");
         }
         if (const CNA_Result result =
                 ValidateTouchLocationValue(location, "The touch location is null.");
@@ -4330,7 +4244,7 @@ CNA_Result cna_touch_state_init(CNA_TouchState* const outState)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The touch-state output is null.");
+            return InvalidArgument("The touch-state output is null.");
         }
         CNA_TouchState state = {};
         state.struct_size = sizeof(CNA_TouchState);
@@ -4349,13 +4263,13 @@ CNA_Result cna_touch_state_init_from_locations(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outState == nullptr) {
-            return InvalidInput("The touch-state output is null.");
+            return InvalidArgument("The touch-state output is null.");
         }
         if (count > CNA_TOUCH_MAX_TOUCHES) {
-            return InvalidInput("The touch count exceeds the fixed snapshot capacity.");
+            return InvalidArgument("The touch count exceeds the fixed snapshot capacity.");
         }
         if (locations == nullptr && count != 0U) {
-            return InvalidInput("The touch-location array is null.");
+            return InvalidArgument("The touch-location array is null.");
         }
         for (uint32_t index = 0U; index < count; ++index) {
             if (const CNA_Result result = ValidateTouchLocationValue(
@@ -4384,13 +4298,13 @@ CNA_Result cna_touch_state_get_is_read_only(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outReadOnly == nullptr) {
-            return InvalidInput("The touch-state read-only output is null.");
+            return InvalidArgument("The touch-state read-only output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outReadOnly = TouchCollection().getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        *outReadOnly = ToCBool(TouchCollection().getIsReadOnlyProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4401,13 +4315,13 @@ CNA_Result cna_touch_state_get_is_empty_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEmpty == nullptr) {
-            return InvalidInput("The touch-state empty output is null.");
+            return InvalidArgument("The touch-state empty output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEmpty = state->touch_count == 0U ? CNA_TRUE : CNA_FALSE;
+        *outEmpty = ToCBool(state->touch_count == 0U);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4419,7 +4333,7 @@ CNA_Result cna_touch_state_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return InvalidInput("The touch-state contains output is null.");
+            return InvalidArgument("The touch-state contains output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -4449,7 +4363,7 @@ CNA_Result cna_touch_state_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return InvalidInput("The touch-state index output is null.");
+            return InvalidArgument("The touch-state index output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -4482,21 +4396,21 @@ CNA_Result cna_touch_state_copy_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return InvalidInput("The touch-state copy count output is null.");
+            return InvalidArgument("The touch-state copy count output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (count > capacity) {
-            return InvalidInput("The destination element count exceeds its capacity.");
+            return InvalidArgument("The destination element count exceeds its capacity.");
         }
         if (destination == nullptr && capacity != UINT64_C(0)) {
-            return InvalidInput("The destination array is null.");
+            return InvalidArgument("The destination array is null.");
         }
         // The canonical operation guards the index the same way and throws for a bad one.
         if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > count) {
-            return InvalidInput("The destination index is out of range.");
+            return InvalidArgument("The destination index is out of range.");
         }
         const uint64_t added = state->touch_count;
         const uint64_t required = count + added;
@@ -4568,7 +4482,7 @@ CNA_Result cna_touch_state_remove(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRemoved == nullptr) {
-            return InvalidInput("The touch-state removal output is null.");
+            return InvalidArgument("The touch-state removal output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -4604,7 +4518,7 @@ CNA_Result cna_touch_state_remove_at(CNA_TouchState* const state, const int32_t 
             return result;
         }
         if (index < 0 || static_cast<uint32_t>(index) >= state->touch_count) {
-            return InvalidInput("The touch-location index is out of range.");
+            return InvalidArgument("The touch-location index is out of range.");
         }
         for (uint32_t shift = static_cast<uint32_t>(index) + 1U;
              shift < state->touch_count;
@@ -4634,7 +4548,7 @@ CNA_Result cna_touch_state_insert(
         }
         // The canonical insertion accepts an index equal to the count, which appends.
         if (index < 0 || static_cast<uint32_t>(index) > state->touch_count) {
-            return InvalidInput("The touch-location index is out of range.");
+            return InvalidArgument("The touch-location index is out of range.");
         }
         if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
             return Fail(
@@ -4657,7 +4571,7 @@ CNA_Result cna_touch_panel_get_display_width(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr) {
-            return InvalidInput("The touch-panel display-width output is null.");
+            return InvalidArgument("The touch-panel display-width output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4688,7 +4602,7 @@ CNA_Result cna_touch_panel_get_display_height(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHeight == nullptr) {
-            return InvalidInput("The touch-panel display-height output is null.");
+            return InvalidArgument("The touch-panel display-height output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4719,7 +4633,7 @@ CNA_Result cna_touch_panel_get_display_orientation(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOrientation == nullptr) {
-            return InvalidInput("The touch-panel orientation output is null.");
+            return InvalidArgument("The touch-panel orientation output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4737,13 +4651,13 @@ CNA_Result cna_touch_panel_get_mouse_touch_emulation_enabled_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEnabled == nullptr) {
-            return InvalidInput("The mouse-touch-emulation output is null.");
+            return InvalidArgument("The mouse-touch-emulation output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outEnabled = TouchPanel::getMouseTouchEmulationEnabledEXT() ? CNA_TRUE : CNA_FALSE;
+        *outEnabled = ToCBool(TouchPanel::getMouseTouchEmulationEnabledEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4773,7 +4687,7 @@ CNA_Result cna_touch_panel_set_display_orientation(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if ((orientation & ~DisplayOrientationAll) != 0U) {
-            return InvalidInput("The display orientation contains an undefined bit.");
+            return InvalidArgument("The display orientation contains an undefined bit.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4790,7 +4704,7 @@ CNA_Result cna_touch_panel_get_enabled_gestures(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGestures == nullptr) {
-            return InvalidInput("The enabled-gestures output is null.");
+            return InvalidArgument("The enabled-gestures output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4825,13 +4739,13 @@ CNA_Result cna_touch_panel_get_is_gesture_available(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAvailable == nullptr) {
-            return InvalidInput("The gesture-available output is null.");
+            return InvalidArgument("The gesture-available output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outAvailable = TouchPanel::getIsGestureAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+        *outAvailable = ToCBool(TouchPanel::getIsGestureAvailableProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4842,7 +4756,7 @@ CNA_Result cna_touch_panel_get_window_handle(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWindow == nullptr) {
-            return InvalidInput("The touch-panel window-handle output is null.");
+            return InvalidArgument("The touch-panel window-handle output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4873,13 +4787,13 @@ CNA_Result cna_touch_panel_get_touch_device_exists_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outExists == nullptr) {
-            return InvalidInput("The touch-device-exists output is null.");
+            return InvalidArgument("The touch-device-exists output is null.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outExists = TouchPanel::getTouchDeviceExistsProperty() ? CNA_TRUE : CNA_FALSE;
+        *outExists = ToCBool(TouchPanel::getTouchDeviceExistsProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4959,7 +4873,7 @@ CNA_Result cna_touch_panel_raise_touch_event_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!IsValidTouchLocationState(state)) {
-            return InvalidInput("The touch location state is undefined.");
+            return InvalidArgument("The touch location state is undefined.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -4984,7 +4898,7 @@ CNA_Result cna_touch_panel_set_finger_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (index < 0 || static_cast<uint32_t>(index) >= CNA_TOUCH_MAX_TOUCHES) {
-            return InvalidInput("The touch slot index is out of range.");
+            return InvalidArgument("The touch slot index is out of range.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {

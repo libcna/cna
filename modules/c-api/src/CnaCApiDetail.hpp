@@ -260,6 +260,24 @@ void SetLastError(
     CNA_ErrorCategory category,
     std::string_view message) noexcept;
 
+/** @brief Records and returns the C layer's own refusal of an argument (a null output, a bad value). */
+[[nodiscard]] inline CNA_Result InvalidArgument(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+/** @brief Records and returns a refusal because the object's current state does not allow the call. */
+[[nodiscard]] inline CNA_Result InvalidState(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
+}
+
+/** @brief Records and returns a refusal of an operation this build or platform does not provide. */
+[[nodiscard]] inline CNA_Result NotSupported(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, message);
+}
+
 void SetLastJoinError(uint32_t joinError) noexcept;
 
 void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;
@@ -473,6 +491,12 @@ template<typename TCallable>
     return value == CNA_FALSE || value == CNA_TRUE;
 }
 
+/** @brief The one spelling of a native `bool` as the ABI's `CNA_Bool`. */
+[[nodiscard]] constexpr CNA_Bool ToCBool(const bool value) noexcept
+{
+    return value ? CNA_TRUE : CNA_FALSE;
+}
+
 /**
  * @brief Refuses a `CNA_Bool` that is neither `CNA_FALSE` nor `CNA_TRUE`.
  *
@@ -596,6 +620,35 @@ private:
     mutable std::mutex mutex_;
     mutable std::vector<Slot> slots_;
 };
+
+/** @brief The process-wide registry every C handle lives in. */
+[[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
+
+/** @brief The object kind's name as diagnostics spell it ("ModelBone", "SoundEffectInstance"). */
+[[nodiscard]] std::string_view ObjectKindName(ObjectKind kind) noexcept;
+
+/**
+ * @brief Looks a handle up as one object kind, recording the diagnostic when it is not one.
+ *
+ * The registry itself only answers with a result. This is the lookup every route makes: a null,
+ * stale, released or wrong-kind handle fails with that result (INVALID_HANDLE, or THREAD for a
+ * handle another thread created) and the message "The <kind> handle is invalid for this call."
+ * The returned reference keeps the object alive for the rest of the call.
+ */
+template<typename TObject>
+[[nodiscard]] CNA_Result LookupHandle(
+    const CNA_Handle handle,
+    const ObjectKind kind,
+    std::shared_ptr<TObject>* const outObject)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(handle, kind, outObject);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    std::string message("The ");
+    message.append(ObjectKindName(kind)).append(" handle is invalid for this call.");
+    return Fail(result, ErrorCategoryForResult(result), message);
+}
 
 } // namespace CNA::C::Detail
 
