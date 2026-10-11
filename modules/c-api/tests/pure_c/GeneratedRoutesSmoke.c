@@ -27,6 +27,7 @@ static CNA_Bool o_CNA_Bool;
 static CNA_BoundingSphere o_CNA_BoundingSphere;
 static CNA_CRTMaskType o_CNA_CRTMaskType;
 static CNA_CameraState o_CNA_CameraState;
+static CNA_Color o_CNA_Color;
 static CNA_CompareFunction o_CNA_CompareFunction;
 static CNA_CompassReading o_CNA_CompassReading;
 static CNA_DepthEffectMode o_CNA_DepthEffectMode;
@@ -107,6 +108,7 @@ static CNA_BoundingFrustum v_CNA_BoundingFrustum;
 static CNA_BoundingSphere v_CNA_BoundingSphere;
 static CNA_CameraHandle v_CNA_CameraHandle;
 static CNA_Char16 v_CNA_Char16;
+static CNA_ClearOptions v_CNA_ClearOptions;
 static CNA_CnbAnimationClipHandle v_CNA_CnbAnimationClipHandle;
 static CNA_CnbAudioFormat v_CNA_CnbAudioFormat;
 static CNA_CnbByteWriterHandle v_CNA_CnbByteWriterHandle;
@@ -221,6 +223,7 @@ static CNA_StringView v_CNA_StringView;
 static CNA_SurfaceFormat v_CNA_SurfaceFormat;
 static CNA_SystemTrayHandle v_CNA_SystemTrayHandle;
 static CNA_TouchLocationState v_CNA_TouchLocationState;
+static CNA_Unsupported3DGraphicsCallBehavior v_CNA_Unsupported3DGraphicsCallBehavior;
 static CNA_UnsupportedContentReaderReason v_CNA_UnsupportedContentReaderReason;
 static CNA_Vector2 v_CNA_Vector2;
 static CNA_Vector3 v_CNA_Vector3;
@@ -768,6 +771,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_primitive_type_get_vertex_count(v_CNA_PrimitiveType, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_primitive_type_get_vertex_count", "a null out_vertex_count");
     failures += expect(cna_graphics_device_get_is_disposed(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_is_disposed", "a null out_is_disposed");
     failures += expect(cna_graphics_device_get_status(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_status", "a null out_status");
+    failures += expect(cna_graphics_device_get_blend_factor(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_blend_factor", "a null out_blend_factor");
     failures += expect(cna_graphics_device_get_graphics_profile(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_graphics_profile", "a null out_profile");
     failures += expect(cna_graphics_device_get_scissor_rectangle(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_scissor_rectangle", "a null out_scissor_rectangle");
     failures += expect(cna_graphics_device_get_viewport(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_viewport", "a null out_viewport");
@@ -2107,6 +2111,15 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_sprite_batch_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sprite_batch_get_type_name_size", what);
     failures += expect(cna_graphics_device_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_is_disposed", what);
     failures += expect(cna_graphics_device_get_status(handle, &o_CNA_GraphicsDeviceStatus), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_status", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_set_viewport(handle, v_CNA_Viewport), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_viewport", what);
+    failures += expect(cna_graphics_device_get_blend_factor(handle, &o_CNA_Color), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_blend_factor", what);
+    failures += expect(cna_graphics_device_set_blend_factor(handle, v_CNA_Color), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_blend_factor", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_clear_rgba(handle, v_float, v_float, v_float, v_float), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_clear_rgba", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_clear_color_depth(handle, v_CNA_Color, v_float), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_clear_color_depth", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_clear_options(handle, v_CNA_ClearOptions, v_CNA_Color, v_float, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_clear_options", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_set_graphics_profile_ext(handle, v_CNA_GraphicsProfile), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_graphics_profile_ext", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_set_unsupported_3d_call_behavior(handle, v_CNA_Unsupported3DGraphicsCallBehavior), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_unsupported_3d_call_behavior", what);
+    failures += expect(cna_graphics_device_set_context_recovery_enabled(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_context_recovery_enabled", what);
     failures += expect(cna_graphics_device_get_graphics_profile(handle, &o_CNA_GraphicsProfile), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_graphics_profile", what);
     failures += expect(cna_graphics_device_get_scissor_rectangle(handle, &o_CNA_Rectangle), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_scissor_rectangle", what);
     failures += expect(cna_graphics_device_set_scissor_rectangle(handle, v_CNA_Rectangle), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_scissor_rectangle", what);
@@ -2940,6 +2953,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1781 generated routes\n", failures);
+    printf("%d failed checks across 1790 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

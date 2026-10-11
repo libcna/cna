@@ -878,44 +878,6 @@ CNA_Result cna_graphics_device_get_adapter_index(
     });
 }
 
-CNA_Result cna_graphics_device_set_viewport(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Viewport viewport)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(viewport.min_depth) || !std::isfinite(viewport.max_depth)) {
-            return InvalidArgument("The viewport depth range is not finite.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.setViewportProperty(ToNative(viewport));
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_get_blend_factor(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_Color* const outBlendFactor)
-{
-    return DeviceQuery(graphicsDeviceHandle, outBlendFactor, [](GraphicsDevice& device) {
-        const Color value = device.getBlendFactorProperty();
-        return CNA_Color{
-            value.getRProperty(),
-            value.getGProperty(),
-            value.getBProperty(),
-            value.getAProperty()};
-    });
-}
-
-CNA_Result cna_graphics_device_set_blend_factor(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Color blendFactor)
-{
-    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-        device.setBlendFactorProperty(
-            Color(blendFactor.r, blendFactor.g, blendFactor.b, blendFactor.a));
-    });
-}
-
 CNA_Result cna_graphics_device_subscribe_event(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsDeviceEvent deviceEvent,
@@ -1170,64 +1132,6 @@ CNA_Result cna_graphics_device_unbind_texture(
             }
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_clear_rgba(
-    const CNA_Handle graphicsDeviceHandle,
-    const float r,
-    const float g,
-    const float b,
-    const float a)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
-            return InvalidArgument("A clear color channel is not finite.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.Clear(r, g, b, a);
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_clear_color_depth(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Color color,
-    const float depth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(depth)) {
-            return InvalidArgument("The clear depth is not finite.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.Clear(Color(color.r, color.g, color.b, color.a), depth);
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_clear_options(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_ClearOptions options,
-    const CNA_Color color,
-    const float depth,
-    const int32_t stencil)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        constexpr CNA_ClearOptions ValidOptions =
-            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL;
-        if ((options & ~ValidOptions) != 0U) {
-            return InvalidArgument("The clear options contain an unknown bit.");
-        }
-        if (!std::isfinite(depth)) {
-            return InvalidArgument("The clear depth is not finite.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.Clear(
-                static_cast<NativeGraphics::ClearOptions>(options),
-                Color(color.r, color.g, color.b, color.a),
-                depth,
-                stencil);
-        });
     });
 }
 
@@ -1626,31 +1530,6 @@ CNA_Result cna_graphics_device_set_depth_write_enabled(
         });
 }
 
-CNA_Result cna_graphics_device_set_graphics_profile_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_GraphicsProfile profile)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (profile != NativeOrdinal(GraphicsProfile::Reach) &&
-            profile != NativeOrdinal(GraphicsProfile::HiDef)) {
-            return InvalidArgument("The graphics profile is not recognized.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.SetGraphicsProfileEXT(static_cast<GraphicsProfile>(profile));
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_set_context_recovery_enabled(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Bool enabled)
-{
-    return DeviceBooleanCommand(
-        graphicsDeviceHandle, enabled, false, [](GraphicsDevice& device, const bool value) {
-            device.SetContextRecoveryEnabled(value);
-        });
-}
-
 CNA_Result cna_graphics_device_set_string_marker_ext(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_StringView marker)
@@ -1663,22 +1542,6 @@ CNA_Result cna_graphics_device_set_string_marker_ext(
         }
         return DeviceCommand(graphicsDeviceHandle, [&](GraphicsDevice& device) {
             device.SetStringMarkerEXT(text);
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_set_unsupported_3d_call_behavior(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Unsupported3DGraphicsCallBehavior behavior)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW &&
-            behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB) {
-            return InvalidArgument("The unsupported-3D-call policy is not recognized.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.SetUnsupported3DGraphicsCallBehavior(
-                static_cast<CNA::Unsupported3DGraphicsCallBehavior>(behavior));
         });
     });
 }

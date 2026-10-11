@@ -212,6 +212,181 @@ CNA_Result cna_graphics_device_get_status(
     });
 }
 
+CNA_Result cna_graphics_device_set_viewport(
+    const CNA_Handle graphics_device,
+    const CNA_Viewport c_viewport)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(c_viewport.min_depth) || !std::isfinite(c_viewport.max_depth)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_set_viewport: invalid because !std::isfinite(viewport.min_depth) || !std::isfinite(viewport.max_depth).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto viewport = CNA::C::Detail::ToNative(c_viewport);
+        object->value->setViewportProperty(viewport);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_blend_factor(
+    const CNA_Handle graphics_device,
+    CNA_Color* const out_blend_factor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_blend_factor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_blend_factor: out_blend_factor is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_blend_factor = CNA::C::Detail::ToC(object->value->getBlendFactorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_blend_factor(
+    const CNA_Handle graphics_device,
+    const CNA_Color c_blend_factor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto blend_factor = CNA::C::Detail::ToNative(c_blend_factor);
+        object->value->setBlendFactorProperty(blend_factor);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_clear_rgba(
+    const CNA_Handle graphics_device,
+    const float r,
+    const float g,
+    const float b,
+    const float a)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_clear_rgba: invalid because !std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Clear(r, g, b, a);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_clear_color_depth(
+    const CNA_Handle graphics_device,
+    const CNA_Color c_color,
+    const float depth)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(depth)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_clear_color_depth: invalid because !std::isfinite(depth).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto color = CNA::C::Detail::ToNative(c_color);
+        object->value->Clear(color, depth);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_clear_options(
+    const CNA_Handle graphics_device,
+    const CNA_ClearOptions options,
+    const CNA_Color c_color,
+    const float depth,
+    const int32_t stencil)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if ((options & ~(CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL)) != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_clear_options: invalid because (options & ~(CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL)) != 0U.");
+        }
+        if (!std::isfinite(depth)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_clear_options: invalid because !std::isfinite(depth).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto color = CNA::C::Detail::ToNative(c_color);
+        object->value->Clear(static_cast<NativeGraphics::ClearOptions>(options), color, depth, stencil);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_graphics_profile_ext(
+    const CNA_Handle graphics_device,
+    const CNA_GraphicsProfile profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (profile != NativeOrdinal(GraphicsProfile::Reach) && profile != NativeOrdinal(GraphicsProfile::HiDef)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_set_graphics_profile_ext: invalid because profile != NativeOrdinal(GraphicsProfile::Reach) && profile != NativeOrdinal(GraphicsProfile::HiDef).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetGraphicsProfileEXT(static_cast<GraphicsProfile>(profile));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_unsupported_3d_call_behavior(
+    const CNA_Handle graphics_device,
+    const CNA_Unsupported3DGraphicsCallBehavior behavior)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW && behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_set_unsupported_3d_call_behavior: invalid because behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW && behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetUnsupported3DGraphicsCallBehavior(static_cast<CNA::Unsupported3DGraphicsCallBehavior>(behavior));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_context_recovery_enabled(
+    const CNA_Handle graphics_device,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        object->value->SetContextRecoveryEnabled(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_device_get_graphics_profile(
     const CNA_Handle graphics_device,
     CNA_GraphicsProfile* const out_profile)

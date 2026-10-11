@@ -28,6 +28,15 @@ object = "std::shared_ptr<BorrowedGraphicsDevice>"
 [borrowed_graphics_device.routes]
 cna_graphics_device_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_graphics_device_get_status = { get = "NativeOrdinal(object->value->getGraphicsDeviceStatusProperty())" }
+cna_graphics_device_set_viewport = { call = "object->value->setViewportProperty(viewport)", invalid_if = "!std::isfinite(viewport.min_depth) || !std::isfinite(viewport.max_depth)" }
+cna_graphics_device_get_blend_factor = { get = "object->value->getBlendFactorProperty()" }
+cna_graphics_device_set_blend_factor = { call = "object->value->setBlendFactorProperty(blend_factor)" }
+cna_graphics_device_clear_rgba = { call = "object->value->Clear(r, g, b, a)", invalid_if = "!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)" }
+cna_graphics_device_clear_color_depth = { call = "object->value->Clear(color, depth)", invalid_if = "!std::isfinite(depth)" }
+cna_graphics_device_clear_options = { call = "object->value->Clear(static_cast<NativeGraphics::ClearOptions>(options), color, depth, stencil)", invalid_if = ["(options & ~(CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL)) != 0U", "!std::isfinite(depth)"] }
+cna_graphics_device_set_graphics_profile_ext = { call = "object->value->SetGraphicsProfileEXT(static_cast<GraphicsProfile>(profile))", invalid_if = "profile != NativeOrdinal(GraphicsProfile::Reach) && profile != NativeOrdinal(GraphicsProfile::HiDef)" }
+cna_graphics_device_set_unsupported_3d_call_behavior = { call = "object->value->SetUnsupported3DGraphicsCallBehavior(static_cast<CNA::Unsupported3DGraphicsCallBehavior>(behavior))", invalid_if = "behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW && behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB" }
+cna_graphics_device_set_context_recovery_enabled = { call = "object->value->SetContextRecoveryEnabled(enabled)" }
 cna_graphics_device_get_graphics_profile = { get = "NativeOrdinal(object->value->getGraphicsProfileProperty())" }
 cna_graphics_device_get_scissor_rectangle = { get = "object->value->getScissorRectangleProperty()" }
 cna_graphics_device_set_scissor_rectangle = { call = "object->value->setScissorRectangleProperty(scissor_rectangle)" }
