@@ -1,10 +1,14 @@
-# GamerServices manual qualification plan — GS-AUDIT-P4
+# GamerServices manual qualification plan
+
+Written by the GamerServices audit (GS-AUDIT-P4, 2026-10-02) for the cases software tests cannot
+close; [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) lists them
+(28, 29, 31 and 33).
 
 **NOT EXECUTED / NO PASS CLAIM.** Software audit closes with these device, network and platform limitations. Run only on disposable lab machines/VMs and approved devices, never the owner's live desktop. Linux window-capable runs must use `tools/platform/run_gpu_tests_private.sh`; Windows/macOS use an isolated lab session/VM. Keep raw passwords/tokens and room recordings out of retained evidence. This plan does not authorize destructive system crashes or power cuts.
 
 ## Common setup and evidence
 
-Use the native/server Phase 4 commits from the [handoff](gamer-services-handoff-phase4.md). Build the four `cna_service_*_client_harness` targets and tests to completion before launching anything. Provision a disposable SQLite service with a trusted TLS certificate and accounts alice/Alice, bob/Bob, charlie/Charlie, dana/Dana. Copy the exact title/achievement/board setup from server `tests/cna_session_e2e.py` (BestScoreLifeTime, Rounds:int32, arbitrated Kills). Server README documents admin `title`, `user`, `achievement`, `leaderboard`, `privilege` and other commands; user passwords enter via stdin, never command-line arguments/logs.
+Build the four `cna_service_*_client_harness` targets (`cmake/Harnesses.cmake`), `CnaGamerServicesTests`, `CnaNetTests` and `../cna-gamer-services-server/build` to completion before launching anything. Provision a disposable SQLite service with a trusted TLS certificate and accounts alice/Alice, bob/Bob, charlie/Charlie, dana/Dana. Copy the exact title/achievement/board setup from server `tests/cna_session_e2e.py` (BestScoreLifeTime, Rounds:int32, arbitrated Kills). Server README documents admin `title`, `user`, `achievement`, `leaderboard`, `privilege` and other commands; user passwords enter via stdin, never command-line arguments/logs.
 
 Configure each native client with `CNA_GAMER_SERVICES_ENDPOINT=https://<qualified-name>:<port>/cna/v1`, `CNA_GAMER_SERVICES_CA_BUNDLE=<lab CA>`, `CNA_GAME_ID=<provisioned title>`. Use actual remote service address, not 127.0.0.1 on two hosts. Record OS/compiler/build hashes, endpoint address family, TLS verification, topology/router/NAT evidence, feature capabilities, device IDs and timestamped per-process logs. Capture server aggregate outcomes and database reads/integrity checks where indicated. Never label a loopback run as LAN/WAN/NAT qualification.
 
@@ -53,7 +57,15 @@ Windows/macOS microphone/output M12–M15 require their actual platform recordin
 
 ## Seven unchanged isolated-network gates
 
-Prerequisites: Linux `unshare`, `ip`, `slirp4netns`, permitted user/network namespaces; `CNA_SERVICE_SLIRP4NETNS` may select a real helper. Establish `unshare --user --map-root-user --net true` succeeds. Supply all four fresh harness paths and avatar catalogs, as in the handoff. Execute:
+Prerequisites: Linux `unshare`, `ip`, `slirp4netns`, permitted user/network namespaces; `CNA_SERVICE_SLIRP4NETNS` may select a real helper. Establish `unshare --user --map-root-user --net true` succeeds. Supply all four fresh harness paths and avatar catalogs, then execute:
+
+```sh
+export CNA_SERVICE_SESSION_CLIENT_HARNESS="$PWD/cmake-build-debug/cna_service_session_client_harness"
+export CNA_SERVICE_DIRECTORY_CLIENT_HARNESS="$PWD/cmake-build-debug/cna_service_directory_client_harness"
+export CNA_SERVICE_RELAY_CLIENT_HARNESS="$PWD/cmake-build-debug/cna_service_relay_client_harness"
+export CNA_SERVICE_AVATAR_CLIENT_HARNESS="$PWD/cmake-build-debug/cna_service_avatar_client_harness"
+export CNA_AVATAR_CATALOGS="$PWD/modules/gamer-services/assets/avatars"
+```
 
 ```sh
 tools/platform/run_gpu_tests_private.sh --exec ctest --test-dir ../cna-gamer-services-server/build \

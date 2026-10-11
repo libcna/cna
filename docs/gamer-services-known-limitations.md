@@ -88,12 +88,14 @@ or sealed with DPAPI (Windows), and serialized avatar catalog installs.
 | 36 | No cluster or horizontal scale | Deployment limitation | None | Yes, substantial |
 | 37 | Distributed hostile traffic | Deployment limitation | None | Operator's firewall/proxy |
 | 38 | Operational limits a game can meet | Deployment limitation | Rare, surfaces as XNA exceptions | Tunable |
-| 39 | Avatar baked shading and occlusion | Intentional (visual quality) | None | Only inside the renderer |
-| 40 | Avatar visual fidelity of catalog v3 | Intentional (art direction) | None | New catalog versions |
-| 41 | Avatar catalog and format edge cases | Intentional | Minor | Partly |
-| 42 | `PropertyDictionary` equality of arbitrary `std::any` | Intentional (host-language difference) | Minor | No |
-| 43 | Leaderboard columns of non-XNA C++ types | Intentional (host-language difference) | None | No |
-| 44 | Value-type `AvatarDescription` and shared `Changed` | Intentional (host-language difference) | None | No |
+| 39 | Progress and ranked results reported by the client, no anti-cheat | Deployment limitation | None for honest clients | Title-specific authority |
+| 40 | Avatar baked shading and occlusion | Intentional (visual quality) | None | Only inside the renderer |
+| 41 | Avatar visual fidelity of catalog v3 | Intentional (art direction) | None | New catalog versions |
+| 42 | Avatar catalog and format edge cases | Intentional | Minor | Partly |
+| 43 | `PropertyDictionary` equality of arbitrary `std::any` | Intentional (host-language difference) | Minor | No |
+| 44 | Leaderboard columns of non-XNA C++ types | Intentional (host-language difference) | None | No |
+| 45 | Value-type `AvatarDescription` and shared `Changed` | Intentional (host-language difference) | None | No |
+| 46 | Signed-out `SignedInGamer` objects kept until the process exits | Intentional (host-language difference) | None | No |
 
 ---
 
@@ -184,7 +186,7 @@ These are outside CNA's identity even where the XNA-facing API has a CNA equival
 - **Status:** intentionally unsupported.
 - **XNA / Xbox:** the console drew avatars from Microsoft's own assets, installed with system updates.
 - **CNA now:** every mesh, texture and animation is original CNA work
-  (`tools/avatar_builder/`), in CNA's own 1,021-byte description encoding; see 40 for how v3 looks.
+  (`tools/avatar_builder/`), in CNA's own 1,021-byte description encoding; see 41 for how v3 looks.
 - **Reason:** proprietary assets; the project forbids them.
 - **Observable impact:** avatars look like CNA avatars, not Xbox 360 avatars; the XNA API behaves
   the same.
@@ -592,6 +594,10 @@ claim about how Xbox LIVE decided.
 
 ## Not independently validated
 
+The manual procedure that would close these is
+[`gamer-services-manual-qualification.md`](gamer-services-manual-qualification.md); it has not
+been run.
+
 ### 29. Voice through real devices
 
 - **Status:** not independently validated end to end (hardware-unverified).
@@ -730,6 +736,22 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** none for ordinary games.
 - **Future work:** tunable in the server.
 
+### 39. Progress and results are reported by the client
+
+- **Status:** deployment limitation.
+- **XNA / Xbox:** the title itself wrote achievements, leaderboard rows and ranked statistics, from
+  a signed console.
+- **CNA now:** the service checks that the account and title own the achievement or board, that
+  values fit their types, and the round, epoch and replay rules; it cannot check that a score was
+  earned. A modified client, or a colluding majority in a ranked round (10), can report plausible
+  fabricated results. There is no anti-cheat.
+- **Reason:** a title-agnostic service does not know the game's rules, and CNA clients run on open
+  machines.
+- **Observable impact:** none for honest clients.
+- **Porting impact:** none; a competitive deployment must trust its clients or add title-specific
+  validation.
+- **Future work:** title-specific server-side authority, if a deployment needs it.
+
 ## Avatars
 
 The model is the console's: the service owns each account's `AvatarDescription` and its revision;
@@ -738,7 +760,7 @@ rendering draws the description with the locally installed exact catalog and nev
 per-user models. A server catalog pack is only the update path for a catalog a client lacks. See
 [`avatars.md`](avatars.md).
 
-### 39. Baked shading and occlusion
+### 40. Baked shading and occlusion
 
 - **Status:** partially implemented (visual quality, not API completeness).
 - **XNA / Xbox:** the console's avatar renderer took `LightDirection`, `LightColor` and
@@ -753,18 +775,18 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 - **Porting impact:** none.
 - **Future work:** baked occlusion in a future catalog version, used internally by the renderer.
 
-### 40. Visual fidelity of catalog v3
+### 41. Visual fidelity of catalog v3
 
 - **Status:** implementation differs by design (art direction).
 - **CNA now:** original assets in the Xbox 360-era style (large head, short limbs, fitted clothes,
-  decal faces). Known deficiencies: no baked occlusion (39); garments are fitted surfaces with
+  decal faces). Known deficiencies: no baked occlusion (40); garments are fitted surfaces with
   hems, cuffs and pockets but no modelled folds; a preset authored for one body lets a planted foot
   drift 1-3 cm on the other; in the deepest crouch (FemaleIdleFixShoe) a few millimetres of trouser
   front can show above a shirt hem.
 - **Porting impact:** none; functional compatibility does not depend on likeness.
 - **Future work:** a later catalog version (v3 is released and does not change).
 
-### 41. Catalog and description-format edge cases
+### 42. Catalog and description-format edge cases
 
 - **Status:** partially implemented.
 - **CNA now:** description formats 1 and 2 exist (format 2 adds facial hair and face shape); no
@@ -801,7 +823,7 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 
 These follow from C++, not from the service.
 
-### 42. `PropertyDictionary` equality of an arbitrary `std::any`
+### 43. `PropertyDictionary` equality of an arbitrary `std::any`
 
 - **Status:** host-language difference.
 - **XNA / Xbox:** .NET compares any boxed values.
@@ -812,7 +834,7 @@ These follow from C++, not from the service.
   dictionary meets it.
 - **Future work:** none.
 
-### 43. Leaderboard columns of non-XNA C++ types
+### 44. Leaderboard columns of non-XNA C++ types
 
 - **Status:** host-language difference.
 - **XNA / Xbox:** columns hold the XNA leaderboard column types.
@@ -822,7 +844,7 @@ These follow from C++, not from the service.
 - **Observable impact / porting impact:** none for XNA-shaped code.
 - **Future work:** none.
 
-### 44. `AvatarDescription` is a value; `Changed` is shared
+### 45. `AvatarDescription` is a value; `Changed` is shared
 
 - **Status:** host-language difference.
 - **XNA / Xbox:** `AvatarDescription` is a class; its `Changed` belongs to the one object.
@@ -832,6 +854,18 @@ These follow from C++, not from the service.
 - **Reason:** C++ value semantics.
 - **Observable impact / porting impact:** none; a port subscribes as in XNA.
 - **Future work:** none.
+
+### 46. Signed-out gamers are kept until the process exits
+
+- **Status:** host-language difference.
+- **XNA / Xbox:** a signed-out `SignedInGamer` is collected once the game drops its references.
+- **CNA now:** `GamerServicesDispatcher` owns every `SignedInGamer` it creates. Signing out
+  disposes the gamer and empties its slot, but the object stays allocated until the process exits,
+  so a pointer the game still holds remains valid.
+- **Reason:** C++ has no garbage collector, and games hold `SignedInGamer*` without owning it.
+- **Observable impact:** memory grows by one gamer per sign-in for the life of the process.
+- **Porting impact:** none, except a long-running process that signs gamers in and out many times.
+- **Future work:** none planned; reclaiming them needs an ownership rule games can follow.
 
 ## Also not limitations
 
@@ -851,12 +885,13 @@ parties and the other console-only services.
 installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15, 18, 20), push scope (19),
 profile self-service (21), credentials at rest (24), the server's single process, SQLite,
 cluster and flood limits (34-37), public Internet qualification (31), avatar shading and likeness
-(39, 40), host-language differences (42-44).
+(40, 41), host-language differences (43-46).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
 service-computed skill (4), expiring Recent scores (7), online guests (16),
 online QoS before joining (17), large Stream
-columns (22), several local talkers on one PC (14), avatar catalog edge cases (41).
+columns (22), several local talkers on one PC (14), avatar catalog edge cases (42),
+competitive titles that must not trust their clients (39).
 
 **Platform-specific:** browser multiplayer (26), voice builds and devices (27), non-Linux
 validation (28), physical audio (29, 30), avatars on unmeasured renderers (33), relay latency (25).

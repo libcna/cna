@@ -130,6 +130,14 @@ The single authoritative list. Every entry below was checked against the code on
    `.TheVertexColourScalesTheLitSumBeforeItIsSaturated`, and
    `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (line 536: a
    negative diffuse colour times a negative texel gives 128 instead of 0).
+8. **`SendDataOptions` is not a flags enum, so `Chat` cannot be combined** (checked 2026-10-11;
+   found by `GS-AUDIT-016`). XNA declares it `[Flags]` and documents `Chat` combined with
+   `Reliable` and/or `InOrder`, with ordered chat packets ordered only among themselves
+   (`xna4-spec/Microsoft.Xna.Framework.Net/SendDataOptions.xml`). CNA's
+   `SendDataOptions.hpp` is an `enum class` without bitwise operators, and its comment wrongly says
+   the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
+   1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
+   combined value 5-7 falls through to the same default.
 
 ### 5.2 Limitations
 
