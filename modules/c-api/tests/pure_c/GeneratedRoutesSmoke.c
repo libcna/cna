@@ -624,6 +624,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_drawable_game_component_get_visible(v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_drawable_game_component_get_visible", "a null out_visible");
     failures += expect(cna_game_components_get_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_get_count", "a null out_count");
     failures += expect(cna_game_components_get_type_name_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_game_components_remove(v_CNA_Handle, v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_remove", "a null out_removed");
+    failures += expect(cna_game_components_contains(v_CNA_Handle, v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_contains", "a null out_contains");
+    failures += expect(cna_game_components_index_of(v_CNA_Handle, v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_index_of", "a null out_index");
     failures += expect(cna_game_component_create(v_CNA_Handle, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_create", "a null out_component");
     failures += expect(cna_drawable_game_component_create(v_CNA_Handle, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_drawable_game_component_create", "a null out_component");
     failures += expect(cna_game_components_subscribe_added(v_CNA_Handle, v_CNA_GameComponentCollectionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_subscribe_added", "a null out_registration");
@@ -2041,6 +2044,10 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_game_components_clear(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_clear", what);
     failures += expect(cna_game_components_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_get_type_name_size", what);
     failures += expect(cna_game_components_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_copy_type_name", what);
+    failures += expect(cna_game_components_add(handle, v_CNA_GameComponentHandle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_add", what);
+    failures += expect(cna_game_components_remove(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove", what);
+    failures += expect(cna_game_components_contains(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_contains", what);
+    failures += expect(cna_game_components_index_of(handle, v_CNA_GameComponentHandle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_index_of", what);
     failures += expect(cna_game_get_is_active(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_active", what);
     failures += expect(cna_game_get_is_mouse_visible(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_mouse_visible", what);
     failures += expect(cna_game_set_is_mouse_visible(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_is_mouse_visible", what);
@@ -2971,6 +2978,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1801 generated routes\n", failures);
+    printf("%d failed checks across 1805 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

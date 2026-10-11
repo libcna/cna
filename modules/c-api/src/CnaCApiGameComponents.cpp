@@ -652,26 +652,6 @@ CNA_Result cna_game_components_get_at(
     });
 }
 
-CNA_Result cna_game_components_add(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentHandle component)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        components->Add(resource->value.get());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_components_insert(
     const CNA_Handle gameHandle,
     const uint64_t index,
@@ -701,30 +681,6 @@ CNA_Result cna_game_components_insert(
     });
 }
 
-CNA_Result cna_game_components_remove(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentHandle component,
-    CNA_Bool* const outRemoved)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRemoved == nullptr) {
-            return InvalidArgument("The removal output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRemoved = ToCBool(components->Remove(resource->value.get()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_components_remove_at(const CNA_Handle gameHandle, const uint64_t index)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -740,54 +696,6 @@ CNA_Result cna_game_components_remove_at(const CNA_Handle gameHandle, const uint
                 "The component index is at or past the collection count.");
         }
         components->RemoveAt(static_cast<GameComponentCollection::size_type>(index));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_components_contains(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentHandle component,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The containment output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(components->Contains(resource->value.get()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_components_index_of(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentHandle component,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The index output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(components->IndexOf(resource->value.get()));
         return CNA_RESULT_SUCCESS;
     });
 }

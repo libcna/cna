@@ -36,6 +36,17 @@ cna_game_components_clear = { call = "object->Clear()" }
 cna_game_components_get_type_name_size = { size = "object->GetTypeName()" }
 cna_game_components_copy_type_name = { copy = "object->GetTypeName()" }
 
+[components_and_component]
+lookup = "BorrowComponents"
+object = "GameComponentCollection*"
+other = { lookup = "BorrowComponent", object = "std::shared_ptr<ComponentResource>" }
+
+[components_and_component.routes]
+cna_game_components_add = { call = "object->Add(other->value.get())" }
+cna_game_components_remove = { get = "object->Remove(other->value.get())" }
+cna_game_components_contains = { get = "object->Contains(other->value.get())" }
+cna_game_components_index_of = { get = "object->IndexOf(other->value.get())" }
+
 [calls]
 [calls.routes]
 cna_game_component_create = { result = "CreateComponent<CGameComponent>(game, callbacks, out_component)" }

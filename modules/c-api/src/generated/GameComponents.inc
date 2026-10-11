@@ -295,6 +295,98 @@ CNA_Result cna_game_components_copy_type_name(
     });
 }
 
+CNA_Result cna_game_components_add(
+    const CNA_Handle game,
+    const CNA_GameComponentHandle component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowComponent(component, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Add(other->value.get());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_components_remove(
+    const CNA_Handle game,
+    const CNA_GameComponentHandle component,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_remove: out_removed is null.");
+        }
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowComponent(component, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_removed = CNA::C::Detail::ToCBool(object->Remove(other->value.get()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_components_contains(
+    const CNA_Handle game,
+    const CNA_GameComponentHandle component,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_contains: out_contains is null.");
+        }
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowComponent(component, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(object->Contains(other->value.get()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_components_index_of(
+    const CNA_Handle game,
+    const CNA_GameComponentHandle component,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_index_of: out_index is null.");
+        }
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowComponent(component, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_index = static_cast<int32_t>(object->IndexOf(other->value.get()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_component_create(
     const CNA_Handle game,
     const CNA_GameComponentCallbacks* const callbacks,
