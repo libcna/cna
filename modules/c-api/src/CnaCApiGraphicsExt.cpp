@@ -32,6 +32,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::ToCBool;
 
 // Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
 // compiles this without using it. The routes stay exported either way, which is the point.
@@ -67,7 +68,6 @@ using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TextureResourceView;
-using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
