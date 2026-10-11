@@ -557,7 +557,7 @@ replacement decoder. The index path was a different, genuinely broken path; `GLT
 
 Note the **leading** star. `RuntimeGltfModelTest` is a glTF suite whose name does not begin with
 `Gltf`, and a prefix filter left it outside this command, outside the ladder and outside the
-sanitizer CI job — with four failing cases nobody saw (`known_bugs.md`, 2026-08-12).
+sanitizer CI job — with four failing cases nobody saw (found 2026-08-12).
 
 Run from the repository root — the fixtures are opened at `tests/assets/gltf/` relative to the
 working directory, which is what CTest is configured to use. The suites are:

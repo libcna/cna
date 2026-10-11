@@ -20,7 +20,7 @@ Analysis date: 2026-07-28
 > | "Missing Regression Tests" | the whole campaign | The corpus is 140 generated assets and a ten-rung oracle ladder (`docs/gltf-conformance.md`). |
 >
 > The current state of any of the above is `plans/plan_gltf.md` (the row), `docs/gltf-limitations.md`
-> (what is still lost, and where it is reported) and `known_bugs.md` (the defect ledger). If this
+> (what is still lost, and where it is reported) and `NEXT.md` §5 (the bug list). If this
 > document and one of those ever disagree, those are right and this one is 2026-07-28.
 
 ## Executive Summary

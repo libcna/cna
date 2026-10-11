@@ -103,6 +103,6 @@ TEST(GltfVendoredCgltf, EveryKnownCgltfFaultStillHasItsCnaSideAnswer)
             << "GltfImportCore.cpp no longer defines or calls " << answer.symbol
             << ", which is CNA's answer to a proven cgltf fault (" << answer.fault
             << ", " << answer.task << "). If an upgrade really did retire it, retire the row in "
-               "docs/gltf-conventions.md and known_bugs.md in the same commit.";
+               "docs/gltf-conventions.md in the same commit.";
     }
 }

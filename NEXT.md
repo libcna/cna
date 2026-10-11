@@ -6,7 +6,7 @@ of past sessions; its "still open" and "remains unfinished" statements were true
 date.
 
 **§5 is the one authoritative list of current known bugs and limitations.** No other file keeps a
-live bug list: `known_bugs.md` points here, `misc/known_bugs.md` and `misc/known_gaps.md` hold only
+live bug list: `misc/known_bugs.md` and `misc/known_gaps.md` hold only
 the measurements behind some §5 entries, the per-subsystem `NEXT*.md`/`handoff*.md` files and the
 plans under `plans/` are history, and capability documents (renderer docs, `docs/gltf-limitations.md`,
 `docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted deviations) describe what a
@@ -164,7 +164,7 @@ Fixed in this pass, or found already fixed while older documents still called th
   had two definitions and the static `SamplerState`s were destroyed twice (AddressSanitizer: an ODR
   violation, then a heap-use-after-free in `~SamplerState` from `__cxa_finalize`). Fixed by STAB-004;
   5/5 clean runs under AddressSanitizer afterwards (287/287 checks).
-- FNA3D resources outliving their device (`known_bugs.md`, a heap-use-after-free that crashed
+- FNA3D resources outliving their device (a heap-use-after-free that crashed
   `CnaTests` after its last test): fixed by `d5c3460db` (liveness token). Re-verified on 2026-10-10
   under AddressSanitizer with `FNA3D` as the renderer: the original
   `MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove` scenario is clean,
