@@ -16,7 +16,7 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Matrix;
@@ -29,10 +29,7 @@ CNA_Result cna_quaternion_conjugate_in_place(CNA_Quaternion* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Quaternion is null.");
+            return InvalidArgument("The Quaternion is null.");
         }
         Quaternion native = ToNative(*value);
         native.Conjugate();
@@ -45,10 +42,7 @@ CNA_Result cna_quaternion_normalize_in_place(CNA_Quaternion* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Quaternion is null.");
+            return InvalidArgument("The Quaternion is null.");
         }
         Quaternion native = ToNative(*value);
         native.Normalize();

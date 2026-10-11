@@ -34,6 +34,7 @@ namespace {
 
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
@@ -50,10 +51,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result NotDrawable()
 {
-    return Fail(
-        CNA_RESULT_INVALID_STATE,
-        CNA_ERROR_CATEGORY_STATE,
-        "This game component does not draw.");
+    return InvalidState("This game component does not draw.");
 }
 
 [[nodiscard]] CNA_GameTime MakeCGameTime(const GameTime& value) noexcept
@@ -387,10 +385,7 @@ CNA_Result CreateOwnedCanonicalGameComponent(
     CNA_Handle* const outComponent)
 {
     if (component == nullptr || outComponent == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The canonical game component factory arguments are invalid.");
+        return InvalidArgument("The canonical game component factory arguments are invalid.");
     }
     *outComponent = CNA_INVALID_HANDLE;
     auto resource = std::make_shared<ComponentResource>();

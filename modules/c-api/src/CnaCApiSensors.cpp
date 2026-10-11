@@ -51,6 +51,7 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -1231,10 +1232,7 @@ public:
 
 [[nodiscard]] CNA_Result NoTestBackend()
 {
-    return Fail(
-        CNA_RESULT_INVALID_STATE,
-        CNA_ERROR_CATEGORY_STATE,
-        "No test backend is installed and started for this sensor.");
+    return InvalidState("No test backend is installed and started for this sensor.");
 }
 
 // Copies the handler out under the state lock and calls it after releasing it: the handler enters

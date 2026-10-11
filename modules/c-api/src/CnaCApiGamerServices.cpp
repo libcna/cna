@@ -26,6 +26,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -252,9 +253,7 @@ CNA_Result cna_signed_in_gamer_destroy(const CNA_SignedInGamerHandle gamerHandle
             return result;
         }
         if (gamer->published) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "The process-wide signed-in collection still references this gamer.");
         }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(gamerHandle);
@@ -319,7 +318,7 @@ CNA_Result cna_gamer_get_signed_in_gamer_count(int32_t* const outCount)
 
 namespace CNA::C::Detail {
 CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uint64_t capacity,uint64_t* outBytes) {
-    if(!outBytes||(!destination&&capacity))return Fail(CNA_RESULT_INVALID_ARGUMENT,CNA_ERROR_CATEGORY_ARGUMENT,"The picture output is invalid.");
+    if(!outBytes||(!destination&&capacity))return InvalidArgument("The picture output is invalid.");
     const auto length=stream?stream->getLengthProperty():0;
     if(length<0||length>16777216)return Fail(CNA_RESULT_IO,CNA_ERROR_CATEGORY_IO,"Invalid picture stream size.");
     *outBytes=static_cast<uint64_t>(length);

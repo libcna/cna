@@ -21,6 +21,7 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToC;
@@ -43,10 +44,7 @@ using Microsoft::Xna::Framework::CurveTangent;
     if (IsValidContinuity(value)) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        "The curve continuity is invalid.");
+    return InvalidArgument("The curve continuity is invalid.");
 }
 
 [[nodiscard]] CNA_Result ValidateKey(const CNA_CurveKey value) noexcept
@@ -66,10 +64,7 @@ using Microsoft::Xna::Framework::CurveTangent;
     if (IsValidLoopType(value)) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        "The curve loop type is invalid.");
+    return InvalidArgument("The curve loop type is invalid.");
 }
 
 [[nodiscard]] bool IsValidTangent(const CNA_CurveTangent value) noexcept
@@ -83,10 +78,7 @@ using Microsoft::Xna::Framework::CurveTangent;
     if (IsValidTangent(value)) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        "The curve tangent type is invalid.");
+    return InvalidArgument("The curve tangent type is invalid.");
 }
 
 template<typename TValue, typename TCallable>
@@ -98,10 +90,7 @@ template<typename TValue, typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                nullMessage);
+            return InvalidArgument(nullMessage);
         }
         const CNA_Result validation = ValidateKey(key);
         if (validation != CNA_RESULT_SUCCESS) {
@@ -120,10 +109,7 @@ template<typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (key == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKey pointer is null.");
+            return InvalidArgument("The CurveKey pointer is null.");
         }
         const CNA_Result validation = ValidateKey(*key);
         if (validation != CNA_RESULT_SUCCESS) {
@@ -163,10 +149,7 @@ CNA_Result cna_curve_key_init_full(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outKey == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKey output is null.");
+            return InvalidArgument("The CurveKey output is null.");
         }
         const CNA_Result validation = ValidateContinuity(continuity);
         if (validation != CNA_RESULT_SUCCESS) {
@@ -202,10 +185,7 @@ CNA_Result cna_curve_key_set_continuity(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (key == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKey pointer is null.");
+            return InvalidArgument("The CurveKey pointer is null.");
         }
         CNA_Result validation = ValidateKey(*key);
         if (validation == CNA_RESULT_SUCCESS) {
@@ -311,10 +291,7 @@ CNA_Result cna_curve_key_compare_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outComparison == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The comparison output is null.");
+            return InvalidArgument("The comparison output is null.");
         }
         CNA_Result validation = ValidateKey(value);
         if (validation == CNA_RESULT_SUCCESS) {
@@ -336,10 +313,7 @@ CNA_Result cna_curve_key_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         CNA_Result validation = ValidateKey(left);
         if (validation == CNA_RESULT_SUCCESS) {
@@ -361,10 +335,7 @@ CNA_Result cna_curve_key_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outNotEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         CNA_Result validation = ValidateKey(left);
         if (validation == CNA_RESULT_SUCCESS) {
@@ -397,10 +368,7 @@ CNA_Result cna_curve_key_collection_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCollection == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKeyCollection output handle is null.");
+            return InvalidArgument("The CurveKeyCollection output handle is null.");
         }
         *outCollection = CNA_INVALID_HANDLE;
         const auto collection = std::make_shared<CurveKeyCollection>();
@@ -416,10 +384,7 @@ CNA_Result cna_curve_key_collection_get_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The collection-count output is null.");
+            return InvalidArgument("The collection-count output is null.");
         }
         std::shared_ptr<CurveKeyCollection> collection;
         if (const CNA_Result result = GetCollection(collectionHandle, &collection);
@@ -438,10 +403,7 @@ CNA_Result cna_curve_key_collection_get_is_read_only(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsReadOnly == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The read-only output is null.");
+            return InvalidArgument("The read-only output is null.");
         }
         std::shared_ptr<CurveKeyCollection> collection;
         if (const CNA_Result result = GetCollection(collectionHandle, &collection);
@@ -461,10 +423,7 @@ CNA_Result cna_curve_key_collection_get(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outKey == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKey output is null.");
+            return InvalidArgument("The CurveKey output is null.");
         }
         std::shared_ptr<CurveKeyCollection> collection;
         if (const CNA_Result result = GetCollection(collectionHandle, &collection);
@@ -520,10 +479,7 @@ CNA_Result cna_curve_key_collection_clone(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCollection == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKeyCollection output handle is null.");
+            return InvalidArgument("The CurveKeyCollection output handle is null.");
         }
         *outCollection = CNA_INVALID_HANDLE;
         std::shared_ptr<CurveKeyCollection> collection;
@@ -545,10 +501,7 @@ CNA_Result cna_curve_key_collection_contains(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContains == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -573,10 +526,7 @@ CNA_Result cna_curve_key_collection_copy_to(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The key destination or count output is invalid.");
+            return InvalidArgument("The key destination or count output is invalid.");
         }
         if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > capacity) {
             return Fail(
@@ -613,10 +563,7 @@ CNA_Result cna_curve_key_collection_index_of(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIndex == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The index output is null.");
+            return InvalidArgument("The index output is null.");
         }
         if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -639,10 +586,7 @@ CNA_Result cna_curve_key_collection_remove(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRemoved == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -662,10 +606,7 @@ CNA_Result cna_curve_create(CNA_CurveHandle* const outCurve)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCurve == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Curve output handle is null.");
+            return InvalidArgument("The Curve output handle is null.");
         }
         *outCurve = CNA_INVALID_HANDLE;
         const auto curve = std::make_shared<Curve>();
@@ -681,10 +622,7 @@ CNA_Result cna_curve_get_is_constant(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsConstant == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         std::shared_ptr<Curve> curve;
         if (const CNA_Result result = GetCurve(curveHandle, &curve);
@@ -703,10 +641,7 @@ CNA_Result cna_curve_get_keys(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outKeys == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The CurveKeyCollection output handle is null.");
+            return InvalidArgument("The CurveKeyCollection output handle is null.");
         }
         *outKeys = CNA_INVALID_HANDLE;
         std::shared_ptr<Curve> curve;
@@ -727,10 +662,7 @@ CNA_Result cna_curve_get_pre_loop(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLoopType == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The curve loop output is null.");
+            return InvalidArgument("The curve loop output is null.");
         }
         std::shared_ptr<Curve> curve;
         if (const CNA_Result result = GetCurve(curveHandle, &curve);
@@ -769,10 +701,7 @@ CNA_Result cna_curve_get_post_loop(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLoopType == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The curve loop output is null.");
+            return InvalidArgument("The curve loop output is null.");
         }
         std::shared_ptr<Curve> curve;
         if (const CNA_Result result = GetCurve(curveHandle, &curve);
@@ -811,10 +740,7 @@ CNA_Result cna_curve_clone(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCurve == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Curve output handle is null.");
+            return InvalidArgument("The Curve output handle is null.");
         }
         *outCurve = CNA_INVALID_HANDLE;
         std::shared_ptr<Curve> curve;
@@ -836,10 +762,7 @@ CNA_Result cna_curve_evaluate(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The curve value output is null.");
+            return InvalidArgument("The curve value output is null.");
         }
         std::shared_ptr<Curve> curve;
         if (const CNA_Result result = GetCurve(curveHandle, &curve);

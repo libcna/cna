@@ -25,6 +25,7 @@ using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToC;
@@ -67,10 +68,7 @@ static_assert(sizeof(int) == sizeof(int32_t));
     int32_t* const outComputedStride)
 {
     if (outElements == nullptr || outComputedStride == nullptr || elementCount == 0U) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "A vertex declaration requires at least one element.");
+        return InvalidArgument("A vertex declaration requires at least one element.");
     }
 
     std::size_t byteCount = 0U;
@@ -100,9 +98,7 @@ static_assert(sizeof(int) == sizeof(int32_t));
         if (!TryMapVertexElementFormat(element.format, &format) ||
             !TryMapVertexElementUsage(element.usage, &usage) ||
             element.offset < 0 || element.usage_index < 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
+            return InvalidArgument(
                 "A vertex element contains an invalid identity, offset or usage index.");
         }
         if (computeStride) {
@@ -153,10 +149,7 @@ CNA_Result cna_vertex_declaration_create_empty(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDeclaration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The VertexDeclaration output handle is null.");
+            return InvalidArgument("The VertexDeclaration output handle is null.");
         }
         *outDeclaration = CNA_INVALID_HANDLE;
         return RegisterDeclaration(std::make_shared<VertexDeclaration>(), outDeclaration);
@@ -170,10 +163,7 @@ CNA_Result cna_vertex_declaration_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDeclaration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The VertexDeclaration output handle is null.");
+            return InvalidArgument("The VertexDeclaration output handle is null.");
         }
         *outDeclaration = CNA_INVALID_HANDLE;
         std::vector<VertexElement> nativeElements;
@@ -198,10 +188,7 @@ CNA_Result cna_vertex_declaration_create_with_stride(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outDeclaration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The VertexDeclaration output handle is null.");
+            return InvalidArgument("The VertexDeclaration output handle is null.");
         }
         *outDeclaration = CNA_INVALID_HANDLE;
         if (vertexStride <= 0) {
@@ -251,10 +238,7 @@ CNA_Result cna_vertex_declaration_get_stride(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVertexStride == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-stride output is null.");
+            return InvalidArgument("The vertex-stride output is null.");
         }
         std::shared_ptr<VertexDeclaration> declaration;
         if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
@@ -275,10 +259,7 @@ CNA_Result cna_vertex_declaration_copy_elements(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outElementCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-element output buffer is invalid.");
+            return InvalidArgument("The vertex-element output buffer is invalid.");
         }
         std::shared_ptr<VertexDeclaration> declaration;
         if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
@@ -307,10 +288,7 @@ CNA_Result cna_vertex_declaration_get_type_name_byte_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outByteCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The type-name byte-count output is null.");
+            return InvalidArgument("The type-name byte-count output is null.");
         }
         std::shared_ptr<VertexDeclaration> declaration;
         if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
@@ -331,15 +309,10 @@ CNA_Result cna_vertex_buffer_binding_init(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBinding == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-buffer binding output is null.");
+            return InvalidArgument("The vertex-buffer binding output is null.");
         }
         if (vertexBuffer == CNA_INVALID_HANDLE) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
+            return InvalidArgument(
                 "A non-default vertex-buffer binding requires a nonzero handle token.");
         }
         if (vertexOffset < 0 || instanceFrequency < 0) {

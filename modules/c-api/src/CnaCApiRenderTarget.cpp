@@ -38,11 +38,13 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsDepthFormat;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -155,9 +157,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
             // code that exception maps to everywhere else in this ABI. A face on a 2D binding is
             // an ordinary bad argument: the field means nothing for this target kind.
             if (binding.array_slice != 0) {
-                return Fail(
-                    CNA_RESULT_NOT_SUPPORTED,
-                    CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                return NotSupported(
                     "RenderTarget2D array slices are not supported; the array slice must be 0.");
             }
             if (binding.cube_map_face != CNA_CUBE_MAP_FACE_POSITIVE_X) {
@@ -224,10 +224,7 @@ CNA_Result GetTrackedRenderTargetBindings(
     std::vector<CNA_RenderTargetBinding>* const outBindings)
 {
     if (device == nullptr || outBindings == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The tracked render-target binding request is invalid.");
+        return InvalidArgument("The tracked render-target binding request is invalid.");
     }
     const auto found = activeBindings.find(device);
     *outBindings = found == activeBindings.end()
@@ -257,10 +254,7 @@ CNA_Result ResolveRenderTargetScopeReference(
     uint64_t** const outReferenceCount)
 {
     if (outOwner == nullptr || outReferenceCount == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The render-target scope reference output is invalid.");
+        return InvalidArgument("The render-target scope reference output is invalid.");
     }
     outOwner->reset();
     *outReferenceCount = nullptr;
@@ -664,17 +658,11 @@ CNA_Result cna_render_target_subscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentLost registration output handle is null.");
+            return InvalidArgument("The ContentLost registration output handle is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentLost callback is null.");
+            return InvalidArgument("The ContentLost callback is null.");
         }
 
         ObjectKind kind = ObjectKind::Unknown;
@@ -785,9 +773,7 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
         }
         if (resource->activeEffectReferenceCount != 0U ||
             resource->activeScopeReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
         }
         resource->value->Dispose();

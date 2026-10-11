@@ -25,6 +25,7 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -54,10 +55,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 [[nodiscard]] CNA_Result ValidateVertexType(const CNA_VertexType type) noexcept
 {
     if (!IsValidVertexType(type)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The built-in vertex type is invalid.");
+        return InvalidArgument("The built-in vertex type is invalid.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -221,10 +219,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 [[nodiscard]] CNA_Result InvalidVertexElement() noexcept
 {
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        "A vertex element contains an invalid format or usage identity.");
+    return InvalidArgument("A vertex element contains an invalid format or usage identity.");
 }
 
 } // namespace
@@ -235,10 +230,7 @@ CNA_Result cna_vertex_value_init_default(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-value output is null.");
+            return InvalidArgument("The vertex-value output is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -257,10 +249,7 @@ CNA_Result cna_vertex_value_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A vertex-value equality argument is null.");
+            return InvalidArgument("A vertex-value equality argument is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -279,10 +268,7 @@ CNA_Result cna_vertex_value_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (left == nullptr || right == nullptr || outNotEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A vertex-value inequality argument is null.");
+            return InvalidArgument("A vertex-value inequality argument is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -300,10 +286,7 @@ CNA_Result cna_vertex_value_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr || outHash == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A vertex-value hash argument is null.");
+            return InvalidArgument("A vertex-value hash argument is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -321,10 +304,7 @@ CNA_Result cna_vertex_value_get_string_byte_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr || outByteCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A vertex-value string-count argument is null.");
+            return InvalidArgument("A vertex-value string-count argument is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -343,10 +323,7 @@ CNA_Result cna_vertex_value_copy_string(
     uint64_t* const outByteCount)
 {
     if (value == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The vertex value is null.");
+        return InvalidArgument("The vertex value is null.");
     }
     if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
         return result;
@@ -362,10 +339,7 @@ CNA_Result cna_vertex_type_get_stride(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outStride == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-stride output is null.");
+            return InvalidArgument("The vertex-stride output is null.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -390,10 +364,7 @@ CNA_Result cna_vertex_type_copy_elements(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outElementCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-element output buffer is invalid.");
+            return InvalidArgument("The vertex-element output buffer is invalid.");
         }
         if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
             return result;
@@ -421,10 +392,7 @@ CNA_Result cna_vertex_element_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         VertexElement nativeLeft;
         VertexElement nativeRight;
@@ -444,10 +412,7 @@ CNA_Result cna_vertex_element_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outNotEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         VertexElement nativeLeft;
         VertexElement nativeRight;
@@ -466,10 +431,7 @@ CNA_Result cna_vertex_element_get_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHash == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The hash-code output is null.");
+            return InvalidArgument("The hash-code output is null.");
         }
         VertexElement native;
         if (!TryToNative(value, &native)) {
@@ -487,10 +449,7 @@ CNA_Result cna_vertex_element_get_string_byte_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outByteCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string byte-count output is null.");
+            return InvalidArgument("The string byte-count output is null.");
         }
         VertexElement native;
         if (!TryToNative(value, &native)) {

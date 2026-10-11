@@ -52,6 +52,7 @@ using CNA::C::Detail::CopyBytes;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
@@ -573,10 +574,7 @@ CNA_Result cna_media_library_get_media_source_type(
         }
         const MediaSource* const source = resource->value->getMediaSourceProperty();
         if (source == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The media library has no media source.");
+            return InvalidState("The media library has no media source.");
         }
         *outType = static_cast<CNA_MediaSourceType>(source->getMediaSourceTypeProperty());
         return CNA_RESULT_SUCCESS;
@@ -598,10 +596,7 @@ CNA_Result cna_media_library_get_media_source_name_size(
         }
         const MediaSource* const source = resource->value->getMediaSourceProperty();
         if (source == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The media library has no media source.");
+            return InvalidState("The media library has no media source.");
         }
         *outBytes = source->getNameProperty().size();
         return CNA_RESULT_SUCCESS;
@@ -622,10 +617,7 @@ CNA_Result cna_media_library_copy_media_source_name(
         }
         const MediaSource* const source = resource->value->getMediaSourceProperty();
         if (source == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The media library has no media source.");
+            return InvalidState("The media library has no media source.");
         }
         return CopyText(source->getNameProperty(), destination, capacity, outBytes);
     });
@@ -651,10 +643,7 @@ template<typename TCollection, typename TGet>
     }
     TCollection* const collection = get(*resource->value);
     if (collection == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "The media library did not build this collection.");
+        return InvalidState("The media library did not build this collection.");
     }
     return PublishLibraryChild<TCollection>(
         MediaTraits<TCollection>::Kind,
@@ -1205,10 +1194,7 @@ CNA_Result cna_picture_album_get_albums(
         }
         PictureAlbumCollection* const children = resource->value->getAlbumsProperty();
         if (children == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The picture album has no child album collection.");
+            return InvalidState("The picture album has no child album collection.");
         }
         return PublishChildOf<PictureAlbumCollection, PictureAlbum>(resource, children, outAlbums);
     });
@@ -1230,10 +1216,7 @@ CNA_Result cna_picture_album_get_pictures(
         }
         PictureCollection* const pictures = resource->value->getPicturesProperty();
         if (pictures == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The picture album has no picture collection.");
+            return InvalidState("The picture album has no picture collection.");
         }
         return PublishChildOf<PictureCollection, PictureAlbum>(resource, pictures, outPictures);
     });

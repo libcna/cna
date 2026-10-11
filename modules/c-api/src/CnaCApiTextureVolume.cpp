@@ -40,10 +40,7 @@ CNA_Result GetOwnedTextureCube(
     TextureCubeResourceView* const outTexture)
 {
     if (outTexture == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The TextureCube resource output is null.");
+        return InvalidArgument("The TextureCube resource output is null.");
     }
     ObjectKind kind = ObjectKind::Unknown;
     if (const CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
@@ -91,10 +88,7 @@ CNA_Result GetOwnedTexture(
     TextureResourceView* const outTexture)
 {
     if (outTexture == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The texture resource output is null.");
+        return InvalidArgument("The texture resource output is null.");
     }
     ObjectKind kind = ObjectKind::Unknown;
     if (const CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
@@ -164,9 +158,11 @@ using CNA::C::Detail::GetOwnedTexture3D;
 using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -438,10 +434,7 @@ CNA_Result CreateOwnedTextureCube(
     CNA_Handle* const outTexture)
 {
     if (texture == nullptr || outTexture == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The owned TextureCube factory arguments are invalid.");
+        return InvalidArgument("The owned TextureCube factory arguments are invalid.");
     }
     return CreateTextureCubeHandle(std::move(texture), parentGame, outTexture);
 }
@@ -466,9 +459,7 @@ CNA_Result cna_texture3d_create(
             return InvalidArgument("The Texture3D creation configuration is invalid.");
         }
         if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "The Texture3D surface format is unsupported by the native contract.");
         }
         if (const CNA_Result result = ValidatePositiveDimensions(
@@ -503,10 +494,7 @@ CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
             return result;
         }
         if (texture->activeEffectReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The Texture3D is retained by an EffectParameter.");
+            return InvalidState("The Texture3D is retained by an EffectParameter.");
         }
         if (const CNA_Result result = ReleaseHandle(textureHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -691,9 +679,7 @@ CNA_Result cna_texturecube_create(
             return InvalidArgument("The TextureCube creation configuration is invalid.");
         }
         if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "The TextureCube surface format is unsupported by the native contract.");
         }
         if (const CNA_Result result = ValidatePositiveDimensions(
@@ -756,10 +742,7 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
             return result;
         }
         if (texture->activeEffectReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The TextureCube is retained by an EffectParameter.");
+            return InvalidState("The TextureCube is retained by an EffectParameter.");
         }
         if (const CNA_Result result = ReleaseHandle(textureHandle);
             result != CNA_RESULT_SUCCESS) {

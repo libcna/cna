@@ -30,8 +30,10 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -64,10 +66,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 [[nodiscard]] CNA_Result ValidateUsable(const IndexBufferResource& resource)
 {
     if (resource.value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "The IndexBuffer has been disposed.");
+        return InvalidState("The IndexBuffer has been disposed.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -244,10 +243,7 @@ CNA_Result cna_index_buffer_create(
             return result;
         }
         if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The selected graphics backend does not support index buffers.");
+            return NotSupported("The selected graphics backend does not support index buffers.");
         }
 
         const auto elementSize =
@@ -294,10 +290,7 @@ CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandl
             return result;
         }
         if (buffer->activeModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The IndexBuffer is retained by a ModelMeshPart.");
+            return InvalidState("The IndexBuffer is retained by a ModelMeshPart.");
         }
         if (const CNA_Result result = ReleaseHandle(indexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -407,9 +400,7 @@ CNA_Result cna_index_buffer_set_data_at(
         // streaming hint cannot describe: Discard means "the old contents are gone", and that is
         // exactly what this route promises not to do.
         if (view.options != SetDataOptions::None) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "A windowed upload preserves the rest of the buffer, so it accepts no "
                 "SetDataOptions other than None.");
         }
@@ -447,10 +438,7 @@ CNA_Result cna_index_buffer_set_data(
                 "The source index width does not match the IndexBuffer element size.");
         }
         if (view.options != SetDataOptions::None && !buffer->dynamic) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "SetDataOptions other than None require DynamicIndexBuffer.");
+            return NotSupported("SetDataOptions other than None require DynamicIndexBuffer.");
         }
         if (view.count >
             static_cast<uint64_t>(buffer->value->getIndexCountProperty())) {
@@ -529,10 +517,7 @@ CNA_Result cna_index_buffer_subscribe_content_lost(
             return result;
         }
         if (!buffer->dynamic) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "ContentLost exists only on DynamicIndexBuffer.");
+            return NotSupported("ContentLost exists only on DynamicIndexBuffer.");
         }
         const auto dynamic = std::static_pointer_cast<DynamicIndexBuffer>(buffer->value);
         const auto token = dynamic->ContentLost.Add(

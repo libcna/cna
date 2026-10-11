@@ -34,6 +34,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
@@ -320,9 +321,7 @@ CNA_Result cna_audio_engine_destroy(const CNA_Handle engineHandle)
             return result;
         }
         if (engine->childCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "All C bank and category children must be destroyed before their AudioEngine.");
         }
         engine->value->Dispose();
@@ -863,10 +862,7 @@ CNA_Result cna_sound_bank_destroy(const CNA_Handle soundBankHandle)
             return result;
         }
         if (soundBank->cueCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "All C Cue children must be destroyed before their SoundBank.");
+            return InvalidState("All C Cue children must be destroyed before their SoundBank.");
         }
         soundBank->value->Dispose();
         if (const CNA_Result result = ReleaseHandle(soundBankHandle);

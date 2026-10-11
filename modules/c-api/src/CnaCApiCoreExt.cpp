@@ -1193,10 +1193,7 @@ CNA_Result cna_assembly_copy_title_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return CNA::C::Detail::Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The required-byte output is null.");
+            return CNA::C::Detail::InvalidArgument("The required-byte output is null.");
         }
         const std::string& title = CNA::GetAssemblyTitleEXT();
         *outBytes = static_cast<uint64_t>(title.size());

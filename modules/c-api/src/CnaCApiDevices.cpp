@@ -61,6 +61,8 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
@@ -79,19 +81,13 @@ static_assert(
 #ifndef CNA_DEVICES
 [[nodiscard]] CNA_Result ExtensionUnavailable()
 {
-    return Fail(
-        CNA_RESULT_NOT_SUPPORTED,
-        CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-        "This CNA build does not contain the extended device layer.");
+    return NotSupported("This CNA build does not contain the extended device layer.");
 }
 #endif
 
 [[nodiscard]] CNA_Result NoTestBackend()
 {
-    return Fail(
-        CNA_RESULT_INVALID_STATE,
-        CNA_ERROR_CATEGORY_STATE,
-        "No test backend is installed for this device.");
+    return InvalidState("No test backend is installed for this device.");
 }
 
 // The canonical vibration hook takes a caller-implemented backend object; C cannot write one, so

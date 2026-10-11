@@ -505,7 +505,7 @@ CNA_Result ValidateCanonicalBool(const CNA_Bool value, const std::string_view na
     std::string message;
     message.reserve(name.size() + 48U);
     message.append("The '").append(name).append("' flag must be CNA_FALSE or CNA_TRUE.");
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+    return InvalidArgument(message);
 }
 
 CNA_Result ValidateStringView(

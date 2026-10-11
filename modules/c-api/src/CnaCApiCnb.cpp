@@ -61,6 +61,7 @@ using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReportTextSize;
@@ -1373,9 +1374,7 @@ CNA_Result cna_cnb_document_destroy(const CNA_CnbDocumentHandle documentHandle)
             return result;
         }
         if (document->activeBorrowCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "Every reader opened from this CNB document must be destroyed before it.");
         }
         return ReleaseHandle(documentHandle);
@@ -1683,7 +1682,8 @@ CNA_Result cna_cnb_document_require_mandatory_chunks_understood(
             return result;
         }
         if (knownTypes == nullptr && knownTypeCount != 0U) {
-            return InvalidArgument("The known chunk-identifier array is null with a non-zero count.");
+            return InvalidArgument(
+                "The known chunk-identifier array is null with a non-zero count.");
         }
         if (knownTypeCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
             return Fail(
@@ -2063,10 +2063,7 @@ CNA_Result cna_cnb_reader_copy_string(
             return result;
         }
         if (!reader->lastString.has_value()) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "This CNB reader has not read a string yet.");
+            return InvalidState("This CNB reader has not read a string yet.");
         }
         return CopyText(*reader->lastString, destination, capacity, outByteCount);
     });
@@ -4594,7 +4591,8 @@ CNA_Result cna_cnb_model_set_skeleton(
             return result;
         }
         if (jointCount != 0U && (bindPose == nullptr || inverseBindPose == nullptr)) {
-            return InvalidArgument("The skeleton pose arrays are null with a non-zero joint count.");
+            return InvalidArgument(
+                "The skeleton pose arrays are null with a non-zero joint count.");
         }
         uint64_t floatCount = 0U;
         if (const CNA_Result result = cna_cnb_checked_multiply(jointCount, 16U, &floatCount);

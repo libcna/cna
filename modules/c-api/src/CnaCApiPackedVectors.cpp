@@ -32,6 +32,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -241,10 +242,7 @@ template<typename TPackedVector>
 [[nodiscard]] CNA_Result ValidateFormat(const CNA_PackedVectorFormat format) noexcept
 {
     if (!IsValidFormat(format)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The packed-vector format is invalid.");
+        return InvalidArgument("The packed-vector format is invalid.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -271,20 +269,14 @@ CNA_Result cna_packed_vector_pack(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outPacked == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The packed-value output is null.");
+            return InvalidArgument("The packed-value output is null.");
         }
         CNA_Result result = ValidateFormat(format);
         if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (!ConsumedComponentsAreFinite(format, vector)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A consumed integer packed-vector component is not finite.");
+            return InvalidArgument("A consumed integer packed-vector component is not finite.");
         }
         const uint64_t packed = PackForFormat(format, ToNative(vector));
         *outPacked = packed;
@@ -299,10 +291,7 @@ CNA_Result cna_packed_vector_unpack(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outVector == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Vector4 output is null.");
+            return InvalidArgument("The Vector4 output is null.");
         }
         CNA_Result result = ValidateFormat(format);
         if (result != CNA_RESULT_SUCCESS) {
@@ -326,10 +315,7 @@ CNA_Result cna_packed_vector_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         CNA_Result result = ValidateFormat(format);
         if (result != CNA_RESULT_SUCCESS) {
@@ -357,10 +343,7 @@ CNA_Result cna_packed_vector_not_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outNotEqual == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean output is null.");
+            return InvalidArgument("The Boolean output is null.");
         }
         CNA_Result result = ValidateFormat(format);
         if (result != CNA_RESULT_SUCCESS) {

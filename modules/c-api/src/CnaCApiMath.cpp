@@ -20,6 +20,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::MathHelper;
@@ -78,10 +79,7 @@ CNA_Result cna_math_closest_msaa_power(
     int32_t* const outValue)
 {
     if (outValue == nullptr || value < 0) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The MSAA input is negative or its output is null.");
+        return InvalidArgument("The MSAA input is negative or its output is null.");
     }
     if (value <= 1) {
         *outValue = 0;
@@ -158,10 +156,7 @@ CNA_Result cna_point_divide(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr || right.x == 0 || right.y == 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The point output is null or a divisor component is zero.");
+            return InvalidArgument("The point output is null or a divisor component is zero.");
         }
         constexpr int32_t Minimum = std::numeric_limits<int32_t>::min();
         if ((left.x == Minimum && right.x == -1) ||
@@ -251,10 +246,7 @@ CNA_Result cna_rectangle_set_location(
     const CNA_Point location)
 {
     if (value == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The rectangle is null.");
+        return InvalidArgument("The rectangle is null.");
     }
     value->x = location.x;
     value->y = location.y;
@@ -325,10 +317,7 @@ CNA_Result cna_rectangle_offset_xy(
     const int32_t offsetY)
 {
     if (value == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The rectangle is null.");
+        return InvalidArgument("The rectangle is null.");
     }
     value->x = WrapAdd(value->x, offsetX);
     value->y = WrapAdd(value->y, offsetY);
@@ -341,10 +330,7 @@ CNA_Result cna_rectangle_inflate(
     const int32_t verticalValue)
 {
     if (value == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The rectangle is null.");
+        return InvalidArgument("The rectangle is null.");
     }
     value->x = WrapSubtract(value->x, horizontalValue);
     value->y = WrapSubtract(value->y, verticalValue);

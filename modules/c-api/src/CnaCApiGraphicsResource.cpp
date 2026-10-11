@@ -34,7 +34,10 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::RenderTargetCubeResource;
@@ -106,10 +109,7 @@ private:
     GraphicsResourceView* const outResource)
 {
     if (outResource == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The internal graphics-resource output is null.");
+        return InvalidArgument("The internal graphics-resource output is null.");
     }
     ObjectKind kind = ObjectKind::Unknown;
     if (const CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
@@ -220,9 +220,7 @@ private:
 [[nodiscard]] CNA_Result EnsureDisposable(const GraphicsResourceView& resource)
 {
     if (!resource.disposeAllowed) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
+        return InvalidState(
             "The graphics resource is a borrowed view and cannot be disposed by the caller.");
     }
     if ((resource.texture != nullptr &&
@@ -234,10 +232,7 @@ private:
          *resource.activeModelReferenceCount != 0U) ||
         (resource.activeScopeReferenceCount != nullptr &&
          *resource.activeScopeReferenceCount != 0U)) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "The graphics resource is retained by an active C API owner.");
+        return InvalidState("The graphics resource is retained by an active C API owner.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -252,10 +247,7 @@ template<typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-resource string output buffer is invalid.");
+            return InvalidArgument("The graphics-resource string output buffer is invalid.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(handle, &resource);
@@ -285,10 +277,7 @@ CNA_Result cna_graphics_resource_get_graphics_device(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outGraphicsDevice == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-device output handle is null.");
+            return InvalidArgument("The graphics-device output handle is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
         GraphicsResourceView resource;
@@ -300,9 +289,7 @@ CNA_Result cna_graphics_resource_get_graphics_device(
             return CNA_RESULT_SUCCESS;
         }
         if (resource.parentGame == CNA_INVALID_HANDLE) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "The resource's graphics-device owner cannot be represented by a C handle.");
         }
         CNA_Handle borrowedHandle = CNA_INVALID_HANDLE;
@@ -332,10 +319,7 @@ CNA_Result cna_graphics_resource_get_is_disposed(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outIsDisposed == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The disposal-state output is null.");
+            return InvalidArgument("The disposal-state output is null.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
@@ -354,10 +338,7 @@ CNA_Result cna_graphics_resource_get_name_byte_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outByteCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The name byte-count output is null.");
+            return InvalidArgument("The name byte-count output is null.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
@@ -413,10 +394,7 @@ CNA_Result cna_graphics_resource_get_string_byte_count(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outByteCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string byte-count output is null.");
+            return InvalidArgument("The string byte-count output is null.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
@@ -449,10 +427,7 @@ CNA_Result cna_graphics_resource_get_tag(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outTag == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-resource tag output is null.");
+            return InvalidArgument("The graphics-resource tag output is null.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
@@ -508,17 +483,11 @@ CNA_Result cna_graphics_resource_subscribe_disposing(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The disposing-registration output handle is null.");
+            return InvalidArgument("The disposing-registration output handle is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The disposing callback is null.");
+            return InvalidArgument("The disposing callback is null.");
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);

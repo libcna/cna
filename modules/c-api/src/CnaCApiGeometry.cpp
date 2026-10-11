@@ -27,6 +27,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -49,10 +50,7 @@ template<typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHit == nullptr || outDistance == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A ray-intersection output is null.");
+            return InvalidArgument("A ray-intersection output is null.");
         }
         const std::optional<float> distance = std::forward<TCallable>(callable)();
         *outHit = ToCBool(distance.has_value());
@@ -67,10 +65,7 @@ CNA_Result cna_plane_normalize_in_place(CNA_Plane* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Plane is null.");
+            return InvalidArgument("The Plane is null.");
         }
         Plane native = ToNative(*value);
         native.Normalize();
@@ -131,10 +126,7 @@ CNA_Result cna_bounding_box_copy_corners(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The corner destination or required-count output is invalid.");
+            return InvalidArgument("The corner destination or required-count output is invalid.");
         }
         constexpr uint64_t RequiredCount = CNA_BOUNDING_BOX_CORNER_COUNT;
         *outCount = RequiredCount;
@@ -170,10 +162,7 @@ CNA_Result cna_bounding_box_create_from_points(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The BoundingBox output is null.");
+            return InvalidArgument("The BoundingBox output is null.");
         }
         std::size_t byteCount = 0U;
         const CNA_Result validation = CheckedElementByteCount(
@@ -185,10 +174,7 @@ CNA_Result cna_bounding_box_create_from_points(
                 "The point array or count is invalid.");
         }
         if (count == 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The point array is empty.");
+            return InvalidArgument("The point array is empty.");
         }
         std::vector<Vector3> nativePoints;
         nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
@@ -208,10 +194,7 @@ CNA_Result cna_bounding_sphere_create_from_points(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The BoundingSphere output is null.");
+            return InvalidArgument("The BoundingSphere output is null.");
         }
         std::size_t byteCount = 0U;
         const CNA_Result validation = CheckedElementByteCount(
@@ -223,10 +206,7 @@ CNA_Result cna_bounding_sphere_create_from_points(
                 "The point array or count is invalid.");
         }
         if (count == 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The point array is empty.");
+            return InvalidArgument("The point array is empty.");
         }
         std::vector<Vector3> nativePoints;
         nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
@@ -274,10 +254,7 @@ CNA_Result cna_bounding_frustum_copy_corners(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The corner destination or required-count output is invalid.");
+            return InvalidArgument("The corner destination or required-count output is invalid.");
         }
         constexpr uint64_t RequiredCount = CNA_BOUNDING_FRUSTUM_CORNER_COUNT;
         *outCount = RequiredCount;

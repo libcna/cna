@@ -44,7 +44,9 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
@@ -181,19 +183,13 @@ CNA_Result cna_content_manager_create(
 {
     return CallWithExceptionBarrier([&]() {
         if (outContentManager == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentManager output handle is null.");
+            return InvalidArgument("The ContentManager output handle is null.");
         }
         *outContentManager = CNA_INVALID_HANDLE;
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_ContentManagerCreateInfo) ||
             createInfo->struct_version != StructureVersion || createInfo->reserved != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentManager creation configuration is invalid.");
+            return InvalidArgument("The ContentManager creation configuration is invalid.");
         }
 
         std::string rootDirectory;
@@ -244,10 +240,7 @@ CNA_Result cna_content_manager_copy_root_directory(
 {
     return CallWithExceptionBarrier([&]() {
         if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The root-directory output buffer is invalid.");
+            return InvalidArgument("The root-directory output buffer is invalid.");
         }
         std::shared_ptr<ContentManagerResource> contentManager;
         if (const CNA_Result result = GetContentManager(
@@ -308,10 +301,7 @@ CNA_Result cna_content_manager_load_texture2d(
 {
     return CallWithExceptionBarrier([&]() {
         if (outTexture == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The loaded Texture2D output handle is null.");
+            return InvalidArgument("The loaded Texture2D output handle is null.");
         }
         *outTexture = CNA_INVALID_HANDLE;
 
@@ -324,10 +314,7 @@ CNA_Result cna_content_manager_load_texture2d(
                 "The content asset name is not valid UTF-8.");
         }
         if (assetNameCopy.empty()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The content asset name must not be empty.");
+            return InvalidArgument("The content asset name must not be empty.");
         }
 
         std::shared_ptr<ContentManagerResource> contentManager;
@@ -370,19 +357,13 @@ CNA_Result cna_content_manager_create_resource(
 {
     return CallWithExceptionBarrier([&]() {
         if (outContentManager == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentManager output handle is null.");
+            return InvalidArgument("The ContentManager output handle is null.");
         }
         *outContentManager = CNA_INVALID_HANDLE;
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_ContentManagerCreateInfo) ||
             createInfo->struct_version != StructureVersion || createInfo->reserved != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ContentManager creation configuration is invalid.");
+            return InvalidArgument("The ContentManager creation configuration is invalid.");
         }
 
         std::string rootDirectory;
@@ -459,10 +440,7 @@ CNA_Result cna_content_manager_load_sound_effect(
                 contentManager->parentGame,
                 outSoundEffect);
         } catch (const NoAudioHardwareException& exception) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                exception.what());
+            return NotSupported(exception.what());
         } catch (const ContentLoadException& exception) {
             return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
         } catch (const std::bad_any_cast&) {
@@ -541,10 +519,7 @@ CNA_Result cna_content_manager_load_sprite_font(
 {
     return CallWithExceptionBarrier([&]() {
         if (outSpriteFont == nullptr || outTexture == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A loaded SpriteFont output handle is null.");
+            return InvalidArgument("A loaded SpriteFont output handle is null.");
         }
         *outSpriteFont = CNA_INVALID_HANDLE;
         *outTexture = CNA_INVALID_HANDLE;
@@ -558,10 +533,7 @@ CNA_Result cna_content_manager_load_sprite_font(
                 "The content asset name is not valid UTF-8.");
         }
         if (assetNameCopy.empty()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The content asset name must not be empty.");
+            return InvalidArgument("The content asset name must not be empty.");
         }
 
         std::shared_ptr<ContentManagerResource> contentManager;
@@ -637,10 +609,7 @@ CNA_Result cna_content_manager_load_foreign_ext(
 {
     return CallWithExceptionBarrier([&]() {
         if (outObject == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The loaded foreign-asset output pointer is null.");
+            return InvalidArgument("The loaded foreign-asset output pointer is null.");
         }
         *outObject = nullptr;
 
@@ -653,10 +622,7 @@ CNA_Result cna_content_manager_load_foreign_ext(
                 "The content asset name is not valid UTF-8.");
         }
         if (assetNameCopy.empty()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The content asset name must not be empty.");
+            return InvalidArgument("The content asset name must not be empty.");
         }
 
         std::shared_ptr<ContentManagerResource> contentManager;
@@ -697,10 +663,7 @@ CNA_Result cna_content_manager_register_cnj_loader_ext(
 {
     return CallWithExceptionBarrier([&]() {
         if (callback == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The .cnj loader callback is null.");
+            return InvalidArgument("The .cnj loader callback is null.");
         }
         std::string typeNameCopy;
         if (const CNA_Result result = CopyStringView(typeName, true, &typeNameCopy);
@@ -711,10 +674,7 @@ CNA_Result cna_content_manager_register_cnj_loader_ext(
                 "The .cnj type name is not valid UTF-8.");
         }
         if (typeNameCopy.empty()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The .cnj type name must not be empty.");
+            return InvalidArgument("The .cnj type name must not be empty.");
         }
 
         std::shared_ptr<ContentManagerResource> contentManager;
@@ -745,12 +705,11 @@ CNA_Result cna_content_manager_register_cnj_loader_ext(
                     return CNA::Content::ForeignContentObjectEXT{object};
                 });
         } catch (const std::invalid_argument& exception) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+            return InvalidArgument(exception.what());
         } catch (const std::logic_error& exception) {
             // The canonical refusal for a name already taken. It is a state failure rather than a
             // bad argument: the same name is perfectly valid on a manager that does not hold it.
-            return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+            return InvalidState(exception.what());
         }
         return CNA_RESULT_SUCCESS;
     });
@@ -906,9 +865,7 @@ CNA_Result cna_content_manager_set_graphics_device(
             return result;
         }
         if (graphicsDevice->parentGame != contentManager->parentGame) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "The graphics device belongs to a different game than the content manager.");
         }
         contentManager->value->setGraphicsDevice(*graphicsDevice->value);
@@ -1107,10 +1064,7 @@ CNA_Result cna_content_manager_destroy(const CNA_Handle contentManagerHandle)
             return result;
         }
         if (contentManager->borrowed) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The game owns this ContentManager; it is released with the game.");
+            return InvalidState("The game owns this ContentManager; it is released with the game.");
         }
         contentManager->value->Dispose();
         if (const CNA_Result releaseResult = ReleaseHandle(contentManagerHandle);
@@ -1128,10 +1082,7 @@ CNA_Result cna_game_get_content_manager_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outContentManager == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The content-manager output handle is null.");
+            return InvalidArgument("The content-manager output handle is null.");
         }
         *outContentManager = CNA_INVALID_HANDLE;
         Microsoft::Xna::Framework::Game* game = nullptr;

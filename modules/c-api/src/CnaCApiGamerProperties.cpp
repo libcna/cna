@@ -27,7 +27,6 @@ using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -180,10 +179,7 @@ CNA_Result CreateOwnedPropertyDictionary(
     CNA_Handle* const outDictionary)
 {
     if (value == nullptr || outDictionary == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The property dictionary factory arguments are invalid.");
+        return InvalidArgument("The property dictionary factory arguments are invalid.");
     }
     *outDictionary = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<PropertyDictionaryResource>();

@@ -20,6 +20,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Matrix;
@@ -42,10 +43,7 @@ template<typename TElement>
         (destination == nullptr && destinationCount != 0U) ||
         sourceIndex > sourceCount || length > sourceCount - sourceIndex ||
         destinationIndex > destinationCount || length > destinationCount - destinationIndex) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The array pointer, count, index or length is invalid.");
+        return InvalidArgument("The array pointer, count, index or length is invalid.");
     }
     constexpr uint64_t MaximumSize = static_cast<uint64_t>(
         std::numeric_limits<std::size_t>::max());
@@ -96,10 +94,7 @@ CNA_Result cna_vector2_normalize_in_place(CNA_Vector2* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Vector2 is null.");
+            return InvalidArgument("The Vector2 is null.");
         }
         Vector2 native = ToNative(*value);
         native.Normalize();
@@ -184,10 +179,7 @@ CNA_Result cna_vector3_normalize_in_place(CNA_Vector3* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Vector3 is null.");
+            return InvalidArgument("The Vector3 is null.");
         }
         Vector3 native = ToNative(*value);
         native.Normalize();
@@ -272,10 +264,7 @@ CNA_Result cna_vector4_normalize_in_place(CNA_Vector4* const value)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Vector4 is null.");
+            return InvalidArgument("The Vector4 is null.");
         }
         Vector4 native = ToNative(*value);
         native.Normalize();

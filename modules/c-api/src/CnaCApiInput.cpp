@@ -105,10 +105,7 @@ constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
 {
     if (state == nullptr || state->struct_size < sizeof(CNA_KeyboardState) ||
         state->struct_version != StructureVersion) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The keyboard-state snapshot structure is invalid.");
+        return InvalidArgument("The keyboard-state snapshot structure is invalid.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -200,10 +197,7 @@ constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
         return result;
     }
     if (state->touch_count > CNA_TOUCH_MAX_TOUCHES) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The touch-state snapshot count exceeds its fixed capacity.");
+        return InvalidArgument("The touch-state snapshot count exceeds its fixed capacity.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -330,10 +324,7 @@ constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
     GamePadDeadZone nativeDeadZone = GamePadDeadZone::None;
     if (!TryMapPlayerIndex(playerIndex, &nativePlayerIndex) ||
         !TryMapDeadZone(deadZone, &nativeDeadZone)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The gamepad player index or dead-zone mode is invalid.");
+        return InvalidArgument("The gamepad player index or dead-zone mode is invalid.");
     }
     if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
         result != CNA_RESULT_SUCCESS) {
@@ -371,10 +362,7 @@ CNA_Result cna_keyboard_get_state(
     return CallWithExceptionBarrier([&]() {
         if (outState == nullptr || outState->struct_size < sizeof(CNA_KeyboardState) ||
             outState->struct_version != StructureVersion) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The keyboard-state output structure is invalid.");
+            return InvalidArgument("The keyboard-state output structure is invalid.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -407,10 +395,7 @@ CNA_Result cna_keyboard_state_is_key_down(
 {
     return CallWithExceptionBarrier([&]() {
         if (outIsDown == nullptr || key >= KeyboardSlotCount) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The keyboard key-down query arguments are invalid.");
+            return InvalidArgument("The keyboard key-down query arguments are invalid.");
         }
         if (const CNA_Result result = ValidateKeyboardState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -428,10 +413,7 @@ CNA_Result cna_keyboard_state_is_key_up(
 {
     return CallWithExceptionBarrier([&]() {
         if (outIsUp == nullptr || key >= KeyboardSlotCount) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The keyboard key-up query arguments are invalid.");
+            return InvalidArgument("The keyboard key-up query arguments are invalid.");
         }
         if (const CNA_Result result = ValidateKeyboardState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -450,10 +432,7 @@ CNA_Result cna_keyboard_state_copy_pressed_keys(
 {
     return CallWithExceptionBarrier([&]() {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The pressed-key output buffer is invalid.");
+            return InvalidArgument("The pressed-key output buffer is invalid.");
         }
         if (const CNA_Result result = ValidateKeyboardState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -561,10 +540,7 @@ CNA_Result cna_gamepad_apply_dead_zone(
         GamePadDeadZone nativeDeadZone = GamePadDeadZone::None;
         if (raw == nullptr || outProcessed == nullptr ||
             !TryMapDeadZone(deadZoneMode, &nativeDeadZone) || !IsFinite(*raw)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The gamepad dead-zone input is invalid.");
+            return InvalidArgument("The gamepad dead-zone input is invalid.");
         }
         static_cast<void>(nativeDeadZone);
         const CNA_GamePadAnalogState processed = ApplyDeadZone(*raw, deadZoneMode);
@@ -580,10 +556,7 @@ CNA_Result cna_gamepad_state_is_button_down(
 {
     return CallWithExceptionBarrier([&]() {
         if (outIsDown == nullptr || (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The gamepad button-down query arguments are invalid.");
+            return InvalidArgument("The gamepad button-down query arguments are invalid.");
         }
         if (const CNA_Result result = ValidateGamePadState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -601,10 +574,7 @@ CNA_Result cna_gamepad_state_is_button_up(
 {
     return CallWithExceptionBarrier([&]() {
         if (outIsUp == nullptr || (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The gamepad button-up query arguments are invalid.");
+            return InvalidArgument("The gamepad button-up query arguments are invalid.");
         }
         if (const CNA_Result result = ValidateGamePadState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -696,10 +666,7 @@ CNA_Result cna_touch_state_find_by_id(
 {
     return CallWithExceptionBarrier([&]() {
         if (outLocation == nullptr || outFound == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The touch find-by-id output is null.");
+            return InvalidArgument("The touch find-by-id output is null.");
         }
         if (const CNA_Result result = ValidateTouchState(state);
             result != CNA_RESULT_SUCCESS) {
@@ -729,10 +696,7 @@ CNA_Result cna_touch_location_try_get_previous(
         if (location == nullptr || outPrevious == nullptr || outFound == nullptr ||
             !IsValidTouchLocationState(location->state) ||
             !IsValidTouchLocationState(location->previous_state)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The touch previous-location query arguments are invalid.");
+            return InvalidArgument("The touch previous-location query arguments are invalid.");
         }
         const CNA_TouchLocation previous = {
             location->id,
@@ -826,10 +790,7 @@ CNA_Result cna_gamepad_capabilities_init(CNA_GamePadCapabilities* const outCapab
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCapabilities == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The gamepad-capabilities output structure is null.");
+            return InvalidArgument("The gamepad-capabilities output structure is null.");
         }
         *outCapabilities = SnapshotCapabilities(GamePadCapabilities{});
         return CNA_RESULT_SUCCESS;
@@ -850,10 +811,7 @@ CNA_Result cna_gamepad_get_capabilities(
         }
         PlayerIndex nativePlayerIndex = PlayerIndex::One;
         if (!TryMapPlayerIndex(playerIndex, &nativePlayerIndex)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The gamepad player index is invalid.");
+            return InvalidArgument("The gamepad player index is invalid.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {

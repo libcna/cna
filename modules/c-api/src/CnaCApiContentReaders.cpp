@@ -47,7 +47,9 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseStorageStream;
 using CNA::C::Detail::ToCBool;
@@ -508,9 +510,7 @@ CNA_Result cna_content_reader_destroy(const CNA_ContentReaderHandle readerHandle
             return result;
         }
         if (reader->isBorrowed) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is "
                 "released when the callback that received it returns.");
         }
@@ -686,9 +686,7 @@ CNA_Result cna_content_type_reader_manager_register(
         registration->callbacks.target_type_name.byte_length = 0U;
 
         if (ContentTypeReaderManager::IsRegistered(registration->canonicalName)) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "A content type-reader factory is already registered under that canonical name.");
         }
 
@@ -752,10 +750,7 @@ CNA_Result cna_content_type_reader_manager_create_reader(
         std::unique_ptr<ContentTypeReaderBase> typeReader =
             ContentTypeReaderManager::CreateReader(canonicalNameCopy);
         if (typeReader == nullptr) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "No content type reader is registered under that canonical name.");
+            return NotSupported("No content type reader is registered under that canonical name.");
         }
         return CreateTypeReaderHandle(std::move(typeReader), outTypeReader);
     });
@@ -1672,9 +1667,7 @@ template <typename T>
     if (found == values.end()) {
         // The canonical KeyNotFoundException and InvalidCastException are one result code here;
         // the message is what tells a caller which of the two it hit.
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-            "No dictionary entry has that key.");
+        return InvalidArgument("No dictionary entry has that key.");
     }
     *outValue = &found->second;
     return CNA_RESULT_SUCCESS;

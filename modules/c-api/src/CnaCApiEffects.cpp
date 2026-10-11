@@ -74,8 +74,10 @@ using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::TextureCubeResourceView;
@@ -832,10 +834,7 @@ template<typename TInterface>
     }
     auto* const interfaceValue = dynamic_cast<TInterface*>(effect->value.get());
     if (interfaceValue == nullptr) {
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            std::string("The Effect does not implement ") + EffectTypeName<TInterface> + ".");
+        return NotSupported(std::string("The Effect does not implement ") + EffectTypeName<TInterface> + ".");
     }
     if (outResource != nullptr) {
         *outResource = std::move(effect);
@@ -946,10 +945,7 @@ template<typename TGetter>
     if (textureParentGame == effect.parentGame) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        "The Effect and texture belong to different graphics devices.");
+    return InvalidArgument("The Effect and texture belong to different graphics devices.");
 }
 
 [[nodiscard]] CNA_Result GetRetainedEffectTexture(
@@ -988,10 +984,7 @@ template<typename TSetter>
         return result;
     }
     if (texture->value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A disposed Texture2D cannot be assigned to a stock effect.");
+        return InvalidState("A disposed Texture2D cannot be assigned to a stock effect.");
     }
     if (texture->activeEffectReferenceCount == UINT64_MAX) {
         return Fail(
@@ -1030,10 +1023,7 @@ template<typename TSetter>
         return result;
     }
     if (texture.value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A disposed TextureCube cannot be assigned to a stock effect.");
+        return InvalidState("A disposed TextureCube cannot be assigned to a stock effect.");
     }
     if (texture.activeEffectReferenceCount == nullptr ||
         *texture.activeEffectReferenceCount == UINT64_MAX) {
@@ -2107,10 +2097,7 @@ CNA_Result cna_effect_parameter_set_value_texture(
             break;
         }
         if (texture->getIsDisposedProperty()) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "A disposed texture cannot be assigned to an EffectParameter.");
+            return InvalidState("A disposed texture cannot be assigned to an EffectParameter.");
         }
         if (referenceCount == nullptr || *referenceCount == UINT64_MAX) {
             return Fail(
@@ -3043,10 +3030,7 @@ CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
             return result;
         }
         if (effect->activeModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The Effect is retained by a ModelMeshPart.");
+            return InvalidState("The Effect is retained by a ModelMeshPart.");
         }
         const CNA_Result result = GetRuntimeHandles().Release(effectHandle);
         return result == CNA_RESULT_SUCCESS
@@ -3124,15 +3108,10 @@ CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
             return result;
         }
         if (effect->activeModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The Effect is retained by a ModelMeshPart.");
+            return InvalidState("The Effect is retained by a ModelMeshPart.");
         }
         if (!effect->disposeAllowed) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "The Effect is a borrowed factory-owned view and cannot be disposed.");
         }
         effect->value->Dispose();
@@ -3824,10 +3803,7 @@ CNA_Result cna_effect_lights_set_enabled(
              dynamic_cast<SkinnedEffect*>(lights) != nullptr ||
              dynamic_cast<PbrEffect*>(lights) != nullptr ||
              dynamic_cast<SkinnedPbrEffect*>(lights) != nullptr)) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "This stock effect's lighting cannot be disabled.");
+            return InvalidState("This stock effect's lighting cannot be disabled.");
         }
         lights->setLightingEnabledProperty(value == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
@@ -5576,10 +5552,7 @@ namespace {
 
 [[nodiscard]] CNA_Result ExtensionEffectUnavailable()
 {
-    return Fail(
-        CNA_RESULT_NOT_SUPPORTED,
-        CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-        "This CNA build does not contain the extended graphics layer.");
+    return NotSupported("This CNA build does not contain the extended graphics layer.");
 }
 
 } // namespace
@@ -5777,11 +5750,10 @@ namespace {
     const float* const values, const int32_t count, const char* const what)
 {
     if (count < INT32_C(0)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The count is negative.");
+        return InvalidArgument("The count is negative.");
     }
     if (values == nullptr && count != INT32_C(0)) {
-        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, what);
+        return InvalidArgument(what);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -5862,10 +5834,7 @@ namespace {
     }
     auto* const material = dynamic_cast<EffectMaterial*>((*outEffect)->value.get());
     if (material == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The Effect handle does not hold an EffectMaterial.");
+        return InvalidArgument("The Effect handle does not hold an EffectMaterial.");
     }
     *outMaterial = material;
     return CNA_RESULT_SUCCESS;
@@ -5886,10 +5855,7 @@ CNA_Result cna_effect_material_retain_parameter_texture_ext(
             return result;
         }
         if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The texture type is not a CNA_EFFECT_TEXTURE_* family.");
+            return InvalidArgument("The texture type is not a CNA_EFFECT_TEXTURE_* family.");
         }
         // The canonical method ignores a null pointer; the null handle is its C spelling, and
         // treating it as an error would make the two disagree about the same input.
@@ -5957,10 +5923,7 @@ CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
             return result;
         }
         if (outCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The retained-texture count output is null.");
+            return InvalidArgument("The retained-texture count output is null.");
         }
         *outCount = static_cast<uint64_t>(material->GetRetainedParameterTextureCountEXT());
         return CNA_RESULT_SUCCESS;

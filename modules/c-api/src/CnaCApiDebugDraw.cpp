@@ -18,6 +18,7 @@
 namespace {
 
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -33,8 +34,7 @@ struct DebugDrawResource final {
 };
 template <class T> CNA_Result StoreValue(T *out, T value) {
   if (!out)
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                "Output is null.");
+    return InvalidArgument("Output is null.");
   *out = value;
   return CNA_RESULT_SUCCESS;
 }
@@ -65,13 +65,11 @@ Microsoft::Xna::Framework::Color ToNativeColour(CNA_Color v) {
 }
 CNA_Result RequireVector3Argument(const CNA_Vector3 *v, const char *msg) {
   return v ? CNA_RESULT_SUCCESS
-           : Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                  msg);
+           : InvalidArgument(msg);
 }
 CNA_Result ToNativeBounds(const CNA_BoundingBox *in, BoundingBox *out) {
   if (!in)
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                "Box is null.");
+    return InvalidArgument("Box is null.");
   *out = BoundingBox(ToNative(in->min), ToNative(in->max));
   return CNA_RESULT_SUCCESS;
 }
@@ -79,8 +77,7 @@ template <class T>
 CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
                           uint64_t *count) {
   if (!count || (!dst && cap))
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                "Count/copy arguments invalid.");
+    return InvalidArgument("Count/copy arguments invalid.");
   *count = src.size();
   if (cap < src.size())
     return CNA_RESULT_BUFFER_TOO_SMALL;
@@ -93,8 +90,7 @@ CNA_Result cna_debug_draw_create(const CNA_Handle graphicsDeviceHandle,
                                  CNA_DebugDrawHandle *const outDebug) {
   return CallWithExceptionBarrier([&]() -> CNA_Result {
     if (outDebug == nullptr) {
-      return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                  "The output handle is null.");
+      return InvalidArgument("The output handle is null.");
     }
     *outDebug = CNA_INVALID_HANDLE;
     std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -138,8 +134,7 @@ CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
   return CNA_WITH_DEBUG(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (view == nullptr || projection == nullptr) {
-          return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                      "A matrix is null.");
+          return InvalidArgument("A matrix is null.");
         }
         d->value->begin(ToNative(*view), ToNative(*projection));
         return CNA_RESULT_SUCCESS;
@@ -169,8 +164,7 @@ CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
   return CNA_WITH_DEBUG(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (from == nullptr || to == nullptr) {
-          return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                      "An endpoint is null.");
+          return InvalidArgument("An endpoint is null.");
         }
         d->value->addLine(ToNative(*from), ToNative(*to),
                           ToNativeColour(colour));
@@ -218,8 +212,7 @@ CNA_Result cna_debug_draw_add_bounding_sphere(
   return CNA_WITH_DEBUG(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (sphere == nullptr) {
-          return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                      "The sphere is null.");
+          return InvalidArgument("The sphere is null.");
         }
         const BoundingSphere native(ToNative(sphere->center),
                                     sphere->radius);

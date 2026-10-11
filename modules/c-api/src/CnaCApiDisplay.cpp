@@ -40,6 +40,7 @@ using CNA::C::Detail::IsPresentInterval;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCPresentationParameters;
@@ -550,10 +551,7 @@ CNA_Result cna_graphics_adapter_get_native_monitor_handle(
             return result;
         }
         static_cast<void>(adapter);
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            "Native monitor handles do not cross the stable CNA C ABI.");
+        return NotSupported("Native monitor handles do not cross the stable CNA C ABI.");
     });
 }
 
@@ -566,9 +564,7 @@ CNA_Result cna_graphics_adapters_refresh(const CNA_Handle graphicsDeviceHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+        return NotSupported(
             "The active C GraphicsDevice retains its adapter; refreshing the global native "
             "adapter cache would invalidate that reference.");
     });
@@ -698,10 +694,7 @@ CNA_Result cna_graphics_device_get_native_window_handle(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            "Native window handles do not cross the stable CNA C ABI.");
+        return NotSupported("Native window handles do not cross the stable CNA C ABI.");
     });
 }
 

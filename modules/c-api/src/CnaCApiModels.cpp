@@ -59,7 +59,9 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -1106,10 +1108,7 @@ void AddMeshEffect(
         return result;
     }
     if ((*outEffect)->value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A disposed Effect cannot be assigned to a ModelMeshPart.");
+        return InvalidState("A disposed Effect cannot be assigned to a ModelMeshPart.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1123,10 +1122,7 @@ void AddMeshEffect(
         return result;
     }
     if ((*outBuffer)->value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A disposed VertexBuffer cannot be assigned to a ModelMeshPart.");
+        return InvalidState("A disposed VertexBuffer cannot be assigned to a ModelMeshPart.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1140,10 +1136,7 @@ void AddMeshEffect(
         return result;
     }
     if ((*outBuffer)->value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A disposed IndexBuffer cannot be assigned to a ModelMeshPart.");
+        return InvalidState("A disposed IndexBuffer cannot be assigned to a ModelMeshPart.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1231,10 +1224,7 @@ void AddMeshEffect(
 {
     if (part->activeSkinnedModelReferenceCount != 0U &&
         bufferHandle != part->vertexBuffer.handle) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A SkinnedModelEXT-owned part cannot replace its VertexBuffer.");
+        return InvalidState("A SkinnedModelEXT-owned part cannot replace its VertexBuffer.");
     }
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetVertexBuffer(nullptr);
@@ -1277,10 +1267,7 @@ void AddMeshEffect(
 {
     if (part->activeSkinnedModelReferenceCount != 0U &&
         bufferHandle != part->indexBuffer.handle) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "A SkinnedModelEXT-owned part cannot replace its IndexBuffer.");
+        return InvalidState("A SkinnedModelEXT-owned part cannot replace its IndexBuffer.");
     }
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetIndexBuffer(nullptr);
@@ -1362,16 +1349,10 @@ void AddMeshEffect(
             return result;
         }
         if (part->parentMesh != nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "A ModelMeshPart cannot belong to more than one live ModelMesh.");
+            return InvalidState("A ModelMeshPart cannot belong to more than one live ModelMesh.");
         }
         if (part->activeSkinnedModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "A SkinnedModelEXT-owned part cannot also belong to a ModelMesh.");
+            return InvalidState("A SkinnedModelEXT-owned part cannot also belong to a ModelMesh.");
         }
         const PartRetainedSlot* const slots[] = {
             &part->effect, &part->vertexBuffer, &part->indexBuffer};
@@ -1640,10 +1621,7 @@ CNA_Result GetOwnedSkinnedModelValue(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT>* const outModel)
 {
     if (outModel == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The SkinnedModelEXT output is null.");
+        return InvalidArgument("The SkinnedModelEXT output is null.");
     }
     outModel->reset();
     std::shared_ptr<SkinnedModelResource> model;
@@ -2418,10 +2396,7 @@ CNA_Result cna_model_mesh_draw(const CNA_ModelMeshHandle meshHandle)
             return result;
         }
         if (!mesh->supportsThreeD) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "ModelMesh drawing requires a renderer with 3D support.");
+            return NotSupported("ModelMesh drawing requires a renderer with 3D support.");
         }
         mesh->value->Draw();
         return CNA_RESULT_SUCCESS;
@@ -2980,10 +2955,7 @@ CNA_Result cna_model_draw(
             return result;
         }
         if (!model->meshes.empty() && !model->supportsThreeD) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "Model drawing requires a renderer with 3D support.");
+            return NotSupported("Model drawing requires a renderer with 3D support.");
         }
         model->value->Draw(
             ToNative(world), ToNative(view), ToNative(projection));
@@ -3134,7 +3106,8 @@ CNA_Result cna_model_add_gltf_import_diagnostic_ext(
             return InvalidArgument("The glTF import diagnostic descriptor is null.");
         }
         if (descriptor->severity > CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT) {
-            return InvalidArgument("The glTF import diagnostic severity is not a defined identity.");
+            return InvalidArgument(
+                "The glTF import diagnostic severity is not a defined identity.");
         }
         if (descriptor->kind > CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT) {
             return InvalidArgument("The glTF import diagnostic kind is not a defined identity.");
@@ -3474,7 +3447,8 @@ CNA_Result cna_morph_target_data_ext_copy_position_deltas(
             return result;
         }
         if (targetIndex >= data->value->PositionDeltas.size()) {
-            return InvalidArgument("The MorphTargetDataEXT target index is outside the valid range.");
+            return InvalidArgument(
+                "The MorphTargetDataEXT target index is outside the valid range.");
         }
         return CopyOutputValues(
             data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)],
@@ -3498,7 +3472,8 @@ CNA_Result cna_morph_target_data_ext_copy_normal_deltas(
             return result;
         }
         if (targetIndex >= data->value->NormalDeltas.size()) {
-            return InvalidArgument("The MorphTargetDataEXT target index is outside the valid range.");
+            return InvalidArgument(
+                "The MorphTargetDataEXT target index is outside the valid range.");
         }
         return CopyOutputValues(
             data->value->NormalDeltas[static_cast<std::size_t>(targetIndex)],
@@ -3527,7 +3502,8 @@ CNA_Result cna_morph_target_data_ext_set_weights(
             return result;
         }
         if (copied.size() != data->value->PositionDeltas.size()) {
-            return InvalidArgument("The MorphTargetDataEXT weight count must equal its target count.");
+            return InvalidArgument(
+                "The MorphTargetDataEXT weight count must equal its target count.");
         }
         data->value->Weights = std::move(copied);
         return CNA_RESULT_SUCCESS;
@@ -3711,7 +3687,8 @@ CNA_Result cna_morph_weight_track_ext_evaluate(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (track == nullptr || outWeightCount == nullptr ||
             (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The MorphWeightTrackEXT evaluation input or output is invalid.");
+            return InvalidArgument(
+                "The MorphWeightTrackEXT evaluation input or output is invalid.");
         }
         if (!std::isfinite(timeSeconds)) {
             return InvalidArgument("The morph evaluation time must be finite.");
@@ -3818,14 +3795,10 @@ CNA_Result cna_model_mesh_part_set_morph_weights_ext(
         }
         if (part->morphData == nullptr ||
             part->value->getTagProperty() != part->morphData->value.get()) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
-                "The ModelMeshPart has no attached MorphTargetDataEXT.");
+            return InvalidState("The ModelMeshPart has no attached MorphTargetDataEXT.");
         }
         if (part->value->getVertexBufferProperty() == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
-                "The ModelMeshPart has no vertex buffer for morph upload.");
+            return InvalidState("The ModelMeshPart has no vertex buffer for morph upload.");
         }
         if (const CNA_Result result = ValidateMorphShape(
                 *part->morphData->value, copiedWeights);
@@ -4291,7 +4264,8 @@ CNA_Result cna_skinned_model_ext_compute_bone_transforms(
             return InvalidArgument("The SkinnedModelEXT loop value is not a canonical C boolean.");
         }
         if (!IsValidTimeSpanSeconds(positionSeconds)) {
-            return InvalidArgument("The SkinnedModelEXT playback position must fit a finite TimeSpan.");
+            return InvalidArgument(
+                "The SkinnedModelEXT playback position must fit a finite TimeSpan.");
         }
         std::string copiedName;
         if (const CNA_Result result = CopyStringView(clipName, true, &copiedName);
@@ -4373,9 +4347,7 @@ CNA_Result cna_skinned_model_ext_add_part(
                 return result;
             }
             if (texture->value->getIsDisposedProperty()) {
-                return Fail(
-                    CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
-                    "A disposed Texture2D cannot be added to a SkinnedModelEXT.");
+                return InvalidState("A disposed Texture2D cannot be added to a SkinnedModelEXT.");
             }
         }
         const CNA_Handle parentGame = vertexBuffer->parentGame;
@@ -4389,9 +4361,7 @@ CNA_Result cna_skinned_model_ext_add_part(
                 "All SkinnedModelEXT parts must belong to one graphics device.");
         }
         if (part->parentMesh != nullptr || part->activeSkinnedModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
-                "A ModelMeshPart cannot belong to more than one live model.");
+            return InvalidState("A ModelMeshPart cannot belong to more than one live model.");
         }
         if (part->activeSkinnedModelReferenceCount ==
                 std::numeric_limits<uint64_t>::max() ||
@@ -5533,10 +5503,7 @@ CNA_Result cna_model_create_skin_skeleton_handle_ext(
             return result;
         }
         if (skin->Data == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The Model skin names no skeleton.");
+            return InvalidState("The Model skin names no skeleton.");
         }
         const std::size_t skinIndex = static_cast<std::size_t>(index);
         if (skinIndex >= model->skinSkeletons.size()) {
@@ -5627,10 +5594,7 @@ CNA_Result cna_model_get_skin_mesh_index_ext(
                 return CNA_RESULT_SUCCESS;
             }
         }
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "The Model skin names a mesh this Model does not own.");
+        return InvalidState("The Model skin names a mesh this Model does not own.");
     });
 }
 

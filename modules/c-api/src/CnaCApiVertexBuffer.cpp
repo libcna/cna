@@ -41,8 +41,10 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -90,10 +92,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 [[nodiscard]] CNA_Result ValidateUsable(const VertexBufferResource& resource)
 {
     if (resource.value->getIsDisposedProperty()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "The VertexBuffer has been disposed.");
+        return InvalidState("The VertexBuffer has been disposed.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -365,10 +364,7 @@ CNA_Result cna_vertex_buffer_create(
             return result;
         }
         if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The selected graphics backend does not support vertex buffers.");
+            return NotSupported("The selected graphics backend does not support vertex buffers.");
         }
 
         std::shared_ptr<VertexBuffer> native;
@@ -417,10 +413,7 @@ CNA_Result cna_vertex_buffer_destroy(const CNA_VertexBufferHandle vertexBufferHa
             return result;
         }
         if (buffer->activeModelReferenceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The VertexBuffer is retained by a ModelMeshPart.");
+            return InvalidState("The VertexBuffer is retained by a ModelMeshPart.");
         }
         if (const CNA_Result result = ReleaseHandle(vertexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -517,9 +510,7 @@ CNA_Result cna_vertex_buffer_set_data(
         }
         if (view.options != SetDataOptions::None &&
             (!buffer->dynamic || !SupportsDynamicOptions(view.type))) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "The selected VertexBuffer kind/type has no SetDataOptions overload.");
         }
         if (view.count >
@@ -659,18 +650,13 @@ namespace {
     Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer** const outDynamic)
 {
     if (!resource.dynamic) {
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            "A static VertexBuffer has no SetDataOptions overload.");
+        return NotSupported("A static VertexBuffer has no SetDataOptions overload.");
     }
     auto* const dynamic =
         dynamic_cast<Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer*>(
             resource.value.get());
     if (dynamic == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
+        return InvalidState(
             "The VertexBuffer handle is marked dynamic but does not hold a DynamicVertexBuffer.");
     }
     *outDynamic = dynamic;
@@ -789,10 +775,7 @@ CNA_Result cna_vertex_buffer_subscribe_content_lost(
             return result;
         }
         if (!buffer->dynamic) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "ContentLost exists only on DynamicVertexBuffer.");
+            return NotSupported("ContentLost exists only on DynamicVertexBuffer.");
         }
         const auto dynamic = std::static_pointer_cast<DynamicVertexBuffer>(buffer->value);
         const auto token = dynamic->ContentLost.Add(

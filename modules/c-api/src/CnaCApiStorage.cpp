@@ -40,6 +40,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
@@ -501,10 +502,7 @@ CNA_Result AcquireStorageStream(const CNA_Handle handle, BorrowedStorageStream* 
         return result;
     }
     if (!stream->value->getCanReadProperty()) {
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            "The storage stream was not opened for reading.");
+        return NotSupported("The storage stream was not opened for reading.");
     }
     stream->activeBorrowCount += 1U;
     outStream->value = stream->value.get();

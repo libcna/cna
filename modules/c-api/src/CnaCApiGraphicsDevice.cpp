@@ -50,7 +50,10 @@
 namespace {
 
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::NativeOrdinal;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 
 namespace NativeGraphics = Microsoft::Xna::Framework::Graphics;
@@ -130,10 +133,7 @@ template<typename TValue, typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-device query output is null.");
+            return InvalidArgument("The graphics-device query output is null.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -168,10 +168,7 @@ template<typename TCallable>
 [[nodiscard]] CNA_Result EnsureThreeDSupported(GraphicsDevice& device) noexcept
 {
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            "The selected graphics backend does not support 3D draw submission.");
+        return NotSupported("The selected graphics backend does not support 3D draw submission.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -296,10 +293,7 @@ struct TextureSlotState final {
     const uint32_t slot) noexcept
 {
     if (!IsSupportedShaderStage(stage)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The shader stage is not recognized.");
+        return InvalidArgument("The shader stage is not recognized.");
     }
     if (slot >= CNA_TEXTURE_COLLECTION_MAX_TEXTURES) {
         return Fail(
@@ -433,10 +427,7 @@ struct DeviceBindingState final {
 [[nodiscard]] CNA_Result ValidatePrimitiveType(const CNA_PrimitiveType primitiveType) noexcept
 {
     if (primitiveType > CNA_PRIMITIVE_POINT_LIST_EXT) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The primitive topology is not recognized.");
+        return InvalidArgument("The primitive topology is not recognized.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -450,10 +441,7 @@ template<typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value != CNA_TRUE && value != CNA_FALSE) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Boolean argument must be CNA_TRUE or CNA_FALSE.");
+            return InvalidArgument("The Boolean argument must be CNA_TRUE or CNA_FALSE.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -498,10 +486,7 @@ struct UserPrimitiveRequest final {
         primitives->primitive_count <= 0 ||
         primitives->vertex_source > CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE ||
         (indexed && primitives->num_vertices <= 0)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The user vertex description is invalid.");
+        return InvalidArgument("The user vertex description is invalid.");
     }
     // The canonical declaration-less raw overloads read their bytes as an array of the native
     // VertexPositionColor object, which carries a vtable and can never be produced from C. A raw
@@ -509,10 +494,7 @@ struct UserPrimitiveRequest final {
     // is the POSITION_COLOR source, which converts before it reaches CNA.
     if (primitives->vertex_source == CNA_USER_VERTEX_SOURCE_RAW_STREAM &&
         primitives->vertex_declaration == CNA_INVALID_HANDLE) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "A raw vertex stream requires an explicit vertex declaration.");
+        return InvalidArgument("A raw vertex stream requires an explicit vertex declaration.");
     }
     if (const CNA_Result result = ValidatePrimitiveType(primitives->primitive_type);
         result != CNA_RESULT_SUCCESS) {
@@ -790,17 +772,11 @@ template<typename TCallback>
     CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration) noexcept
 {
     if (outRegistration == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The device event-registration output handle is null.");
+        return InvalidArgument("The device event-registration output handle is null.");
     }
     *outRegistration = CNA_INVALID_HANDLE;
     if (callback == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The device event callback is null.");
+        return InvalidArgument("The device event callback is null.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -866,10 +842,7 @@ CNA_Result cna_viewport_set_bounds(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (viewport == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The viewport is null.");
+            return InvalidArgument("The viewport is null.");
         }
         Viewport native = ToNative(*viewport);
         native.setBoundsProperty(ToNative(bounds));
@@ -884,10 +857,7 @@ CNA_Result cna_graphics_device_get_adapter_index(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAdapterIndex == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The adapter-index output is null.");
+            return InvalidArgument("The adapter-index output is null.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -903,9 +873,7 @@ CNA_Result cna_graphics_device_get_adapter_index(
                 return CNA_RESULT_SUCCESS;
             }
         }
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
+        return InvalidState(
             "The device's graphics adapter is no longer one of the enumerated adapters.");
     });
 }
@@ -916,10 +884,7 @@ CNA_Result cna_graphics_device_set_viewport(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(viewport.min_depth) || !std::isfinite(viewport.max_depth)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The viewport depth range is not finite.");
+            return InvalidArgument("The viewport depth range is not finite.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.setViewportProperty(ToNative(viewport));
@@ -979,9 +944,7 @@ CNA_Result cna_graphics_device_dispose(const CNA_Handle graphicsDeviceHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return Fail(
-            CNA_RESULT_NOT_SUPPORTED,
-            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+        return NotSupported(
             "The active game owns this graphics device; destroy the game to dispose it.");
     });
 }
@@ -995,23 +958,14 @@ CNA_Result cna_graphics_device_subscribe_event(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The device event-registration output handle is null.");
+            return InvalidArgument("The device event-registration output handle is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The device event callback is null.");
+            return InvalidArgument("The device event callback is null.");
         }
         if (deviceEvent > CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-device event identity is not recognized.");
+            return InvalidArgument("The graphics-device event identity is not recognized.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -1134,10 +1088,7 @@ CNA_Result cna_graphics_device_get_texture(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_TextureSlotInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The texture-slot output structure is invalid.");
+            return InvalidArgument("The texture-slot output structure is invalid.");
         }
         if (const CNA_Result result = ValidateTextureSlot(stage, slot);
             result != CNA_RESULT_SUCCESS) {
@@ -1264,10 +1215,7 @@ CNA_Result cna_graphics_device_clear_rgba(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A clear color channel is not finite.");
+            return InvalidArgument("A clear color channel is not finite.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.Clear(r, g, b, a);
@@ -1282,10 +1230,7 @@ CNA_Result cna_graphics_device_clear_color_depth(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(depth)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The clear depth is not finite.");
+            return InvalidArgument("The clear depth is not finite.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.Clear(Color(color.r, color.g, color.b, color.a), depth);
@@ -1304,16 +1249,10 @@ CNA_Result cna_graphics_device_clear_options(
         constexpr CNA_ClearOptions ValidOptions =
             CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL;
         if ((options & ~ValidOptions) != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The clear options contain an unknown bit.");
+            return InvalidArgument("The clear options contain an unknown bit.");
         }
         if (!std::isfinite(depth)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The clear depth is not finite.");
+            return InvalidArgument("The clear depth is not finite.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.Clear(
@@ -1338,16 +1277,10 @@ CNA_Result cna_graphics_device_get_backbuffer_data_window(
              readback->has_source_rectangle != CNA_FALSE) ||
             readback->reserved[0] != 0U || readback->reserved[1] != 0U ||
             readback->reserved[2] != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The back-buffer readback structure is invalid.");
+            return InvalidArgument("The back-buffer readback structure is invalid.");
         }
         if (destination == nullptr && capacity != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The back-buffer destination is invalid.");
+            return InvalidArgument("The back-buffer destination is invalid.");
         }
         if (readback->start_index > static_cast<uint64_t>(INT32_MAX) ||
             readback->element_count > static_cast<uint64_t>(INT32_MAX)) {
@@ -1459,10 +1392,7 @@ CNA_Result cna_graphics_device_set_vertex_buffers(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (bindings == nullptr && bindingCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The vertex-buffer binding array is invalid.");
+            return InvalidArgument("The vertex-buffer binding array is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -1517,9 +1447,7 @@ CNA_Result cna_graphics_device_copy_vertex_buffers(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
+            return InvalidArgument(
                 "The vertex-buffer binding destination or count output is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -1688,10 +1616,7 @@ CNA_Result cna_graphics_device_draw_user_indexed_primitives(
             indices->index_offset < 0 ||
             (indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS &&
              indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The user index description is invalid.");
+            return InvalidArgument("The user index description is invalid.");
         }
         UserPrimitiveRequest request;
         if (const CNA_Result result = ResolveUserPrimitives(
@@ -1741,10 +1666,7 @@ CNA_Result cna_graphics_device_set_graphics_profile_ext(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (profile != NativeOrdinal(GraphicsProfile::Reach) &&
             profile != NativeOrdinal(GraphicsProfile::HiDef)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics profile is not recognized.");
+            return InvalidArgument("The graphics profile is not recognized.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.SetGraphicsProfileEXT(static_cast<GraphicsProfile>(profile));
@@ -1785,10 +1707,7 @@ CNA_Result cna_graphics_device_set_unsupported_3d_call_behavior(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW &&
             behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The unsupported-3D-call policy is not recognized.");
+            return InvalidArgument("The unsupported-3D-call policy is not recognized.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.SetUnsupported3DGraphicsCallBehavior(
@@ -1849,10 +1768,7 @@ CNA_Result cna_occlusion_query_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outOcclusionQuery == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The occlusion-query output handle is null.");
+            return InvalidArgument("The occlusion-query output handle is null.");
         }
         *outOcclusionQuery = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -1862,9 +1778,7 @@ CNA_Result cna_occlusion_query_create(
             return result;
         }
         if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery)) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            return NotSupported(
                 "The selected graphics backend does not support occlusion queries.");
         }
 
@@ -1909,10 +1823,7 @@ namespace {
 [[nodiscard]] CNA_Result ValidateDisplayColorSpaceOrdinal(const uint32_t space) noexcept
 {
     if (space > UINT32_C(2)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The display colour space is not a defined identity.");
+        return InvalidArgument("The display colour space is not a defined identity.");
     }
     return CNA_RESULT_SUCCESS;
 }

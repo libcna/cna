@@ -41,8 +41,10 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::ReleaseHandle;
@@ -129,17 +131,11 @@ struct SoundEffectInstanceResource final {
 {
     if (value == nullptr || value->struct_size < sizeof(CNA_AudioListener) ||
         value->struct_version != StructureVersion) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The AudioListener structure is invalid.");
+        return InvalidArgument("The AudioListener structure is invalid.");
     }
     if (!IsFinite(value->forward) || !IsFinite(value->position) || !IsFinite(value->up) ||
         !IsFinite(value->velocity)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The AudioListener vectors must be finite.");
+        return InvalidArgument("The AudioListener vectors must be finite.");
     }
     outListener->setForwardProperty(ToNative(value->forward));
     outListener->setPositionProperty(ToNative(value->position));
@@ -154,23 +150,14 @@ struct SoundEffectInstanceResource final {
 {
     if (value == nullptr || value->struct_size < sizeof(CNA_AudioEmitter) ||
         value->struct_version != StructureVersion) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The AudioEmitter structure is invalid.");
+        return InvalidArgument("The AudioEmitter structure is invalid.");
     }
     if (!std::isfinite(value->doppler_scale)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The AudioEmitter Doppler scale must be finite.");
+        return InvalidArgument("The AudioEmitter Doppler scale must be finite.");
     }
     if (!IsFinite(value->forward) || !IsFinite(value->position) || !IsFinite(value->up) ||
         !IsFinite(value->velocity)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The AudioEmitter vectors must be finite.");
+        return InvalidArgument("The AudioEmitter vectors must be finite.");
     }
     outEmitter->setDopplerScaleProperty(value->doppler_scale);
     outEmitter->setForwardProperty(ToNative(value->forward));
@@ -190,10 +177,7 @@ CNA_Result CreateOwnedSoundEffect(
     CNA_Handle* const outSoundEffect)
 {
     if (soundEffect == nullptr || outSoundEffect == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The owned SoundEffect factory arguments are invalid.");
+        return InvalidArgument("The owned SoundEffect factory arguments are invalid.");
     }
     const auto resource = std::make_shared<SoundEffectResource>(
         SoundEffectResource{std::move(soundEffect), parentGame, 0U});
@@ -217,10 +201,7 @@ CNA_Result cna_audio_get_capabilities(
         if (outCapabilities == nullptr ||
             outCapabilities->struct_size < sizeof(CNA_AudioCapabilities) ||
             outCapabilities->struct_version != StructureVersion) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The audio-capabilities output structure is invalid.");
+            return InvalidArgument("The audio-capabilities output structure is invalid.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -255,10 +236,7 @@ CNA_Result cna_sound_effect_create_pcm16(
 {
     return CallWithExceptionBarrier([&]() {
         if (outSoundEffect == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffect output handle is null.");
+            return InvalidArgument("The SoundEffect output handle is null.");
         }
         *outSoundEffect = CNA_INVALID_HANDLE;
 
@@ -269,10 +247,7 @@ CNA_Result cna_sound_effect_create_pcm16(
             createInfo->sample_rate == 0U ||
             createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
             !TryMapChannels(createInfo->channels, &nativeChannels)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffect PCM creation configuration is invalid.");
+            return InvalidArgument("The SoundEffect PCM creation configuration is invalid.");
         }
 
         std::size_t nativeByteCount = 0U;
@@ -290,9 +265,7 @@ CNA_Result cna_sound_effect_create_pcm16(
         const uint64_t frameByteCount = UINT64_C(2) * createInfo->channels;
         if (byteCount == 0U || byteCount > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
             byteCount % frameByteCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
+            return InvalidArgument(
                 "The SoundEffect PCM data must contain complete nonempty channel frames.");
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
@@ -310,10 +283,7 @@ CNA_Result cna_sound_effect_create_pcm16(
                 static_cast<int32_t>(createInfo->sample_rate),
                 nativeChannels);
         } catch (const NoAudioHardwareException& exception) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                exception.what());
+            return NotSupported(exception.what());
         }
 
         const auto resource = std::make_shared<SoundEffectResource>(
@@ -335,10 +305,7 @@ CNA_Result cna_sound_effect_create_instance(
 {
     return CallWithExceptionBarrier([&]() {
         if (outInstance == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance output handle is null.");
+            return InvalidArgument("The SoundEffectInstance output handle is null.");
         }
         *outInstance = CNA_INVALID_HANDLE;
 
@@ -372,9 +339,7 @@ CNA_Result cna_sound_effect_destroy(const CNA_Handle soundEffectHandle)
             return result;
         }
         if (soundEffect->instanceCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "All C SoundEffectInstance children must be destroyed before their SoundEffect.");
         }
         soundEffect->value->Dispose();
@@ -393,10 +358,7 @@ CNA_Result cna_sound_effect_instance_stop(
 {
     return CallWithExceptionBarrier([&]() {
         if (immediate != CNA_FALSE && immediate != CNA_TRUE) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance immediate-stop flag is invalid.");
+            return InvalidArgument("The SoundEffectInstance immediate-stop flag is invalid.");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -415,10 +377,7 @@ CNA_Result cna_sound_effect_instance_get_info(
     return CallWithExceptionBarrier([&]() {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_SoundEffectInstanceInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance info output structure is invalid.");
+            return InvalidArgument("The SoundEffectInstance info output structure is invalid.");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -447,10 +406,7 @@ CNA_Result cna_sound_effect_instance_set_volume(
 {
     return CallWithExceptionBarrier([&]() {
         if (!std::isfinite(volume)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance volume must be finite.");
+            return InvalidArgument("The SoundEffectInstance volume must be finite.");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -468,10 +424,7 @@ CNA_Result cna_sound_effect_instance_set_pitch(
 {
     return CallWithExceptionBarrier([&]() {
         if (!std::isfinite(pitch)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance pitch must be finite.");
+            return InvalidArgument("The SoundEffectInstance pitch must be finite.");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -489,9 +442,7 @@ CNA_Result cna_sound_effect_instance_set_pan(
 {
     return CallWithExceptionBarrier([&]() {
         if (!std::isfinite(pan) || pan < -1.0F || pan > 1.0F) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
+            return InvalidArgument(
                 "The SoundEffectInstance pan must be finite and within [-1, 1].");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
@@ -510,10 +461,7 @@ CNA_Result cna_sound_effect_instance_set_is_looped(
 {
     return CallWithExceptionBarrier([&]() {
         if (isLooped != CNA_FALSE && isLooped != CNA_TRUE) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The SoundEffectInstance loop flag is invalid.");
+            return InvalidArgument("The SoundEffectInstance loop flag is invalid.");
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -523,10 +471,7 @@ CNA_Result cna_sound_effect_instance_set_is_looped(
         try {
             instance->value->setIsLoopedProperty(isLooped == CNA_TRUE);
         } catch (const System::InvalidOperationException& exception) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                exception.what());
+            return InvalidState(exception.what());
         }
         return CNA_RESULT_SUCCESS;
     });
@@ -668,10 +613,7 @@ CNA_Result cna_sound_effect_create_from_encoded_ext(
         std::istringstream stream(std::move(encoded), std::ios::binary);
         const std::shared_ptr<SoundEffect> nativeSoundEffect(SoundEffect::FromStream(stream));
         if (!nativeSoundEffect) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The encoded audio could not be decoded by this build.");
+            return NotSupported("The encoded audio could not be decoded by this build.");
         }
         return PublishSoundEffect(nativeSoundEffect, gameHandle, outSoundEffect);
     });
@@ -795,10 +737,7 @@ using Microsoft::Xna::Framework::Audio::MicrophoneState;
     }
     *outDynamic = dynamic_cast<DynamicSoundEffectInstance*>((*outInstance)->value.get());
     if (*outDynamic == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
-            "This SoundEffectInstance does not stream caller-supplied buffers.");
+        return InvalidState("This SoundEffectInstance does not stream caller-supplied buffers.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1470,10 +1409,7 @@ CNA_Result cna_audio_emitter_init(CNA_AudioEmitter* const outEmitter)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEmitter == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The AudioEmitter output is null.");
+            return InvalidArgument("The AudioEmitter output is null.");
         }
         const Microsoft::Xna::Framework::Audio::AudioEmitter emitter;
         const CNA_AudioEmitter value = {
@@ -1494,10 +1430,7 @@ CNA_Result cna_audio_listener_init(CNA_AudioListener* const outListener)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outListener == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The AudioListener output is null.");
+            return InvalidArgument("The AudioListener output is null.");
         }
         const Microsoft::Xna::Framework::Audio::AudioListener listener;
         const CNA_AudioListener value = {
@@ -1547,17 +1480,11 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (listeners == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The AudioListener array is null.");
+            return InvalidArgument("The AudioListener array is null.");
         }
         if (listenerCount >
             static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The AudioListener count is too large.");
+            return InvalidArgument("The AudioListener count is too large.");
         }
         // At least one element, so the pointer handed to the canonical overload is never null even
         // for an empty array: a count of zero reaches the canonical count check and is refused

@@ -17,7 +17,7 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Color;
@@ -42,10 +42,7 @@ CNA_Result cna_color_set_packed_value(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (color == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Color pointer is null.");
+            return InvalidArgument("The Color pointer is null.");
         }
         Color native(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
         native.setPackedValueProperty(packedValue);
@@ -61,10 +58,7 @@ CNA_Result cna_color_pack_from_vector4(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (color == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Color pointer is null.");
+            return InvalidArgument("The Color pointer is null.");
         }
         Color native = ToNative(*color);
         native.PackFromVector4(ToNative(vector));

@@ -32,6 +32,7 @@ using CNA::C::Detail::ApplyPresentationParameters;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsDepthFormat;
 using CNA::C::Detail::IsDisplayOrientation;
 using CNA::C::Detail::IsGraphicsProfile;
@@ -336,10 +337,7 @@ CNA_Result cna_graphics_device_manager_get_graphics_device(
             return result;
         }
         if (resource->value->getGraphicsDeviceProperty() == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The manager has no graphics device yet.");
+            return InvalidState("The manager has no graphics device yet.");
         }
         return CNA::C::Detail::BorrowGameGraphicsDevice(resource->game, outGraphicsDevice);
     });

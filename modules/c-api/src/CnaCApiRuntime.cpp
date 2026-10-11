@@ -30,6 +30,8 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::HandleRegistry;
 using CNA::C::Detail::HasOwnedGraphicsResources;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -154,19 +156,14 @@ public:
     [[nodiscard]] CNA_Result BorrowGraphicsDevice(CNA_Handle* const outGraphicsDevice)
     {
         if (outGraphicsDevice == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-device output handle is null.");
+            return InvalidArgument("The graphics-device output handle is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
         // CBIND-153: before its run begins the game's device exists and nothing else drives it, as
         // in XNA, whose ApplyChanges in a Game constructor creates the device the constructor then
         // reads. A handle lent then lasts until the run's first callback returns.
         if (callbackDepth_ == 0U && hasBegunRun_) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
+            return InvalidState(
                 "The graphics device may be borrowed only during a game lifecycle callback or "
                 "before the game's run begins.");
         }
@@ -476,9 +473,7 @@ private:
         return result;
     }
     if ((*outGame)->IsInsideCallback()) {
-        return Fail(
-            CNA_RESULT_INVALID_STATE,
-            CNA_ERROR_CATEGORY_STATE,
+        return InvalidState(
             "A game-driving or destruction operation cannot be called from a lifecycle callback.");
     }
     return CNA_RESULT_SUCCESS;
@@ -698,20 +693,14 @@ CNA_Result cna_game_create(
 {
     return CallWithExceptionBarrier([&]() {
         if (!IsSupportedGameCreateInfo(createInfo) || outGame == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The game creation structure or output handle is invalid.");
+            return InvalidArgument("The game creation structure or output handle is invalid.");
         }
         *outGame = CNA_INVALID_HANDLE;
         if ((createInfo->is_fixed_time_step != CNA_FALSE &&
              createInfo->is_fixed_time_step != CNA_TRUE) ||
             createInfo->target_elapsed_time_ticks <= 0 ||
             !IsSupportedGameCallbacks(createInfo->callbacks)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The game creation configuration is invalid.");
+            return InvalidArgument("The game creation configuration is invalid.");
         }
         if (const CNA_Result titleResult = ValidateStringView(createInfo->window_title, true);
             titleResult != CNA_RESULT_SUCCESS) {
@@ -727,10 +716,7 @@ CNA_Result cna_game_create(
         RuntimeState& state = GetRuntimeState();
         std::lock_guard lock(state.mutex);
         if (state.hasActiveGame) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "Only one C-owned CNA game may be active at a time.");
+            return InvalidState("Only one C-owned CNA game may be active at a time.");
         }
 
         const auto game = std::make_shared<CGame>(createInfo->callbacks);
@@ -769,8 +755,7 @@ CNA_Result cna_game_run_frame_ext(const CNA_Handle gameHandle, CNA_Bool* const o
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRunning == nullptr) {
-            return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
-                        "The running output is null.");
+            return InvalidArgument("The running output is null.");
         }
         *outRunning = CNA_FALSE;
         std::shared_ptr<CGame> game;
@@ -816,10 +801,7 @@ CNA_Result cna_game_set_frame_hooks_ext(
         if (hooks != nullptr &&
             (hooks->struct_size < sizeof(CNA_GameFrameHooks) ||
              hooks->struct_version != StructureVersion)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The game frame hook table is not a valid structure.");
+            return InvalidArgument("The game frame hook table is not a valid structure.");
         }
         std::shared_ptr<CGame> game;
         if (const CNA_Result result = GetGame(gameHandle, &game);
@@ -862,10 +844,7 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         if (HasOwnedGraphicsResources() || CNA::C::Detail::HasOwnedContentManagers() ||
             CNA::C::Detail::HasOwnedAudioResources() ||
             CNA::C::Detail::HasOwnedGameComponents()) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "All owned C child resources must be destroyed before the game.");
+            return InvalidState("All owned C child resources must be destroyed before the game.");
         }
         CNA::C::Detail::EndForeignThreadCalls();
 

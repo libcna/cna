@@ -49,10 +49,11 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::IsSurfaceFormat;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -721,10 +722,7 @@ CNA_Result cna_texture_validate_format(const CNA_SurfaceFormat format)
             return InvalidArgument("The texture surface-format identity is invalid.");
         }
         if (format != CNA_SURFACE_FORMAT_COLOR) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The base Texture contract supports only Color on every renderer.");
+            return NotSupported("The base Texture contract supports only Color on every renderer.");
         }
         Texture::ValidateFormat(SurfaceFormat::Color);
         return CNA_RESULT_SUCCESS;
@@ -957,10 +955,7 @@ CNA_Result cna_texture2d_set_data(
                 return InvalidArgument(
                     "The Texture2D upload element type does not match its surface format.");
             }
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "SDL_RENDERER does not support mip-level Texture2D uploads.");
+            return NotSupported("SDL_RENDERER does not support mip-level Texture2D uploads.");
         }
 #endif
         DispatchSetData(*texture->value, dataType, view, data);

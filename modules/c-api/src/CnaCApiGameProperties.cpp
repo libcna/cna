@@ -327,10 +327,7 @@ namespace {
     const LaunchParameters& parameters = game->getLaunchParametersProperty();
     const auto found = parameters.find(name);
     if (found == parameters.end()) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "No launch parameter has that name.");
+        return InvalidArgument("No launch parameter has that name.");
     }
     *outValue = found->second;
     return CNA_RESULT_SUCCESS;

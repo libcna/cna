@@ -18,7 +18,7 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -43,10 +43,7 @@ template<typename TCallable>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The Matrix is null.");
+            return InvalidArgument("The Matrix is null.");
         }
         Matrix native = ToNative(*value);
         std::forward<TCallable>(callable)(native);
@@ -130,10 +127,7 @@ CNA_Result cna_matrix_decompose(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outScale == nullptr || outRotation == nullptr ||
             outTranslation == nullptr || outDecomposed == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A Matrix decomposition output is null.");
+            return InvalidArgument("A Matrix decomposition output is null.");
         }
         Vector3 scale;
         Quaternion rotation = Quaternion::Identity;

@@ -32,6 +32,8 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::ToCBool;
@@ -40,10 +42,7 @@ using CNA::C::Detail::ToCBool;
 // compiles this without using it. The routes stay exported either way, which is the point.
 [[nodiscard, maybe_unused]] CNA_Result ExtensionUnavailable()
 {
-    return Fail(
-        CNA_RESULT_NOT_SUPPORTED,
-        CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-        "This CNA build does not contain the extended graphics layer.");
+    return NotSupported("This CNA build does not contain the extended graphics layer.");
 }
 
 template<typename TValue>
@@ -51,10 +50,7 @@ template<typename TValue>
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The output value is null.");
+            return InvalidArgument("The output value is null.");
         }
         *output = value;
         return CNA_RESULT_SUCCESS;
@@ -122,8 +118,7 @@ CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* const out
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outArguments == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+            return InvalidArgument("The arguments are null.");
         }
         const CNA::IndirectDrawArguments defaults;
         outArguments->vertex_count = defaults.VertexCount;
@@ -139,8 +134,7 @@ CNA_Result cna_indirect_draw_indexed_arguments_init(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outArguments == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+            return InvalidArgument("The arguments are null.");
         }
         const CNA::IndirectDrawIndexedArguments defaults;
         outArguments->index_count = defaults.IndexCount;
@@ -156,8 +150,7 @@ CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* const outLight
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outLight == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+            return InvalidArgument("The light is null.");
         }
         const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT defaults;
         *outLight = CNA_ImageBasedLightEXT{};
@@ -177,15 +170,11 @@ CNA_Result cna_image_based_light_ext_is_valid(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (light == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+            return InvalidArgument("The light is null.");
         }
         if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
             light->struct_version == UINT32_C(0)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The image-based-light structure is malformed.");
+            return InvalidArgument("The image-based-light structure is malformed.");
         }
         // The canonical predicate asks whether all three textures are present and the mip count is
         // at least one. Here the textures are handles, so "present" is "a live texture handle" --
@@ -298,10 +287,7 @@ CNA_Result cna_ascii_post_process_effect_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEffect == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ASCII post-process effect output handle is null.");
+            return InvalidArgument("The ASCII post-process effect output handle is null.");
         }
         *outEffect = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -331,10 +317,7 @@ CNA_Result cna_ascii_post_process_effect_get_cell_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWidth == nullptr || outHeight == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A cell-size output is null.");
+            return InvalidArgument("A cell-size output is null.");
         }
         std::shared_ptr<AsciiEffectResource> effect;
         if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
@@ -372,10 +355,7 @@ CNA_Result cna_ascii_post_process_effect_get_quantize_mode(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outMode == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The quantize-mode output is null.");
+            return InvalidArgument("The quantize-mode output is null.");
         }
         std::shared_ptr<AsciiEffectResource> effect;
         if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
@@ -393,10 +373,7 @@ CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (mode > CNA_ASCII_QUANTIZE_MODE_COLOR) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The ASCII quantize mode is not recognized.");
+            return InvalidArgument("The ASCII quantize mode is not recognized.");
         }
         std::shared_ptr<AsciiEffectResource> effect;
         if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
@@ -454,10 +431,7 @@ CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outColumns == nullptr || outRows == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "A grid-dimension output is null.");
+            return InvalidArgument("A grid-dimension output is null.");
         }
         std::shared_ptr<AsciiEffectResource> effect;
         if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
