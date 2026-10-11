@@ -501,32 +501,6 @@ CNA_Result cna_audio_category_stop(
     });
 }
 
-CNA_Result cna_audio_category_equals(
-    const CNA_Handle categoryHandle,
-    const CNA_Handle otherHandle,
-    CNA_Bool* const outEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The category equality output is null.");
-        }
-        std::shared_ptr<CategoryResource> category;
-        std::shared_ptr<CategoryResource> other;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetCategory(otherHandle, &other);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Categories compare by name alone, so two categories from two engines can be equal. Both
-        // canonical equality operators are this one answer; inequality is its negation.
-        *outEquals = ToCBool(*category->value == *other->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_wave_bank_create(
     const CNA_Handle engineHandle,
     const CNA_StringView filename,

@@ -76,3 +76,13 @@ cna_audio_engine_copy_renderer_id = { copy = "object->getRendererIdProperty()" }
 cna_audio_engine_get_renderer_text_size = { size = "object->ToString()" }
 cna_audio_engine_copy_renderer_text = { copy = "object->ToString()" }
 cna_audio_engine_get_renderer_hash_code = { get = "object->GetHashCode()" }
+
+[category_pair]
+lookup = "GetCategory"
+object = "std::shared_ptr<CategoryResource>"
+other = { lookup = "GetCategory", object = "std::shared_ptr<CategoryResource>" }
+
+[category_pair.routes]
+# Categories compare by name alone, so two categories from two engines can be equal. Both
+# canonical equality operators are this one answer; inequality is its negation.
+cna_audio_category_equals = { get = "*object->value == *other->value" }

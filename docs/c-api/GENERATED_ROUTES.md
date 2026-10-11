@@ -106,7 +106,7 @@ arguments = 2
 
 A route over two objects — equals, contains, index_of, add — takes the second handle right after
 the lookup's parameters, and its group says how to reach it; the generated route looks it up after
-the first, into `other`:
+the first, into `other` (a parameter itself named `other` becomes `c_other` in the definition):
 
 ```toml
 other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementResource>" }

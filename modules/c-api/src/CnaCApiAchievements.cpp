@@ -188,31 +188,6 @@ CNA_Result cna_achievement_copy_picture(const CNA_AchievementHandle handle,uint8
     });
 }
 
-CNA_Result cna_achievement_equals(
-    const CNA_AchievementHandle achievementHandle,
-    const CNA_AchievementHandle otherHandle,
-    CNA_Bool* const outEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The achievement equality output is null.");
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        std::shared_ptr<AchievementResource> other;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAchievement(otherHandle, &other);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Both canonical equality operators are this one answer; inequality is its negation.
-        *outEquals = ToCBool(*achievement->value == *other->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_achievement_collection_create_ext(
     const CNA_AchievementHandle* const achievements,
     const uint64_t count,

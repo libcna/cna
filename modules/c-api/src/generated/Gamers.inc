@@ -410,3 +410,27 @@ CNA_Result cna_friend_gamer_copy_presence(
         return CNA::C::Detail::CopyText(object->getPresenceProperty(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_signed_in_gamer_is_friend(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_GamerHandle c_other,
+    CNA_Bool* const out_is_friend)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_friend == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_is_friend: out_is_friend is null.");
+        }
+        SignedInGamer* object{};
+        if (const CNA_Result routeResult = BorrowSignedIn(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* other{};
+        if (const CNA_Result routeResult = BorrowGamerBase(c_other, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_friend = CNA::C::Detail::ToCBool(object->IsFriend(other));
+        return CNA_RESULT_SUCCESS;
+    });
+}

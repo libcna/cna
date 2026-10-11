@@ -288,7 +288,7 @@ class Route:
         self._check_names()
 
     def _check_names(self) -> None:
-        names = {p.name for p in self.params}
+        names = {p.name for p in self.params if not self._renamed(p)}
         locals_ = ({"object", "owner", "other", "routeResult"}
                    | {f"c_{p.name}" for p in self.inputs})
         if names & locals_:
@@ -299,8 +299,12 @@ class Route:
     def _converted(self, param: Param) -> bool:
         return not param.pointer and self.types.kind_of(param.type) in ("marshaled", "bool")
 
+    # The second handle may itself be named `other`; the definition renames it, as the ABI allows.
+    def _renamed(self, param: Param) -> bool:
+        return param is self.other and param.name == "other"
+
     def _c_name(self, param: Param) -> str:
-        return f"c_{param.name}" if self._converted(param) else param.name
+        return f"c_{param.name}" if self._converted(param) or self._renamed(param) else param.name
 
     def signature(self) -> list[str]:
         params = [p.declaration(self._c_name(p)) for p in self.params]
@@ -363,7 +367,8 @@ class Route:
         if self.other is not None:
             other = self.group["other"]
             lines += ([f"{indent}{other['object']} other{{}};"]
-                      + returns_on_failure(f"{other['lookup']}({self.other.name}, &other)", indent))
+                      + returns_on_failure(f"{other['lookup']}({self._c_name(self.other)}, &other)",
+                                           indent))
         return lines
 
     def _converted_result(self) -> str:

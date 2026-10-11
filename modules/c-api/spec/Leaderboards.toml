@@ -39,3 +39,12 @@ cna_leaderboard_entry_create_ext = { result = "PublishOwnedEntry(LeaderboardEntr
 # Both canonical creation routes are this one: the overload without a game mode is this one
 # with zero.
 cna_leaderboard_identity_init = { result = "WriteCIdentity(LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(game_mode)), out_identity)", invalid_if = "key > CNA_LEADERBOARD_KEY_MAXIMUM" }
+
+[entry_pair]
+lookup = "BorrowEntry"
+object = "std::shared_ptr<LeaderboardEntryResource>"
+other = { lookup = "BorrowEntry", object = "std::shared_ptr<LeaderboardEntryResource>" }
+
+[entry_pair.routes]
+# Both canonical equality operators are this one answer; inequality is its negation.
+cna_leaderboard_entry_equals = { get = "*object->Value() == *other->Value()" }

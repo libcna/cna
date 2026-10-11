@@ -468,30 +468,6 @@ CNA_Result cna_drawable_game_component_get_graphics_device(
     });
 }
 
-CNA_Result cna_game_component_compare_to(
-    const CNA_GameComponentHandle component,
-    const CNA_GameComponentHandle other,
-    int32_t* const outOrder)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOrder == nullptr) {
-            return InvalidArgument("The comparison output is null.");
-        }
-        std::shared_ptr<ComponentResource> first;
-        if (const CNA_Result result = BorrowComponent(component, &first);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ComponentResource> second;
-        if (const CNA_Result result = BorrowComponent(other, &second);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOrder = static_cast<int32_t>(first->value->CompareTo(*second->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_component_update(
     const CNA_GameComponentHandle component,
     const CNA_GameTime* const gameTime)

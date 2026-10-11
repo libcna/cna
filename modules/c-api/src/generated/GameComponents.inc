@@ -444,3 +444,27 @@ CNA_Result cna_game_components_subscribe_removed(
         return SubscribeCollection(game, false, callback, context, out_registration);
     });
 }
+
+CNA_Result cna_game_component_compare_to(
+    const CNA_GameComponentHandle component,
+    const CNA_GameComponentHandle c_other,
+    int32_t* const out_order)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_order == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_compare_to: out_order is null.");
+        }
+        std::shared_ptr<ComponentResource> object{};
+        if (const CNA_Result routeResult = BorrowComponent(component, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowComponent(c_other, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_order = static_cast<int32_t>(object->value->CompareTo(*other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}

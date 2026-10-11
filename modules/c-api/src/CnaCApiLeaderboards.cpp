@@ -505,30 +505,5 @@ CNA_Result cna_leaderboard_entry_set_rating_changed_hook_ext(
     });
 }
 
-CNA_Result cna_leaderboard_entry_equals(
-    const CNA_LeaderboardEntryHandle entryHandle,
-    const CNA_LeaderboardEntryHandle otherHandle,
-    CNA_Bool* const outEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The entry equality output is null.");
-        }
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        std::shared_ptr<LeaderboardEntryResource> other;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowEntry(otherHandle, &other);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Both canonical equality operators are this one answer; inequality is its negation.
-        *outEquals = ToCBool(*entry->Value() == *other->Value());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 // The mechanically regular routes of this family, generated from modules/c-api/spec/Leaderboards.toml.
 #include "generated/Leaderboards.inc"

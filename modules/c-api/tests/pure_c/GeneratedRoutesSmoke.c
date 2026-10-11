@@ -164,6 +164,7 @@ static CNA_InputDeviceHotplugCallback v_CNA_InputDeviceHotplugCallback;
 static CNA_JoystickHotplugCallback v_CNA_JoystickHotplugCallback;
 static CNA_JoystickStateHandle v_CNA_JoystickStateHandle;
 static CNA_Key v_CNA_Key;
+static CNA_LeaderboardEntryHandle v_CNA_LeaderboardEntryHandle;
 static CNA_LeaderboardKey v_CNA_LeaderboardKey;
 static CNA_LeaderboardReaderHandle v_CNA_LeaderboardReaderHandle;
 static CNA_Matrix v_CNA_Matrix;
@@ -295,6 +296,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_achievement_collection_index_of(v_CNA_AchievementCollectionHandle, v_CNA_AchievementHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_achievement_collection_index_of", "a null out_index");
     failures += expect(cna_achievement_collection_contains(v_CNA_AchievementCollectionHandle, v_CNA_AchievementHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_achievement_collection_contains", "a null out_contains");
     failures += expect(cna_achievement_collection_remove(v_CNA_AchievementCollectionHandle, v_CNA_AchievementHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_achievement_collection_remove", "a null out_removed");
+    failures += expect(cna_achievement_equals(v_CNA_AchievementHandle, v_CNA_AchievementHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_achievement_equals", "a null out_equals");
     failures += expect(cna_sound_effect_get_duration_ticks(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sound_effect_get_duration_ticks", "a null out_duration_ticks");
     failures += expect(cna_sound_effect_get_is_disposed(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sound_effect_get_is_disposed", "a null out_disposed");
     failures += expect(cna_sound_effect_get_name_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sound_effect_get_name_size", "a null out_bytes");
@@ -631,6 +633,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_drawable_game_component_create(v_CNA_Handle, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_drawable_game_component_create", "a null out_component");
     failures += expect(cna_game_components_subscribe_added(v_CNA_Handle, v_CNA_GameComponentCollectionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_subscribe_added", "a null out_registration");
     failures += expect(cna_game_components_subscribe_removed(v_CNA_Handle, v_CNA_GameComponentCollectionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_subscribe_removed", "a null out_registration");
+    failures += expect(cna_game_component_compare_to(v_CNA_GameComponentHandle, v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_compare_to", "a null out_order");
     failures += expect(cna_game_get_is_active(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_get_is_active", "a null out_active");
     failures += expect(cna_game_get_is_mouse_visible(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_get_is_mouse_visible", "a null out_visible");
     failures += expect(cna_game_get_is_fixed_time_step(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_get_is_fixed_time_step", "a null out_fixed");
@@ -671,6 +674,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_gamer_collection_get_count(v_CNA_GamerCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_collection_get_count", "a null out_count");
     failures += expect(cna_friend_collection_get_is_disposed(v_CNA_GamerCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_friend_collection_get_is_disposed", "a null out_is_disposed");
     failures += expect(cna_friend_gamer_get_presence_size(v_CNA_GamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_friend_gamer_get_presence_size", "a null out_bytes");
+    failures += expect(cna_signed_in_gamer_is_friend(v_CNA_SignedInGamerHandle, v_CNA_GamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_signed_in_gamer_is_friend", "a null out_is_friend");
     failures += expect(cna_plane_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_init", "a null out_value");
     failures += expect(cna_plane_init_abcd(v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_init_abcd", "a null out_value");
     failures += expect(cna_plane_dot(v_CNA_Plane, v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_dot", "a null out_value");
@@ -968,6 +972,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_leaderboard_reader_read(NULL, v_int32_t, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_leaderboard_reader_read", "a null out_reader");
     failures += expect(cna_leaderboard_entry_create_ext(v_CNA_GamerHandle, v_int64_t, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_leaderboard_entry_create_ext", "a null out_entry");
     failures += expect(cna_leaderboard_identity_init(v_CNA_LeaderboardKey, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_leaderboard_identity_init", "a null out_identity");
+    failures += expect(cna_leaderboard_entry_equals(v_CNA_LeaderboardEntryHandle, v_CNA_LeaderboardEntryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_leaderboard_entry_equals", "a null out_equals");
     failures += expect(cna_math_barycentric(v_float, v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_math_barycentric", "a null out_value");
     failures += expect(cna_math_catmull_rom(v_float, v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_math_catmull_rom", "a null out_value");
     failures += expect(cna_math_clamp_float(v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_math_clamp_float", "a null out_value");
@@ -1590,6 +1595,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_audio_engine_get_renderer_id_size(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_renderer_id_size", "a null out_bytes");
     failures += expect(cna_audio_engine_get_renderer_text_size(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_renderer_text_size", "a null out_bytes");
     failures += expect(cna_audio_engine_get_renderer_hash_code(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_renderer_hash_code", "a null out_hash_code");
+    failures += expect(cna_audio_category_equals(v_CNA_Handle, v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_category_equals", "a null out_equals");
     return failures;
 }
 
@@ -1624,6 +1630,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_achievement_collection_contains(handle, v_CNA_AchievementHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_achievement_collection_contains", what);
     failures += expect(cna_achievement_collection_add(handle, v_CNA_AchievementHandle), CNA_RESULT_INVALID_HANDLE, "cna_achievement_collection_add", what);
     failures += expect(cna_achievement_collection_remove(handle, v_CNA_AchievementHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_achievement_collection_remove", what);
+    failures += expect(cna_achievement_equals(handle, v_CNA_AchievementHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_achievement_equals", what);
     failures += expect(cna_sound_effect_get_duration_ticks(handle, &o_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_get_duration_ticks", what);
     failures += expect(cna_sound_effect_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_get_is_disposed", what);
     failures += expect(cna_sound_effect_get_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_get_name_size", what);
@@ -2048,6 +2055,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_game_components_remove(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove", what);
     failures += expect(cna_game_components_contains(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_contains", what);
     failures += expect(cna_game_components_index_of(handle, v_CNA_GameComponentHandle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_index_of", what);
+    failures += expect(cna_game_component_compare_to(handle, v_CNA_GameComponentHandle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_game_component_compare_to", what);
     failures += expect(cna_game_get_is_active(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_active", what);
     failures += expect(cna_game_get_is_mouse_visible(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_mouse_visible", what);
     failures += expect(cna_game_set_is_mouse_visible(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_is_mouse_visible", what);
@@ -2119,6 +2127,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_gamer_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_gamer_collection_destroy", what);
     failures += expect(cna_friend_gamer_get_presence_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_friend_gamer_get_presence_size", what);
     failures += expect(cna_friend_gamer_copy_presence(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_friend_gamer_copy_presence", what);
+    failures += expect(cna_signed_in_gamer_is_friend(handle, v_CNA_GamerHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_is_friend", what);
     failures += expect(cna_graphics_device_get_renderer_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_renderer_name_size", what);
     failures += expect(cna_graphics_device_get_capability_report_size_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_capability_report_size_ext", what);
     failures += expect(cna_graphics_device_get_shader_dialect_ext(handle, &o_CNA_ShaderDialect), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_shader_dialect_ext", what);
@@ -2291,6 +2300,7 @@ static int handles_are_refused(const CNA_Handle handle,
         failures += expect(cna_leaderboard_entry_create_ext(handle, v_int64_t, v_int32_t, &o_CNA_LeaderboardEntryHandle), CNA_RESULT_INVALID_HANDLE, "cna_leaderboard_entry_create_ext", what);
         failures += expect_cleared(o_CNA_LeaderboardEntryHandle, "cna_leaderboard_entry_create_ext");
     }
+    failures += expect(cna_leaderboard_entry_equals(handle, v_CNA_LeaderboardEntryHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_leaderboard_entry_equals", what);
     failures += expect(cna_song_set_duration(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_set_duration", what);
     failures += expect(cna_song_set_play_count(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_song_set_play_count", what);
     failures += expect(cna_song_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_song_dispose", what);
@@ -2814,6 +2824,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_audio_engine_get_renderer_text_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_renderer_text_size", what);
     failures += expect(cna_audio_engine_copy_renderer_text(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_copy_renderer_text", what);
     failures += expect(cna_audio_engine_get_renderer_hash_code(handle, v_uint64_t, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_renderer_hash_code", what);
+    failures += expect(cna_audio_category_equals(handle, v_CNA_Handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_audio_category_equals", what);
     return failures;
 }
 
@@ -2978,6 +2989,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1805 generated routes\n", failures);
+    printf("%d failed checks across 1810 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

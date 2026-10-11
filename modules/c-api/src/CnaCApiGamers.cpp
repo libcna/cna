@@ -656,30 +656,6 @@ CNA_Result cna_signed_in_gamer_get_privileges(
     });
 }
 
-CNA_Result cna_signed_in_gamer_is_friend(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const CNA_GamerHandle otherHandle,
-    CNA_Bool* const outIsFriend)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsFriend == nullptr) {
-            return InvalidArgument("The friendship output is null.");
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* other = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(otherHandle, &other);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsFriend = ToCBool(gamer->IsFriend(other));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_signed_in_gamer_is_headset(
     const CNA_SignedInGamerHandle gamerHandle,
     const uint64_t microphoneIndex,

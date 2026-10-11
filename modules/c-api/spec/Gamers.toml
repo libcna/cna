@@ -58,3 +58,11 @@ owner = "std::shared_ptr<GamerResource>"
 [friend.routes]
 cna_friend_gamer_get_presence_size = { size = "object->getPresenceProperty()" }
 cna_friend_gamer_copy_presence = { copy = "object->getPresenceProperty()" }
+
+[signed_in_and_gamer]
+lookup = "BorrowSignedIn"
+object = "SignedInGamer*"
+other = { lookup = "BorrowGamerBase", object = "Gamer*" }
+
+[signed_in_and_gamer.routes]
+cna_signed_in_gamer_is_friend = { get = "object->IsFriend(other)" }

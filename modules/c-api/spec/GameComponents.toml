@@ -53,3 +53,11 @@ cna_game_component_create = { result = "CreateComponent<CGameComponent>(game, ca
 cna_drawable_game_component_create = { result = "CreateComponent<CDrawableGameComponent>(game, callbacks, out_component)" }
 cna_game_components_subscribe_added = { result = "SubscribeCollection(game, true, callback, context, out_registration)" }
 cna_game_components_subscribe_removed = { result = "SubscribeCollection(game, false, callback, context, out_registration)" }
+
+[component_pair]
+lookup = "BorrowComponent"
+object = "std::shared_ptr<ComponentResource>"
+other = { lookup = "BorrowComponent", object = "std::shared_ptr<ComponentResource>" }
+
+[component_pair.routes]
+cna_game_component_compare_to = { get = "object->value->CompareTo(*other->value)" }

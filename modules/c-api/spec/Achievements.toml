@@ -49,3 +49,12 @@ cna_achievement_collection_index_of = { get = "object->value->IndexOf(*other->va
 cna_achievement_collection_contains = { get = "object->value->Contains(*other->value)" }
 cna_achievement_collection_add = { call = "object->value->Add(*other->value)" }
 cna_achievement_collection_remove = { get = "object->value->Remove(*other->value)" }
+
+[achievement_pair]
+lookup = "BorrowAchievement"
+object = "std::shared_ptr<AchievementResource>"
+other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementResource>" }
+
+[achievement_pair.routes]
+# Both canonical equality operators are this one answer; inequality is its negation.
+cna_achievement_equals = { get = "*object->value == *other->value" }

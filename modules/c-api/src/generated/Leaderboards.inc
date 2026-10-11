@@ -151,3 +151,27 @@ CNA_Result cna_leaderboard_identity_init(
         return WriteCIdentity(LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(game_mode)), out_identity);
     });
 }
+
+CNA_Result cna_leaderboard_entry_equals(
+    const CNA_LeaderboardEntryHandle entry,
+    const CNA_LeaderboardEntryHandle c_other,
+    CNA_Bool* const out_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_entry_equals: out_equals is null.");
+        }
+        std::shared_ptr<LeaderboardEntryResource> object{};
+        if (const CNA_Result routeResult = BorrowEntry(entry, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<LeaderboardEntryResource> other{};
+        if (const CNA_Result routeResult = BorrowEntry(c_other, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equals = CNA::C::Detail::ToCBool(*object->Value() == *other->Value());
+        return CNA_RESULT_SUCCESS;
+    });
+}

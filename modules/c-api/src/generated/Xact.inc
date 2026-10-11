@@ -599,3 +599,27 @@ CNA_Result cna_audio_engine_get_renderer_hash_code(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_audio_category_equals(
+    const CNA_Handle category,
+    const CNA_Handle c_other,
+    CNA_Bool* const out_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_category_equals: out_equals is null.");
+        }
+        std::shared_ptr<CategoryResource> object{};
+        if (const CNA_Result routeResult = GetCategory(category, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CategoryResource> other{};
+        if (const CNA_Result routeResult = GetCategory(c_other, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equals = CNA::C::Detail::ToCBool(*object->value == *other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
