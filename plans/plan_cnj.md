@@ -161,7 +161,7 @@
 > (47/47 pass, zero window/SDL-video calls in the output).
 > `SkinnedModelTypeReader`/`.skinnedmodel.json` was deliberately kept
 > separate, not migrated (`CNB-22`'s recorded decision) — every other reader now speaks `.cnj`.
-> `xnb.md`/`plan_xnb.md` are frozen as "researched, not adopted" (`CNB-30`). Not yet merged to
+> `../misc/xnb.md`/`plan_xnb.md` are frozen as "researched, not adopted" (`CNB-30`). Not yet merged to
 > `develop` — awaiting the project owner's decision on next steps (PR, merge, etc.).
 >
 > **Post-completion review found and fixed 2 real bugs, same day.** (1) `GenericCnjTypeReader<T>`
@@ -178,7 +178,7 @@
 > after both fixes: 4408 tests, 4406 passed, same 2 pre-existing skips, 0 failures.
 >
 > Turns [`cnj.md`](../misc/cnj.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
-> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](../xnb.md) into concrete tasks. Read
+> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`../misc/xnb.md`](../misc/xnb.md) into concrete tasks. Read
 > `cnj.md` first — this file assumes its design decisions (resolution order, envelope shape,
 > `sourceFile`, `RegisterCnjLoader<T>`) as given and does not re-argue them.
 >
@@ -369,7 +369,7 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 |---|------|--------|-------|
 | CNB-28 | Update `cnj.md`'s status header to reflect what's actually implemented vs. still planned, once the phases above land | ✅ | Status blockquote rewritten to "✅ IMPLEMENTED"; "Relationship to CNA's existing per-type JSON conventions" and the former "Suggested next step" (now "Implementation record") sections rewritten past-tense to match reality instead of contradicting the new status |
 | CNB-29 | Full `CnaTests` regression run + a dedicated `.cnj`-specific ctest tally, recorded in this file's status header | ✅ | Final confirmation run (no code changes since Phase 7's own regression): 4404 tests, 4402 passed, same 2 pre-existing hardware skips, 0 failures. Dedicated `--gtest_filter="*Cnj*"` tally: 27/27 passing across 8 suites |
-| CNB-30 | Decide the fate of `xnb.md`/`plan_xnb.md` per `cnj.md`'s own "Relationship to `xnb.md`/`plan_xnb.md`" section (freeze as "researched, not adopted" vs. leave open) and record the decision in both files | ✅ | **Decision: froze both, per `cnj.md`'s own pre-existing recommendation.** Added a "🧊 FROZEN — researched, not adopted" status banner to the top of both `xnb.md` and `plan_xnb.md`, pointing at `cnj.md`/`plan_cnj.md` as the adopted strategy. Neither file's content was deleted — both remain as reference material, exactly as `cnj.md` itself already recommended before this plan started |
+| CNB-30 | Decide the fate of `../misc/xnb.md`/`plan_xnb.md` per `cnj.md`'s own "Relationship to `../misc/xnb.md`/`plan_xnb.md`" section (freeze as "researched, not adopted" vs. leave open) and record the decision in both files | ✅ | **Decision: froze both, per `cnj.md`'s own pre-existing recommendation.** Added a "🧊 FROZEN — researched, not adopted" status banner to the top of both `../misc/xnb.md` and `plan_xnb.md`, pointing at `cnj.md`/`plan_cnj.md` as the adopted strategy. Neither file's content was deleted — both remain as reference material, exactly as `cnj.md` itself already recommended before this plan started |
 | CNB-31 | Final compliance sweep: every task above closed, every new/changed public method has Doxygen (per `CLAUDE.md`) and test coverage, no `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` fixture left un-migrated except by the explicit CNB-22 decision | ✅ | Swept: zero `.font.json`/`.model.json`/`.shader.json` files remain anywhere in the repo (`find` + `GetExtensions()` grep both clean); `.skinnedmodel.json` files remain only per the CNB-22 decision. `CnjEnvelope.hpp`'s public struct/functions and `ContentManager.hpp`'s new `CnjLoaderFn`/`RegisterCnjLoader<T>` all have full Doxygen blocks. Every phase (0–7) closed with a passing regression run. All 31 tasks `✅` |
 
 ---
@@ -770,7 +770,7 @@ Full-suite regression: EasyGL `CnaTests` (direct binary invocation) **4843/4845 
 ## Relationship to other plan files
 
 - **`cnj.md`** — the design this plan implements; read it first.
-- **`xnb.md`/`plan_xnb.md`** — the alternative, not-adopted (binary `.xnb` reader) strategy; CNB-30
+- **`../misc/xnb.md`/`plan_xnb.md`** — the alternative, not-adopted (binary `.xnb` reader) strategy; CNB-30
   is the task that formally records `.cnj`'s adoption status relative to it.
 - **`docs/model-content-pipeline-support.md`** — documents `ModelTypeReader`'s current FNA-fidelity
   gaps and test-coverage gap; CNB-19/CNB-21 are the tasks that touch it.

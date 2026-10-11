@@ -68,7 +68,7 @@
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
 > cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
 
-> Companion task list to [`xnb.md`](../xnb.md) (the narrative research/design document — read that
+> Companion task list to [`../misc/xnb.md`](../misc/xnb.md) (the narrative research/design document — read that
 > first for *why* each phase is shaped this way). This file turns that plan into concrete,
 > numbered tasks (`XNB-1`, `XNB-2`, ...) the same way `plan_graphics.md` tracks graphics work.
 > **Nothing here is implemented yet — every row starts `⬜`.** "Top quality" (broad real-world
@@ -78,7 +78,7 @@
 > Phase H (Lua custom readers) and Phase I (official-sample inventory) sit even later still, strictly
 > after Phase G, and are not required for "top quality" native `.xnb` loading itself.
 >
-> **Revised after an independent review of the first draft** (see `xnb.md`'s changelog note) to fix
+> **Revised after an independent review of the first draft** (see `../misc/xnb.md`'s changelog note) to fix
 > several protocol-accuracy issues and one implementation-strategy issue: the root-object dispatch
 > algorithm (XNB-16), assembly-qualified generic reader-name parsing (XNB-13/XNB-13A), the exact
 > shared-resource fixup ordering (XNB-15), an early `ContentManager` integration slice (new Phase
@@ -629,7 +629,7 @@ entirely the second one.
 ## Phase G — Top-quality hardening + custom reader ergonomics (deliberately last)
 
 > This is where "špičková kvalita" (top-tier quality) actually lives — not attempted before every
-> earlier phase is solid, per `xnb.md`'s own "why this is still not urgent" framing.
+> earlier phase is solid, per `../misc/xnb.md`'s own "why this is still not urgent" framing.
 >
 > **Fully complete 2026-07-16** — un-frozen the same day CNA's owner explicitly requested it.
 > XNB-47's own compliance sweep (broadening the fuzz coverage from XNB-43 to also target
@@ -704,10 +704,10 @@ entirely the second one.
 
 ## Relationship to other plan files
 
-- [`xnb.md`](../xnb.md) — the narrative design document this task list is derived from; read it for
+- [`../misc/xnb.md`](../misc/xnb.md) — the narrative design document this task list is derived from; read it for
   *why*, not just *what*.
 - [`plan_graphics.md`](plan_graphics.md) Phase 74 — compiled `.fx` shader bytecode via MojoShader;
-  related but independent (see `xnb.md`'s own "Effect/compiled shader bytecode" section). Phase E's
+  related but independent (see `../misc/xnb.md`'s own "Effect/compiled shader bytecode" section). Phase E's
   stock-effect readers (XNB-32) deliberately avoid needing Phase 74 at all; the general `EffectReader`
   (XNB-32A) is the one place this plan and Phase 74 actually connect.
 - [`docs/model-content-pipeline-support.md`](../docs/model-content-pipeline-support.md) — the existing,

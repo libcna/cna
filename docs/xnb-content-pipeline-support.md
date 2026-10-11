@@ -4,7 +4,7 @@ Covers CNA's real, binary-`.xnb`-compatible content loader (`Microsoft::Xna::Fra
 ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual readers under
 `CNA::Internal::Xnb`) — the closing documentation task for `plans/plan_xnb.md`'s Phase G (XNB-45),
 written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. See
-`xnb.md` for the original design rationale and `plans/plan_xnb.md` for the full, numbered task history.
+`../misc/xnb.md` for the original design rationale and `plans/plan_xnb.md` for the full, numbered task history.
 
 This is **CNA's second, independent content format** alongside `.cnj` (see `cnj.md`) and the older,
 CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which

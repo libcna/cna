@@ -58,7 +58,7 @@ tasks 5 · .github 3 · plus ~40 root-level files (plan_*.md, NEXT*.md, CMakeLis
 5. `LICENSE`, `NOTICE.md`, `THIRD_PARTY_NOTICES.md` → **EXEMPT** `legal-text`.
 6. Any root-level (`depth==0`) `*.md` file → **EXEMPT** `planning-tracking-doc` (see decision D-3 below —
    `README.md`, `AUDIT.md`, `CHECKLIST.md`, `CLAUDE.md`, `TODO.md`, `RAM.md`, `programs.md`, `known_bugs.md`,
-   `NOXNA.md`, `noxna_devices.md`, `input_noxna.md`, `input_noxna_progress.md`, `cnj.md`, `xnb.md`, every
+   `NOXNA.md`, `noxna_devices.md`, `input_noxna.md`, `input_noxna_progress.md`, `cnj.md`, `../misc/xnb.md`, every
    `NEXT*.md`/`plan_*.md`).
 7. `tests/assets/xnb/monogame/**` → **EXEMPT** `vendored-test-fixture` (third-party MonoGame-generated reference
    XNB corpus + its manifests/README — not first-party source).
@@ -104,7 +104,7 @@ All binary/media test and example assets (images, audio, video, compiled `.xnb`,
   `xna-4-api-coverage.md`, per-effect `*-support.md` docs, backend docs) → **AUDIT**, checked for accuracy against
   current code behavior, same as any other in-scope file.
 - Root-level planning/status/tracking documents (`plan_*.md`, `NEXT*.md`, `AUDIT.md`, `CHECKLIST.md`, `TODO.md`,
-  `RAM.md`, `programs.md`, `known_bugs.md`, `NOXNA.md`, `noxna_devices.md`, `input_noxna*.md`, `cnj.md`, `xnb.md`,
+  `RAM.md`, `programs.md`, `known_bugs.md`, `NOXNA.md`, `noxna_devices.md`, `input_noxna*.md`, `cnj.md`, `../misc/xnb.md`,
   root `README.md`) and `tasks/backlog/*.md` → **EXEMPT** `planning-tracking-doc`, not given per-file audit
   reports. They are still read and cross-checked as secondary context during subsystem audits — in particular
   `known_bugs.md` documents specific live defects (e.g. the SpriteBatch Begin/End bug) that should be corroborated

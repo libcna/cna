@@ -50,4 +50,4 @@ Reason: root-level planning/tracking/status document, project-management artifac
 | 40 | `programs.md` |
 | 41 | `tasks/backlog/000035_Bundle SDL3, SDL_image, and SDL_mixer into the Project.md` |
 | 42 | `tasks/backlog/000036_Implement Content System with ContentTypeReader and ShaderEffect.md` |
-| 43 | `xnb.md` |
+| 43 | `../../misc/xnb.md` |

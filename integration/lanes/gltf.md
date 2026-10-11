@@ -60,7 +60,7 @@ The commit's single added path is `gltfissues.md` at the repository root. It the
 | AI attribution | **no** — see below |
 
 The repository root already carries 43 tracked `.md` documents at the integration head
-(`AUDIT.md`, `plan_*.md`, `known_bugs.md`, `cnj.md`, `xnb.md`, …). A root-level analysis document is
+(`AUDIT.md`, `plan_*.md`, `known_bugs.md`, `cnj.md`, `../../misc/xnb.md`, …). A root-level analysis document is
 the established convention here, so **no relocation is warranted**.
 
 ## Attribution scan

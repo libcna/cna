@@ -63,7 +63,7 @@ subsystems own their own backend concepts):
 `remediation/**`, `integration/**`, `tasks/**`, `third_party/**`, `vendor/**`,
 `dx*-spike/**` (committed spike records), `plan_*.md`, `NEXT*.md` (targeted edits to
 `NEXT.md` only), `AUDIT.md`, `TODO.md`, `known_bugs.md`, `RAM.md`, `programs.md`,
-`cnj.md`, `xnb.md`, `gltfissues.md`, `input_noxna.md`, `input_noxna_progress.md`,
+`cnj.md`, `../../misc/xnb.md`, `gltfissues.md`, `input_noxna.md`, `input_noxna_progress.md`,
 `noxna_devices.md`, `NOTICE.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE`, `header.txt`.
 `plans/MODULARIZATION_PLAN.md` and `FUTURE.md`/`NEXT.md` receive targeted current-state edits
 in the docs commit, not mechanical rewrites.
