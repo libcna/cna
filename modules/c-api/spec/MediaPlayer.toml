@@ -20,3 +20,31 @@ cna_media_queue_set_active_song_index = { call = "object->value->setActiveSongIn
 cna_media_queue_clear = { call = "object->value->Clear()" }
 cna_media_queue_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_media_queue_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[active_game_handle]
+lookup = "ValidateActiveGameHandle"
+
+[active_game_handle.routes]
+cna_media_player_get_game_has_control = { get = "MediaPlayer::getGameHasControlProperty()" }
+cna_media_player_get_is_muted = { get = "MediaPlayer::getIsMutedProperty()" }
+cna_media_player_set_is_muted = { call = "MediaPlayer::setIsMutedProperty(muted)" }
+cna_media_player_get_is_repeating = { get = "MediaPlayer::getIsRepeatingProperty()" }
+cna_media_player_set_is_repeating = { call = "MediaPlayer::setIsRepeatingProperty(repeating)" }
+cna_media_player_get_is_shuffled = { get = "MediaPlayer::getIsShuffledProperty()" }
+cna_media_player_set_is_shuffled = { call = "MediaPlayer::setIsShuffledProperty(shuffled)" }
+cna_media_player_get_play_position_ticks = { get = "MediaPlayer::getPlayPositionProperty().getTicksProperty()" }
+cna_media_player_get_state = { get = "MediaPlayer::getStateProperty()" }
+cna_media_player_get_volume = { get = "MediaPlayer::getVolumeProperty()" }
+# The canonical setter clamps rather than refusing, so C passes the value through.
+cna_media_player_set_volume = { call = "MediaPlayer::setVolumeProperty(volume)" }
+cna_media_player_get_is_visualization_enabled = { get = "MediaPlayer::getIsVisualizationEnabledProperty()" }
+cna_media_player_set_is_visualization_enabled = { call = "MediaPlayer::setIsVisualizationEnabledProperty(enabled)" }
+cna_media_player_move_next = { call = "MediaPlayer::MoveNext()" }
+cna_media_player_move_previous = { call = "MediaPlayer::MovePrevious()" }
+cna_media_player_pause = { call = "MediaPlayer::Pause()" }
+cna_media_player_resume = { call = "MediaPlayer::Resume()" }
+cna_media_player_stop = { call = "MediaPlayer::Stop()" }
+cna_media_player_update_ext = { call = "MediaPlayer::Update()" }
+cna_media_player_program_exit_ext = { call = "MediaPlayer::ProgramExit()" }
+cna_media_player_raise_active_song_changed_ext = { call = "MediaPlayer::OnActiveSongChanged()" }
+cna_media_player_raise_media_state_changed_ext = { call = "MediaPlayer::OnMediaStateChanged()" }

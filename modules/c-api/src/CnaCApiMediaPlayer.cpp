@@ -28,7 +28,6 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
-using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Media::Detail::BorrowMediaChild;
 using CNA::C::Media::Detail::MediaChildResource;
 using CNA::C::Media::Detail::PublishMediaChild;
@@ -38,7 +37,6 @@ using CNA::C::Media::Detail::SongResource;
 namespace {
 
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::MediaQueue;
@@ -178,195 +176,6 @@ private:
 
 } // namespace
 
-CNA_Result cna_media_player_get_game_has_control(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outHasControl)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasControl == nullptr) {
-            return InvalidArgument("The media player control-state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outHasControl = ToCBool(MediaPlayer::getGameHasControlProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_is_muted(const CNA_Handle gameHandle, CNA_Bool* const outMuted)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMuted == nullptr) {
-            return InvalidArgument("The media player mute-state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outMuted = ToCBool(MediaPlayer::getIsMutedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_set_is_muted(const CNA_Handle gameHandle, const CNA_Bool muted)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(muted, "muted");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::setIsMutedProperty(muted != CNA_FALSE);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_is_repeating(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outRepeating)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRepeating == nullptr) {
-            return InvalidArgument("The media player repeat-state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outRepeating = ToCBool(MediaPlayer::getIsRepeatingProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_set_is_repeating(
-    const CNA_Handle gameHandle,
-    const CNA_Bool repeating)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(repeating, "repeating");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::setIsRepeatingProperty(repeating != CNA_FALSE);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_is_shuffled(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outShuffled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outShuffled == nullptr) {
-            return InvalidArgument("The media player shuffle-state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outShuffled = ToCBool(MediaPlayer::getIsShuffledProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_set_is_shuffled(const CNA_Handle gameHandle, const CNA_Bool shuffled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(shuffled, "shuffled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::setIsShuffledProperty(shuffled != CNA_FALSE);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_play_position_ticks(
-    const CNA_Handle gameHandle,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The media player position output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outTicks = static_cast<int64_t>(
-                MediaPlayer::getPlayPositionProperty().getTicksProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_state(
-    const CNA_Handle gameHandle,
-    CNA_MediaState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The media player state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outState = static_cast<CNA_MediaState>(MediaPlayer::getStateProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_volume(const CNA_Handle gameHandle, float* const outVolume)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVolume == nullptr) {
-            return InvalidArgument("The media player volume output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outVolume = MediaPlayer::getVolumeProperty();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_set_volume(const CNA_Handle gameHandle, const float volume)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            // The canonical setter clamps rather than refusing, so C passes the value through.
-            MediaPlayer::setVolumeProperty(volume);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_is_visualization_enabled(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The visualization-state output is null.");
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            *outEnabled =
-                ToCBool(MediaPlayer::getIsVisualizationEnabledProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_set_is_visualization_enabled(
-    const CNA_Handle gameHandle,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::setIsVisualizationEnabledProperty(enabled != CNA_FALSE);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_media_player_get_visualization_data(
     const CNA_Handle gameHandle,
     CNA_VisualizationData* const data)
@@ -470,76 +279,6 @@ CNA_Result cna_media_player_play_songs_from(
     });
 }
 
-CNA_Result cna_media_player_move_next(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::MoveNext();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_move_previous(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::MovePrevious();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_pause(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Pause();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_resume(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Resume();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_stop(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Stop();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_update_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Update();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_program_exit_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::ProgramExit();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_media_player_subscribe_active_song_changed_ext(
     const CNA_MediaPlayerEventCallback callback,
     void* const context,
@@ -588,26 +327,6 @@ CNA_Result cna_media_player_unsubscribe_ext(
                 "The media player registration handle could not be released.");
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_player_raise_active_song_changed_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::OnActiveSongChanged();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_raise_media_state_changed_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::OnMediaStateChanged();
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 

@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiContentReaders.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_content_reader_get_asset_name_size(
     const CNA_ContentReaderHandle reader,
     uint64_t* const out_bytes)
@@ -62,6 +66,42 @@ CNA_Result cna_content_reader_read_shared_resources(
             return routeResult;
         }
         object->value->ReadSharedResources();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_content_reader_get_version(
+    const CNA_ContentReaderHandle reader,
+    int32_t* const out_version)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_version == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_get_version: out_version is null.");
+        }
+        std::shared_ptr<ContentReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_version = static_cast<int32_t>(object->value->getVersionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_content_reader_get_platform(
+    const CNA_ContentReaderHandle reader,
+    uint8_t* const out_platform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_platform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_get_platform: out_platform is null.");
+        }
+        std::shared_ptr<ContentReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_platform = static_cast<uint8_t>(object->value->getPlatformProperty());
         return CNA_RESULT_SUCCESS;
     });
 }

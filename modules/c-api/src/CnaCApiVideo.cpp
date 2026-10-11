@@ -29,9 +29,7 @@ using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::MediaState;
@@ -278,45 +276,6 @@ CNA_Result cna_video_create_from_uri_ext(
     });
 }
 
-CNA_Result cna_video_get_width(const CNA_VideoHandle video, int32_t* const outWidth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr) {
-            return InvalidArgument("The video width output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outWidth = static_cast<int32_t>(value.getWidthProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_height(const CNA_VideoHandle video, int32_t* const outHeight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeight == nullptr) {
-            return InvalidArgument("The video height output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outHeight = static_cast<int32_t>(value.getHeightProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_frames_per_second(const CNA_VideoHandle video, float* const outFps)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFps == nullptr) {
-            return InvalidArgument("The video frame-rate output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outFps = value.getFramesPerSecondProperty();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -329,104 +288,6 @@ CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const 
             outInfo->height = static_cast<int32_t>(value.getHeightProperty());
             outInfo->fps = static_cast<double>(value.getFramesPerSecondProperty());
             return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_soundtrack_type(
-    const CNA_VideoHandle video,
-    CNA_VideoSoundtrackType* const outType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outType == nullptr) {
-            return InvalidArgument("The video soundtrack output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outType =
-                static_cast<CNA_VideoSoundtrackType>(value.getVideoSoundtrackTypeProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_duration(const CNA_VideoHandle video, int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The video duration output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_file_name_size(const CNA_VideoHandle video, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The video file-name byte-count output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outBytes = value.getFileNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_copy_file_name(
-    const CNA_VideoHandle video,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadVideo(video, [&](const Video& value) {
-            return CopyText(value.getFileNameProperty(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_video_get_has_graphics_device(
-    const CNA_VideoHandle video,
-    CNA_Bool* const outBound)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBound == nullptr) {
-            return InvalidArgument("The video device-presence output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            // Presence only: a borrowed device handle is valid solely inside the callback that
-            // produced it, so handing one back later would be a promise this ABI cannot keep.
-            *outBound = ToCBool(value.getGraphicsDeviceProperty() != nullptr);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_get_type_name_size(const CNA_VideoHandle video, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The video type-name byte-count output is null.");
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_video_copy_type_name(
-    const CNA_VideoHandle video,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadVideo(video, [&](const Video& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
         });
     });
 }

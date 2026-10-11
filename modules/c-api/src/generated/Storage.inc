@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiStorage.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_storage_device_get_free_space(
     const CNA_StorageDeviceHandle device,
     int64_t* const out_free_space)
@@ -167,6 +171,96 @@ CNA_Result cna_storage_stream_flush(
             return routeResult;
         }
         object->value->Flush();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_storage_stream_get_position(
+    const CNA_StorageStreamHandle stream,
+    int64_t* const out_position)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_position == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_get_position: out_position is null.");
+        }
+        std::shared_ptr<StorageStreamResource> object{};
+        if (const CNA_Result routeResult = GetStream(stream, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_position = static_cast<int64_t>(object->value->getPositionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_storage_stream_get_length(
+    const CNA_StorageStreamHandle stream,
+    int64_t* const out_length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_length == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_get_length: out_length is null.");
+        }
+        std::shared_ptr<StorageStreamResource> object{};
+        if (const CNA_Result routeResult = GetStream(stream, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_length = static_cast<int64_t>(object->value->getLengthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_storage_stream_get_can_read(
+    const CNA_StorageStreamHandle stream,
+    CNA_Bool* const out_can_read)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_can_read == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_get_can_read: out_can_read is null.");
+        }
+        std::shared_ptr<StorageStreamResource> object{};
+        if (const CNA_Result routeResult = GetStream(stream, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_can_read = CNA::C::Detail::ToCBool(object->value->getCanReadProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_storage_stream_get_can_write(
+    const CNA_StorageStreamHandle stream,
+    CNA_Bool* const out_can_write)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_can_write == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_get_can_write: out_can_write is null.");
+        }
+        std::shared_ptr<StorageStreamResource> object{};
+        if (const CNA_Result routeResult = GetStream(stream, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_can_write = CNA::C::Detail::ToCBool(object->value->getCanWriteProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_storage_stream_get_can_seek(
+    const CNA_StorageStreamHandle stream,
+    CNA_Bool* const out_can_seek)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_can_seek == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_get_can_seek: out_can_seek is null.");
+        }
+        std::shared_ptr<StorageStreamResource> object{};
+        if (const CNA_Result routeResult = GetStream(stream, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_can_seek = CNA::C::Detail::ToCBool(object->value->getCanSeekProperty());
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiInput.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_keyboard_state_get_pressed_key_count(
     const CNA_KeyboardState* const state,
     uint32_t* const out_count)
@@ -129,6 +133,40 @@ CNA_Result cna_gamepad_state_copy_string(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(GamePadState().ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_state_get_buttons(
+    const CNA_GamePadState* const state,
+    CNA_GamePadButtonFlags* const out_buttons)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_buttons == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_state_get_buttons: out_buttons is null.");
+        }
+        if (const CNA_Result routeResult = ValidateState(state);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_buttons = static_cast<CNA_GamePadButtonFlags>(state->pressed_buttons);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_dpad(
+    const CNA_GamePadState* const state,
+    CNA_GamePadButtonFlags* const out_dpad)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dpad == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_state_get_dpad: out_dpad is null.");
+        }
+        if (const CNA_Result routeResult = ValidateState(state);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_dpad = static_cast<CNA_GamePadButtonFlags>(state->pressed_buttons & DPadMask);
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -709,6 +747,23 @@ CNA_Result cna_touch_panel_reset_for_tests_ext(
     });
 }
 
+CNA_Result cna_keyboard_get_mod_state_ext(
+    const CNA_Handle game,
+    CNA_KeyModifiers* const out_modifiers)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_modifiers == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_mod_state_ext: out_modifiers is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_modifiers = static_cast<CNA_KeyModifiers>(MapKeyModifiers(Keyboard::GetModStateEXT()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_mouse_cursor_dispose(
     const CNA_MouseCursorHandle cursor)
 {
@@ -766,6 +821,23 @@ CNA_Result cna_touch_state_clear(
             return routeResult;
         }
         state->touch_count = 0U;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_init_from_mask(
+    const CNA_GamePadButtonFlags buttons,
+    CNA_GamePadButtonFlags* const out_buttons)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_buttons == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_init_from_mask: out_buttons is null.");
+        }
+        if (const CNA_Result routeResult = ValidateMask(buttons);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_buttons = static_cast<CNA_GamePadButtonFlags>(buttons);
         return CNA_RESULT_SUCCESS;
     });
 }

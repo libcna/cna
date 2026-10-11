@@ -762,45 +762,6 @@ CNA_Result cna_packet_writer_create(
     });
 }
 
-CNA_Result cna_packet_writer_get_length(
-    const CNA_PacketWriterHandle writerHandle,
-    int32_t* const outLength)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLength == nullptr) {
-            return InvalidArgument("The packet-length output is null.");
-        }
-        return WriterCommand(writerHandle, [outLength](PacketWriter& writer) {
-            *outLength = static_cast<int32_t>(writer.getLengthProperty());
-        });
-    });
-}
-
-CNA_Result cna_packet_writer_get_position(
-    const CNA_PacketWriterHandle writerHandle,
-    int32_t* const outPosition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPosition == nullptr) {
-            return InvalidArgument("The packet-position output is null.");
-        }
-        return WriterCommand(writerHandle, [outPosition](PacketWriter& writer) {
-            *outPosition = static_cast<int32_t>(writer.getPositionProperty());
-        });
-    });
-}
-
-CNA_Result cna_packet_writer_set_position(
-    const CNA_PacketWriterHandle writerHandle,
-    const int32_t position)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WriterCommand(writerHandle, [position](PacketWriter& writer) {
-            writer.setPositionProperty(static_cast<int>(position));
-        });
-    });
-}
-
 CNA_Result cna_packet_writer_write_color(
     const CNA_PacketWriterHandle writerHandle,
     const CNA_Color value)
@@ -808,17 +769,6 @@ CNA_Result cna_packet_writer_write_color(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return WriterCommand(writerHandle, [value](PacketWriter& writer) {
             writer.Write(ToNativeColor(value));
-        });
-    });
-}
-
-CNA_Result cna_packet_writer_write_matrix(
-    const CNA_PacketWriterHandle writerHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WriterCommand(writerHandle, [&value](PacketWriter& writer) {
-            writer.Write(ToNative(value));
         });
     });
 }
@@ -863,28 +813,6 @@ CNA_Result cna_packet_writer_write_vector4(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return WriterCommand(writerHandle, [value](PacketWriter& writer) {
             writer.Write(Vector4(value.x, value.y, value.z, value.w));
-        });
-    });
-}
-
-CNA_Result cna_packet_writer_write_single(
-    const CNA_PacketWriterHandle writerHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WriterCommand(writerHandle, [value](PacketWriter& writer) {
-            writer.Write(value);
-        });
-    });
-}
-
-CNA_Result cna_packet_writer_write_double(
-    const CNA_PacketWriterHandle writerHandle,
-    const double value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return WriterCommand(writerHandle, [value](PacketWriter& writer) {
-            writer.Write(value);
         });
     });
 }
@@ -1045,36 +973,6 @@ CNA_Result cna_packet_reader_copy_data_ext(
     });
 }
 
-CNA_Result cna_packet_reader_get_length(
-    const CNA_PacketReaderHandle readerHandle,
-    int32_t* const outLength)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReaderCommand(
-            readerHandle,
-            outLength,
-            "The packet-length output is null.",
-            [outLength](PacketReader& reader) {
-                *outLength = static_cast<int32_t>(reader.getLengthProperty());
-            });
-    });
-}
-
-CNA_Result cna_packet_reader_get_position(
-    const CNA_PacketReaderHandle readerHandle,
-    int32_t* const outPosition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReaderCommand(
-            readerHandle,
-            outPosition,
-            "The packet-position output is null.",
-            [outPosition](PacketReader& reader) {
-                *outPosition = static_cast<int32_t>(reader.getPositionProperty());
-            });
-    });
-}
-
 CNA_Result cna_packet_reader_read_color(
     const CNA_PacketReaderHandle readerHandle,
     CNA_Color* const outValue)
@@ -1177,32 +1075,6 @@ CNA_Result cna_packet_reader_read_vector4(
                 outValue->z = value.Z;
                 outValue->w = value.W;
             });
-    });
-}
-
-CNA_Result cna_packet_reader_read_single(
-    const CNA_PacketReaderHandle readerHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReaderCommand(
-            readerHandle,
-            outValue,
-            "The value output is null.",
-            [outValue](PacketReader& reader) { *outValue = reader.ReadSingle(); });
-    });
-}
-
-CNA_Result cna_packet_reader_read_double(
-    const CNA_PacketReaderHandle readerHandle,
-    double* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReaderCommand(
-            readerHandle,
-            outValue,
-            "The value output is null.",
-            [outValue](PacketReader& reader) { *outValue = reader.ReadDouble(); });
     });
 }
 

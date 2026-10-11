@@ -361,6 +361,10 @@ def render_family(spec: Path, routes: list[Route]) -> str:
         f"// Included at the end of src/{owner}, whose lookups and native types these routes use.",
         "// To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.",
         "",
+        '#include "../CnaCApiDetail.hpp"',
+        '#include "../CnaCApiMarshal.hpp"',
+        '#include "../CnaCApiOutput.hpp"',
+        "",
         "",
     ]
     return "\n".join(header) + "\n".join(route.render() for route in routes)

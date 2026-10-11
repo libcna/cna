@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiRuntime.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_game_set_foreign_thread_calls_ext(
     const CNA_Handle game,
     const CNA_Bool c_enabled)

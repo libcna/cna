@@ -1041,22 +1041,6 @@ CNA_Result cna_gamepad_buttons_init(CNA_GamePadButtonFlags* const outButtons)
     });
 }
 
-CNA_Result cna_gamepad_buttons_init_from_mask(
-    const CNA_GamePadButtonFlags buttons,
-    CNA_GamePadButtonFlags* const outButtons)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outButtons == nullptr) {
-            return InvalidArgument("The gamepad button-set output is null.");
-        }
-        if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outButtons = buttons;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_buttons_init_from_button_array(
     const CNA_GamePadButtonFlags* const buttons,
     const uint64_t count,
@@ -1495,38 +1479,6 @@ CNA_Result cna_gamepad_state_init_from_values(
             GamePadTriggers(leftTrigger, rightTrigger),
             NativeButtons(mask),
             NativeDPad(mask)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_get_buttons(
-    const CNA_GamePadState* const state,
-    CNA_GamePadButtonFlags* const outButtons)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outButtons == nullptr) {
-            return InvalidArgument("The gamepad button-set output is null.");
-        }
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outButtons = state->pressed_buttons;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_get_dpad(
-    const CNA_GamePadState* const state,
-    CNA_GamePadButtonFlags* const outDPad)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDPad == nullptr) {
-            return InvalidArgument("The directional-pad output is null.");
-        }
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDPad = state->pressed_buttons & DPadMask;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2448,23 +2400,6 @@ CNA_Result cna_keyboard_get_key_from_scancode_ext(
         }
         *outKey = static_cast<CNA_Key>(
             Keyboard::GetKeyFromScancodeEXT(static_cast<Keys>(scancode)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_keyboard_get_mod_state_ext(
-    const CNA_Handle gameHandle,
-    CNA_KeyModifiers* const outModifiers)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModifiers == nullptr) {
-            return InvalidArgument("The modifier-state output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outModifiers = MapKeyModifiers(Keyboard::GetModStateEXT());
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiVideo.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_video_set_duration(
     const CNA_VideoHandle video,
     const int64_t ticks)
@@ -47,6 +51,180 @@ CNA_Result cna_video_set_video_track_ext(
         }
         object->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_width(
+    const CNA_VideoHandle video,
+    int32_t* const out_width)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_width: out_width is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_width = static_cast<int32_t>(object->value->getWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_height(
+    const CNA_VideoHandle video,
+    int32_t* const out_height)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_height: out_height is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_height = static_cast<int32_t>(object->value->getHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_frames_per_second(
+    const CNA_VideoHandle video,
+    float* const out_fps)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_fps == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_frames_per_second: out_fps is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_fps = static_cast<float>(object->value->getFramesPerSecondProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_soundtrack_type(
+    const CNA_VideoHandle video,
+    CNA_VideoSoundtrackType* const out_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_soundtrack_type: out_type is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_type = static_cast<CNA_VideoSoundtrackType>(object->value->getVideoSoundtrackTypeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_duration(
+    const CNA_VideoHandle video,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_duration: out_ticks is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->getDurationProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_file_name_size(
+    const CNA_VideoHandle video,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_file_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getFileNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_video_copy_file_name(
+    const CNA_VideoHandle video,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getFileNameProperty(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_video_get_has_graphics_device(
+    const CNA_VideoHandle video,
+    CNA_Bool* const out_bound)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bound == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_has_graphics_device: out_bound is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bound = CNA::C::Detail::ToCBool(object->value->getGraphicsDeviceProperty() != nullptr);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_video_get_type_name_size(
+    const CNA_VideoHandle video,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_video_copy_type_name(
+    const CNA_VideoHandle video,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 

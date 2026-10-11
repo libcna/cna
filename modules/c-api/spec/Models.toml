@@ -30,6 +30,7 @@ cna_model_mesh_part_get_start_index = { get = "object->value->getStartIndexPrope
 cna_model_mesh_part_get_vertex_offset = { get = "object->value->getVertexOffsetProperty()" }
 cna_model_mesh_part_set_tag = { call = "object->tag = tag" }
 cna_model_mesh_part_get_primitive_type_ext = { get = "object->value->getPrimitiveTypeEXTProperty()" }
+cna_model_mesh_part_get_tag = { get = "object->tag" }
 
 [part_collection]
 lookup = "GetPartCollection"
@@ -48,6 +49,7 @@ cna_model_mesh_set_bounding_sphere = { call = "object->value->setBoundingSphereP
 cna_model_mesh_get_name_byte_count = { size = "object->value->getNameProperty()" }
 cna_model_mesh_copy_name = { copy = "object->value->getNameProperty()" }
 cna_model_mesh_set_tag = { call = "object->tag = tag" }
+cna_model_mesh_get_tag = { get = "object->tag" }
 
 [mesh_collection]
 lookup = "GetMeshCollection"
@@ -76,6 +78,7 @@ cna_model_get_skin_count_ext = { get = "object->value->getSkinsEXTProperty().siz
 cna_model_get_material_variant_count_ext = { get = "object->value->getMaterialVariantNamesEXTProperty().size()" }
 cna_model_get_material_variant_ext = { get = "object->value->getMaterialVariantEXTProperty()" }
 cna_model_set_material_variant_ext = { call = "object->value->setMaterialVariantEXTProperty(static_cast<int>(value))" }
+cna_model_get_tag = { get = "object->tag" }
 
 [morph_data]
 lookup = "GetMorphData"

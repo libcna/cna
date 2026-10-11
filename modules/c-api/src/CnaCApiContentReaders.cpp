@@ -253,36 +253,6 @@ CNA_Result cna_content_reader_get_content_manager(
     });
 }
 
-CNA_Result cna_content_reader_get_version(
-    const CNA_ContentReaderHandle readerHandle,
-    int32_t* const outVersion)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outVersion,
-            "The container-version output is null.",
-            [outVersion](ContentReader& reader) {
-                *outVersion = static_cast<int32_t>(reader.getVersionProperty());
-            });
-    });
-}
-
-CNA_Result cna_content_reader_get_platform(
-    const CNA_ContentReaderHandle readerHandle,
-    uint8_t* const outPlatform)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outPlatform,
-            "The platform output is null.",
-            [outPlatform](ContentReader& reader) {
-                *outPlatform = static_cast<uint8_t>(reader.getPlatformProperty());
-            });
-    });
-}
-
 CNA_Result cna_content_reader_read_matrix(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Matrix* const outValue)

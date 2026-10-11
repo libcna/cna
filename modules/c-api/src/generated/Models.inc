@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiModels.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_model_bone_get_name_byte_count(
     const CNA_ModelBoneHandle bone,
     uint64_t* const out_byte_count)
@@ -213,6 +217,24 @@ CNA_Result cna_model_mesh_part_get_primitive_type_ext(
     });
 }
 
+CNA_Result cna_model_mesh_part_get_tag(
+    const CNA_ModelMeshPartHandle part,
+    CNA_ModelMeshPartTag* const out_tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_tag: out_tag is null.");
+        }
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_tag = static_cast<CNA_ModelMeshPartTag>(object->tag);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_model_mesh_part_collection_get_count(
     const CNA_ModelMeshPartCollectionHandle collection,
     uint64_t* const out_count)
@@ -309,6 +331,24 @@ CNA_Result cna_model_mesh_set_tag(
             return routeResult;
         }
         object->tag = tag;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_get_tag(
+    const CNA_ModelMeshHandle mesh,
+    CNA_ModelMeshTag* const out_tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_get_tag: out_tag is null.");
+        }
+        std::shared_ptr<MeshResource> object{};
+        if (const CNA_Result routeResult = GetMesh(mesh, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_tag = static_cast<CNA_ModelMeshTag>(object->tag);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -479,6 +519,24 @@ CNA_Result cna_model_set_material_variant_ext(
             return routeResult;
         }
         object->value->setMaterialVariantEXTProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_tag(
+    const CNA_ModelHandle model,
+    CNA_ModelTag* const out_tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_tag: out_tag is null.");
+        }
+        std::shared_ptr<ModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_tag = static_cast<CNA_ModelTag>(object->tag);
         return CNA_RESULT_SUCCESS;
     });
 }

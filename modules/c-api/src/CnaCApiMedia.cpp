@@ -422,19 +422,6 @@ CNA_Result cna_song_create_from_uri(
     });
 }
 
-CNA_Result cna_song_get_name_size(const CNA_SongHandle song, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The song name byte-count output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_song_copy_name(
     const CNA_SongHandle song,
     char* const destination,
@@ -453,19 +440,6 @@ CNA_Result cna_song_copy_name(
     });
 }
 
-CNA_Result cna_song_get_handle_text_size_ext(const CNA_SongHandle song, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The song handle-text byte-count output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outBytes = value.getHandle().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_song_copy_handle_text_ext(
     const CNA_SongHandle song,
     char* const destination,
@@ -478,97 +452,6 @@ CNA_Result cna_song_copy_handle_text_ext(
         }
         return ReadSong(song, [&](const Song& value) {
             return CopyText(value.getHandle(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_song_get_duration(const CNA_SongHandle song, int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The song duration output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_is_protected(const CNA_SongHandle song, CNA_Bool* const outProtected)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outProtected == nullptr) {
-            return InvalidArgument("The song protection output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outProtected = ToCBool(value.getIsProtectedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_is_rated(const CNA_SongHandle song, CNA_Bool* const outRated)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRated == nullptr) {
-            return InvalidArgument("The song rating-presence output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outRated = ToCBool(value.getIsRatedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_play_count(const CNA_SongHandle song, int32_t* const outPlayCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlayCount == nullptr) {
-            return InvalidArgument("The song play-count output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outPlayCount = static_cast<int32_t>(value.getPlayCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_rating(const CNA_SongHandle song, int32_t* const outRating)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRating == nullptr) {
-            return InvalidArgument("The song rating output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outRating = static_cast<int32_t>(value.getRatingProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_track_number(const CNA_SongHandle song, int32_t* const outTrackNumber)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTrackNumber == nullptr) {
-            return InvalidArgument("The song track-number output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outTrackNumber = static_cast<int32_t>(value.getTrackNumberProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_is_disposed(const CNA_SongHandle song, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The song disposal-state output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
         });
     });
 }
@@ -613,32 +496,6 @@ CNA_Result cna_song_equals(
         }
         *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_song_get_hash_code(const CNA_SongHandle song, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The song hash output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_song_get_type_name_size(const CNA_SongHandle song, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The song type-name byte-count output is null.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 

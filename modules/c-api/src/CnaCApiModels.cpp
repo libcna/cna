@@ -2172,24 +2172,6 @@ CNA_Result cna_model_mesh_part_set_index_buffer(
     });
 }
 
-CNA_Result cna_model_mesh_part_get_tag(
-    const CNA_ModelMeshPartHandle partHandle,
-    CNA_ModelMeshPartTag* const outTag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTag == nullptr) {
-            return InvalidArgument("The ModelMeshPart tag output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTag = part->tag;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_collection_create(
     const CNA_ModelMeshPartHandle* const partHandles,
     const uint64_t partCount,
@@ -2421,24 +2403,6 @@ CNA_Result cna_model_mesh_set_parent_bone(
         }
         mesh->value->setParentBoneProperty(bone->node->value.get());
         mesh->parentBone = bone->node;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_get_tag(
-    const CNA_ModelMeshHandle meshHandle,
-    CNA_ModelMeshTag* const outTag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTag == nullptr) {
-            return InvalidArgument("The ModelMesh tag output is null.");
-        }
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTag = mesh->tag;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2878,24 +2842,6 @@ CNA_Result cna_model_get_root(
             return result;
         }
         *outHasRoot = CNA_TRUE;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_get_tag(
-    const CNA_ModelHandle modelHandle,
-    CNA_ModelTag* const outTag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTag == nullptr) {
-            return InvalidArgument("The Model tag output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTag = model->tag;
         return CNA_RESULT_SUCCESS;
     });
 }

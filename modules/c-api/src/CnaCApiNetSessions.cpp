@@ -144,24 +144,6 @@ struct NetworkSessionResource final {
         "The owned AvailableNetworkSession handle could not be created.");
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result SessionQuery(
-    const CNA_Handle handle,
-    const void* const output,
-    const char* const message,
-    TCallable&& callable)
-{
-    if (output == nullptr) {
-        return InvalidArgument(message);
-    }
-    std::shared_ptr<AvailableSessionResource> session;
-    if (const CNA_Result result = GetSession(handle, &session); result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    callable(*session->value);
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_available_network_session_create_ext(
@@ -244,66 +226,6 @@ CNA_Result cna_available_network_session_create_ext(
                 createInfo->host_port,
                 static_cast<NetworkSessionType>(createInfo->session_type)),
             outSession);
-    });
-}
-
-CNA_Result cna_available_network_session_get_current_gamer_count(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outValue,
-            "The gamer-count output is null.",
-            [outValue](AvailableNetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getCurrentGamerCountProperty());
-            });
-    });
-}
-
-CNA_Result cna_available_network_session_get_host_gamertag_size(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outBytes,
-            "The host-gamertag size output is null.",
-            [outBytes](AvailableNetworkSession& session) {
-                *outBytes = session.getHostGamertagProperty().size();
-            });
-    });
-}
-
-CNA_Result cna_available_network_session_get_open_private_gamer_slots(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outValue,
-            "The private-slot output is null.",
-            [outValue](AvailableNetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getOpenPrivateGamerSlotsProperty());
-            });
-    });
-}
-
-CNA_Result cna_available_network_session_get_open_public_gamer_slots(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outValue,
-            "The public-slot output is null.",
-            [outValue](AvailableNetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getOpenPublicGamerSlotsProperty());
-            });
     });
 }
 
@@ -401,51 +323,6 @@ CNA_Result cna_available_network_session_not_equals(
         }
         *outNotEqual = ToCBool(*left->value != *right->value);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_available_network_session_get_connect_address_size_ext(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outBytes,
-            "The connect-address size output is null.",
-            [outBytes](AvailableNetworkSession& session) {
-                *outBytes = session.GetConnectAddress().size();
-            });
-    });
-}
-
-CNA_Result cna_available_network_session_get_connect_port_ext(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    uint16_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outValue,
-            "The connect-port output is null.",
-            [outValue](AvailableNetworkSession& session) {
-                *outValue = session.GetConnectPort();
-            });
-    });
-}
-
-CNA_Result cna_available_network_session_get_session_type_ext(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    CNA_NetworkSessionType* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SessionQuery(
-            sessionHandle,
-            outValue,
-            "The session-type output is null.",
-            [outValue](AvailableNetworkSession& session) {
-                *outValue = static_cast<CNA_NetworkSessionType>(session.GetSessionType());
-            });
     });
 }
 
@@ -616,25 +493,6 @@ namespace {
 }
 
 template<typename TCallable>
-[[nodiscard]] CNA_Result NetworkSessionQuery(
-    const CNA_Handle handle,
-    const void* const output,
-    const char* const message,
-    TCallable&& callable)
-{
-    if (output == nullptr) {
-        return InvalidArgument(message);
-    }
-    std::shared_ptr<NetworkSessionResource> session;
-    if (const CNA_Result result = GetSessionResource(handle, &session);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    callable(*session->value);
-    return CNA_RESULT_SUCCESS;
-}
-
-template<typename TCallable>
 [[nodiscard]] CNA_Result NetworkSessionCommand(const CNA_Handle handle, TCallable&& callable)
 {
     std::shared_ptr<NetworkSessionResource> session;
@@ -781,21 +639,6 @@ CNA_Result cna_network_session_create_with_local_gamers(
     });
 }
 
-CNA_Result cna_network_session_get_is_disposed(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outIsDisposed,
-            "The disposal output is null.",
-            [outIsDisposed](NetworkSession& session) {
-                *outIsDisposed = ToCBool(session.getIsDisposedProperty());
-            });
-    });
-}
-
 CNA_Result cna_network_session_get_gamer_count(
     const CNA_NetworkSessionHandle sessionHandle,
     const uint32_t roster,
@@ -872,96 +715,6 @@ CNA_Result cna_network_session_get_gamer(
     });
 }
 
-CNA_Result cna_network_session_get_allow_host_migration(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session state output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = ToCBool(session.getAllowHostMigrationProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_allow_host_migration(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
-            session.setAllowHostMigrationProperty(value != CNA_FALSE);
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_allow_join_in_progress(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session state output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = ToCBool(session.getAllowJoinInProgressProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_allow_join_in_progress(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(value, "value");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
-            session.setAllowJoinInProgressProperty(value != CNA_FALSE);
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_bytes_per_second_received(
-    const CNA_NetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The throughput output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getBytesPerSecondReceivedProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_get_bytes_per_second_sent(
-    const CNA_NetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The throughput output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getBytesPerSecondSentProperty());
-            });
-    });
-}
-
 CNA_Result cna_network_session_get_host(
     const CNA_NetworkSessionHandle sessionHandle,
     CNA_NetworkGamerHandle* const outGamer)
@@ -986,88 +739,6 @@ CNA_Result cna_network_session_get_host(
             &session->activeGamerViews,
             sessionHandle,
             outGamer);
-    });
-}
-
-CNA_Result cna_network_session_get_is_everyone_ready(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session state output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = ToCBool(session.getIsEveryoneReadyProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_get_is_host(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session state output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = ToCBool(session.getIsHostProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_get_max_gamers(
-    const CNA_NetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The gamer-limit output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getMaxGamersProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_max_gamers(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
-            session.setMaxGamersProperty(static_cast<int>(value));
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_private_gamer_slots(
-    const CNA_NetworkSessionHandle sessionHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The private-slot output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<int32_t>(session.getPrivateGamerSlotsProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_private_gamer_slots(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
-            session.setPrivateGamerSlotsProperty(static_cast<int>(value));
-        });
     });
 }
 
@@ -1103,111 +774,6 @@ CNA_Result cna_network_session_replace_session_properties(
         }
         return NetworkSessionCommand(sessionHandle, [properties](NetworkSession& session) {
             session.getSessionPropertiesProperty() = *properties;
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_session_state(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_NetworkSessionState* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session state output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<CNA_NetworkSessionState>(session.getSessionStateProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_get_session_type(
-    const CNA_NetworkSessionHandle sessionHandle,
-    CNA_NetworkSessionType* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The session type output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = static_cast<CNA_NetworkSessionType>(session.getSessionTypeProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_get_simulated_latency_ticks(
-    const CNA_NetworkSessionHandle sessionHandle,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outTicks,
-            "The latency output is null.",
-            [outTicks](NetworkSession& session) {
-                *outTicks = static_cast<int64_t>(
-                    session.getSimulatedLatencyProperty().getTicksProperty());
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_simulated_latency_ticks(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [ticks](NetworkSession& session) {
-            session.setSimulatedLatencyProperty(System::TimeSpan(ticks));
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_simulated_packet_loss(
-    const CNA_NetworkSessionHandle sessionHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outValue,
-            "The packet-loss output is null.",
-            [outValue](NetworkSession& session) {
-                *outValue = session.getSimulatedPacketLossProperty();
-            });
-    });
-}
-
-CNA_Result cna_network_session_set_simulated_packet_loss(
-    const CNA_NetworkSessionHandle sessionHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [value](NetworkSession& session) {
-            session.setSimulatedPacketLossProperty(value);
-        });
-    });
-}
-
-CNA_Result cna_network_session_get_type_name_size(
-    const CNA_NetworkSessionHandle sessionHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outBytes,
-            "The type-name size output is null.",
-            [outBytes](NetworkSession& session) { *outBytes = session.GetTypeName().size(); });
-    });
-}
-
-CNA_Result cna_network_session_update(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.Update();
         });
     });
 }
@@ -1257,33 +823,6 @@ CNA_Result cna_network_session_find_gamer_by_id(
             &session->activeGamerViews,
             sessionHandle,
             outGamer);
-    });
-}
-
-CNA_Result cna_network_session_reset_ready(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.ResetReady();
-        });
-    });
-}
-
-CNA_Result cna_network_session_start_game(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.StartGame();
-        });
-    });
-}
-
-CNA_Result cna_network_session_end_game(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.EndGame();
-        });
     });
 }
 
@@ -1403,21 +942,6 @@ CNA_Result cna_network_session_remove_gamer_ext(
     });
 }
 
-CNA_Result cna_network_session_get_owned_gamer_count_ext(
-    const CNA_NetworkSessionHandle sessionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionQuery(
-            sessionHandle,
-            outCount,
-            "The owned-gamer count output is null.",
-            [outCount](NetworkSession& session) {
-                *outCount = static_cast<uint64_t>(session.GetOwnedGamerCountForTesting());
-            });
-    });
-}
-
 CNA_Result cna_network_session_get_instance_count_ext(int32_t* const outCount)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1437,15 +961,6 @@ CNA_Result cna_network_session_get_active_action_count_ext(int32_t* const outCou
         }
         *outCount = static_cast<int32_t>(NetworkSession::GetActiveActionInstanceCountForTesting());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_dispose(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.Dispose();
-        });
     });
 }
 

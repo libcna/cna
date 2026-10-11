@@ -10,6 +10,8 @@ cna_content_reader_get_asset_name_size = { size = "object->value->getAssetNamePr
 cna_content_reader_copy_asset_name = { copy = "object->value->getAssetNameProperty()" }
 cna_content_reader_initialize_type_readers = { call = "object->value->InitializeTypeReaders()" }
 cna_content_reader_read_shared_resources = { call = "object->value->ReadSharedResources()" }
+cna_content_reader_get_version = { get = "object->value->getVersionProperty()" }
+cna_content_reader_get_platform = { get = "object->value->getPlatformProperty()" }
 
 [copy_reader_name]
 lookup = "CopyReaderName"

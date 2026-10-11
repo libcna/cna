@@ -20,3 +20,45 @@ cna_viewport_init_from_rectangle = { value = "Viewport(bounds)" }
 [values]
 [values.routes]
 cna_primitive_type_get_vertex_count = { value = "GraphicsDevice::PrimitiveVerts(static_cast<PrimitiveType>(primitive_type), primitive_count)" }
+
+[borrowed_graphics_device]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+
+[borrowed_graphics_device.routes]
+cna_graphics_device_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_graphics_device_get_status = { get = "NativeOrdinal(object->value->getGraphicsDeviceStatusProperty())" }
+cna_graphics_device_get_graphics_profile = { get = "NativeOrdinal(object->value->getGraphicsProfileProperty())" }
+cna_graphics_device_get_scissor_rectangle = { get = "object->value->getScissorRectangleProperty()" }
+cna_graphics_device_set_scissor_rectangle = { call = "object->value->setScissorRectangleProperty(scissor_rectangle)" }
+cna_graphics_device_get_viewport = { get = "object->value->getViewportProperty()" }
+cna_graphics_device_get_multi_sample_mask = { get = "object->value->getMultiSampleMaskProperty()" }
+cna_graphics_device_set_multi_sample_mask = { call = "object->value->setMultiSampleMaskProperty(multi_sample_mask)" }
+cna_graphics_device_get_reference_stencil = { get = "object->value->getReferenceStencilProperty()" }
+cna_graphics_device_set_reference_stencil = { call = "object->value->setReferenceStencilProperty(reference_stencil)" }
+cna_graphics_device_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_graphics_device_present = { call = "object->value->Present()" }
+cna_graphics_device_get_vertex_buffer_count = { get = "object->value->GetVertexBuffers().size()" }
+cna_graphics_device_get_tracked_resource_count = { get = "object->value->GetTrackedResourceCount()" }
+cna_graphics_device_get_unsupported_3d_call_behavior = { get = "NativeOrdinal(object->value->GetUnsupported3DGraphicsCallBehavior())" }
+cna_graphics_device_notify_content_lost_resources_ext = { call = "object->value->NotifyContentLostResourcesEXT()" }
+cna_graphics_device_supports_surface_format_as_render_target_ext = { get = "object->value->SupportsSurfaceFormatAsRenderTargetEXT(static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format))" }
+cna_graphics_device_executes_shader_effect_source_ext = { get = "object->value->ExecutesShaderEffectSourceEXT()" }
+cna_graphics_device_supports_image_based_lighting_ext = { get = "object->value->SupportsImageBasedLightingEXT()" }
+cna_graphics_device_get_display_color_space_ext = { get = "static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT())" }
+cna_graphics_device_get_max_compute_work_group_size_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis)))" }
+cna_graphics_device_get_max_compute_work_group_invocations_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupInvocationsEXT())" }
+
+[occlusion_query]
+lookup = "GetOcclusionQuery"
+object = "std::shared_ptr<OcclusionQueryResource>"
+
+[occlusion_query.routes]
+cna_occlusion_query_begin = { call = "object->value->Begin()" }
+cna_occlusion_query_end = { call = "object->value->End()" }
+cna_occlusion_query_get_is_complete = { get = "object->value->getIsCompleteProperty()" }
+cna_occlusion_query_get_pixel_count = { get = "object->value->getPixelCountProperty()" }
+# CBIND-104: whether the count above is a tally or a flag. A coverage ratio computed from a boolean
+# count is 1/area rather than a fraction, so a caller that divides has to be able to ask first.
+cna_occlusion_query_get_is_pixel_count_precise_ext = { get = "object->value->isPixelCountPreciseEXT()" }
+cna_occlusion_query_has_renderer = { get = "object->value->HasRenderer()" }

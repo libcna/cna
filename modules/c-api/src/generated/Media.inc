@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiMedia.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_song_set_duration(
     const CNA_SongHandle song,
     const int64_t ticks)
@@ -46,6 +50,201 @@ CNA_Result cna_song_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_name_size(
+    const CNA_SongHandle song,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_song_get_handle_text_size_ext(
+    const CNA_SongHandle song,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_handle_text_size_ext: out_bytes is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getHandle(), out_bytes);
+    });
+}
+
+CNA_Result cna_song_get_duration(
+    const CNA_SongHandle song,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_duration: out_ticks is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->getDurationProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_is_protected(
+    const CNA_SongHandle song,
+    CNA_Bool* const out_protected)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_protected == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_is_protected: out_protected is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_protected = CNA::C::Detail::ToCBool(object->value->getIsProtectedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_is_rated(
+    const CNA_SongHandle song,
+    CNA_Bool* const out_rated)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_rated == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_is_rated: out_rated is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_rated = CNA::C::Detail::ToCBool(object->value->getIsRatedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_play_count(
+    const CNA_SongHandle song,
+    int32_t* const out_play_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_play_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_play_count: out_play_count is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_play_count = static_cast<int32_t>(object->value->getPlayCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_rating(
+    const CNA_SongHandle song,
+    int32_t* const out_rating)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_rating == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_rating: out_rating is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_rating = static_cast<int32_t>(object->value->getRatingProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_track_number(
+    const CNA_SongHandle song,
+    int32_t* const out_track_number)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_track_number == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_track_number: out_track_number is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_track_number = static_cast<int32_t>(object->value->getTrackNumberProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_is_disposed(
+    const CNA_SongHandle song,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_hash_code(
+    const CNA_SongHandle song,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_song_get_type_name_size(
+    const CNA_SongHandle song,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
     });
 }
 

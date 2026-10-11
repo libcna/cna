@@ -1,0 +1,32 @@
+# NetGamers routes, generated into src/generated/NetGamers.inc,
+# which src/CnaCApiNetGamers.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[gamer]
+lookup = "GetGamer"
+object = "std::shared_ptr<NetworkGamerResource>"
+
+[gamer.routes]
+cna_network_gamer_get_has_left_session = { get = "object->value->getHasLeftSessionProperty()" }
+cna_network_gamer_set_has_left_session_ext = { call = "object->value->SetHasLeftSession(value)" }
+cna_network_gamer_get_has_voice = { get = "object->value->getHasVoiceProperty()" }
+cna_network_gamer_get_id = { get = "object->value->getIdProperty()" }
+cna_network_gamer_set_id_ext = { call = "object->value->SetId(static_cast<SharpRuntime::bytecs>(value))" }
+cna_network_gamer_get_is_guest = { get = "object->value->getIsGuestProperty()" }
+cna_network_gamer_get_is_host = { get = "object->value->getIsHostProperty()" }
+cna_network_gamer_set_is_host_ext = { call = "object->value->SetIsHost(value)" }
+cna_network_gamer_get_is_local = { get = "object->value->getIsLocalProperty()" }
+cna_network_gamer_get_is_muted_by_local_user = { get = "object->value->getIsMutedByLocalUserProperty()" }
+cna_network_gamer_get_is_private_slot = { get = "object->value->getIsPrivateSlotProperty()" }
+cna_network_gamer_get_is_ready = { get = "object->value->getIsReadyProperty()" }
+cna_network_gamer_set_is_ready = { call = "object->value->setIsReadyProperty(value)" }
+cna_network_gamer_get_is_talking = { get = "object->value->getIsTalkingProperty()" }
+cna_network_gamer_get_roundtrip_ticks = { get = "object->value->getRoundtripTimeProperty() .getTicksProperty()" }
+cna_network_gamer_set_roundtrip_ticks_ext = { call = "object->value->SetRoundtripTime(System::TimeSpan(ticks))" }
+
+[machine]
+lookup = "GetMachine"
+object = "std::shared_ptr<NetworkMachineResource>"
+
+[machine.routes]
+cna_network_machine_get_gamer_count = { get = "object->value->getGamersProperty().getCountProperty()" }
+cna_network_machine_remove_from_session = { call = "object->value->RemoveFromSession()" }

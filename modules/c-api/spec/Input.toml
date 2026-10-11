@@ -19,6 +19,8 @@ cna_gamepad_state_set_packet_number_ext = { call = "state->packet_number = packe
 cna_gamepad_state_get_hash_code = { get = "static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^ (static_cast<unsigned>(state->packet_number) * 31U)" }
 cna_gamepad_state_get_string_size = { size = "GamePadState().ToString()" }
 cna_gamepad_state_copy_string = { copy = "GamePadState().ToString()" }
+cna_gamepad_state_get_buttons = { get = "state->pressed_buttons" }
+cna_gamepad_state_get_dpad = { get = "state->pressed_buttons & DPadMask" }
 
 [mouse_state]
 lookup = "ValidateMouseState"
@@ -65,6 +67,7 @@ cna_touch_panel_get_touch_device_exists_ext = { get = "TouchPanel::getTouchDevic
 cna_touch_panel_set_touch_device_exists_ext = { call = "TouchPanel::setTouchDeviceExistsProperty(exists)" }
 cna_touch_panel_update_ext = { call = "TouchPanel::Update()" }
 cna_touch_panel_reset_for_tests_ext = { call = "TouchPanel::ResetForTests()" }
+cna_keyboard_get_mod_state_ext = { get = "MapKeyModifiers(Keyboard::GetModStateEXT())" }
 
 [cursor]
 lookup = "GetCursorResource"
@@ -80,3 +83,9 @@ lookup = "ValidateTouchState"
 cna_touch_state_get_is_read_only = { get = "TouchCollection().getIsReadOnlyProperty()" }
 cna_touch_state_get_is_empty_ext = { get = "state->touch_count == 0U" }
 cna_touch_state_clear = { call = "state->touch_count = 0U" }
+
+[mask]
+lookup = "ValidateMask"
+
+[mask.routes]
+cna_gamepad_buttons_init_from_mask = { get = "buttons" }

@@ -226,89 +226,10 @@ template<typename TValue>
 
 } // namespace
 
-CNA_Result cna_album_get_name_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The album name byte-count output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_album_copy_name(
-    const CNA_AlbumHandle album,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Album>(album, [&](const Album& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_album_get_is_disposed(const CNA_AlbumHandle album, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The album disposal-state output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_album_destroy(const CNA_AlbumHandle album)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<Album>(album, "The album handle could not be released.");
-    });
-}
-
-CNA_Result cna_album_get_hash_code(const CNA_AlbumHandle album, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The album hash output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_album_get_type_name_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The album type-name byte-count output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_album_copy_type_name(
-    const CNA_AlbumHandle album,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Album>(album, [&](const Album& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -355,21 +276,6 @@ CNA_Result cna_album_equals(
     });
 }
 
-CNA_Result cna_album_collection_get_count(
-    const CNA_AlbumCollectionHandle collection,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The album collection count output is null.");
-        }
-        return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_album_collection_get_at(
     const CNA_AlbumCollectionHandle collection,
     const int32_t index,
@@ -377,21 +283,6 @@ CNA_Result cna_album_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return CollectionElementAt<AlbumCollection, Album>(collection, index, outAlbum);
-    });
-}
-
-CNA_Result cna_album_collection_get_is_disposed(
-    const CNA_AlbumCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The album collection disposal-state output is null.");
-        }
-        return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 
@@ -403,117 +294,10 @@ CNA_Result cna_album_collection_destroy(const CNA_AlbumCollectionHandle collecti
     });
 }
 
-CNA_Result cna_album_collection_get_type_name_size(
-    const CNA_AlbumCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The album collection type-name byte-count output is null.");
-        }
-        return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_album_collection_copy_type_name(
-    const CNA_AlbumCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<AlbumCollection>(collection, [&](const AlbumCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_artist_get_name_size(const CNA_ArtistHandle artist, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The artist name byte-count output is null.");
-        }
-        return Read<Artist>(artist, [&](const Artist& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_artist_copy_name(
-    const CNA_ArtistHandle artist,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Artist>(artist, [&](const Artist& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_artist_get_is_disposed(const CNA_ArtistHandle artist, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The artist disposal-state output is null.");
-        }
-        return Read<Artist>(artist, [&](const Artist& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_artist_destroy(const CNA_ArtistHandle artist)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<Artist>(artist, "The artist handle could not be released.");
-    });
-}
-
-CNA_Result cna_artist_get_hash_code(const CNA_ArtistHandle artist, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The artist hash output is null.");
-        }
-        return Read<Artist>(artist, [&](const Artist& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_artist_get_type_name_size(const CNA_ArtistHandle artist, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The artist type-name byte-count output is null.");
-        }
-        return Read<Artist>(artist, [&](const Artist& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_artist_copy_type_name(
-    const CNA_ArtistHandle artist,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Artist>(artist, [&](const Artist& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -560,21 +344,6 @@ CNA_Result cna_artist_equals(
     });
 }
 
-CNA_Result cna_artist_collection_get_count(
-    const CNA_ArtistCollectionHandle collection,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The artist collection count output is null.");
-        }
-        return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_artist_collection_get_at(
     const CNA_ArtistCollectionHandle collection,
     const int32_t index,
@@ -582,21 +351,6 @@ CNA_Result cna_artist_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return CollectionElementAt<ArtistCollection, Artist>(collection, index, outArtist);
-    });
-}
-
-CNA_Result cna_artist_collection_get_is_disposed(
-    const CNA_ArtistCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The artist collection disposal-state output is null.");
-        }
-        return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 
@@ -608,117 +362,10 @@ CNA_Result cna_artist_collection_destroy(const CNA_ArtistCollectionHandle collec
     });
 }
 
-CNA_Result cna_artist_collection_get_type_name_size(
-    const CNA_ArtistCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The artist collection type-name byte-count output is null.");
-        }
-        return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_artist_collection_copy_type_name(
-    const CNA_ArtistCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<ArtistCollection>(collection, [&](const ArtistCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_genre_get_name_size(const CNA_GenreHandle genre, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The genre name byte-count output is null.");
-        }
-        return Read<Genre>(genre, [&](const Genre& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_genre_copy_name(
-    const CNA_GenreHandle genre,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Genre>(genre, [&](const Genre& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_genre_get_is_disposed(const CNA_GenreHandle genre, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The genre disposal-state output is null.");
-        }
-        return Read<Genre>(genre, [&](const Genre& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_genre_destroy(const CNA_GenreHandle genre)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<Genre>(genre, "The genre handle could not be released.");
-    });
-}
-
-CNA_Result cna_genre_get_hash_code(const CNA_GenreHandle genre, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The genre hash output is null.");
-        }
-        return Read<Genre>(genre, [&](const Genre& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_genre_get_type_name_size(const CNA_GenreHandle genre, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The genre type-name byte-count output is null.");
-        }
-        return Read<Genre>(genre, [&](const Genre& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_genre_copy_type_name(
-    const CNA_GenreHandle genre,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Genre>(genre, [&](const Genre& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -765,21 +412,6 @@ CNA_Result cna_genre_equals(
     });
 }
 
-CNA_Result cna_genre_collection_get_count(
-    const CNA_GenreCollectionHandle collection,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The genre collection count output is null.");
-        }
-        return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_genre_collection_get_at(
     const CNA_GenreCollectionHandle collection,
     const int32_t index,
@@ -787,21 +419,6 @@ CNA_Result cna_genre_collection_get_at(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return CollectionElementAt<GenreCollection, Genre>(collection, index, outGenre);
-    });
-}
-
-CNA_Result cna_genre_collection_get_is_disposed(
-    const CNA_GenreCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The genre collection disposal-state output is null.");
-        }
-        return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 
@@ -813,117 +430,10 @@ CNA_Result cna_genre_collection_destroy(const CNA_GenreCollectionHandle collecti
     });
 }
 
-CNA_Result cna_genre_collection_get_type_name_size(
-    const CNA_GenreCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The genre collection type-name byte-count output is null.");
-        }
-        return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_genre_collection_copy_type_name(
-    const CNA_GenreCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<GenreCollection>(collection, [&](const GenreCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_playlist_get_name_size(const CNA_PlaylistHandle playlist, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The playlist name byte-count output is null.");
-        }
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_playlist_copy_name(
-    const CNA_PlaylistHandle playlist,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_playlist_get_is_disposed(const CNA_PlaylistHandle playlist, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The playlist disposal-state output is null.");
-        }
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_playlist_destroy(const CNA_PlaylistHandle playlist)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<Playlist>(playlist, "The playlist handle could not be released.");
-    });
-}
-
-CNA_Result cna_playlist_get_hash_code(const CNA_PlaylistHandle playlist, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The playlist hash output is null.");
-        }
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_playlist_get_type_name_size(const CNA_PlaylistHandle playlist, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The playlist type-name byte-count output is null.");
-        }
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_playlist_copy_type_name(
-    const CNA_PlaylistHandle playlist,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -970,21 +480,6 @@ CNA_Result cna_playlist_equals(
     });
 }
 
-CNA_Result cna_playlist_collection_get_count(
-    const CNA_PlaylistCollectionHandle collection,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The playlist collection count output is null.");
-        }
-        return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_playlist_collection_get_at(
     const CNA_PlaylistCollectionHandle collection,
     const int32_t index,
@@ -995,54 +490,11 @@ CNA_Result cna_playlist_collection_get_at(
     });
 }
 
-CNA_Result cna_playlist_collection_get_is_disposed(
-    const CNA_PlaylistCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The playlist collection disposal-state output is null.");
-        }
-        return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_playlist_collection_destroy(const CNA_PlaylistCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<PlaylistCollection>(
             collection, "The playlist collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_playlist_collection_get_type_name_size(
-    const CNA_PlaylistCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The playlist collection type-name byte-count output is null.");
-        }
-        return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_playlist_collection_copy_type_name(
-    const CNA_PlaylistCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<PlaylistCollection>(collection, [&](const PlaylistCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -1374,32 +826,6 @@ CNA_Result cna_album_get_genre(
     });
 }
 
-CNA_Result cna_album_get_duration(const CNA_AlbumHandle album, int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The album duration output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_album_get_has_art(const CNA_AlbumHandle album, CNA_Bool* const outHasArt)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasArt == nullptr) {
-            return InvalidArgument("The album art-presence output is null.");
-        }
-        return Read<Album>(album, [&](const Album& value) {
-            *outHasArt = ToCBool(value.getHasArtProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_album_get_art_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1522,19 +948,6 @@ CNA_Result cna_genre_get_albums(
     });
 }
 
-CNA_Result cna_playlist_get_duration(const CNA_PlaylistHandle playlist, int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The playlist duration output is null.");
-        }
-        return Read<Playlist>(playlist, [&](const Playlist& value) {
-            *outTicks = static_cast<int64_t>(value.getDurationProperty().getTicksProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_song_get_album(
     const CNA_SongHandle song,
     CNA_AlbumHandle* const outAlbum,
@@ -1577,46 +990,6 @@ CNA_Result cna_song_get_genre(
     });
 }
 
-CNA_Result cna_picture_get_name_size(const CNA_PictureHandle handle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture name byte-count output is null.");
-        }
-        return Read<Picture>(handle, [&](const Picture& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_copy_name(
-    const CNA_PictureHandle handle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Picture>(handle, [&](const Picture& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_get_is_disposed(const CNA_PictureHandle handle, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The picture disposal-state output is null.");
-        }
-        return Read<Picture>(handle, [&](const Picture& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_picture_destroy(const CNA_PictureHandle handle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1645,85 +1018,6 @@ CNA_Result cna_picture_equals(
         }
         *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_picture_get_hash_code(const CNA_PictureHandle handle, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The picture hash output is null.");
-        }
-        return Read<Picture>(handle, [&](const Picture& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_get_type_name_size(const CNA_PictureHandle handle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture type-name byte-count output is null.");
-        }
-        return Read<Picture>(handle, [&](const Picture& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_copy_type_name(
-    const CNA_PictureHandle handle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Picture>(handle, [&](const Picture& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_album_get_name_size(const CNA_PictureAlbumHandle handle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture album name byte-count output is null.");
-        }
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            *outBytes = value.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_album_copy_name(
-    const CNA_PictureAlbumHandle handle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            // The canonical string conversion returns the name unchanged, so one route is both.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_album_get_is_disposed(const CNA_PictureAlbumHandle handle, CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The picture album disposal-state output is null.");
-        }
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 
@@ -1758,58 +1052,6 @@ CNA_Result cna_picture_album_equals(
     });
 }
 
-CNA_Result cna_picture_album_get_hash_code(const CNA_PictureAlbumHandle handle, int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The picture album hash output is null.");
-        }
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            *outHash = static_cast<int32_t>(value.GetHashCode());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_album_get_type_name_size(const CNA_PictureAlbumHandle handle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture album type-name byte-count output is null.");
-        }
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_album_copy_type_name(
-    const CNA_PictureAlbumHandle handle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_collection_get_count(const CNA_PictureCollectionHandle collection, int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection count output is null.");
-        }
-        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_picture_collection_get_at(
     const CNA_PictureCollectionHandle collection,
     const int32_t index,
@@ -1820,66 +1062,10 @@ CNA_Result cna_picture_collection_get_at(
     });
 }
 
-CNA_Result cna_picture_collection_get_is_disposed(
-    const CNA_PictureCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The collection disposal-state output is null.");
-        }
-        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_picture_collection_destroy(const CNA_PictureCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<PictureCollection>(collection, "The collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_picture_collection_get_type_name_size(
-    const CNA_PictureCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The collection type-name byte-count output is null.");
-        }
-        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_collection_copy_type_name(
-    const CNA_PictureCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_album_collection_get_count(const CNA_PictureAlbumCollectionHandle collection, int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection count output is null.");
-        }
-        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
-            *outCount = static_cast<int32_t>(value.getCountProperty());
-            return CNA_RESULT_SUCCESS;
-        });
     });
 }
 
@@ -1893,81 +1079,10 @@ CNA_Result cna_picture_album_collection_get_at(
     });
 }
 
-CNA_Result cna_picture_album_collection_get_is_disposed(
-    const CNA_PictureAlbumCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The collection disposal-state output is null.");
-        }
-        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
-            *outDisposed = ToCBool(value.getIsDisposedProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_picture_album_collection_destroy(const CNA_PictureAlbumCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return ReleaseHandle<PictureAlbumCollection>(collection, "The collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_picture_album_collection_get_type_name_size(
-    const CNA_PictureAlbumCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The collection type-name byte-count output is null.");
-        }
-        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
-            *outBytes = value.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_album_collection_copy_type_name(
-    const CNA_PictureAlbumCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_picture_get_token_size_ext(
-    const CNA_PictureHandle picture,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture token byte-count output is null.");
-        }
-        return Read<Picture>(picture, [&](const Picture& value) {
-            *outBytes = value.getTokenEXT().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_copy_token_ext(
-    const CNA_PictureHandle picture,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return Read<Picture>(picture, [&](const Picture& value) {
-            return CopyText(value.getTokenEXT(), destination, capacity, outBytes);
-        });
     });
 }
 
@@ -2002,32 +1117,6 @@ CNA_Result cna_picture_get_date_unix_ticks(
                 std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(
                     since)
                     .count());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_get_width(const CNA_PictureHandle picture, int32_t* const outWidth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr) {
-            return InvalidArgument("The picture width output is null.");
-        }
-        return Read<Picture>(picture, [&](const Picture& value) {
-            *outWidth = static_cast<int32_t>(value.getWidthProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_picture_get_height(const CNA_PictureHandle picture, int32_t* const outHeight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeight == nullptr) {
-            return InvalidArgument("The picture height output is null.");
-        }
-        return Read<Picture>(picture, [&](const Picture& value) {
-            *outHeight = static_cast<int32_t>(value.getHeightProperty());
             return CNA_RESULT_SUCCESS;
         });
     });

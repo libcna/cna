@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiMediaPlayer.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_media_player_detect_song_ended_by_elapsed_time_ext(
     const CNA_SongHandle song,
     const int64_t elapsed_ticks,
@@ -119,5 +123,348 @@ CNA_Result cna_media_queue_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_media_player_get_game_has_control(
+    const CNA_Handle game,
+    CNA_Bool* const out_has_control)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_control == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_game_has_control: out_has_control is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_has_control = CNA::C::Detail::ToCBool(MediaPlayer::getGameHasControlProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_is_muted(
+    const CNA_Handle game,
+    CNA_Bool* const out_muted)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_muted == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_is_muted: out_muted is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_muted = CNA::C::Detail::ToCBool(MediaPlayer::getIsMutedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_set_is_muted(
+    const CNA_Handle game,
+    const CNA_Bool c_muted)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_muted, "muted");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool muted = CNA::C::Detail::FromCBool(c_muted);
+        MediaPlayer::setIsMutedProperty(muted);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_is_repeating(
+    const CNA_Handle game,
+    CNA_Bool* const out_repeating)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_repeating == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_is_repeating: out_repeating is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_repeating = CNA::C::Detail::ToCBool(MediaPlayer::getIsRepeatingProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_set_is_repeating(
+    const CNA_Handle game,
+    const CNA_Bool c_repeating)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_repeating, "repeating");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool repeating = CNA::C::Detail::FromCBool(c_repeating);
+        MediaPlayer::setIsRepeatingProperty(repeating);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_is_shuffled(
+    const CNA_Handle game,
+    CNA_Bool* const out_shuffled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_shuffled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_is_shuffled: out_shuffled is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_shuffled = CNA::C::Detail::ToCBool(MediaPlayer::getIsShuffledProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_set_is_shuffled(
+    const CNA_Handle game,
+    const CNA_Bool c_shuffled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_shuffled, "shuffled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool shuffled = CNA::C::Detail::FromCBool(c_shuffled);
+        MediaPlayer::setIsShuffledProperty(shuffled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_play_position_ticks(
+    const CNA_Handle game,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_play_position_ticks: out_ticks is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(MediaPlayer::getPlayPositionProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_state(
+    const CNA_Handle game,
+    CNA_MediaState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_state: out_state is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = static_cast<CNA_MediaState>(MediaPlayer::getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_volume(
+    const CNA_Handle game,
+    float* const out_volume)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_volume == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_volume: out_volume is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_volume = static_cast<float>(MediaPlayer::getVolumeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_set_volume(
+    const CNA_Handle game,
+    const float volume)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::setVolumeProperty(volume);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_get_is_visualization_enabled(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_is_visualization_enabled: out_enabled is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(MediaPlayer::getIsVisualizationEnabledProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_set_is_visualization_enabled(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        MediaPlayer::setIsVisualizationEnabledProperty(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_move_next(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::MoveNext();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_move_previous(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::MovePrevious();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_pause(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::Pause();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_resume(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::Resume();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_stop(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_update_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_program_exit_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::ProgramExit();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_raise_active_song_changed_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::OnActiveSongChanged();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_player_raise_media_state_changed_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        MediaPlayer::OnMediaStateChanged();
+        return CNA_RESULT_SUCCESS;
     });
 }

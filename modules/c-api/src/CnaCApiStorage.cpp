@@ -493,24 +493,6 @@ private:
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result StreamQuery(
-    const CNA_Handle streamHandle,
-    void* const output,
-    const char* const message,
-    const std::function<void(System::IO::Stream&)>& query)
-{
-    if (output == nullptr) {
-        return InvalidArgument(message);
-    }
-    std::shared_ptr<StorageStreamResource> stream;
-    if (const CNA_Result result = GetStream(streamHandle, &stream);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    query(*stream->value);
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 namespace CNA::C::Detail {
@@ -1271,36 +1253,6 @@ CNA_Result cna_storage_stream_seek(
     });
 }
 
-CNA_Result cna_storage_stream_get_position(
-    const CNA_StorageStreamHandle streamHandle,
-    int64_t* const outPosition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StreamQuery(
-            streamHandle,
-            outPosition,
-            "The storage stream position output is null.",
-            [outPosition](System::IO::Stream& stream) {
-                *outPosition = static_cast<int64_t>(stream.getPositionProperty());
-            });
-    });
-}
-
-CNA_Result cna_storage_stream_get_length(
-    const CNA_StorageStreamHandle streamHandle,
-    int64_t* const outLength)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StreamQuery(
-            streamHandle,
-            outLength,
-            "The storage stream length output is null.",
-            [outLength](System::IO::Stream& stream) {
-                *outLength = static_cast<int64_t>(stream.getLengthProperty());
-            });
-    });
-}
-
 CNA_Result cna_storage_stream_set_length(
     const CNA_StorageStreamHandle streamHandle,
     const int64_t length)
@@ -1322,51 +1274,6 @@ CNA_Result cna_storage_stream_set_length(
         }
         stream->value->SetLength(nativeLength);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_stream_get_can_read(
-    const CNA_StorageStreamHandle streamHandle,
-    CNA_Bool* const outCanRead)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StreamQuery(
-            streamHandle,
-            outCanRead,
-            "The storage stream read-capability output is null.",
-            [outCanRead](System::IO::Stream& stream) {
-                *outCanRead = ToCBool(stream.getCanReadProperty());
-            });
-    });
-}
-
-CNA_Result cna_storage_stream_get_can_write(
-    const CNA_StorageStreamHandle streamHandle,
-    CNA_Bool* const outCanWrite)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StreamQuery(
-            streamHandle,
-            outCanWrite,
-            "The storage stream write-capability output is null.",
-            [outCanWrite](System::IO::Stream& stream) {
-                *outCanWrite = ToCBool(stream.getCanWriteProperty());
-            });
-    });
-}
-
-CNA_Result cna_storage_stream_get_can_seek(
-    const CNA_StorageStreamHandle streamHandle,
-    CNA_Bool* const outCanSeek)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StreamQuery(
-            streamHandle,
-            outCanSeek,
-            "The storage stream seek-capability output is null.",
-            [outCanSeek](System::IO::Stream& stream) {
-                *outCanSeek = ToCBool(stream.getCanSeekProperty());
-            });
     });
 }
 

@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiVectors.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_vector2_init(
     CNA_Vector2* const out_value)
 {

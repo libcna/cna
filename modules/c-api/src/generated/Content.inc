@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiContent.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_content_manager_get_root_directory_size(
     const CNA_Handle content_manager,
     uint64_t* const out_bytes)

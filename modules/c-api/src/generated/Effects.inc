@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiEffects.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_effect_annotation_copy_name(
     const CNA_EffectAnnotationHandle annotation,
     char* const destination,

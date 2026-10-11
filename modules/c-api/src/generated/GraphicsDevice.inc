@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiGraphicsDevice.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_viewport_init(
     CNA_Viewport* const out_value)
 {
@@ -168,6 +172,487 @@ CNA_Result cna_primitive_type_get_vertex_count(
             return CNA::C::Detail::InvalidArgument("cna_primitive_type_get_vertex_count: out_vertex_count is null.");
         }
         *out_vertex_count = static_cast<int32_t>(GraphicsDevice::PrimitiveVerts(static_cast<PrimitiveType>(primitive_type), primitive_count));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_is_disposed(
+    const CNA_Handle graphics_device,
+    CNA_Bool* const out_is_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_is_disposed: out_is_disposed is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_status(
+    const CNA_Handle graphics_device,
+    CNA_GraphicsDeviceStatus* const out_status)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_status == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_status: out_status is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_status = static_cast<CNA_GraphicsDeviceStatus>(NativeOrdinal(object->value->getGraphicsDeviceStatusProperty()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_graphics_profile(
+    const CNA_Handle graphics_device,
+    CNA_GraphicsProfile* const out_profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_profile == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_graphics_profile: out_profile is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_profile = static_cast<CNA_GraphicsProfile>(NativeOrdinal(object->value->getGraphicsProfileProperty()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_scissor_rectangle(
+    const CNA_Handle graphics_device,
+    CNA_Rectangle* const out_scissor_rectangle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_scissor_rectangle == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_scissor_rectangle: out_scissor_rectangle is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_scissor_rectangle = CNA::C::Detail::ToC(object->value->getScissorRectangleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_scissor_rectangle(
+    const CNA_Handle graphics_device,
+    const CNA_Rectangle c_scissor_rectangle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto scissor_rectangle = CNA::C::Detail::ToNative(c_scissor_rectangle);
+        object->value->setScissorRectangleProperty(scissor_rectangle);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_viewport(
+    const CNA_Handle graphics_device,
+    CNA_Viewport* const out_viewport)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_viewport == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_viewport: out_viewport is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_viewport = CNA::C::Detail::ToC(object->value->getViewportProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_multi_sample_mask(
+    const CNA_Handle graphics_device,
+    int32_t* const out_multi_sample_mask)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_multi_sample_mask == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_multi_sample_mask: out_multi_sample_mask is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_multi_sample_mask = static_cast<int32_t>(object->value->getMultiSampleMaskProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_multi_sample_mask(
+    const CNA_Handle graphics_device,
+    const int32_t multi_sample_mask)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setMultiSampleMaskProperty(multi_sample_mask);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_reference_stencil(
+    const CNA_Handle graphics_device,
+    int32_t* const out_reference_stencil)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reference_stencil == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_reference_stencil: out_reference_stencil is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_reference_stencil = static_cast<int32_t>(object->value->getReferenceStencilProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_reference_stencil(
+    const CNA_Handle graphics_device,
+    const int32_t reference_stencil)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setReferenceStencilProperty(reference_stencil);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_type_name_size(
+    const CNA_Handle graphics_device,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_graphics_device_present(
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Present();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_vertex_buffer_count(
+    const CNA_Handle graphics_device,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_vertex_buffer_count: out_count is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->value->GetVertexBuffers().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_tracked_resource_count(
+    const CNA_Handle graphics_device,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_tracked_resource_count: out_count is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->value->GetTrackedResourceCount());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_unsupported_3d_call_behavior(
+    const CNA_Handle graphics_device,
+    CNA_Unsupported3DGraphicsCallBehavior* const out_behavior)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_behavior == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_unsupported_3d_call_behavior: out_behavior is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_behavior = static_cast<CNA_Unsupported3DGraphicsCallBehavior>(NativeOrdinal(object->value->GetUnsupported3DGraphicsCallBehavior()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_notify_content_lost_resources_ext(
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->NotifyContentLostResourcesEXT();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_supports_surface_format_as_render_target_ext(
+    const CNA_Handle graphics_device,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_supports_surface_format_as_render_target_ext: out_supported is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(object->value->SupportsSurfaceFormatAsRenderTargetEXT(static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_executes_shader_effect_source_ext(
+    const CNA_Handle graphics_device,
+    CNA_Bool* const out_executes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_executes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_executes_shader_effect_source_ext: out_executes is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_executes = CNA::C::Detail::ToCBool(object->value->ExecutesShaderEffectSourceEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
+    const CNA_Handle graphics_device,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_supports_image_based_lighting_ext: out_supported is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(object->value->SupportsImageBasedLightingEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_display_color_space_ext(
+    const CNA_Handle graphics_device,
+    uint32_t* const out_space)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_space == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_display_color_space_ext: out_space is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_space = static_cast<uint32_t>(static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
+    const CNA_Handle graphics_device,
+    const int32_t axis,
+    int32_t* const out_size)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_size == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_max_compute_work_group_size_ext: out_size is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_size = static_cast<int32_t>(static_cast<int32_t>(object->value->GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis))));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
+    const CNA_Handle graphics_device,
+    int32_t* const out_invocations)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_invocations == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_max_compute_work_group_invocations_ext: out_invocations is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_invocations = static_cast<int32_t>(static_cast<int32_t>(object->value->GetMaxComputeWorkGroupInvocationsEXT()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_begin(
+    const CNA_OcclusionQueryHandle occlusion_query)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Begin();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_end(
+    const CNA_OcclusionQueryHandle occlusion_query)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->End();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_get_is_complete(
+    const CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* const out_is_complete)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_complete == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_occlusion_query_get_is_complete: out_is_complete is null.");
+        }
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_complete = CNA::C::Detail::ToCBool(object->value->getIsCompleteProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_get_pixel_count(
+    const CNA_OcclusionQueryHandle occlusion_query,
+    int32_t* const out_pixel_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pixel_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_occlusion_query_get_pixel_count: out_pixel_count is null.");
+        }
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_pixel_count = static_cast<int32_t>(object->value->getPixelCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
+    const CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* const out_is_precise)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_precise == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_occlusion_query_get_is_pixel_count_precise_ext: out_is_precise is null.");
+        }
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_precise = CNA::C::Detail::ToCBool(object->value->isPixelCountPreciseEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_has_renderer(
+    const CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* const out_has_renderer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_renderer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_occlusion_query_has_renderer: out_has_renderer is null.");
+        }
+        std::shared_ptr<OcclusionQueryResource> object{};
+        if (const CNA_Result routeResult = GetOcclusionQuery(occlusion_query, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_has_renderer = CNA::C::Detail::ToCBool(object->value->HasRenderer());
         return CNA_RESULT_SUCCESS;
     });
 }

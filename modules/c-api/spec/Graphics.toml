@@ -1,0 +1,18 @@
+# Graphics routes, generated into src/generated/Graphics.inc,
+# which src/CnaCApiGraphics.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[borrowed_graphics_device]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+
+[borrowed_graphics_device.routes]
+cna_graphics_device_get_renderer_name_size = { size = "object->value->GetGraphicsRendererName()" }
+cna_graphics_device_get_capability_report_size_ext = { size = "object->value->GetRendererCapabilityReportEXT()" }
+cna_graphics_device_get_shader_dialect_ext = { get = "MapShaderDialect(object->value->GetShaderDialectEXT())" }
+
+[sprite_batch]
+lookup = "GetSpriteBatch"
+object = "std::shared_ptr<SpriteBatchResource>"
+
+[sprite_batch.routes]
+cna_sprite_batch_get_type_name_size = { size = "object->value->GetTypeName()" }

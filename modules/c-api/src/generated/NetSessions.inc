@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiNetSessions.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_available_network_session_copy_host_gamertag(
     const CNA_AvailableNetworkSessionHandle session,
     char* const destination,
@@ -34,6 +38,130 @@ CNA_Result cna_available_network_session_copy_connect_address_ext(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetConnectAddress(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_available_network_session_get_current_gamer_count(
+    const CNA_AvailableNetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_current_gamer_count: out_value is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getCurrentGamerCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_get_host_gamertag_size(
+    const CNA_AvailableNetworkSessionHandle session,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_host_gamertag_size: out_bytes is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getHostGamertagProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_available_network_session_get_open_private_gamer_slots(
+    const CNA_AvailableNetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_open_private_gamer_slots: out_value is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getOpenPrivateGamerSlotsProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_get_open_public_gamer_slots(
+    const CNA_AvailableNetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_open_public_gamer_slots: out_value is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getOpenPublicGamerSlotsProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_get_connect_address_size_ext(
+    const CNA_AvailableNetworkSessionHandle session,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_connect_address_size_ext: out_bytes is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetConnectAddress(), out_bytes);
+    });
+}
+
+CNA_Result cna_available_network_session_get_connect_port_ext(
+    const CNA_AvailableNetworkSessionHandle session,
+    uint16_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_connect_port_ext: out_value is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<uint16_t>(object->value->GetConnectPort());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_get_session_type_ext(
+    const CNA_AvailableNetworkSessionHandle session,
+    CNA_NetworkSessionType* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_session_type_ext: out_value is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<CNA_NetworkSessionType>(object->value->GetSessionType());
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -100,6 +228,445 @@ CNA_Result cna_network_session_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_network_session_get_is_disposed(
+    const CNA_NetworkSessionHandle session,
+    CNA_Bool* const out_is_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_is_disposed: out_is_disposed is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_allow_host_migration(
+    const CNA_NetworkSessionHandle session,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_allow_host_migration: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object->value->getAllowHostMigrationProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_allow_host_migration(
+    const CNA_NetworkSessionHandle session,
+    const CNA_Bool c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool value = CNA::C::Detail::FromCBool(c_value);
+        object->value->setAllowHostMigrationProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_allow_join_in_progress(
+    const CNA_NetworkSessionHandle session,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_allow_join_in_progress: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object->value->getAllowJoinInProgressProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_allow_join_in_progress(
+    const CNA_NetworkSessionHandle session,
+    const CNA_Bool c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool value = CNA::C::Detail::FromCBool(c_value);
+        object->value->setAllowJoinInProgressProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_bytes_per_second_received(
+    const CNA_NetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_bytes_per_second_received: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getBytesPerSecondReceivedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_bytes_per_second_sent(
+    const CNA_NetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_bytes_per_second_sent: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getBytesPerSecondSentProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_is_everyone_ready(
+    const CNA_NetworkSessionHandle session,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_is_everyone_ready: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object->value->getIsEveryoneReadyProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_is_host(
+    const CNA_NetworkSessionHandle session,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_is_host: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object->value->getIsHostProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_max_gamers(
+    const CNA_NetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_max_gamers: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getMaxGamersProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_max_gamers(
+    const CNA_NetworkSessionHandle session,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setMaxGamersProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_private_gamer_slots(
+    const CNA_NetworkSessionHandle session,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_private_gamer_slots: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->getPrivateGamerSlotsProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_private_gamer_slots(
+    const CNA_NetworkSessionHandle session,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPrivateGamerSlotsProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_session_state(
+    const CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionState* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_session_state: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<CNA_NetworkSessionState>(object->value->getSessionStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_session_type(
+    const CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionType* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_session_type: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<CNA_NetworkSessionType>(object->value->getSessionTypeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_simulated_latency_ticks(
+    const CNA_NetworkSessionHandle session,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_simulated_latency_ticks: out_ticks is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->getSimulatedLatencyProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_simulated_latency_ticks(
+    const CNA_NetworkSessionHandle session,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setSimulatedLatencyProperty(System::TimeSpan(ticks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_simulated_packet_loss(
+    const CNA_NetworkSessionHandle session,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_simulated_packet_loss: out_value is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(object->value->getSimulatedPacketLossProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_set_simulated_packet_loss(
+    const CNA_NetworkSessionHandle session,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setSimulatedPacketLossProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_type_name_size(
+    const CNA_NetworkSessionHandle session,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_network_session_update(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_reset_ready(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->ResetReady();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_start_game(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->StartGame();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_end_game(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->EndGame();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_owned_gamer_count_ext(
+    const CNA_NetworkSessionHandle session,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_owned_gamer_count_ext: out_count is null.");
+        }
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->value->GetOwnedGamerCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_dispose(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Dispose();
+        return CNA_RESULT_SUCCESS;
     });
 }
 

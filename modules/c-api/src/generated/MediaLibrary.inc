@@ -5,6 +5,10 @@
 // Included at the end of src/CnaCApiMediaLibrary.cpp, whose lookups and native types these routes use.
 // To change a route, edit the spec and regenerate; docs/c-api/GENERATED_ROUTES.md.
 
+#include "../CnaCApiDetail.hpp"
+#include "../CnaCApiMarshal.hpp"
+#include "../CnaCApiOutput.hpp"
+
 CNA_Result cna_album_dispose(
     const CNA_AlbumHandle album)
 {
@@ -15,6 +19,144 @@ CNA_Result cna_album_dispose(
             return routeResult;
         }
         object->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_get_name_size(
+    const CNA_AlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_album_copy_name(
+    const CNA_AlbumHandle album,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_album_get_is_disposed(
+    const CNA_AlbumHandle album,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_get_hash_code(
+    const CNA_AlbumHandle album,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_get_type_name_size(
+    const CNA_AlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_album_copy_type_name(
+    const CNA_AlbumHandle album,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_album_get_duration(
+    const CNA_AlbumHandle album,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_duration: out_ticks is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->getDurationProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_get_has_art(
+    const CNA_AlbumHandle album,
+    CNA_Bool* const out_has_art)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_art == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_has_art: out_has_art is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_has_art = CNA::C::Detail::ToCBool(object->value->getHasArtProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -33,6 +175,75 @@ CNA_Result cna_album_collection_dispose(
     });
 }
 
+CNA_Result cna_album_collection_get_count(
+    const CNA_AlbumCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<AlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<AlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_collection_get_is_disposed(
+    const CNA_AlbumCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<AlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<AlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_album_collection_get_type_name_size(
+    const CNA_AlbumCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<AlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<AlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_album_collection_copy_type_name(
+    const CNA_AlbumCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<AlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<AlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_artist_dispose(
     const CNA_ArtistHandle artist)
 {
@@ -44,6 +255,108 @@ CNA_Result cna_artist_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_get_name_size(
+    const CNA_ArtistHandle artist,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_artist_copy_name(
+    const CNA_ArtistHandle artist,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_artist_get_is_disposed(
+    const CNA_ArtistHandle artist,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_get_hash_code(
+    const CNA_ArtistHandle artist,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_get_type_name_size(
+    const CNA_ArtistHandle artist,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_artist_copy_type_name(
+    const CNA_ArtistHandle artist,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 
@@ -61,6 +374,75 @@ CNA_Result cna_artist_collection_dispose(
     });
 }
 
+CNA_Result cna_artist_collection_get_count(
+    const CNA_ArtistCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<ArtistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<ArtistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_collection_get_is_disposed(
+    const CNA_ArtistCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<ArtistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<ArtistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_collection_get_type_name_size(
+    const CNA_ArtistCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<ArtistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<ArtistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_artist_collection_copy_type_name(
+    const CNA_ArtistCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<ArtistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<ArtistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_genre_dispose(
     const CNA_GenreHandle genre)
 {
@@ -72,6 +454,108 @@ CNA_Result cna_genre_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_get_name_size(
+    const CNA_GenreHandle genre,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_genre_copy_name(
+    const CNA_GenreHandle genre,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_genre_get_is_disposed(
+    const CNA_GenreHandle genre,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_get_hash_code(
+    const CNA_GenreHandle genre,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_get_type_name_size(
+    const CNA_GenreHandle genre,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_genre_copy_type_name(
+    const CNA_GenreHandle genre,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 
@@ -89,6 +573,75 @@ CNA_Result cna_genre_collection_dispose(
     });
 }
 
+CNA_Result cna_genre_collection_get_count(
+    const CNA_GenreCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<GenreCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<GenreCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_collection_get_is_disposed(
+    const CNA_GenreCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<GenreCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<GenreCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_collection_get_type_name_size(
+    const CNA_GenreCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<GenreCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<GenreCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_genre_collection_copy_type_name(
+    const CNA_GenreCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<GenreCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<GenreCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_playlist_dispose(
     const CNA_PlaylistHandle playlist)
 {
@@ -99,6 +652,126 @@ CNA_Result cna_playlist_dispose(
             return routeResult;
         }
         object->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_get_name_size(
+    const CNA_PlaylistHandle playlist,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_playlist_copy_name(
+    const CNA_PlaylistHandle playlist,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_playlist_get_is_disposed(
+    const CNA_PlaylistHandle playlist,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_get_hash_code(
+    const CNA_PlaylistHandle playlist,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_get_type_name_size(
+    const CNA_PlaylistHandle playlist,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_playlist_copy_type_name(
+    const CNA_PlaylistHandle playlist,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_playlist_get_duration(
+    const CNA_PlaylistHandle playlist,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_duration: out_ticks is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->getDurationProperty().getTicksProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -114,6 +787,75 @@ CNA_Result cna_playlist_collection_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_collection_get_count(
+    const CNA_PlaylistCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<PlaylistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PlaylistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_collection_get_is_disposed(
+    const CNA_PlaylistCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<PlaylistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PlaylistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_collection_get_type_name_size(
+    const CNA_PlaylistCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<PlaylistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PlaylistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_playlist_collection_copy_type_name(
+    const CNA_PlaylistCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PlaylistCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PlaylistCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 
@@ -196,6 +938,177 @@ CNA_Result cna_picture_dispose(
     });
 }
 
+CNA_Result cna_picture_get_name_size(
+    const CNA_PictureHandle picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_copy_name(
+    const CNA_PictureHandle picture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_get_is_disposed(
+    const CNA_PictureHandle picture,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_get_hash_code(
+    const CNA_PictureHandle picture,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_get_type_name_size(
+    const CNA_PictureHandle picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_copy_type_name(
+    const CNA_PictureHandle picture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_get_token_size_ext(
+    const CNA_PictureHandle picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_token_size_ext: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getTokenEXT(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_copy_token_ext(
+    const CNA_PictureHandle picture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getTokenEXT(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_get_width(
+    const CNA_PictureHandle picture,
+    int32_t* const out_width)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_width: out_width is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_width = static_cast<int32_t>(object->value->getWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_get_height(
+    const CNA_PictureHandle picture,
+    int32_t* const out_height)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_height: out_height is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_height = static_cast<int32_t>(object->value->getHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_picture_album_dispose(
     const CNA_PictureAlbumHandle album)
 {
@@ -207,6 +1120,108 @@ CNA_Result cna_picture_album_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_get_name_size(
+    const CNA_PictureAlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_album_copy_name(
+    const CNA_PictureAlbumHandle album,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_album_get_is_disposed(
+    const CNA_PictureAlbumHandle album,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_get_hash_code(
+    const CNA_PictureAlbumHandle album,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_hash_code: out_hash is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(object->value->GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_get_type_name_size(
+    const CNA_PictureAlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_album_copy_type_name(
+    const CNA_PictureAlbumHandle album,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 
@@ -224,6 +1239,75 @@ CNA_Result cna_picture_collection_dispose(
     });
 }
 
+CNA_Result cna_picture_collection_get_count(
+    const CNA_PictureCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_collection_get_is_disposed(
+    const CNA_PictureCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_collection_get_type_name_size(
+    const CNA_PictureCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_collection_copy_type_name(
+    const CNA_PictureCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_picture_album_collection_dispose(
     const CNA_PictureAlbumCollectionHandle collection)
 {
@@ -235,5 +1319,74 @@ CNA_Result cna_picture_album_collection_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_count(
+    const CNA_PictureAlbumCollectionHandle collection,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_collection_get_count: out_count is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(object->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_is_disposed(
+    const CNA_PictureAlbumCollectionHandle collection,
+    CNA_Bool* const out_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_collection_get_is_disposed: out_disposed is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_disposed = CNA::C::Detail::ToCBool(object->value->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_type_name_size(
+    const CNA_PictureAlbumCollectionHandle collection,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_collection_get_type_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_picture_album_collection_copy_type_name(
+    const CNA_PictureAlbumCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbumCollection>(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }

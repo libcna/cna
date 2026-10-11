@@ -592,7 +592,6 @@ CNA_Result GetOwnedTexture2D(
         "The owned Texture2D handle is invalid for this call.");
 }
 
-
 CNA_Result GetOwnedSpriteBatchValue(
     const CNA_Handle handle,
     Microsoft::Xna::Framework::Graphics::SpriteBatch** const outSpriteBatch)
@@ -654,29 +653,6 @@ CNA_Result cna_graphics_device_get_renderer_info(
             .max_texture_dimension = static_cast<uint32_t>(maxTextureDimension)
         };
         *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_renderer_name_size(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The renderer-name size output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = graphicsDevice->value->GetGraphicsRendererName().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -828,29 +804,6 @@ CNA_Result cna_graphics_device_get_surface_format_support_ext(
     });
 }
 
-CNA_Result cna_graphics_device_get_capability_report_size_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The renderer-capability report size output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = graphicsDevice->value->GetRendererCapabilityReportEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_copy_capability_report_ext(
     const CNA_Handle graphicsDeviceHandle,
     char* const destination,
@@ -884,29 +837,6 @@ CNA_Result cna_graphics_device_copy_capability_report_ext(
         if (!report.empty()) {
             std::memcpy(destination, report.data(), report.size());
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_shader_dialect_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_ShaderDialect* const outDialect)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outDialect == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The shader-dialect output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDialect = MapShaderDialect(graphicsDevice->value->GetShaderDialectEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1806,27 +1736,6 @@ CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
     });
 }
 
-CNA_Result cna_sprite_batch_get_type_name_size(
-    const CNA_Handle spriteBatchHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The required-byte output is null.");
-        }
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(spriteBatch->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sprite_batch_copy_type_name(
     const CNA_Handle spriteBatchHandle,
     char* const destination,
@@ -1924,3 +1833,6 @@ CNA_Result cna_sprite_batch_draw_string(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Graphics.toml.
+#include "generated/Graphics.inc"

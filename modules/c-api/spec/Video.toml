@@ -9,6 +9,18 @@ object = "std::shared_ptr<VideoResource>"
 cna_video_set_duration = { call = "object->value->setDurationProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
 cna_video_set_audio_track_ext = { call = "object->value->SetAudioTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
 cna_video_set_video_track_ext = { call = "object->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
+cna_video_get_width = { get = "object->value->getWidthProperty()" }
+cna_video_get_height = { get = "object->value->getHeightProperty()" }
+cna_video_get_frames_per_second = { get = "object->value->getFramesPerSecondProperty()" }
+cna_video_get_soundtrack_type = { get = "object->value->getVideoSoundtrackTypeProperty()" }
+cna_video_get_duration = { get = "object->value->getDurationProperty().getTicksProperty()" }
+cna_video_get_file_name_size = { size = "object->value->getFileNameProperty()" }
+cna_video_copy_file_name = { copy = "object->value->getFileNameProperty()" }
+# Presence only: a borrowed device handle is valid solely inside the callback that
+# produced it, so handing one back later would be a promise this ABI cannot keep.
+cna_video_get_has_graphics_device = { get = "object->value->getGraphicsDeviceProperty() != nullptr" }
+cna_video_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_video_copy_type_name = { copy = "object->value->GetTypeName()" }
 
 [player_for_call]
 lookup = "BorrowPlayerForCall"

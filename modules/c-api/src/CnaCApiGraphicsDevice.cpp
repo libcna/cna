@@ -761,47 +761,6 @@ void DrawUserIndexedPrimitivesNative(
     return LookupHandle(handle, ObjectKind::OcclusionQuery, outQuery);
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result OcclusionQueryCommand(
-    const CNA_Handle handle,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<OcclusionQueryResource> query;
-        if (const CNA_Result result = GetOcclusionQuery(handle, &query);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::forward<TCallable>(callable)(*query->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result OcclusionQueryValue(
-    const CNA_Handle handle,
-    TValue* const output,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The occlusion-query output is null.");
-        }
-        std::shared_ptr<OcclusionQueryResource> query;
-        if (const CNA_Result result = GetOcclusionQuery(handle, &query);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const TValue value =
-            static_cast<TValue>(std::forward<TCallable>(callable)(*query->value));
-        *output = value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 struct LiveRegistrations final {
     std::mutex mutex;
     std::vector<std::weak_ptr<DeviceRegistration>> entries;
@@ -921,24 +880,6 @@ CNA_Result cna_viewport_set_bounds(
     });
 }
 
-CNA_Result cna_graphics_device_get_is_disposed(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return DeviceQuery(graphicsDeviceHandle, outIsDisposed, [](GraphicsDevice& device) {
-        return ToCBool(device.getIsDisposedProperty());
-    });
-}
-
-CNA_Result cna_graphics_device_get_status(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_GraphicsDeviceStatus* const outStatus)
-{
-    return DeviceQuery(graphicsDeviceHandle, outStatus, [](GraphicsDevice& device) {
-        return NativeOrdinal(device.getGraphicsDeviceStatusProperty());
-    });
-}
-
 CNA_Result cna_graphics_device_get_adapter_index(
     const CNA_Handle graphicsDeviceHandle,
     uint32_t* const outAdapterIndex)
@@ -968,42 +909,6 @@ CNA_Result cna_graphics_device_get_adapter_index(
             CNA_RESULT_INVALID_STATE,
             CNA_ERROR_CATEGORY_STATE,
             "The device's graphics adapter is no longer one of the enumerated adapters.");
-    });
-}
-
-CNA_Result cna_graphics_device_get_graphics_profile(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_GraphicsProfile* const outProfile)
-{
-    return DeviceQuery(graphicsDeviceHandle, outProfile, [](GraphicsDevice& device) {
-        return NativeOrdinal(device.getGraphicsProfileProperty());
-    });
-}
-
-CNA_Result cna_graphics_device_get_scissor_rectangle(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_Rectangle* const outScissorRectangle)
-{
-    return DeviceQuery(graphicsDeviceHandle, outScissorRectangle, [](GraphicsDevice& device) {
-        return ToC(device.getScissorRectangleProperty());
-    });
-}
-
-CNA_Result cna_graphics_device_set_scissor_rectangle(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Rectangle scissorRectangle)
-{
-    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-        device.setScissorRectangleProperty(ToNative(scissorRectangle));
-    });
-}
-
-CNA_Result cna_graphics_device_get_viewport(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_Viewport* const outViewport)
-{
-    return DeviceQuery(graphicsDeviceHandle, outViewport, [](GraphicsDevice& device) {
-        return ToC(device.getViewportProperty());
     });
 }
 
@@ -1045,51 +950,6 @@ CNA_Result cna_graphics_device_set_blend_factor(
     return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
         device.setBlendFactorProperty(
             Color(blendFactor.r, blendFactor.g, blendFactor.b, blendFactor.a));
-    });
-}
-
-CNA_Result cna_graphics_device_get_multi_sample_mask(
-    const CNA_Handle graphicsDeviceHandle,
-    int32_t* const outMultiSampleMask)
-{
-    return DeviceQuery(graphicsDeviceHandle, outMultiSampleMask, [](GraphicsDevice& device) {
-        return static_cast<int32_t>(device.getMultiSampleMaskProperty());
-    });
-}
-
-CNA_Result cna_graphics_device_set_multi_sample_mask(
-    const CNA_Handle graphicsDeviceHandle,
-    const int32_t multiSampleMask)
-{
-    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-        device.setMultiSampleMaskProperty(multiSampleMask);
-    });
-}
-
-CNA_Result cna_graphics_device_get_reference_stencil(
-    const CNA_Handle graphicsDeviceHandle,
-    int32_t* const outReferenceStencil)
-{
-    return DeviceQuery(graphicsDeviceHandle, outReferenceStencil, [](GraphicsDevice& device) {
-        return static_cast<int32_t>(device.getReferenceStencilProperty());
-    });
-}
-
-CNA_Result cna_graphics_device_set_reference_stencil(
-    const CNA_Handle graphicsDeviceHandle,
-    const int32_t referenceStencil)
-{
-    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-        device.setReferenceStencilProperty(referenceStencil);
-    });
-}
-
-CNA_Result cna_graphics_device_get_type_name_size(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outBytes)
-{
-    return DeviceQuery(graphicsDeviceHandle, outBytes, [](GraphicsDevice& device) {
-        return static_cast<uint64_t>(device.GetTypeName().size());
     });
 }
 
@@ -1474,13 +1334,6 @@ CNA_Result cna_graphics_device_clear_options(
     });
 }
 
-CNA_Result cna_graphics_device_present(const CNA_Handle graphicsDeviceHandle)
-{
-    return DeviceCommand(graphicsDeviceHandle, [](GraphicsDevice& device) {
-        device.Present();
-    });
-}
-
 CNA_Result cna_graphics_device_get_backbuffer_data_window(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_BackBufferReadback* const readback,
@@ -1662,15 +1515,6 @@ CNA_Result cna_graphics_device_set_vertex_buffers(
         std::lock_guard lock(state.mutex);
         state.vertexBindings = std::move(recorded);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_vertex_buffer_count(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outCount)
-{
-    return DeviceQuery(graphicsDeviceHandle, outCount, [](GraphicsDevice& device) {
-        return static_cast<uint64_t>(device.GetVertexBuffers().size());
     });
 }
 
@@ -1869,15 +1713,6 @@ CNA_Result cna_graphics_device_draw_user_indexed_primitives(
     });
 }
 
-CNA_Result cna_graphics_device_get_tracked_resource_count(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outCount)
-{
-    return DeviceQuery(graphicsDeviceHandle, outCount, [](GraphicsDevice& device) {
-        return static_cast<uint64_t>(device.GetTrackedResourceCount());
-    });
-}
-
 CNA_Result cna_graphics_device_set_depth_test_enabled(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Bool enabled)
@@ -1949,15 +1784,6 @@ CNA_Result cna_graphics_device_set_string_marker_ext(
         return DeviceCommand(graphicsDeviceHandle, [&](GraphicsDevice& device) {
             device.SetStringMarkerEXT(text);
         });
-    });
-}
-
-CNA_Result cna_graphics_device_get_unsupported_3d_call_behavior(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_Unsupported3DGraphicsCallBehavior* const outBehavior)
-{
-    return DeviceQuery(graphicsDeviceHandle, outBehavior, [](GraphicsDevice& device) {
-        return NativeOrdinal(device.GetUnsupported3DGraphicsCallBehavior());
     });
 }
 
@@ -2067,58 +1893,6 @@ CNA_Result cna_occlusion_query_create(
     });
 }
 
-CNA_Result cna_occlusion_query_begin(const CNA_OcclusionQueryHandle occlusionQueryHandle)
-{
-    return OcclusionQueryCommand(occlusionQueryHandle, [](OcclusionQuery& query) {
-        query.Begin();
-    });
-}
-
-CNA_Result cna_occlusion_query_end(const CNA_OcclusionQueryHandle occlusionQueryHandle)
-{
-    return OcclusionQueryCommand(occlusionQueryHandle, [](OcclusionQuery& query) {
-        query.End();
-    });
-}
-
-CNA_Result cna_occlusion_query_get_is_complete(
-    const CNA_OcclusionQueryHandle occlusionQueryHandle,
-    CNA_Bool* const outIsComplete)
-{
-    return OcclusionQueryValue(occlusionQueryHandle, outIsComplete, [](OcclusionQuery& query) {
-        return ToCBool(query.getIsCompleteProperty());
-    });
-}
-
-CNA_Result cna_occlusion_query_get_pixel_count(
-    const CNA_OcclusionQueryHandle occlusionQueryHandle,
-    int32_t* const outPixelCount)
-{
-    return OcclusionQueryValue(occlusionQueryHandle, outPixelCount, [](OcclusionQuery& query) {
-        return static_cast<int32_t>(query.getPixelCountProperty());
-    });
-}
-
-// CBIND-104: whether the count above is a tally or a flag. A coverage ratio computed from a boolean
-// count is 1/area rather than a fraction, so a caller that divides has to be able to ask first.
-CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
-    const CNA_OcclusionQueryHandle occlusionQueryHandle,
-    CNA_Bool* const outIsPrecise)
-{
-    return OcclusionQueryValue(occlusionQueryHandle, outIsPrecise, [](OcclusionQuery& query) {
-        return ToCBool(query.isPixelCountPreciseEXT());
-    });
-}
-
-CNA_Result cna_occlusion_query_has_renderer(
-    const CNA_OcclusionQueryHandle occlusionQueryHandle,
-    CNA_Bool* const outHasRenderer)
-{
-    return OcclusionQueryValue(occlusionQueryHandle, outHasRenderer, [](OcclusionQuery& query) {
-        return ToCBool(query.HasRenderer());
-    });
-}
-
 CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQueryHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2143,53 +1917,6 @@ CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQ
 // CBIND-093. The GraphicsDevice EXT surface: ten queries and one command that the engine-layer
 // slices needed but never bound, because each is a method on the always-compiled device rather
 // than on an engine-layer object. They live here with their siblings and work in every build.
-
-CNA_Result cna_graphics_device_notify_content_lost_resources_ext(
-    const CNA_Handle graphicsDeviceHandle)
-{
-    return DeviceCommand(
-        graphicsDeviceHandle,
-        [](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) { device.NotifyContentLostResourcesEXT(); });
-}
-
-CNA_Result cna_graphics_device_supports_surface_format_as_render_target_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_SurfaceFormat format,
-    CNA_Bool* const outSupported)
-{
-    return DeviceQuery<CNA_Bool>(
-        graphicsDeviceHandle, outSupported, [format](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(device.SupportsSurfaceFormatAsRenderTargetEXT(
-                       static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format)));
-        });
-}
-
-CNA_Result cna_graphics_device_executes_shader_effect_source_ext(
-    const CNA_Handle graphicsDeviceHandle, CNA_Bool* const outExecutes)
-{
-    return DeviceQuery<CNA_Bool>(
-        graphicsDeviceHandle, outExecutes, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(device.ExecutesShaderEffectSourceEXT());
-        });
-}
-
-CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
-    const CNA_Handle graphicsDeviceHandle, CNA_Bool* const outSupported)
-{
-    return DeviceQuery<CNA_Bool>(
-        graphicsDeviceHandle, outSupported, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(device.SupportsImageBasedLightingEXT());
-        });
-}
-
-CNA_Result cna_graphics_device_get_display_color_space_ext(
-    const CNA_Handle graphicsDeviceHandle, uint32_t* const outSpace)
-{
-    return DeviceQuery<uint32_t>(
-        graphicsDeviceHandle, outSpace, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return static_cast<uint32_t>(device.GetDisplayColorSpaceEXT());
-        });
-}
 
 namespace {
 
@@ -2246,25 +1973,6 @@ CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
         graphicsDeviceHandle, outCount, [axis](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
             return static_cast<int32_t>(
                 device.GetMaxComputeWorkGroupCountEXT(static_cast<int>(axis)));
-        });
-}
-
-CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
-    const CNA_Handle graphicsDeviceHandle, const int32_t axis, int32_t* const outSize)
-{
-    return DeviceQuery<int32_t>(
-        graphicsDeviceHandle, outSize, [axis](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return static_cast<int32_t>(
-                device.GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis)));
-        });
-}
-
-CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
-    const CNA_Handle graphicsDeviceHandle, int32_t* const outInvocations)
-{
-    return DeviceQuery<int32_t>(
-        graphicsDeviceHandle, outInvocations, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return static_cast<int32_t>(device.GetMaxComputeWorkGroupInvocationsEXT());
         });
 }
 
