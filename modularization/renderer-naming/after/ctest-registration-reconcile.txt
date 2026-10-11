@@ -1,3 +1,0 @@
-before=88 renamed=3 missing=[('CnaTests_NOT_BUILT', 'CnaTests_NOT_BUILT')]
-gtest-case-level names are covered by the file-level mechanical replay
-(tools/reconcile_naming.py RECONCILIATION: OK).

@@ -88,7 +88,7 @@ Common helper targets (deliberate sharing, not public identities):
 
 Examples follow the same ownership model as sources and tests (module-examples campaign,
 implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10 as
-`675e04c7a`; move map + no-loss reconciliation under `modularization/module-examples/`):
+`675e04c7a`):
 
 - **Subsystem examples** live with the framework module whose API they primarily
   demonstrate: `modules/graphics/examples/` (demo_2d, house3d_demo, the renderer-agnostic
@@ -150,9 +150,6 @@ miscellaneous dumping ground again.
 - `modules/CMakeLists.txt` — physical source-partition validator: every production TU must
   live inside a declared module's `src`/`tests`/`examples` tree, and the legacy global
   `src/`/`include/` roots must not reappear (configure-time FATAL_ERROR).
-- `modularization/tools/check_include_reachability.py` — every `#include "CNA/..."`
-  / `"Microsoft/..."` in every module TU (transitively through headers) must resolve through
-  the declared module graph; config-gated renderer includes are attributed to their renderer.
 - `cmake/Tests/ModuleProbes.cmake` — minimal-link probes for math, design, core, graphics, content,
   runtime, input, audio, media, storage, devices, devices-ext, graphics-ext, the CnaExt
   composition umbrella and net, with per-probe link-closure gates

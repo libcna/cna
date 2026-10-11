@@ -23,7 +23,8 @@ pre-renderer-expansion fast-forward, together with its accepted descendant
 the old spellings survive only in historical records.
 
 Campaign evidence (engine, per-pass rename maps, baseline/after inventories,
-mechanical-replay reconciliation): `modularization/renderer-naming/`.
+mechanical-replay reconciliation) lived under `modularization/renderer-naming/`
+until 2026-10-11 and remains in Git history.
 
 ## 1. Graphics "backend" → "renderer" terminology
 
@@ -55,7 +56,7 @@ Unchanged on purpose (not CNA graphics-renderer terminology):
   `GrBackendSurface`/`SkSurfaces::WrapBackendRenderTarget`, sokol (retired 2026-09-17)
   `sg_query_backend`/`SG_BACKEND_*`, bgfx (retired 2026-09-17) `bgfx::RendererType::*`
   (including its `OpenGLES` value and name string);
-- historical evidence: `audit/`, `modularization/` campaign records, plan
+- historical evidence: `audit/`, the former `modularization/` campaign records, plan
   ledgers (`plan_*.md`, `NEXT*.md` task histories), surviving spike directories
   (with retired probes available in Git history), and the
   historical `BackendLibraries.cmake` references that describe the pre-Phase-3
