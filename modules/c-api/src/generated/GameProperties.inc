@@ -348,7 +348,7 @@ CNA_Result cna_game_window_get_allow_user_resizing(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_allow_user_resizing: out_allowed is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -366,7 +366,7 @@ CNA_Result cna_game_window_get_current_orientation(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_current_orientation: out_orientation is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -384,7 +384,7 @@ CNA_Result cna_game_window_get_native_handle_ext(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_native_handle_ext: out_handle is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -402,7 +402,7 @@ CNA_Result cna_game_window_get_screen_device_name_size(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_screen_device_name_size: out_bytes is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -418,7 +418,7 @@ CNA_Result cna_game_window_copy_screen_device_name(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -435,7 +435,7 @@ CNA_Result cna_game_window_get_title_size(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_title_size: out_bytes is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -451,7 +451,7 @@ CNA_Result cna_game_window_copy_title(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -468,7 +468,7 @@ CNA_Result cna_game_window_get_is_borderless_ext(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_is_borderless_ext: out_borderless is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -487,7 +487,7 @@ CNA_Result cna_game_window_begin_screen_device_change(
             return routeResult;
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -506,7 +506,7 @@ CNA_Result cna_game_window_get_type_name_size(
             return CNA::C::Detail::InvalidArgument("cna_game_window_get_type_name_size: out_bytes is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -522,7 +522,7 @@ CNA_Result cna_game_window_copy_type_name(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -540,7 +540,7 @@ CNA_Result cna_game_window_set_allow_user_resizing(
             return routeResult;
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -559,7 +559,7 @@ CNA_Result cna_game_window_set_is_borderless_ext(
             return routeResult;
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -573,7 +573,7 @@ CNA_Result cna_game_window_minimize_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -586,7 +586,7 @@ CNA_Result cna_game_window_restore_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

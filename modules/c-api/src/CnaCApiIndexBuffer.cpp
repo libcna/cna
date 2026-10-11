@@ -3,6 +3,7 @@
 #include "CNA/C/index_resources.h"
 #include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -32,6 +33,7 @@ using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
@@ -45,16 +47,6 @@ using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] bool IsZero(const uint8_t* const values, const std::size_t count) noexcept
-{
-    for (std::size_t index = 0U; index < count; ++index) {
-        if (values[index] != 0U) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] CNA_Result GetBuffer(
     const CNA_IndexBufferHandle handle,

@@ -60,6 +60,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
@@ -642,14 +643,6 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
     return names;
 }
 
-constexpr double MaxTimeSpanSeconds = 922337203685.0;
-
-[[nodiscard]] bool IsValidTimeSpanSeconds(const double value) noexcept
-{
-    return std::isfinite(value) && value >= -MaxTimeSpanSeconds &&
-        value <= MaxTimeSpanSeconds;
-}
-
 [[nodiscard]] CNA_Result CopyAnimationClipDescriptor(
     const CNA_AnimationClipEXTDescriptor& descriptor,
     AnimationClipEXT* const outClip)
@@ -934,10 +927,7 @@ template<typename T>
     double previousTime = 0.0;
     for (uint64_t index = 0U; index < descriptor.keyframe_count; ++index) {
         const CNA_MorphWeightKeyframeEXTDescriptor& key = descriptor.keyframes[index];
-        constexpr double MaxTimeSpanSeconds = 922337203685.0;
-        if (!std::isfinite(key.time_seconds) ||
-            key.time_seconds < -MaxTimeSpanSeconds ||
-            key.time_seconds > MaxTimeSpanSeconds) {
+        if (!IsValidTimeSpanSeconds(key.time_seconds)) {
             return InvalidArgument("Morph track keyframe times must fit a finite TimeSpan.");
         }
         if (index != 0U && key.time_seconds < previousTime) {

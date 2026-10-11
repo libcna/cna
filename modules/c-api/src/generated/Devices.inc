@@ -537,7 +537,7 @@ CNA_Result cna_display_info_get_content_scale_ext(
             return CNA::C::Detail::InvalidArgument("cna_display_info_get_content_scale_ext: out_scale is null.");
         }
         Microsoft::Xna::Framework::GameWindow* object{};
-        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

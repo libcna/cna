@@ -51,6 +51,7 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetGameWindow;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -602,13 +603,6 @@ void DeliverFileDialogResult(
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result BorrowWindow(
-    const CNA_Handle gameHandle,
-    Microsoft::Xna::Framework::GameWindow** const outWindow)
-{
-    return CNA::C::Detail::GetGameWindow(gameHandle, outWindow);
-}
-
 // Nothing this ABI is verified on has a camera, and the canonical class takes its backend as a
 // constructor argument, so this is the only path to a frame.
 struct CameraTestState final {
@@ -883,7 +877,7 @@ CNA_Result cna_display_info_get_safe_area_ext(
             return InvalidArgument("The safe area output is null.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

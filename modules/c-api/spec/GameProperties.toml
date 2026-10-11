@@ -28,7 +28,7 @@ cna_title_location_get_path_size = { size = "TitleLocation::getPathProperty()" }
 cna_title_location_copy_path = { copy = "TitleLocation::Path()" }
 
 [window]
-lookup = "BorrowWindow"
+lookup = "CNA::C::Detail::GetGameWindow"
 object = "Microsoft::Xna::Framework::GameWindow*"
 
 [window.routes]

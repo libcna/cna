@@ -27,6 +27,7 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetGameWindow;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
@@ -505,13 +506,6 @@ CNA_Result cna_title_container_read_ext(
 
 namespace {
 
-[[nodiscard]] CNA_Result BorrowWindow(
-    const CNA_Handle gameHandle,
-    Microsoft::Xna::Framework::GameWindow** const outWindow)
-{
-    return CNA::C::Detail::GetGameWindow(gameHandle, outWindow);
-}
-
 // Every canonical window state change reports an SDL failure as a plain runtime error naming the
 // call. That is the platform refusing, not an internal fault, and the route says so: a headless
 // video driver refuses to minimize a window it never really showed.
@@ -537,7 +531,7 @@ CNA_Result cna_game_window_get_client_bounds(
             return InvalidArgument("The client bounds output is null.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -577,7 +571,7 @@ CNA_Result cna_game_window_get_native_window_ext(
             return InvalidArgument("The native-window-handle structure is invalid.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -599,7 +593,7 @@ CNA_Result cna_game_window_end_screen_device_change(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -642,7 +636,7 @@ CNA_Result cna_game_window_subscribe(
             return InvalidArgument("The window event is not a defined identity.");
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

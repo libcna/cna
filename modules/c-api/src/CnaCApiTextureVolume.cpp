@@ -161,6 +161,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
@@ -200,16 +201,6 @@ struct TextureCubeTransferView final {
     int elementCount;
     uint64_t requiredElements;
 };
-
-[[nodiscard]] bool IsZero(const uint8_t* const bytes, const std::size_t count) noexcept
-{
-    for (std::size_t index = 0U; index < count; ++index) {
-        if (bytes[index] != 0U) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] int MipDimension(const int base, const int level) noexcept
 {

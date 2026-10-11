@@ -230,6 +230,24 @@ namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+/** @brief Whether a count of seconds is finite and fits a TimeSpan (about +/-29,227 years). */
+[[nodiscard]] inline bool IsValidTimeSpanSeconds(const double value) noexcept
+{
+    constexpr double MaxTimeSpanSeconds = 922337203685.0;
+    return std::isfinite(value) && value >= -MaxTimeSpanSeconds && value <= MaxTimeSpanSeconds;
+}
+
+/** @brief Whether the first `count` bytes are all zero, as a structure's reserved bytes must be. */
+[[nodiscard]] inline bool IsZero(const uint8_t* const bytes, const std::size_t count) noexcept
+{
+    for (std::size_t index = 0U; index < count; ++index) {
+        if (bytes[index] != 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /** @brief Maps a C player index to the canonical one; false for a value outside One..Four. */
 [[nodiscard]] inline bool TryMapPlayerIndex(
     const CNA_PlayerIndex index,

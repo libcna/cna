@@ -44,7 +44,7 @@ cna_locale_get_country_size_at_ext = { get = "object.Country.size()" }
 cna_locale_copy_country_at_ext = { copy = "object.Country" }
 
 [window]
-lookup = "BorrowWindow"
+lookup = "CNA::C::Detail::GetGameWindow"
 object = "Microsoft::Xna::Framework::GameWindow*"
 feature = "CNA_DEVICES"
 unavailable = "ExtensionUnavailable()"

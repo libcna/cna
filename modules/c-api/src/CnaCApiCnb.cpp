@@ -2,6 +2,7 @@
 
 #include "CNA/C/cnb.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -47,6 +48,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateBuffer;
@@ -532,12 +534,6 @@ void ReadPartInfo(const Cnb::CnbModelPart& part, CNA_CnbModelPartInfo* const inf
 }
 
 /// The largest number of seconds a native `TimeSpan` represents, matching the models family.
-constexpr double MaxTimeSpanSeconds = 922337203685.0;
-
-[[nodiscard]] bool IsValidTimeSpanSeconds(const double value) noexcept
-{
-    return std::isfinite(value) && value >= -MaxTimeSpanSeconds && value <= MaxTimeSpanSeconds;
-}
 
 /// CBIND-110: the compiled font. A handle because it owns its atlas as well as its glyph table.
 struct CnbSpriteFontResource final {

@@ -43,6 +43,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
@@ -71,16 +72,6 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTextureSkinned;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] bool IsZero(const uint8_t* const values, const std::size_t count) noexcept
-{
-    for (std::size_t index = 0U; index < count; ++index) {
-        if (values[index] != 0U) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] CNA_Result GetBuffer(
     const CNA_VertexBufferHandle handle,
