@@ -138,7 +138,11 @@ unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing 
 - routes with more lookups than an object and an `other`, or with several statements of work
   after them;
 - routes that check an argument against the object (an index against its count, a state the
-  object is in), or need an output that may be null.
+  object is in), or need an output that may be null;
+- routes that read text: the families read it through different helpers (`ReadText`,
+  `ReadTextBytes`, `CopyStringView`, `BorrowText`, `RelativePath`) with different rules, and
+  disagree on whether the text or the handle is checked first. Those rules should be made one
+  before such routes are generated.
 
 Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments
 refused with `InvalidArgument`, handles resolved through the family's lookups, conversions through
