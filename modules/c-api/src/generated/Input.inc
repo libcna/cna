@@ -1407,3 +1407,180 @@ CNA_Result cna_gamepad_state_is_button_up(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_gamepad_set_vibration(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const float left_motor,
+    const float right_motor,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_set_vibration: out_applied is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_applied = CNA::C::Detail::ToCBool(GamePad::SetVibration(object, left_motor, right_motor));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_set_trigger_vibration_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const float left_trigger,
+    const float right_trigger,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_set_trigger_vibration_ext: out_applied is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_applied = CNA::C::Detail::ToCBool(GamePad::SetTriggerVibrationEXT(object, left_trigger, right_trigger));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_player_index_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_player_index_ext: out_index is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_index = static_cast<int32_t>(GamePad::GetPlayerIndexEXT(object));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_set_player_index_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const int32_t index,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_set_player_index_ext: out_applied is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_applied = CNA::C::Detail::ToCBool(GamePad::SetPlayerIndexEXT(object, static_cast<int>(index)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_firmware_version_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint16_t* const out_version)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_version == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_firmware_version_ext: out_version is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_version = static_cast<uint16_t>(GamePad::GetFirmwareVersionEXT(object));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_steam_handle_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint64_t* const out_handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_handle == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_steam_handle_ext: out_handle is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_handle = static_cast<uint64_t>(GamePad::GetSteamHandleEXT(object));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_connection_state_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_GamePadConnectionState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_connection_state_ext: out_state is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = static_cast<CNA_GamePadConnectionState>(MapConnectionState(GamePad::GetConnectionStateEXT(object)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_touchpad_count_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_touchpad_count_ext: out_count is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(GamePad::GetTouchpadCountEXT(object));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_touchpad_finger_count_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const int32_t touchpad,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_touchpad_finger_count_ext: out_count is null.");
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<int32_t>(GamePad::GetTouchpadFingerCountEXT(object, static_cast<int>(touchpad)));
+        return CNA_RESULT_SUCCESS;
+    });
+}

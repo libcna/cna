@@ -38,6 +38,7 @@ static CNA_EffectAnnotationCollectionHandle o_CNA_EffectAnnotationCollectionHand
 static CNA_EffectHandle o_CNA_EffectHandle;
 static CNA_EffectParameterCollectionHandle o_CNA_EffectParameterCollectionHandle;
 static CNA_EffectTechniqueCollectionHandle o_CNA_EffectTechniqueCollectionHandle;
+static CNA_GamePadConnectionState o_CNA_GamePadConnectionState;
 static CNA_GamerProfileHandle o_CNA_GamerProfileHandle;
 static CNA_GenreHandle o_CNA_GenreHandle;
 static CNA_GestureType o_CNA_GestureType;
@@ -156,6 +157,8 @@ static CNA_GenreCollectionHandle v_CNA_GenreCollectionHandle;
 static CNA_GenreHandle v_CNA_GenreHandle;
 static CNA_GraphicsDeviceManagerHandle v_CNA_GraphicsDeviceManagerHandle;
 static CNA_GraphicsProfile v_CNA_GraphicsProfile;
+static CNA_GraphicsRendererFallbackReason v_CNA_GraphicsRendererFallbackReason;
+static CNA_GraphicsRendererType v_CNA_GraphicsRendererType;
 static CNA_GyroscopeHandle v_CNA_GyroscopeHandle;
 static CNA_Handle v_CNA_Handle;
 static CNA_HapticDeviceHandle v_CNA_HapticDeviceHandle;
@@ -458,6 +461,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_renderer_get_automatic_fallback_ext(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_get_automatic_fallback_ext", "a null out_enabled");
     failures += expect(cna_graphics_renderer_get_fallback_count_ext(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_get_fallback_count_ext", "a null out_count");
     failures += expect(cna_graphics_renderer_get_current_type(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_get_current_type", "a null out_type");
+    failures += expect(cna_graphics_backend_get_category(v_CNA_GraphicsRendererType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_backend_get_category", "a null out_category");
+    failures += expect(cna_graphics_backend_get_maturity(v_CNA_GraphicsRendererType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_backend_get_maturity", "a null out_maturity");
+    failures += expect(cna_graphics_renderer_get_is_available_ext(v_CNA_GraphicsRendererType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_get_is_available_ext", "a null out_available");
+    failures += expect(cna_graphics_renderer_fallback_reason_get_name_size_ext(v_CNA_GraphicsRendererFallbackReason, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_reason_get_name_size_ext", "a null out_bytes");
     failures += expect(cna_curve_key_init_position_value(v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_init_position_value", "a null out_key");
     failures += expect(cna_curve_key_init_tangents(v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_init_tangents", "a null out_key");
     failures += expect(cna_curve_key_collection_get_count(v_CNA_CurveKeyCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_collection_get_count", "a null out_count");
@@ -901,6 +908,15 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_touch_capabilities_init_from_values_ext(v_CNA_Bool, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_touch_capabilities_init_from_values_ext", "a null out_capabilities");
     failures += expect(cna_gamepad_state_is_button_down(NULL, v_CNA_GamePadButtonFlags, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_state_is_button_down", "a null out_is_down");
     failures += expect(cna_gamepad_state_is_button_up(NULL, v_CNA_GamePadButtonFlags, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_state_is_button_up", "a null out_is_up");
+    failures += expect(cna_gamepad_set_vibration(v_CNA_Handle, v_CNA_PlayerIndex, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_set_vibration", "a null out_applied");
+    failures += expect(cna_gamepad_set_trigger_vibration_ext(v_CNA_Handle, v_CNA_PlayerIndex, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_set_trigger_vibration_ext", "a null out_applied");
+    failures += expect(cna_gamepad_get_player_index_ext(v_CNA_Handle, v_CNA_PlayerIndex, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_player_index_ext", "a null out_index");
+    failures += expect(cna_gamepad_set_player_index_ext(v_CNA_Handle, v_CNA_PlayerIndex, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_set_player_index_ext", "a null out_applied");
+    failures += expect(cna_gamepad_get_firmware_version_ext(v_CNA_Handle, v_CNA_PlayerIndex, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_firmware_version_ext", "a null out_version");
+    failures += expect(cna_gamepad_get_steam_handle_ext(v_CNA_Handle, v_CNA_PlayerIndex, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_steam_handle_ext", "a null out_handle");
+    failures += expect(cna_gamepad_get_connection_state_ext(v_CNA_Handle, v_CNA_PlayerIndex, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_connection_state_ext", "a null out_state");
+    failures += expect(cna_gamepad_get_touchpad_count_ext(v_CNA_Handle, v_CNA_PlayerIndex, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_touchpad_count_ext", "a null out_count");
+    failures += expect(cna_gamepad_get_touchpad_finger_count_ext(v_CNA_Handle, v_CNA_PlayerIndex, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_touchpad_finger_count_ext", "a null out_count");
     failures += expect(cna_clipboard_get_text_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_get_text_size", "a null out_bytes");
     failures += expect(cna_clipboard_get_has_text(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_get_has_text", "a null out_has_text");
     failures += expect(cna_sensors_get_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sensors_get_count", "a null out_count");
@@ -2246,6 +2262,15 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_arguments_refused(cna_touch_panel_set_display_orientation(handle, v_CNA_DisplayOrientation), CNA_RESULT_INVALID_HANDLE, "cna_touch_panel_set_display_orientation", what);
     failures += expect_unless_arguments_refused(cna_touch_panel_raise_touch_event_ext(handle, v_int32_t, v_CNA_TouchLocationState, v_float, v_float, v_float, v_float), CNA_RESULT_INVALID_HANDLE, "cna_touch_panel_raise_touch_event_ext", what);
     failures += expect(cna_mouse_cursor_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_mouse_cursor_dispose", what);
+    failures += expect(cna_gamepad_set_vibration(handle, v_CNA_PlayerIndex, v_float, v_float, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_vibration", what);
+    failures += expect(cna_gamepad_set_trigger_vibration_ext(handle, v_CNA_PlayerIndex, v_float, v_float, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_trigger_vibration_ext", what);
+    failures += expect(cna_gamepad_get_player_index_ext(handle, v_CNA_PlayerIndex, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_player_index_ext", what);
+    failures += expect(cna_gamepad_set_player_index_ext(handle, v_CNA_PlayerIndex, v_int32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_player_index_ext", what);
+    failures += expect(cna_gamepad_get_firmware_version_ext(handle, v_CNA_PlayerIndex, &o_uint16_t), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_firmware_version_ext", what);
+    failures += expect(cna_gamepad_get_steam_handle_ext(handle, v_CNA_PlayerIndex, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_steam_handle_ext", what);
+    failures += expect(cna_gamepad_get_connection_state_ext(handle, v_CNA_PlayerIndex, &o_CNA_GamePadConnectionState), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_connection_state_ext", what);
+    failures += expect(cna_gamepad_get_touchpad_count_ext(handle, v_CNA_PlayerIndex, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_touchpad_count_ext", what);
+    failures += expect(cna_gamepad_get_touchpad_finger_count_ext(handle, v_CNA_PlayerIndex, v_int32_t, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_touchpad_finger_count_ext", what);
     failures += expect(cna_input_devices_reset_for_tests_ext(handle), CNA_RESULT_INVALID_HANDLE, "cna_input_devices_reset_for_tests_ext", what);
     failures += expect(cna_clipboard_get_text_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_text_size", what);
     failures += expect(cna_clipboard_get_has_text(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_has_text", what);
@@ -2989,6 +3014,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1810 generated routes\n", failures);
+    printf("%d failed checks across 1838 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

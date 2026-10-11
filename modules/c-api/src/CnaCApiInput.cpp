@@ -1399,28 +1399,6 @@ using DeviceTextRoute = std::string (*)(PlayerIndex);
 
 } // namespace
 
-CNA_Result cna_gamepad_set_vibration(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const float leftMotor,
-    const float rightMotor,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The vibration output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(GamePad::SetVibration(nativePlayerIndex, leftMotor, rightMotor));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_set_light_bar_ext(
     const CNA_Handle gameHandle,
     const CNA_PlayerIndex playerIndex,
@@ -1434,29 +1412,6 @@ CNA_Result cna_gamepad_set_light_bar_ext(
             return result;
         }
         GamePad::SetLightBarEXT(nativePlayerIndex, Color(color.r, color.g, color.b, color.a));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_set_trigger_vibration_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const float leftTrigger,
-    const float rightTrigger,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The trigger-vibration output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied =
-            ToCBool(GamePad::SetTriggerVibrationEXT(nativePlayerIndex, leftTrigger, rightTrigger));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1519,47 +1474,6 @@ CNA_Result cna_gamepad_get_accelerometer_ext(
     });
 }
 
-CNA_Result cna_gamepad_get_player_index_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The device player-index output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(GamePad::GetPlayerIndexEXT(nativePlayerIndex));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_set_player_index_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const int32_t index,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The device player-index output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(GamePad::SetPlayerIndexEXT(nativePlayerIndex, static_cast<int>(index)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_get_power_info_ext(
     const CNA_Handle gameHandle,
     const CNA_PlayerIndex playerIndex,
@@ -1604,108 +1518,6 @@ CNA_Result cna_gamepad_get_button_label_ext(
         }
         *outLabel = MapButtonLabel(
             GamePad::GetButtonLabelEXT(nativePlayerIndex, static_cast<Buttons>(button)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_firmware_version_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint16_t* const outVersion)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVersion == nullptr) {
-            return InvalidArgument("The firmware-version output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outVersion = GamePad::GetFirmwareVersionEXT(nativePlayerIndex);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_steam_handle_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint64_t* const outHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHandle == nullptr) {
-            return InvalidArgument("The Steam-handle output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHandle = GamePad::GetSteamHandleEXT(nativePlayerIndex);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_connection_state_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    CNA_GamePadConnectionState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The connection-state output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = MapConnectionState(GamePad::GetConnectionStateEXT(nativePlayerIndex));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_touchpad_count_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The touchpad-count output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(GamePad::GetTouchpadCountEXT(nativePlayerIndex));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_touchpad_finger_count_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const int32_t touchpad,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The touchpad finger-count output is null.");
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(
-            GamePad::GetTouchpadFingerCountEXT(nativePlayerIndex, static_cast<int>(touchpad)));
         return CNA_RESULT_SUCCESS;
     });
 }

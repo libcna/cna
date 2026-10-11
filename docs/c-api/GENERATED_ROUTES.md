@@ -91,7 +91,8 @@ cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<Eff
 
 A group's `lookup` is an ordinary hand-written function in the family's `.cpp`,
 `CNA_Result Name(<first parameter>, <object>*)`, which receives the route's first parameter
-unconverted — usually a handle, sometimes a struct or string view it validates. Most lookups are
+unconverted — usually a handle, sometimes a struct or string view it validates, or an enumerator
+it maps (then `object` is the canonical value, say a `PlayerIndex`). Most lookups are
 one line over `LookupHandle`, which records "The <kind> handle is invalid for this call." for a
 null, stale, released or wrong-kind handle. A lookup that hands back a pointer into a resource it
 must keep alive names that resource as `owner` and is called `Lookup(<first>, &owner, &object)`:

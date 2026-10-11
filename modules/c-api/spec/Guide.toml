@@ -37,3 +37,28 @@ cna_gamer_services_dispatcher_update = { call = "GamerServicesDispatcher::Update
 cna_gamer_services_dispatcher_update_async = { value = "GamerServicesDispatcher::UpdateAsync()" }
 cna_gamer_services_dispatcher_get_freed_gamer_count_ext = { value = "GamerServicesDispatcher::GetFreedGamerCountForTesting()" }
 cna_guide_set_notification_position = { call = "Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position))", invalid_if = "position > CNA_NOTIFICATION_POSITION_MAXIMUM" }
+
+# `object` is the canonical PlayerIndex the C player index maps to; `other` the gamer shown.
+[player_and_gamer]
+lookup = "ValidatePlayer"
+object = "PlayerIndex"
+other = { lookup = "BorrowGamerForGuide", object = "Gamer*" }
+
+[player_and_gamer.routes]
+cna_guide_show_friend_request = { call = "Guide::ShowFriendRequest(object, other)" }
+cna_guide_show_gamer_card = { call = "Guide::ShowGamerCard(object, other)" }
+cna_guide_show_player_review = { call = "Guide::ShowPlayerReview(object, other)" }
+
+# `object` is the canonical PlayerIndex the C player index maps to.
+[player]
+lookup = "ValidatePlayer"
+object = "PlayerIndex"
+
+[player.routes]
+cna_guide_show_friends = { call = "Guide::ShowFriends(object)" }
+cna_guide_show_marketplace = { call = "Guide::ShowMarketplace(object)" }
+cna_guide_show_messages = { call = "Guide::ShowMessages(object)" }
+cna_guide_show_party = { call = "Guide::ShowParty(object)" }
+cna_guide_show_party_sessions = { call = "Guide::ShowPartySessions(object)" }
+cna_guide_show_players = { call = "Guide::ShowPlayers(object)" }
+cna_guide_show_achievements_ext = { call = "Guide::ShowAchievementsEXT(object)" }

@@ -299,3 +299,161 @@ CNA_Result cna_guide_set_notification_position(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_guide_show_friend_request(
+    const CNA_PlayerIndex player,
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* other{};
+        if (const CNA_Result routeResult = BorrowGamerForGuide(gamer, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowFriendRequest(object, other);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_gamer_card(
+    const CNA_PlayerIndex player,
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* other{};
+        if (const CNA_Result routeResult = BorrowGamerForGuide(gamer, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowGamerCard(object, other);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_player_review(
+    const CNA_PlayerIndex player,
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* other{};
+        if (const CNA_Result routeResult = BorrowGamerForGuide(gamer, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowPlayerReview(object, other);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_friends(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowFriends(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_marketplace(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowMarketplace(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_messages(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowMessages(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_party(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowParty(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_party_sessions(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowPartySessions(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_players(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowPlayers(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_achievements_ext(
+    const CNA_PlayerIndex player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = ValidatePlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Guide::ShowAchievementsEXT(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}

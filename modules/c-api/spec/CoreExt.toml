@@ -39,3 +39,47 @@ cna_graphics_renderer_get_automatic_fallback_ext = { value = "CNA::GraphicsRende
 cna_graphics_renderer_get_fallback_count_ext = { value = "CNA::GraphicsRendererSelection::GetFallbackHistory().size()" }
 cna_graphics_renderer_reset_selection_for_tests_ext = { call = "CNA::GraphicsRendererSelection::ResetForTestingEXT()" }
 cna_graphics_renderer_get_current_type = { value = "MapRendererTypeToC(CNA::getCurrentGraphicsRendererType())" }
+
+# The lookup maps the C log level to the canonical one; `object` is that CNA::LogLevel.
+[log_level]
+lookup = "MapLogLevel"
+object = "CNA::LogLevel"
+
+[log_level.routes]
+cna_logger_set_minimum_level = { call = "CNA::Logger::SetMinimumLevel(object)" }
+
+# The lookup maps the C renderer identity to the canonical one, refusing unknown values.
+[renderer_type]
+lookup = "MapRendererType"
+object = "CNA::GraphicsRendererType"
+
+[renderer_type.routes]
+cna_graphics_backend_get_category = { get = "MapBackendCategoryToC(CNA::getGraphicsBackendCategory(object))" }
+cna_graphics_backend_get_maturity = { get = "MapBackendMaturityToC(CNA::getGraphicsBackendMaturity(object))" }
+cna_graphics_renderer_set_preferred_ext = { call = "CNA::GraphicsRendererSelection::SetPreferred(object)" }
+cna_graphics_renderer_get_is_available_ext = { get = "CNA::GraphicsRendererSelection::IsAvailable(object)" }
+
+# The lookup maps the C backend category to the canonical one.
+[backend_category]
+lookup = "MapBackendCategory"
+object = "CNA::GraphicsBackendCategory"
+
+[backend_category.routes]
+cna_graphics_backend_category_copy_name = { copy = "CNA::toStringView(object)" }
+
+# The lookup maps the C backend maturity to the canonical one.
+[backend_maturity]
+lookup = "MapBackendMaturity"
+object = "CNA::GraphicsBackendMaturity"
+
+[backend_maturity.routes]
+cna_graphics_backend_maturity_copy_name = { copy = "CNA::toStringView(object)" }
+
+# The lookup maps the C fallback reason to the canonical one.
+[fallback_reason]
+lookup = "MapFallbackReason"
+object = "CNA::GraphicsRendererFallbackReason"
+
+[fallback_reason.routes]
+cna_graphics_renderer_fallback_reason_get_name_size_ext = { size = "std::string_view(CNA::getGraphicsRendererFallbackReasonName(object))" }
+cna_graphics_renderer_fallback_reason_copy_name_ext = { copy = "CNA::getGraphicsRendererFallbackReasonName(object)" }

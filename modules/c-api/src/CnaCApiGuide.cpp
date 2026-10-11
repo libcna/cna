@@ -557,39 +557,6 @@ CNA_Result cna_guide_show_compose_message(
     });
 }
 
-CNA_Result cna_guide_show_friend_request(
-    const CNA_PlayerIndex player,
-    const CNA_GamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerForGuide(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowFriendRequest(nativePlayer, gamer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_friends(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowFriends(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_show_game_invite(
     const CNA_PlayerIndex player,
     const CNA_GamerHandle* const recipients,
@@ -626,111 +593,6 @@ CNA_Result cna_guide_show_game_invite_for_session(const CNA_StringView sessionId
     });
 }
 
-CNA_Result cna_guide_show_gamer_card(
-    const CNA_PlayerIndex player,
-    const CNA_GamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerForGuide(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowGamerCard(nativePlayer, gamer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_marketplace(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowMarketplace(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_messages(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowMessages(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_party(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowParty(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_party_sessions(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowPartySessions(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_player_review(
-    const CNA_PlayerIndex player,
-    const CNA_GamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerForGuide(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowPlayerReview(nativePlayer, gamer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_players(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowPlayers(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool onlineOnly)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -743,19 +605,6 @@ CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool online
             return result;
         }
         Guide::ShowSignIn(static_cast<int>(paneCount), onlineOnly == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_achievements_ext(const CNA_PlayerIndex player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PlayerIndex nativePlayer = PlayerIndex::One;
-        if (const CNA_Result result = ValidatePlayer(player, &nativePlayer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowAchievementsEXT(nativePlayer);
         return CNA_RESULT_SUCCESS;
     });
 }

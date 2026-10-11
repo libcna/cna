@@ -455,19 +455,6 @@ CNA_Result cna_logger_experiment_if(const CNA_StringView message, const CNA_Bool
     });
 }
 
-CNA_Result cna_logger_set_minimum_level(const CNA_LogLevel level)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::LogLevel nativeLevel = CNA::LogLevel::INFO;
-        if (const CNA_Result result = MapLogLevel(level, &nativeLevel);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::Logger::SetMinimumLevel(nativeLevel);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_platform_get_current(CNA_Platform* const outPlatform)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -500,24 +487,6 @@ CNA_Result cna_desktop_os_get_current(CNA_DesktopOS* const outOs)
     });
 }
 
-CNA_Result cna_graphics_backend_get_category(
-    const CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendCategory* const outCategory)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCategory == nullptr) {
-            return InvalidArgument("The backend-category output is null.");
-        }
-        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-        if (const CNA_Result result = MapRendererType(type, &nativeType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCategory = MapBackendCategoryToC(CNA::getGraphicsBackendCategory(nativeType));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_backend_category_get_name_size(
     const CNA_GraphicsBackendCategory category,
     uint64_t* const outBytes)
@@ -532,40 +501,6 @@ CNA_Result cna_graphics_backend_category_get_name_size(
     });
 }
 
-CNA_Result cna_graphics_backend_category_copy_name(
-    const CNA_GraphicsBackendCategory category,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsBackendCategory nativeCategory = CNA::GraphicsBackendCategory::Native;
-        if (const CNA_Result result = MapBackendCategory(category, &nativeCategory);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(CNA::toStringView(nativeCategory), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_graphics_backend_get_maturity(
-    const CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendMaturity* const outMaturity)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMaturity == nullptr) {
-            return InvalidArgument("The backend-maturity output is null.");
-        }
-        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-        if (const CNA_Result result = MapRendererType(type, &nativeType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outMaturity = MapBackendMaturityToC(CNA::getGraphicsBackendMaturity(nativeType));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_backend_maturity_get_name_size(
     const CNA_GraphicsBackendMaturity maturity,
     uint64_t* const outBytes)
@@ -577,22 +512,6 @@ CNA_Result cna_graphics_backend_maturity_get_name_size(
             return result;
         }
         return ReportTextSize(CNA::toStringView(nativeMaturity), outBytes);
-    });
-}
-
-CNA_Result cna_graphics_backend_maturity_copy_name(
-    const CNA_GraphicsBackendMaturity maturity,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsBackendMaturity nativeMaturity = CNA::GraphicsBackendMaturity::Production;
-        if (const CNA_Result result = MapBackendMaturity(maturity, &nativeMaturity);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(CNA::toStringView(nativeMaturity), destination, capacity, outBytes);
     });
 }
 
@@ -726,19 +645,6 @@ CNA_Result cna_logger_reset_sink_ext(void)
     });
 }
 
-CNA_Result cna_graphics_renderer_set_preferred_ext(const CNA_GraphicsRendererType type)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-        if (const CNA_Result result = MapRendererType(type, &nativeType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::GraphicsRendererSelection::SetPreferred(nativeType);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(const CNA_StringView name)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -776,25 +682,6 @@ CNA_Result cna_graphics_renderer_copy_available_ext(
         for (std::size_t index = 0U; index < available.size(); ++index) {
             destination[index] = MapRendererTypeToC(available[index]);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_get_is_available_ext(
-    const CNA_GraphicsRendererType type,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAvailable == nullptr) {
-            return InvalidArgument("The availability output is null.");
-        }
-        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-        if (const CNA_Result result = MapRendererType(type, &nativeType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable =
-            ToCBool(CNA::GraphicsRendererSelection::IsAvailable(nativeType));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -848,47 +735,6 @@ CNA_Result cna_graphics_renderer_get_fallback_at_ext(
         outRecord->type = MapRendererTypeToC(record->type);
         outRecord->reason = MapFallbackReasonToC(record->reason);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_fallback_reason_get_name_size_ext(
-    const CNA_GraphicsRendererFallbackReason reason,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The fallback reason name size output is null.");
-        }
-        CNA::GraphicsRendererFallbackReason nativeReason =
-            CNA::GraphicsRendererFallbackReason::NotCompiledIn;
-        if (const CNA_Result result = MapFallbackReason(reason, &nativeReason);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = std::string_view(
-            CNA::getGraphicsRendererFallbackReasonName(nativeReason)).size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_fallback_reason_copy_name_ext(
-    const CNA_GraphicsRendererFallbackReason reason,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsRendererFallbackReason nativeReason =
-            CNA::GraphicsRendererFallbackReason::NotCompiledIn;
-        if (const CNA_Result result = MapFallbackReason(reason, &nativeReason);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            CNA::getGraphicsRendererFallbackReasonName(nativeReason),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 

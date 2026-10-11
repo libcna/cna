@@ -139,3 +139,20 @@ lookup = "ValidateGamePadState"
 [game_pad_state.routes]
 cna_gamepad_state_is_button_down = { get = "(state->pressed_buttons & buttons) == buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
 cna_gamepad_state_is_button_up = { get = "(state->pressed_buttons & buttons) != buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
+
+# The lookup checks the game is active and maps the player index; `object` is that PlayerIndex.
+[gamepad]
+lookup = "BeginGamePadCall"
+object = "PlayerIndex"
+arguments = 2
+
+[gamepad.routes]
+cna_gamepad_set_vibration = { get = "GamePad::SetVibration(object, left_motor, right_motor)" }
+cna_gamepad_set_trigger_vibration_ext = { get = "GamePad::SetTriggerVibrationEXT(object, left_trigger, right_trigger)" }
+cna_gamepad_get_player_index_ext = { get = "GamePad::GetPlayerIndexEXT(object)" }
+cna_gamepad_set_player_index_ext = { get = "GamePad::SetPlayerIndexEXT(object, static_cast<int>(index))" }
+cna_gamepad_get_firmware_version_ext = { get = "GamePad::GetFirmwareVersionEXT(object)" }
+cna_gamepad_get_steam_handle_ext = { get = "GamePad::GetSteamHandleEXT(object)" }
+cna_gamepad_get_connection_state_ext = { get = "MapConnectionState(GamePad::GetConnectionStateEXT(object))" }
+cna_gamepad_get_touchpad_count_ext = { get = "GamePad::GetTouchpadCountEXT(object)" }
+cna_gamepad_get_touchpad_finger_count_ext = { get = "GamePad::GetTouchpadFingerCountEXT(object, static_cast<int>(touchpad))" }
