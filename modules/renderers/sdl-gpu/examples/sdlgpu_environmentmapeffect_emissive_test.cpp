@@ -4,8 +4,8 @@
 // (EmissiveColor + lightSum)*DiffuseColor. The wrong form re-multiplies the already-ambient-folded
 // emissive by DiffuseColor a second time.
 //
-// This test also isolates the audit's separately-reported "alpha-squaring" symptom (see
-// audit/examples/sdlgpu_smoke_test.cpp.audit.md). That symptom is NOT an independent defect: it is
+// This test also isolates the audit's separately-reported "alpha-squaring" symptom (reported
+// against sdlgpu_smoke_test.cpp). That symptom is NOT an independent defect: it is
 // a direct arithmetic consequence of the SAME wrong multiply. The CPU layer pre-folds Alpha into
 // BOTH operands -- EnvironmentMapEffect::FillGpuDrawParams() uploads
 //   diffuseColor = (DiffuseColor*Alpha, Alpha)   (fragTint.rgb == DiffuseColor*Alpha)

@@ -56,7 +56,7 @@ Unchanged on purpose (not CNA graphics-renderer terminology):
   `GrBackendSurface`/`SkSurfaces::WrapBackendRenderTarget`, sokol (retired 2026-09-17)
   `sg_query_backend`/`SG_BACKEND_*`, bgfx (retired 2026-09-17) `bgfx::RendererType::*`
   (including its `OpenGLES` value and name string);
-- historical evidence: `audit/`, the former `modularization/` campaign records, plan
+- historical evidence: the former `audit/` and `modularization/` campaign records, plan
   ledgers (`plan_*.md`, `NEXT*.md` task histories), surviving spike directories
   (with retired probes available in Git history), and the
   historical `BackendLibraries.cmake` references that describe the pre-Phase-3
