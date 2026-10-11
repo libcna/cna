@@ -13,7 +13,8 @@ that turns out to be already-resolved says so with the measurement that showed i
 
 Downstream repositories are read-only evidence. They are not modified by this milestone.
 
-The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCKER_HANDOFF.md`.
+The per-blocker report `fixcnacs.md` Phase 10 asks for was `docs/c-api/CABI_BLOCKER_HANDOFF.md`,
+removed on 2026-10-11 (it remains in Git history).
 
 ## Status
 

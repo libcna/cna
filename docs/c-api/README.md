@@ -42,8 +42,8 @@ discovery, join and invited-join routes; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async
-selector and container pairs. Exact support and omissions are recorded in
-[`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
+selector and container pairs. Exact support is recorded in [`COVERAGE.md`](COVERAGE.md) and
+omissions in [`LIMITATIONS.md`](LIMITATIONS.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plans/plan_binding.md`](../../plans/plan_binding.md) is complete.
 
@@ -174,8 +174,7 @@ media identities, songs, the library catalog and their ownership contract are in
 [`DEVICES.md`](DEVICES.md), which also covers vibration, the host services and the camera; the
 component callback model, the game's component collection and the limits of the service container
 are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md); the gamer-services identities and routes, and what
-they answer with and without a CNA service, are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
-[initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
+they answer with and without a CNA service, are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md).
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C status summary and tells maintainers how to produce
 the full implementation record; the compilers, language
 modes and build configurations the ABI is actually put through — and the ones it is not — are in

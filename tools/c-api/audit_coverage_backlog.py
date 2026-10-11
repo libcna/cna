@@ -3,8 +3,9 @@
 
 """Partition the C API coverage backlog into categories that mean something.
 
-Read-only. This is **not** a gate and nothing depends on it; it exists so the numbers in
-``docs/c-api/COVERAGE_AUDIT.md`` can be reproduced from the tree instead of trusted.
+Read-only. This is **not** a gate and nothing depends on it; it exists so the backlog numbers
+can be reproduced from the tree instead of trusted. (The 2026-09-18 audit that first used it,
+``docs/c-api/COVERAGE_AUDIT.md``, was removed on 2026-10-11 and remains in Git history.)
 
 The question it answers is the one ``generate_coverage_inventory.py`` deliberately does not:
 a ``planned`` row means *no rule claims this symbol*, which is not the same as *no C route

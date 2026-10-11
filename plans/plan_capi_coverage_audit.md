@@ -102,4 +102,5 @@ categories, genuinely missing bindings are counted as unique logical APIs, the `
 ambiguity is root-caused to a source-of-truth error, and the trustworthiness of `plan_binding.md`,
 `COVERAGE.md` and the limitations generator is stated without softening.
 
-The findings are recorded in [`docs/c-api/COVERAGE_AUDIT.md`](../docs/c-api/COVERAGE_AUDIT.md).
+The findings were recorded in `docs/c-api/COVERAGE_AUDIT.md`, removed on 2026-10-11 once superseded
+(it remains in Git history).
