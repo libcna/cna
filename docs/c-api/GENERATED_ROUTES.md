@@ -77,8 +77,9 @@ The route then answers `CNA_RESULT_INVALID_ARGUMENT`, with the condition in the 
 `invalid_if` takes one condition or a list of them.
 
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
-output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `result`, every non-const `out_*`
-pointer, and a handle output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
+output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
+null destination with a capacity; for `result`, every non-const `out_*` pointer, and a handle
+output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
 `invalid_if` conditions, then the lookup (and `other`'s), whose own result is returned when it
 refuses. So a call with two faults always reports the null output.
 

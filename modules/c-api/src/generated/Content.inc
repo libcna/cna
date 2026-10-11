@@ -130,6 +130,10 @@ CNA_Result cna_content_manager_copy_manifest_relative_path(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ContentManagerResource> owner{};
         const ContentManifestEntry* object{};
         if (const CNA_Result routeResult = GetManifestEntry(content_manager, index, &owner, &object);

@@ -33,6 +33,10 @@ CNA_Result cna_graphics_renderer_fallback_copy_message_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         const CNA::GraphicsRendererFallbackRecord* object{};
         if (const CNA_Result routeResult = BorrowFallbackRecord(index, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -408,6 +412,10 @@ CNA_Result cna_graphics_backend_category_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         CNA::GraphicsBackendCategory object{};
         if (const CNA_Result routeResult = MapBackendCategory(category, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -424,6 +432,10 @@ CNA_Result cna_graphics_backend_maturity_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         CNA::GraphicsBackendMaturity object{};
         if (const CNA_Result routeResult = MapBackendMaturity(maturity, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -457,6 +469,10 @@ CNA_Result cna_graphics_renderer_fallback_reason_copy_name_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         CNA::GraphicsRendererFallbackReason object{};
         if (const CNA_Result routeResult = MapFallbackReason(reason, &object);
             routeResult != CNA_RESULT_SUCCESS) {

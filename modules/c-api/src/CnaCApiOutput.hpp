@@ -119,6 +119,26 @@ template<typename TElement>
 }
 
 /**
+ * @brief The argument check of the copy protocols, made before anything else is looked at.
+ *
+ * @param destination The caller's buffer.
+ * @param capacity How many elements `destination` holds.
+ * @param outCount Receives the element count.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null `outCount` or a null
+ *         `destination` with a non-zero `capacity`.
+ */
+[[nodiscard]] inline CNA_Result ValidateCopyOutput(
+    const void* const destination,
+    const uint64_t capacity,
+    const uint64_t* const outCount) noexcept
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The destination or count output is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/**
  * @brief The copy half of the text protocol: UTF-8 bytes, no terminator, no partial write.
  *
  * `outBytes` always receives the full byte count. A capacity short of it writes nothing and fails
@@ -162,8 +182,9 @@ template<typename TFormat>
     TFormat&& format) noexcept
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The destination or count output is invalid.");
+        if (const CNA_Result result = ValidateCopyOutput(destination, capacity, outBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         const auto text = std::forward<TFormat>(format)();
         return CopyText(text, destination, capacity, outBytes);

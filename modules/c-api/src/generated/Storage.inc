@@ -87,6 +87,10 @@ CNA_Result cna_storage_container_copy_display_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<StorageContainerResource> object{};
         if (const CNA_Result routeResult = GetContainer(container, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -120,6 +124,10 @@ CNA_Result cna_storage_container_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<StorageContainerResource> object{};
         if (const CNA_Result routeResult = GetContainer(container, &object);
             routeResult != CNA_RESULT_SUCCESS) {

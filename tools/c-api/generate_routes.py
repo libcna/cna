@@ -70,8 +70,9 @@ refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(vo
 condition reads the parameters as the caller passed them, before any conversion, and is checked
 before the lookup.
 
-Every generated route runs inside CallWithExceptionBarrier, refuses a null output with
-CNA_RESULT_INVALID_ARGUMENT before doing anything else, then validates CNA_Bool inputs, then its
+Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
+null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
+doing anything else, then validates CNA_Bool inputs, then its
 ``invalid_if`` conditions, and returns whatever the lookup returns when the handle is refused.
 
 Usage::
@@ -393,6 +394,9 @@ class Route:
         lines = [f"    return {DETAIL}CallWithExceptionBarrier([&]() -> CNA_Result {{"]
         if self.kind in ("value", "get", "size"):
             lines += null_check(self.name, self.outputs[0], i)
+        elif self.kind == "copy":
+            lines += returns_on_failure(
+                f"{DETAIL}ValidateCopyOutput({', '.join(p.name for p in self.outputs)})", i)
         elif self.kind == "result":
             for output in self.outputs:
                 lines += null_check(self.name, output, i)
@@ -621,13 +625,14 @@ def render_contract_test(routes: list[Route]) -> str:
             lines.append(_expect(f"{r.name}({_arguments(r, **{output: 'NULL'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name, f'"a null {output}"',
                                  "feature" in r.group))
-        elif r.kind == "copy" and not r.has_lookup:
+        elif r.kind == "copy":
             destination, capacity, out_bytes = (p.name for p in r.outputs)
             lines.append(_expect(f"{r.name}({_arguments(r, **{destination: 'NULL', capacity: '1U'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name,
-                                 '"a null destination with a capacity"'))
+                                 '"a null destination with a capacity"', "feature" in r.group))
             lines.append(_expect(f"{r.name}({_arguments(r, **{out_bytes: 'NULL'})})",
-                                 "CNA_RESULT_INVALID_ARGUMENT", r.name, '"a null out_bytes"'))
+                                 "CNA_RESULT_INVALID_ARGUMENT", r.name, '"a null out_bytes"',
+                                 "feature" in r.group))
     lines += ["    return failures;", "}", "",
               "/* `handle` goes to every route but the curve routes, which get `curve_routes_handle`. */",
               "static int handles_are_refused(const CNA_Handle handle,",

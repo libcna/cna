@@ -16,6 +16,10 @@ CNA_Result cna_effect_annotation_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AnnotationResource> object{};
         if (const CNA_Result routeResult = GetAnnotation(annotation, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -32,6 +36,10 @@ CNA_Result cna_effect_annotation_copy_semantic(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AnnotationResource> object{};
         if (const CNA_Result routeResult = GetAnnotation(annotation, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -102,6 +110,10 @@ CNA_Result cna_effect_annotation_copy_value_string(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AnnotationResource> object{};
         if (const CNA_Result routeResult = GetAnnotation(annotation, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -259,6 +271,10 @@ CNA_Result cna_effect_parameter_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ParameterResource> object{};
         if (const CNA_Result routeResult = GetParameter(parameter, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -275,6 +291,10 @@ CNA_Result cna_effect_parameter_copy_semantic(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ParameterResource> object{};
         if (const CNA_Result routeResult = GetParameter(parameter, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -291,6 +311,10 @@ CNA_Result cna_effect_parameter_copy_value_string(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ParameterResource> object{};
         if (const CNA_Result routeResult = GetParameter(parameter, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -394,6 +418,10 @@ CNA_Result cna_effect_pass_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<PassResource> object{};
         if (const CNA_Result routeResult = GetPass(pass, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -495,6 +523,10 @@ CNA_Result cna_effect_technique_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<TechniqueResource> object{};
         if (const CNA_Result routeResult = GetTechnique(technique, &object);
             routeResult != CNA_RESULT_SUCCESS) {

@@ -16,6 +16,10 @@ CNA_Result cna_cnb_document_copy_origin(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -32,6 +36,10 @@ CNA_Result cna_cnb_document_copy_metadata_asset_type_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -48,6 +56,10 @@ CNA_Result cna_cnb_document_copy_metadata_content_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -80,6 +92,10 @@ CNA_Result cna_cnb_decode_song_stream_reference(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -96,6 +112,10 @@ CNA_Result cna_cnb_decode_song_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -112,6 +132,10 @@ CNA_Result cna_cnb_decode_video_stream_reference(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbDocumentResource> object{};
         if (const CNA_Result routeResult = GetDocument(document, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -375,6 +399,10 @@ CNA_Result cna_cnb_reader_copy_context(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbReaderResource> object{};
         if (const CNA_Result routeResult = GetReader(reader, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -657,6 +685,10 @@ CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnjToCnbResultResource> object{};
         if (const CNA_Result routeResult = GetCompiledCnj(result, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1664,6 +1696,10 @@ CNA_Result cna_cnb_model_copy_part_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbModelResource> owner{};
         Cnb::CnbModelPart* object{};
         if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
@@ -1701,6 +1737,10 @@ CNA_Result cna_cnb_model_copy_part_external_effect(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CnbModelResource> owner{};
         Cnb::CnbModelPart* object{};
         if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);

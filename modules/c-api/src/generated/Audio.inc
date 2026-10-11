@@ -69,6 +69,10 @@ CNA_Result cna_sound_effect_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SoundEffectResource> object{};
         if (const CNA_Result routeResult = GetSoundEffect(sound_effect, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -102,6 +106,10 @@ CNA_Result cna_sound_effect_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SoundEffectResource> object{};
         if (const CNA_Result routeResult = GetSoundEffect(sound_effect, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -195,6 +203,10 @@ CNA_Result cna_sound_effect_instance_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SoundEffectInstanceResource> object{};
         if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -498,6 +510,10 @@ CNA_Result cna_microphone_copy_name_at(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Microphone* object{};
         if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -798,6 +814,10 @@ CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SoundEffectInstanceResource> owner{};
         DynamicSoundEffectInstance* object{};
         if (const CNA_Result routeResult = BorrowDynamicInstance(instance, &owner, &object);

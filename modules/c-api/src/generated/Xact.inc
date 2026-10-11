@@ -83,6 +83,10 @@ CNA_Result cna_audio_engine_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<EngineResource> object{};
         if (const CNA_Result routeResult = GetEngine(engine, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -116,6 +120,10 @@ CNA_Result cna_audio_category_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CategoryResource> object{};
         if (const CNA_Result routeResult = GetCategory(category, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -267,6 +275,10 @@ CNA_Result cna_wave_bank_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<WaveBankResource> object{};
         if (const CNA_Result routeResult = GetWaveBank(wave_bank, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -336,6 +348,10 @@ CNA_Result cna_sound_bank_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SoundBankResource> object{};
         if (const CNA_Result routeResult = GetSoundBank(sound_bank, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -369,6 +385,10 @@ CNA_Result cna_cue_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CueResource> object{};
         if (const CNA_Result routeResult = GetCue(cue, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -444,6 +464,10 @@ CNA_Result cna_cue_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<CueResource> object{};
         if (const CNA_Result routeResult = GetCue(cue, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -496,6 +520,10 @@ CNA_Result cna_audio_engine_copy_renderer_friendly_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<EngineResource> owner{};
         const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
         if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
@@ -533,6 +561,10 @@ CNA_Result cna_audio_engine_copy_renderer_id(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<EngineResource> owner{};
         const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
         if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);
@@ -570,6 +602,10 @@ CNA_Result cna_audio_engine_copy_renderer_text(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<EngineResource> owner{};
         const Microsoft::Xna::Framework::Audio::RendererDetail* object{};
         if (const CNA_Result routeResult = GetRendererDetail(engine, renderer_index, &owner, &object);

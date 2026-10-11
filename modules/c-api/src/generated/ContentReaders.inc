@@ -33,6 +33,10 @@ CNA_Result cna_content_reader_copy_asset_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ContentReaderResource> object{};
         if (const CNA_Result routeResult = GetReader(reader, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -188,6 +192,10 @@ CNA_Result cna_content_type_reader_copy_target_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ContentTypeReaderResource> object{};
         if (const CNA_Result routeResult = GetTypeReader(type_reader, &object);
             routeResult != CNA_RESULT_SUCCESS) {

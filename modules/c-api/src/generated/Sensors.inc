@@ -51,6 +51,10 @@ CNA_Result cna_accelerometer_reading_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         AccelerometerReading object{};
         if (const CNA_Result routeResult = ToAccelerometerReading(reading, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -102,6 +106,10 @@ CNA_Result cna_gyroscope_reading_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         GyroscopeReading object{};
         if (const CNA_Result routeResult = ToGyroscopeReading(reading, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -153,6 +161,10 @@ CNA_Result cna_attitude_reading_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         AttitudeReading object{};
         if (const CNA_Result routeResult = ToAttitudeReading(reading, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -204,6 +216,10 @@ CNA_Result cna_compass_reading_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         CompassReading object{};
         if (const CNA_Result routeResult = ToCompassReading(reading, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -255,6 +271,10 @@ CNA_Result cna_motion_reading_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         MotionReading object{};
         if (const CNA_Result routeResult = ToMotionReading(reading, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -341,6 +361,10 @@ CNA_Result cna_accelerometer_copy_last_dispatch_exception_message_for_tests_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -444,6 +468,10 @@ CNA_Result cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -742,6 +770,10 @@ CNA_Result cna_accelerometer_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1020,6 +1052,10 @@ CNA_Result cna_gyroscope_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1102,6 +1138,10 @@ CNA_Result cna_accelerometer_reading_event_info_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         AccelerometerReadingEventArgs object{};
         if (const CNA_Result routeResult = ToAccelerometerReadingEventArgs(info, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1246,6 +1286,10 @@ CNA_Result cna_compass_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SensorResource<Compass>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Compass>(sensor, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1439,6 +1483,10 @@ CNA_Result cna_motion_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SensorResource<Motion>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Motion>(sensor, &object);
             routeResult != CNA_RESULT_SUCCESS) {

@@ -33,6 +33,10 @@ CNA_Result cna_model_bone_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<BoneResource> object{};
         if (const CNA_Result routeResult = GetBone(bone, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -389,6 +393,10 @@ CNA_Result cna_model_mesh_copy_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MeshResource> object{};
         if (const CNA_Result routeResult = GetMesh(mesh, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -919,6 +927,10 @@ CNA_Result cna_skinning_data_copy_type_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SkinningDataResource> object{};
         if (const CNA_Result routeResult = GetSkinningData(data, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1021,6 +1033,10 @@ CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<SkinningDataResource> object{};
         if (const CNA_Result routeResult = GetSkinningData(data, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1148,6 +1164,10 @@ CNA_Result cna_animation_player_copy_current_clip_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AnimationPlayerResource> object{};
         if (const CNA_Result routeResult = GetAnimationPlayer(player, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1238,6 +1258,10 @@ CNA_Result cna_model_animations_ext_copy_type_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelAnimationsResource> object{};
         if (const CNA_Result routeResult = GetModelAnimations(animations, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1415,6 +1439,10 @@ CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelResource> owner{};
         const GltfImportDiagnosticEXT* object{};
         if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
@@ -1433,6 +1461,10 @@ CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelResource> owner{};
         const GltfImportDiagnosticEXT* object{};
         if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
@@ -1451,6 +1483,10 @@ CNA_Result cna_model_copy_gltf_import_diagnostic_message_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelResource> owner{};
         const GltfImportDiagnosticEXT* object{};
         if (const CNA_Result routeResult = GetImportDiagnostic(model, index, &owner, &object);
@@ -1488,6 +1524,10 @@ CNA_Result cna_model_copy_camera_name_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelResource> owner{};
         const ModelCameraEXT* object{};
         if (const CNA_Result routeResult = GetModelCamera(model, index, &owner, &object);
@@ -1525,6 +1565,10 @@ CNA_Result cna_model_copy_skin_name_ext(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ModelResource> owner{};
         const ModelSkinEXT* object{};
         if (const CNA_Result routeResult = GetModelSkin(model, index, &owner, &object);

@@ -47,6 +47,10 @@ CNA_Result cna_album_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Album>> object{};
         if (const CNA_Result routeResult = Borrow<Album>(album, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -116,6 +120,10 @@ CNA_Result cna_album_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Album>> object{};
         if (const CNA_Result routeResult = Borrow<Album>(album, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -253,6 +261,10 @@ CNA_Result cna_album_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<AlbumCollection>> object{};
         if (const CNA_Result routeResult = Borrow<AlbumCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -300,6 +312,10 @@ CNA_Result cna_artist_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Artist>> object{};
         if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -369,6 +385,10 @@ CNA_Result cna_artist_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Artist>> object{};
         if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -488,6 +508,10 @@ CNA_Result cna_artist_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<ArtistCollection>> object{};
         if (const CNA_Result routeResult = Borrow<ArtistCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -535,6 +559,10 @@ CNA_Result cna_genre_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Genre>> object{};
         if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -604,6 +632,10 @@ CNA_Result cna_genre_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Genre>> object{};
         if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -723,6 +755,10 @@ CNA_Result cna_genre_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<GenreCollection>> object{};
         if (const CNA_Result routeResult = Borrow<GenreCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -770,6 +806,10 @@ CNA_Result cna_playlist_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Playlist>> object{};
         if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -839,6 +879,10 @@ CNA_Result cna_playlist_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Playlist>> object{};
         if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -958,6 +1002,10 @@ CNA_Result cna_playlist_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<PlaylistCollection>> object{};
         if (const CNA_Result routeResult = Borrow<PlaylistCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1023,6 +1071,10 @@ CNA_Result cna_media_library_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaLibraryResource> object{};
         if (const CNA_Result routeResult = BorrowLibraryResource(library, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1083,6 +1135,10 @@ CNA_Result cna_picture_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Picture>> object{};
         if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1152,6 +1208,10 @@ CNA_Result cna_picture_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Picture>> object{};
         if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1185,6 +1245,10 @@ CNA_Result cna_picture_copy_token_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<Picture>> object{};
         if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1286,6 +1350,10 @@ CNA_Result cna_picture_album_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
         if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1355,6 +1423,10 @@ CNA_Result cna_picture_album_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
         if (const CNA_Result routeResult = Borrow<PictureAlbum>(album, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1438,6 +1510,10 @@ CNA_Result cna_picture_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<PictureCollection>> object{};
         if (const CNA_Result routeResult = Borrow<PictureCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -1521,6 +1597,10 @@ CNA_Result cna_picture_album_collection_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<MediaChildResource<PictureAlbumCollection>> object{};
         if (const CNA_Result routeResult = Borrow<PictureAlbumCollection>(collection, &object);
             routeResult != CNA_RESULT_SUCCESS) {

@@ -33,6 +33,10 @@ CNA_Result cna_gamer_copy_display_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Gamer* object{};
         if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -66,6 +70,10 @@ CNA_Result cna_gamer_copy_gamertag(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Gamer* object{};
         if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -99,6 +107,10 @@ CNA_Result cna_gamer_copy_text(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Gamer* object{};
         if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -270,6 +282,10 @@ CNA_Result cna_gamer_profile_copy_motto(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<GamerProfileResource> object{};
         if (const CNA_Result routeResult = BorrowProfile(profile, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -303,6 +319,10 @@ CNA_Result cna_gamer_profile_copy_region_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<GamerProfileResource> object{};
         if (const CNA_Result routeResult = BorrowProfile(profile, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -401,6 +421,10 @@ CNA_Result cna_friend_gamer_copy_presence(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<GamerResource> owner{};
         FriendGamer* object{};
         if (const CNA_Result routeResult = BorrowFriend(gamer, &owner, &object);

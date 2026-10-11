@@ -107,6 +107,10 @@ CNA_Result cna_vibrate_controller_copy_device_name_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -436,6 +440,10 @@ CNA_Result cna_locale_copy_language_at_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         LocaleInfo object{};
         if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -502,6 +510,10 @@ CNA_Result cna_locale_copy_country_at_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         LocaleInfo object{};
         if (const CNA_Result routeResult = BorrowLocale(game, index, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -751,6 +763,10 @@ CNA_Result cna_camera_copy_name_at_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         CameraDeviceInfo object{};
         if (const CNA_Result routeResult = BorrowEnumeratedCamera(game, index, &object);
             routeResult != CNA_RESULT_SUCCESS) {

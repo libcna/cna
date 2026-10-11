@@ -33,6 +33,10 @@ CNA_Result cna_vertex_buffer_copy_type_name(
     uint64_t* const out_byte_count)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<VertexBufferResource> object{};
         if (const CNA_Result routeResult = GetBuffer(vertex_buffer, &object);
             routeResult != CNA_RESULT_SUCCESS) {

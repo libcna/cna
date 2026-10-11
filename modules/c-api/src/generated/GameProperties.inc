@@ -265,6 +265,10 @@ CNA_Result cna_game_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Game* object{};
         if (const CNA_Result routeResult = BorrowGame(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -330,6 +334,10 @@ CNA_Result cna_title_location_copy_path(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Game* object{};
         if (const CNA_Result routeResult = BorrowGame(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -453,6 +461,10 @@ CNA_Result cna_game_window_copy_screen_device_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Microsoft::Xna::Framework::GameWindow* object{};
         if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -486,6 +498,10 @@ CNA_Result cna_game_window_copy_title(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Microsoft::Xna::Framework::GameWindow* object{};
         if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -557,6 +573,10 @@ CNA_Result cna_game_window_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         Microsoft::Xna::Framework::GameWindow* object{};
         if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -656,6 +676,10 @@ CNA_Result cna_game_launch_parameters_copy_value(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::string object{};
         if (const CNA_Result routeResult = FindLaunchParameter(game, key, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -691,6 +715,10 @@ CNA_Result cna_game_launch_parameters_copy_key(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::string object{};
         if (const CNA_Result routeResult = FindLaunchParameterName(game, index, &object);
             routeResult != CNA_RESULT_SUCCESS) {

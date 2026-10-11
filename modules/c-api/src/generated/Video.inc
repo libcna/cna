@@ -168,6 +168,10 @@ CNA_Result cna_video_copy_file_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<VideoResource> object{};
         if (const CNA_Result routeResult = BorrowVideo(video, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -219,6 +223,10 @@ CNA_Result cna_video_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<VideoResource> object{};
         if (const CNA_Result routeResult = BorrowVideo(video, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -514,6 +522,10 @@ CNA_Result cna_video_player_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<VideoPlayerResource> object{};
         if (const CNA_Result routeResult = BorrowPlayerForCall(player, &object);
             routeResult != CNA_RESULT_SUCCESS) {

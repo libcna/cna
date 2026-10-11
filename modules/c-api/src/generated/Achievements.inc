@@ -33,6 +33,10 @@ CNA_Result cna_achievement_copy_key(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AchievementResource> object{};
         if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -66,6 +70,10 @@ CNA_Result cna_achievement_copy_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AchievementResource> object{};
         if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -99,6 +107,10 @@ CNA_Result cna_achievement_copy_description(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AchievementResource> object{};
         if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -132,6 +144,10 @@ CNA_Result cna_achievement_copy_how_to_earn(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AchievementResource> object{};
         if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
             routeResult != CNA_RESULT_SUCCESS) {

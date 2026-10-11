@@ -16,6 +16,10 @@ CNA_Result cna_available_network_session_copy_host_gamertag(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AvailableSessionResource> object{};
         if (const CNA_Result routeResult = GetSession(session, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -32,6 +36,10 @@ CNA_Result cna_available_network_session_copy_connect_address_ext(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<AvailableSessionResource> object{};
         if (const CNA_Result routeResult = GetSession(session, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -258,6 +266,10 @@ CNA_Result cna_network_session_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<NetworkSessionResource> object{};
         if (const CNA_Result routeResult = GetSessionResource(session, &object);
             routeResult != CNA_RESULT_SUCCESS) {

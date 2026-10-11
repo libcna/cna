@@ -66,6 +66,10 @@ CNA_Result cna_keyboard_state_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateKeyboardState(state);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -149,6 +153,10 @@ CNA_Result cna_gamepad_state_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateState(state);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -231,6 +239,10 @@ CNA_Result cna_mouse_state_copy_string(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         if (const CNA_Result routeResult = ValidateMouseState(state);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;

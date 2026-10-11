@@ -350,6 +350,10 @@ CNA_Result cna_graphics_device_manager_copy_type_name(
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         std::shared_ptr<ManagerResource> object{};
         if (const CNA_Result routeResult = BorrowManager(manager, &object);
             routeResult != CNA_RESULT_SUCCESS) {
