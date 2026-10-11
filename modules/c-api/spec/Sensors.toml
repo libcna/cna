@@ -1,0 +1,148 @@
+# Sensors routes, generated into src/generated/Sensors.inc,
+# which src/CnaCApiSensors.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[accelerometer_reading]
+lookup = "ToAccelerometerReading"
+object = "AccelerometerReading"
+
+[accelerometer_reading.routes]
+cna_accelerometer_reading_get_hash_code = { get = "object.GetHashCode()" }
+cna_accelerometer_reading_get_string_size = { size = "object.ToString()" }
+cna_accelerometer_reading_copy_string = { copy = "object.ToString()" }
+
+[gyroscope_reading]
+lookup = "ToGyroscopeReading"
+object = "GyroscopeReading"
+
+[gyroscope_reading.routes]
+cna_gyroscope_reading_get_hash_code = { get = "object.GetHashCode()" }
+cna_gyroscope_reading_get_string_size = { size = "object.ToString()" }
+cna_gyroscope_reading_copy_string = { copy = "object.ToString()" }
+
+[attitude_reading]
+lookup = "ToAttitudeReading"
+object = "AttitudeReading"
+
+[attitude_reading.routes]
+cna_attitude_reading_get_hash_code = { get = "object.GetHashCode()" }
+cna_attitude_reading_get_string_size = { size = "object.ToString()" }
+cna_attitude_reading_copy_string = { copy = "object.ToString()" }
+
+[compass_reading]
+lookup = "ToCompassReading"
+object = "CompassReading"
+
+[compass_reading.routes]
+cna_compass_reading_get_hash_code = { get = "object.GetHashCode()" }
+cna_compass_reading_get_string_size = { size = "object.ToString()" }
+cna_compass_reading_copy_string = { copy = "object.ToString()" }
+
+[motion_reading]
+lookup = "ToMotionReading"
+object = "MotionReading"
+
+[motion_reading.routes]
+cna_motion_reading_get_hash_code = { get = "object.GetHashCode()" }
+cna_motion_reading_get_string_size = { size = "object.ToString()" }
+cna_motion_reading_copy_string = { copy = "object.ToString()" }
+
+[game]
+lookup = "ValidateActiveGameHandle"
+
+[game.routes]
+cna_accelerometer_get_is_supported = { get = "Accelerometer::getIsSupportedProperty()" }
+cna_accelerometer_set_event_watch_registration_failure_for_tests_ext = { call = "Accelerometer::SetEventWatchRegistrationFailureForTesting(should_fail)" }
+cna_accelerometer_get_dispatch_exception_count_for_tests_ext = { get = "Accelerometer::GetDispatchExceptionCountForTesting()" }
+cna_accelerometer_get_last_dispatch_exception_message_size_for_tests_ext = { get = "Accelerometer::GetLastDispatchExceptionMessageForTesting().size()" }
+cna_accelerometer_copy_last_dispatch_exception_message_for_tests_ext = { copy = "Accelerometer::GetLastDispatchExceptionMessageForTesting()" }
+cna_accelerometer_is_sensor_connected_for_tests_ext = { get = "Accelerometer::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensor_id))" }
+cna_gyroscope_get_is_supported = { get = "Gyroscope::getIsSupportedProperty()" }
+cna_gyroscope_set_event_watch_registration_failure_for_tests_ext = { call = "Gyroscope::SetEventWatchRegistrationFailureForTesting(should_fail)" }
+cna_gyroscope_get_dispatch_exception_count_for_tests_ext = { get = "Gyroscope::GetDispatchExceptionCountForTesting()" }
+cna_gyroscope_get_last_dispatch_exception_message_size_for_tests_ext = { get = "Gyroscope::GetLastDispatchExceptionMessageForTesting().size()" }
+cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext = { copy = "Gyroscope::GetLastDispatchExceptionMessageForTesting()" }
+cna_gyroscope_is_sensor_connected_for_tests_ext = { get = "Gyroscope::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensor_id))" }
+cna_compass_get_is_supported = { get = "Compass::getIsSupportedProperty()" }
+cna_motion_get_is_supported = { get = "Motion::getIsSupportedProperty()" }
+
+[accelerometer]
+lookup = "BorrowSensor<Accelerometer>"
+object = "std::shared_ptr<SensorResource<Accelerometer>>"
+
+[accelerometer.routes]
+cna_accelerometer_get_state = { get = "object->value->getStateProperty()" }
+cna_accelerometer_start = { call = "object->value->Start()" }
+cna_accelerometer_stop = { call = "object->value->Stop()" }
+cna_accelerometer_dispose = { call = "object->value->Dispose()" }
+cna_accelerometer_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
+cna_accelerometer_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
+cna_accelerometer_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_accelerometer_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)" }
+cna_accelerometer_set_started_for_tests_ext = { call = "object->value->SetStartedForTesting(started)" }
+cna_accelerometer_set_supported_for_tests_ext = { call = "object->value->SetSupportedForTesting(supported)" }
+cna_accelerometer_get_subsystem_held_for_tests_ext = { get = "object->value->GetSubsystemHeldForTesting()" }
+cna_accelerometer_register_started_instance_for_tests_ext = { call = "Accelerometer::RegisterStartedInstanceForTesting(*object->value)" }
+cna_accelerometer_unregister_started_instance_for_tests_ext = { call = "Accelerometer::UnregisterStartedInstanceForTesting(*object->value)" }
+cna_accelerometer_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_accelerometer_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[gyroscope]
+lookup = "BorrowSensor<Gyroscope>"
+object = "std::shared_ptr<SensorResource<Gyroscope>>"
+
+[gyroscope.routes]
+cna_gyroscope_get_state = { get = "object->value->getStateProperty()" }
+cna_gyroscope_start = { call = "object->value->Start()" }
+cna_gyroscope_stop = { call = "object->value->Stop()" }
+cna_gyroscope_dispose = { call = "object->value->Dispose()" }
+cna_gyroscope_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
+cna_gyroscope_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
+cna_gyroscope_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_gyroscope_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)" }
+cna_gyroscope_set_started_for_tests_ext = { call = "object->value->SetStartedForTesting(started)" }
+cna_gyroscope_set_supported_for_tests_ext = { call = "object->value->SetSupportedForTesting(supported)" }
+cna_gyroscope_get_subsystem_held_for_tests_ext = { get = "object->value->GetSubsystemHeldForTesting()" }
+cna_gyroscope_register_started_instance_for_tests_ext = { call = "Gyroscope::RegisterStartedInstanceForTesting(*object->value)" }
+cna_gyroscope_unregister_started_instance_for_tests_ext = { call = "Gyroscope::UnregisterStartedInstanceForTesting(*object->value)" }
+cna_gyroscope_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_gyroscope_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[accelerometer_reading_event_args]
+lookup = "ToAccelerometerReadingEventArgs"
+object = "AccelerometerReadingEventArgs"
+
+[accelerometer_reading_event_args.routes]
+cna_accelerometer_reading_event_info_get_hash_code = { get = "object.GetHashCode()" }
+cna_accelerometer_reading_event_info_get_string_size = { size = "object.ToString()" }
+cna_accelerometer_reading_event_info_copy_string = { copy = "object.ToString()" }
+
+[compass]
+lookup = "BorrowSensor<Compass>"
+object = "std::shared_ptr<SensorResource<Compass>>"
+
+[compass.routes]
+cna_compass_get_state = { get = "object->value->getStateProperty()" }
+cna_compass_start = { call = "object->value->Start()" }
+cna_compass_stop = { call = "object->value->Stop()" }
+cna_compass_dispose = { call = "object->value->Dispose()" }
+cna_compass_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
+cna_compass_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
+cna_compass_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_compass_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_compass_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[motion]
+lookup = "BorrowSensor<Motion>"
+object = "std::shared_ptr<SensorResource<Motion>>"
+
+[motion.routes]
+cna_motion_get_state = { get = "object->value->getStateProperty()" }
+cna_motion_get_is_attitude_north_referenced_ext = { get = "object->value->getIsAttitudeNorthReferencedProperty()" }
+cna_motion_start = { call = "object->value->Start()" }
+cna_motion_stop = { call = "object->value->Stop()" }
+cna_motion_dispose = { call = "object->value->Dispose()" }
+cna_motion_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
+cna_motion_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
+cna_motion_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_motion_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_motion_copy_type_name = { copy = "object->value->GetTypeName()" }

@@ -19,7 +19,6 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -219,158 +218,6 @@ CNA_Result cna_achievement_get_info(
     });
 }
 
-CNA_Result cna_achievement_get_key_size(
-    const CNA_AchievementHandle achievementHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The achievement key size output is null.");
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = achievement->value->getKeyProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_copy_key(
-    const CNA_AchievementHandle achievementHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            achievement->value->getKeyProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_achievement_get_name_size(
-    const CNA_AchievementHandle achievementHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The achievement name size output is null.");
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = achievement->value->getNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_copy_name(
-    const CNA_AchievementHandle achievementHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            achievement->value->getNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_achievement_get_description_size(
-    const CNA_AchievementHandle achievementHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The achievement description size output is null.");
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = achievement->value->getDescriptionProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_copy_description(
-    const CNA_AchievementHandle achievementHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            achievement->value->getDescriptionProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_achievement_get_how_to_earn_size(
-    const CNA_AchievementHandle achievementHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The achievement how-to-earn size output is null.");
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = achievement->value->getHowToEarnProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_copy_how_to_earn(
-    const CNA_AchievementHandle achievementHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            achievement->value->getHowToEarnProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_achievement_get_picture_size(
     const CNA_AchievementHandle achievementHandle,
     uint64_t* const outBytes)
@@ -473,60 +320,6 @@ CNA_Result cna_achievement_collection_destroy(
                 ErrorCategoryForResult(result),
                 "The owned achievement collection handle could not be released.");
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_get_count(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection count output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(collection->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_get_is_disposed(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The collection disposal output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(collection->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_get_is_read_only(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    CNA_Bool* const outIsReadOnly)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsReadOnly == nullptr) {
-            return InvalidArgument("The collection read-only output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsReadOnly = ToCBool(collection->value->getIsReadOnlyProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -666,21 +459,6 @@ CNA_Result cna_achievement_collection_insert(
     });
 }
 
-CNA_Result cna_achievement_collection_remove_at(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const int32_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->RemoveAt(static_cast<int>(index));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_achievement_collection_remove(
     const CNA_AchievementCollectionHandle collectionHandle,
     const CNA_AchievementHandle achievementHandle,
@@ -701,20 +479,6 @@ CNA_Result cna_achievement_collection_remove(
             return result;
         }
         *outRemoved = ToCBool(collection->value->Remove(*achievement->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_clear(
-    const CNA_AchievementCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Clear();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -803,3 +567,6 @@ CNA_Result cna_signed_in_gamer_begin_get_achievements(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Achievements.toml.
+#include "generated/Achievements.inc"

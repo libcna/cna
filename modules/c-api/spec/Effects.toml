@@ -1,0 +1,271 @@
+# Effect, effect-parameter and stock-effect routes, generated into src/generated/Effects.inc,
+# which src/CnaCApiEffects.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[annotation]
+lookup = "GetAnnotation"
+object = "std::shared_ptr<AnnotationResource>"
+
+[annotation.routes]
+cna_effect_annotation_copy_name = { copy = "object->value->getNameProperty()" }
+cna_effect_annotation_copy_semantic = { copy = "object->value->getSemanticProperty()" }
+cna_effect_annotation_get_value_boolean = { get = "object->value->GetValueBoolean()" }
+cna_effect_annotation_get_value_int32 = { get = "object->value->GetValueInt32()" }
+cna_effect_annotation_get_value_single = { get = "object->value->GetValueSingle()" }
+cna_effect_annotation_copy_value_string = { copy = "object->value->GetValueString()" }
+cna_effect_annotation_get_value_vector2 = { get = "object->value->GetValueVector2()" }
+cna_effect_annotation_get_value_vector3 = { get = "object->value->GetValueVector3()" }
+cna_effect_annotation_get_value_vector4 = { get = "object->value->GetValueVector4()" }
+cna_effect_annotation_get_value_matrix = { get = "object->value->GetValueMatrix()" }
+
+[collection]
+lookup = "GetCollection"
+object = "std::shared_ptr<AnnotationCollectionResource>"
+
+[collection.routes]
+cna_effect_annotation_collection_get_count = { get = "object->value->getCountProperty()" }
+
+[parameter]
+lookup = "GetParameter"
+object = "std::shared_ptr<ParameterResource>"
+
+[parameter.routes]
+cna_effect_parameter_copy_name = { copy = "object->value->getNameProperty()" }
+cna_effect_parameter_copy_semantic = { copy = "object->value->getSemanticProperty()" }
+cna_effect_parameter_copy_value_string = { copy = "object->value->GetValueString()" }
+
+[parameter_collection]
+lookup = "GetParameterCollection"
+object = "std::shared_ptr<ParameterCollectionResource>"
+
+[parameter_collection.routes]
+cna_effect_parameter_collection_get_count = { get = "object->state->value->getCountProperty()" }
+
+[pass]
+lookup = "GetPass"
+object = "std::shared_ptr<PassResource>"
+
+[pass.routes]
+cna_effect_pass_get_index_ext = { get = "object->value->getIndexInternal()" }
+cna_effect_pass_copy_name = { copy = "object->value->getNameProperty()" }
+cna_effect_pass_apply = { call = "object->value->Apply()" }
+
+[pass_collection]
+lookup = "GetPassCollection"
+object = "std::shared_ptr<PassCollectionResource>"
+
+[pass_collection.routes]
+cna_effect_pass_collection_get_count = { get = "object->state->value->getCountProperty()" }
+
+[technique]
+lookup = "GetTechnique"
+object = "std::shared_ptr<TechniqueResource>"
+
+[technique.routes]
+cna_effect_technique_get_index_ext = { get = "object->value->getIndexInternal()" }
+cna_effect_technique_copy_name = { copy = "object->value->getNameProperty()" }
+cna_effect_technique_get_identity = { get = "object->value->getIdInternal()" }
+
+[technique_collection]
+lookup = "GetTechniqueCollection"
+object = "std::shared_ptr<TechniqueCollectionResource>"
+
+[technique_collection.routes]
+cna_effect_technique_collection_get_count = { get = "object->state->value->getCountProperty()" }
+
+[effect]
+lookup = "GetEffect"
+object = "std::shared_ptr<EffectResource>"
+
+[effect.routes]
+cna_effect_apply = { call = "object->value->Apply()" }
+# The runtime itself is renderer-owned implementation, so its presence is what crosses.
+cna_effect_get_is_compiled_ext = { get = "object->value->GetCompiledRuntimePtr() != nullptr" }
+cna_effect_has_renderer = { get = "object->value->GetEffectRendererPtr() != nullptr" }
+cna_effect_is_exact_stock_sprite_effect = { get = "object->value->IsExactStockSpriteEffectEXT()" }
+
+[shader_effect]
+lookup = "GetStockEffect<ShaderEffect>"
+object = "ShaderEffect*"
+
+[shader_effect.routes]
+cna_shader_effect_is_valid = { get = "object->IsEffectValid()" }
+cna_shader_effect_has_renderer = { get = "object->HasRenderer()" }
+cna_shader_effect_get_world = { get = "object->getWorldProperty()" }
+cna_shader_effect_set_world = { call = "object->setWorldProperty(value)" }
+cna_shader_effect_get_view = { get = "object->getViewProperty()" }
+cna_shader_effect_set_view = { call = "object->setViewProperty(value)" }
+cna_shader_effect_get_projection = { get = "object->getProjectionProperty()" }
+cna_shader_effect_set_projection = { call = "object->setProjectionProperty(value)" }
+
+[directional_light]
+lookup = "GetDirectionalLight"
+object = "std::shared_ptr<DirectionalLightResource>"
+
+[directional_light.routes]
+cna_directional_light_get_diffuse_color = { get = "object->value->getDiffuseColorProperty()" }
+cna_directional_light_set_diffuse_color = { call = "object->value->setDiffuseColorProperty(value)" }
+cna_directional_light_get_direction = { get = "object->value->getDirectionProperty()" }
+cna_directional_light_set_direction = { call = "object->value->setDirectionProperty(value)" }
+cna_directional_light_get_specular_color = { get = "object->value->getSpecularColorProperty()" }
+cna_directional_light_set_specular_color = { call = "object->value->setSpecularColorProperty(value)" }
+cna_directional_light_get_enabled = { get = "object->value->getEnabledProperty()" }
+cna_directional_light_set_enabled = { call = "object->value->setEnabledProperty(value)" }
+
+[ieffect_matrices]
+lookup = "GetEffectInterface<IEffectMatrices>"
+object = "IEffectMatrices*"
+
+[ieffect_matrices.routes]
+cna_effect_matrices_get_world = { get = "object->getWorldProperty()" }
+cna_effect_matrices_set_world = { call = "object->setWorldProperty(value)" }
+cna_effect_matrices_get_view = { get = "object->getViewProperty()" }
+cna_effect_matrices_set_view = { call = "object->setViewProperty(value)" }
+cna_effect_matrices_get_projection = { get = "object->getProjectionProperty()" }
+cna_effect_matrices_set_projection = { call = "object->setProjectionProperty(value)" }
+
+[ieffect_fog]
+lookup = "GetEffectInterface<IEffectFog>"
+object = "IEffectFog*"
+
+[ieffect_fog.routes]
+cna_effect_fog_get_color = { get = "object->getFogColorProperty()" }
+cna_effect_fog_set_color = { call = "object->setFogColorProperty(value)" }
+cna_effect_fog_get_enabled = { get = "object->getFogEnabledProperty()" }
+cna_effect_fog_set_enabled = { call = "object->setFogEnabledProperty(value)" }
+cna_effect_fog_get_start = { get = "object->getFogStartProperty()" }
+cna_effect_fog_set_start = { call = "object->setFogStartProperty(value)" }
+cna_effect_fog_get_end = { get = "object->getFogEndProperty()" }
+cna_effect_fog_set_end = { call = "object->setFogEndProperty(value)" }
+
+[ieffect_lights]
+lookup = "GetEffectInterface<IEffectLights>"
+object = "IEffectLights*"
+
+[ieffect_lights.routes]
+cna_effect_lights_get_ambient_color = { get = "object->getAmbientLightColorProperty()" }
+cna_effect_lights_set_ambient_color = { call = "object->setAmbientLightColorProperty(value)" }
+cna_effect_lights_get_enabled = { get = "object->getLightingEnabledProperty()" }
+cna_effect_lights_enable_default = { call = "object->EnableDefaultLighting()" }
+
+[basic_effect]
+lookup = "GetStockEffect<BasicEffect>"
+object = "BasicEffect*"
+
+[basic_effect.routes]
+cna_basic_effect_get_vertex_color_enabled = { get = "object->VertexColorEnabled" }
+cna_basic_effect_set_vertex_color_enabled = { call = "object->VertexColorEnabled = value" }
+cna_basic_effect_get_prefer_per_pixel_lighting = { get = "object->getPreferPerPixelLightingProperty()" }
+cna_basic_effect_set_prefer_per_pixel_lighting = { call = "object->setPreferPerPixelLightingProperty(value)" }
+cna_basic_effect_get_diffuse_color = { get = "object->getDiffuseColorProperty()" }
+cna_basic_effect_set_diffuse_color = { call = "object->setDiffuseColorProperty(value)" }
+cna_basic_effect_get_emissive_color = { get = "object->getEmissiveColorProperty()" }
+cna_basic_effect_set_emissive_color = { call = "object->setEmissiveColorProperty(value)" }
+cna_basic_effect_get_specular_color = { get = "object->getSpecularColorProperty()" }
+cna_basic_effect_set_specular_color = { call = "object->setSpecularColorProperty(value)" }
+cna_basic_effect_get_specular_power = { get = "object->getSpecularPowerProperty()" }
+cna_basic_effect_set_specular_power = { call = "object->setSpecularPowerProperty(value)" }
+cna_basic_effect_get_alpha = { get = "object->getAlphaProperty()" }
+cna_basic_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
+cna_basic_effect_get_texture_enabled = { get = "object->getTextureEnabledProperty()" }
+cna_basic_effect_set_texture_enabled = { call = "object->setTextureEnabledProperty(value)" }
+
+[alpha_test_effect]
+lookup = "GetStockEffect<AlphaTestEffect>"
+object = "AlphaTestEffect*"
+
+[alpha_test_effect.routes]
+cna_alpha_test_effect_get_diffuse_color = { get = "object->getDiffuseColorProperty()" }
+cna_alpha_test_effect_set_diffuse_color = { call = "object->setDiffuseColorProperty(value)" }
+cna_alpha_test_effect_get_alpha = { get = "object->getAlphaProperty()" }
+cna_alpha_test_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
+cna_alpha_test_effect_get_vertex_color_enabled = { get = "object->getVertexColorEnabledProperty()" }
+cna_alpha_test_effect_set_vertex_color_enabled = { call = "object->setVertexColorEnabledProperty(value)" }
+cna_alpha_test_effect_get_alpha_function = { get = "object->getAlphaFunctionProperty()" }
+cna_alpha_test_effect_get_reference_alpha = { get = "object->getReferenceAlphaProperty()" }
+cna_alpha_test_effect_set_reference_alpha = { call = "object->setReferenceAlphaProperty(static_cast<int>(value))" }
+
+[dual_texture_effect]
+lookup = "GetStockEffect<DualTextureEffect>"
+object = "DualTextureEffect*"
+
+[dual_texture_effect.routes]
+cna_dual_texture_effect_get_diffuse_color = { get = "object->getDiffuseColorProperty()" }
+cna_dual_texture_effect_set_diffuse_color = { call = "object->setDiffuseColorProperty(value)" }
+cna_dual_texture_effect_get_alpha = { get = "object->getAlphaProperty()" }
+cna_dual_texture_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
+cna_dual_texture_effect_get_vertex_color_enabled = { get = "object->getVertexColorEnabledProperty()" }
+cna_dual_texture_effect_set_vertex_color_enabled = { call = "object->setVertexColorEnabledProperty(value)" }
+
+[environment_map_effect]
+lookup = "GetStockEffect<EnvironmentMapEffect>"
+object = "EnvironmentMapEffect*"
+
+[environment_map_effect.routes]
+cna_environment_map_effect_get_diffuse_color = { get = "object->getDiffuseColorProperty()" }
+cna_environment_map_effect_set_diffuse_color = { call = "object->setDiffuseColorProperty(value)" }
+cna_environment_map_effect_get_emissive_color = { get = "object->getEmissiveColorProperty()" }
+cna_environment_map_effect_set_emissive_color = { call = "object->setEmissiveColorProperty(value)" }
+cna_environment_map_effect_get_alpha = { get = "object->getAlphaProperty()" }
+cna_environment_map_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
+cna_environment_map_effect_get_amount = { get = "object->getEnvironmentMapAmountProperty()" }
+cna_environment_map_effect_set_amount = { call = "object->setEnvironmentMapAmountProperty(value)" }
+cna_environment_map_effect_get_specular = { get = "object->getEnvironmentMapSpecularProperty()" }
+cna_environment_map_effect_set_specular = { call = "object->setEnvironmentMapSpecularProperty(value)" }
+cna_environment_map_effect_get_fresnel_factor = { get = "object->getFresnelFactorProperty()" }
+cna_environment_map_effect_set_fresnel_factor = { call = "object->setFresnelFactorProperty(value)" }
+
+[skinned_effect]
+lookup = "GetStockEffect<SkinnedEffect>"
+object = "SkinnedEffect*"
+
+[skinned_effect.routes]
+cna_skinned_effect_get_diffuse_color = { get = "object->getDiffuseColorProperty()" }
+cna_skinned_effect_set_diffuse_color = { call = "object->setDiffuseColorProperty(value)" }
+cna_skinned_effect_get_emissive_color = { get = "object->getEmissiveColorProperty()" }
+cna_skinned_effect_set_emissive_color = { call = "object->setEmissiveColorProperty(value)" }
+cna_skinned_effect_get_specular_color = { get = "object->getSpecularColorProperty()" }
+cna_skinned_effect_set_specular_color = { call = "object->setSpecularColorProperty(value)" }
+cna_skinned_effect_get_specular_power = { get = "object->getSpecularPowerProperty()" }
+cna_skinned_effect_set_specular_power = { call = "object->setSpecularPowerProperty(value)" }
+cna_skinned_effect_get_alpha = { get = "object->getAlphaProperty()" }
+cna_skinned_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
+cna_skinned_effect_get_prefer_per_pixel_lighting = { get = "object->getPreferPerPixelLightingProperty()" }
+cna_skinned_effect_set_prefer_per_pixel_lighting = { call = "object->setPreferPerPixelLightingProperty(value)" }
+cna_skinned_effect_get_weights_per_vertex = { get = "object->getWeightsPerVertexProperty()" }
+cna_skinned_effect_get_vertex_color_enabled = { get = "object->VertexColorEnabled" }
+cna_skinned_effect_set_vertex_color_enabled = { call = "object->VertexColorEnabled = value" }
+
+[color_matrix_effect]
+lookup = "GetStockEffect<ColorMatrixEffect>"
+object = "ColorMatrixEffect*"
+
+[color_matrix_effect.routes]
+cna_color_matrix_effect_get_offset = { get = "object->GetColorOffset()" }
+cna_color_matrix_effect_set_offset = { call = "object->SetColorOffset(value)" }
+cna_color_matrix_effect_set_grayscale = { call = "object->SetGrayscale()" }
+cna_color_matrix_effect_reset = { call = "object->Reset()" }
+
+[pbr_effect]
+lookup = "GetPbrEffect"
+object = "PbrEffectView"
+
+[pbr_effect.routes]
+cna_pbr_effect_get_diffuse_color = { get = "object.pbr != nullptr ? object.pbr->getDiffuseColorProperty() : object.skinned->getDiffuseColorProperty()" }
+cna_pbr_effect_get_alpha = { get = "object.pbr != nullptr ? object.pbr->getAlphaProperty() : object.skinned->getAlphaProperty()" }
+cna_pbr_effect_get_metallic_factor = { get = "object.pbr != nullptr ? object.pbr->getMetallicFactorProperty() : object.skinned->getMetallicFactorProperty()" }
+cna_pbr_effect_get_roughness_factor = { get = "object.pbr != nullptr ? object.pbr->getRoughnessFactorProperty() : object.skinned->getRoughnessFactorProperty()" }
+cna_pbr_effect_get_emissive_factor = { get = "object.pbr != nullptr ? object.pbr->getEmissiveFactorProperty() : object.skinned->getEmissiveFactorProperty()" }
+cna_pbr_effect_get_ior_ext = { get = "object.pbr != nullptr ? object.pbr->getIorEXTProperty() : object.skinned->getIorEXTProperty()" }
+cna_pbr_effect_get_specular_factor_ext = { get = "object.pbr != nullptr ? object.pbr->getSpecularFactorEXTProperty() : object.skinned->getSpecularFactorEXTProperty()" }
+cna_pbr_effect_get_specular_color_factor_ext = { get = "object.pbr != nullptr ? object.pbr->getSpecularColorFactorEXTProperty() : object.skinned->getSpecularColorFactorEXTProperty()" }
+cna_pbr_effect_get_normal_scale_ext = { get = "object.pbr != nullptr ? object.pbr->getNormalScaleEXTProperty() : object.skinned->getNormalScaleEXTProperty()" }
+cna_pbr_effect_get_occlusion_strength_ext = { get = "object.pbr != nullptr ? object.pbr->getOcclusionStrengthEXTProperty() : object.skinned->getOcclusionStrengthEXTProperty()" }
+cna_pbr_effect_get_alpha_mode_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaModeEXTProperty() : object.skinned->getAlphaModeEXTProperty()" }
+cna_pbr_effect_get_alpha_cutoff_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaCutoffEXTProperty() : object.skinned->getAlphaCutoffEXTProperty()" }
+
+[skinned_pbr_effect]
+lookup = "GetStockEffect<SkinnedPbrEffect>"
+object = "SkinnedPbrEffect*"
+
+[skinned_pbr_effect.routes]
+cna_skinned_pbr_effect_get_weights_per_vertex = { get = "object->getWeightsPerVertexProperty()" }

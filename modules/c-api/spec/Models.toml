@@ -1,0 +1,130 @@
+# Models routes, generated into src/generated/Models.inc,
+# which src/CnaCApiModels.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[bone]
+lookup = "GetBone"
+object = "std::shared_ptr<BoneResource>"
+
+[bone.routes]
+cna_model_bone_get_name_byte_count = { size = "object->node->value->getNameProperty()" }
+cna_model_bone_copy_name = { copy = "object->node->value->getNameProperty()" }
+cna_model_bone_get_index = { get = "object->node->value->getIndexProperty()" }
+cna_model_bone_get_transform = { get = "object->node->value->getTransformProperty()" }
+cna_model_bone_set_transform = { call = "object->node->value->setTransformProperty(transform)" }
+
+[collection]
+lookup = "GetCollection"
+object = "std::shared_ptr<BoneCollectionResource>"
+
+[collection.routes]
+cna_model_bone_collection_get_count = { get = "CollectionNodes(*object).size()" }
+
+[part]
+lookup = "GetPart"
+object = "std::shared_ptr<PartResource>"
+
+[part.routes]
+cna_model_mesh_part_get_num_vertices = { get = "object->value->getNumVerticesProperty()" }
+cna_model_mesh_part_get_primitive_count = { get = "object->value->getPrimitiveCountProperty()" }
+cna_model_mesh_part_get_start_index = { get = "object->value->getStartIndexProperty()" }
+cna_model_mesh_part_get_vertex_offset = { get = "object->value->getVertexOffsetProperty()" }
+cna_model_mesh_part_set_tag = { call = "object->tag = tag" }
+cna_model_mesh_part_get_primitive_type_ext = { get = "object->value->getPrimitiveTypeEXTProperty()" }
+
+[part_collection]
+lookup = "GetPartCollection"
+object = "std::shared_ptr<PartCollectionResource>"
+
+[part_collection.routes]
+cna_model_mesh_part_collection_get_count = { get = "PartList(*object).size()" }
+
+[mesh]
+lookup = "GetMesh"
+object = "std::shared_ptr<MeshResource>"
+
+[mesh.routes]
+cna_model_mesh_get_bounding_sphere = { get = "object->value->getBoundingSphereProperty()" }
+cna_model_mesh_set_bounding_sphere = { call = "object->value->setBoundingSphereProperty(value)" }
+cna_model_mesh_get_name_byte_count = { size = "object->value->getNameProperty()" }
+cna_model_mesh_copy_name = { copy = "object->value->getNameProperty()" }
+cna_model_mesh_set_tag = { call = "object->tag = tag" }
+
+[mesh_collection]
+lookup = "GetMeshCollection"
+object = "std::shared_ptr<MeshCollectionResource>"
+
+[mesh_collection.routes]
+cna_model_mesh_collection_get_count = { get = "object->meshes.size()" }
+
+[effect_collection]
+lookup = "GetEffectCollection"
+object = "std::shared_ptr<EffectCollectionResource>"
+
+[effect_collection.routes]
+cna_model_effect_collection_get_count = { get = "object->mesh->effects.size()" }
+
+[model]
+lookup = "GetModel"
+object = "std::shared_ptr<ModelResource>"
+
+[model.routes]
+cna_model_set_tag = { call = "object->tag = tag" }
+cna_model_get_bone_transform_count = { get = "object->bones.size()" }
+cna_model_get_camera_count_ext = { get = "object->value->getCamerasEXTProperty().size()" }
+cna_model_clear_cameras_ext = { call = "object->value->setCamerasEXTProperty({})" }
+cna_model_get_skin_count_ext = { get = "object->value->getSkinsEXTProperty().size()" }
+cna_model_get_material_variant_count_ext = { get = "object->value->getMaterialVariantNamesEXTProperty().size()" }
+cna_model_get_material_variant_ext = { get = "object->value->getMaterialVariantEXTProperty()" }
+cna_model_set_material_variant_ext = { call = "object->value->setMaterialVariantEXTProperty(static_cast<int>(value))" }
+
+[morph_data]
+lookup = "GetMorphData"
+object = "std::shared_ptr<MorphDataResource>"
+
+[morph_data.routes]
+cna_morph_target_data_ext_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+cna_morph_target_data_ext_get_stride = { get = "object->value->Stride" }
+cna_morph_target_data_ext_get_base_vertex_byte_count = { get = "object->value->BaseVertexBytes.size()" }
+cna_morph_target_data_ext_get_target_count = { get = "object->value->PositionDeltas.size()" }
+cna_morph_target_data_ext_get_recompute_flat_normals_ext = { get = "object->value->RecomputeFlatNormalsEXT" }
+
+[skinned_model]
+lookup = "GetSkinnedModel"
+object = "std::shared_ptr<SkinnedModelResource>"
+
+[skinned_model.routes]
+cna_skinned_model_ext_get_bone_count = { get = "object->value->BoneCount" }
+cna_skinned_model_ext_get_clip_count = { get = "object->value->Clips.size()" }
+cna_skinned_model_ext_get_part_count = { get = "object->parts.size()" }
+
+[skinning_data]
+lookup = "GetSkinningData"
+object = "std::shared_ptr<SkinningDataResource>"
+
+[skinning_data.routes]
+cna_skinning_data_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+cna_skinning_data_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_skinning_data_get_bone_count = { get = "object->value->BoneCount" }
+cna_skinning_data_get_clip_count = { get = "object->value->AnimationClips.size()" }
+cna_skinning_data_get_skeleton_root_node_index_ext = { get = "object->value->SkeletonRootNodeIndexEXT" }
+cna_skinning_data_set_skeleton_root_node_index_ext = { call = "object->value->SkeletonRootNodeIndexEXT = static_cast<int>(value)" }
+cna_skinning_data_get_skeleton_root_name_byte_count_ext = { size = "object->value->SkeletonRootNameEXT" }
+cna_skinning_data_copy_skeleton_root_name_ext = { copy = "object->value->SkeletonRootNameEXT" }
+
+[animation_player]
+lookup = "GetAnimationPlayer"
+object = "std::shared_ptr<AnimationPlayerResource>"
+
+[animation_player.routes]
+cna_animation_player_get_current_position = { get = "object->value->getCurrentPositionProperty().getTotalSecondsProperty()" }
+cna_animation_player_get_current_clip_name_byte_count = { size = "object->currentClipName" }
+cna_animation_player_copy_current_clip_name = { copy = "object->currentClipName" }
+
+[model_animations]
+lookup = "GetModelAnimations"
+object = "std::shared_ptr<ModelAnimationsResource>"
+
+[model_animations.routes]
+cna_model_animations_ext_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+cna_model_animations_ext_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_model_animations_ext_get_clip_count = { get = "object->value->Clips.size()" }

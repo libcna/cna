@@ -1,0 +1,48 @@
+# GameProperties routes, generated into src/generated/GameProperties.inc,
+# which src/CnaCApiGameProperties.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[game]
+lookup = "BorrowGame"
+object = "Game*"
+
+[game.routes]
+cna_game_get_is_active = { get = "object->getIsActiveProperty()" }
+cna_game_get_is_mouse_visible = { get = "object->getIsMouseVisibleProperty()" }
+cna_game_set_is_mouse_visible = { call = "object->setIsMouseVisibleProperty(visible)" }
+cna_game_get_is_fixed_time_step = { get = "object->getIsFixedTimeStepProperty()" }
+cna_game_set_is_fixed_time_step = { call = "object->setIsFixedTimeStepProperty(fixed)" }
+cna_game_get_target_elapsed_time_ticks = { get = "object->getTargetElapsedTimeProperty().getTicksProperty()" }
+cna_game_get_inactive_sleep_time_ticks = { get = "object->getInactiveSleepTimeProperty().getTicksProperty()" }
+cna_game_get_target_fps_ext = { get = "object->getTargetFPSProperty()" }
+cna_game_get_target_ms_frame_time_ext = { get = "object->getTargetMsFrameTimeProperty()" }
+cna_game_get_run_application_ext = { get = "object->RunApplication" }
+cna_game_set_run_application_ext = { call = "object->RunApplication = running" }
+cna_game_reset_elapsed_time = { call = "object->ResetElapsedTime()" }
+cna_game_suppress_draw = { call = "object->SuppressDraw()" }
+cna_game_get_type_name_size = { size = "object->GetTypeName()" }
+cna_game_copy_type_name = { copy = "object->GetTypeName()" }
+cna_game_launch_parameters_get_count = { get = "object->getLaunchParametersProperty().size()" }
+cna_framework_dispatcher_update = { call = "FrameworkDispatcher::Update()" }
+cna_title_location_get_path_size = { size = "TitleLocation::getPathProperty()" }
+# The canonical alias returns the same string as the property; C needs only one route.
+cna_title_location_copy_path = { copy = "TitleLocation::Path()" }
+
+[window]
+lookup = "BorrowWindow"
+object = "Microsoft::Xna::Framework::GameWindow*"
+
+[window.routes]
+cna_game_window_get_allow_user_resizing = { get = "object->getAllowUserResizingProperty()" }
+cna_game_window_get_current_orientation = { get = "object->getCurrentOrientationProperty()" }
+# XNA's `Handle` property, which is not the native window: CNA initializes it to zero and
+# never writes a platform value into it. `cna_game_window_get_native_window_ext` is the
+# route that asks the platform.
+cna_game_window_get_native_handle_ext = { get = "object->getHandleProperty()" }
+cna_game_window_get_screen_device_name_size = { size = "object->getScreenDeviceNameProperty()" }
+cna_game_window_copy_screen_device_name = { copy = "object->getScreenDeviceNameProperty()" }
+cna_game_window_get_title_size = { size = "object->getTitleProperty()" }
+cna_game_window_copy_title = { copy = "object->getTitleProperty()" }
+cna_game_window_get_is_borderless_ext = { get = "object->getIsBorderlessEXTProperty()" }
+cna_game_window_begin_screen_device_change = { call = "object->BeginScreenDeviceChange(will_be_full_screen)" }
+cna_game_window_get_type_name_size = { size = "object->GetTypeName()" }
+cna_game_window_copy_type_name = { copy = "object->GetTypeName()" }

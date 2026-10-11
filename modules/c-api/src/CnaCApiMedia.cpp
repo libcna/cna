@@ -495,20 +495,6 @@ CNA_Result cna_song_get_duration(const CNA_SongHandle song, int64_t* const outTi
     });
 }
 
-CNA_Result cna_song_set_duration(const CNA_SongHandle song, const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setDurationProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_song_get_is_protected(const CNA_SongHandle song, CNA_Bool* const outProtected)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -548,19 +534,6 @@ CNA_Result cna_song_get_play_count(const CNA_SongHandle song, int32_t* const out
     });
 }
 
-CNA_Result cna_song_set_play_count(const CNA_SongHandle song, const int32_t playCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPlayCountProperty(static_cast<SharpRuntime::intcs>(playCount));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_song_get_rating(const CNA_SongHandle song, int32_t* const outRating)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -597,19 +570,6 @@ CNA_Result cna_song_get_is_disposed(const CNA_SongHandle song, CNA_Bool* const o
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_song_dispose(const CNA_SongHandle song)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -775,55 +735,6 @@ CNA_Result cna_song_collection_get_at(
     });
 }
 
-CNA_Result cna_song_collection_get_count(
-    const CNA_SongCollectionHandle collection,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The song collection count output is null.");
-        }
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(resource->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_song_collection_get_is_disposed(
-    const CNA_SongCollectionHandle collection,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The song collection disposal-state output is null.");
-        }
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_song_collection_dispose(const CNA_SongCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_song_collection_destroy(const CNA_SongCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -839,24 +750,6 @@ CNA_Result cna_song_collection_destroy(const CNA_SongCollectionHandle collection
                 CNA::C::Detail::ErrorCategoryForResult(result),
                 "The song collection handle could not be released.");
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_song_collection_get_type_name_size(
-    const CNA_SongCollectionHandle collection,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The song collection type-name byte-count output is null.");
-        }
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -879,3 +772,6 @@ CNA_Result cna_song_collection_copy_type_name(
         return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Media.toml.
+#include "generated/Media.inc"

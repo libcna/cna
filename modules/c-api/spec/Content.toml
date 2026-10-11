@@ -1,0 +1,15 @@
+# Content routes, generated into src/generated/Content.inc,
+# which src/CnaCApiContent.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[content_manager]
+lookup = "GetContentManager"
+object = "std::shared_ptr<ContentManagerResource>"
+
+[content_manager.routes]
+cna_content_manager_get_root_directory_size = { size = "object->value->getRootDirectoryProperty()" }
+cna_content_manager_unload = { call = "object->value->Unload()" }
+cna_content_manager_register_builtin_loaders = { call = "object->value->RegisterBuiltinLoaders()" }
+cna_content_manager_get_has_service_provider = { get = "object->value->getServiceProviderProperty() != nullptr" }
+cna_content_manager_refresh_content_manifest = { call = "object->value->RefreshContentManifest()" }
+cna_content_manager_get_manifest_entry_count = { get = "object->value->GetContentManifest().size()" }
+cna_content_manager_get_xnb_reader_usage_count = { get = "SortedReaderUsage(object).size()" }

@@ -1,0 +1,22 @@
+# GraphicsDevice routes, generated into src/generated/GraphicsDevice.inc,
+# which src/CnaCApiGraphicsDevice.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[viewport]
+[viewport.routes]
+cna_viewport_init = { value = "Viewport()" }
+cna_viewport_init_bounds = { value = "Viewport(x, y, width, height)" }
+cna_viewport_get_aspect_ratio = { value = "value.getAspectRatioProperty()" }
+cna_viewport_get_bounds = { value = "value.getBoundsProperty()" }
+cna_viewport_get_title_safe_area = { value = "value.getTitleSafeAreaProperty()" }
+cna_viewport_project = { value = "value.Project(source, projection, view, world)" }
+cna_viewport_unproject = { value = "value.Unproject(source, projection, view, world)" }
+cna_viewport_get_string_size = { size = "value.ToString()" }
+cna_viewport_copy_string = { copy = "value.ToString()" }
+
+[rectangle]
+[rectangle.routes]
+cna_viewport_init_from_rectangle = { value = "Viewport(bounds)" }
+
+[values]
+[values.routes]
+cna_primitive_type_get_vertex_count = { value = "GraphicsDevice::PrimitiveVerts(static_cast<PrimitiveType>(primitive_type), primitive_count)" }

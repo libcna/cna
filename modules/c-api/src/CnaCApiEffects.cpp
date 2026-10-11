@@ -64,7 +64,6 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyStringView;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -732,60 +731,38 @@ template<typename TNative, typename TC, typename TConvert>
         "The owned Effect handle could not be created.");
 }
 
-[[nodiscard]] CNA_Result GetShaderEffect(
-    const CNA_EffectHandle handle,
-    std::shared_ptr<EffectResource>* const outResource,
-    ShaderEffect** const outShader)
-{
-    std::shared_ptr<EffectResource> effect;
-    if (const CNA_Result result = GetEffect(handle, &effect);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    auto* const shader = dynamic_cast<ShaderEffect*>(effect->value.get());
-    if (shader == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_HANDLE,
-            CNA_ERROR_CATEGORY_HANDLE,
-            "The Effect handle does not refer to a ShaderEffect.");
-    }
-    if (outResource != nullptr) {
-        *outResource = std::move(effect);
-    }
-    *outShader = shader;
-    return CNA_RESULT_SUCCESS;
-}
+// The class or interface name an Effect lookup names when the effect is not one.
+template<typename TEffect>
+constexpr const char* EffectTypeName = nullptr;
+template<>
+constexpr const char* EffectTypeName<AlphaTestEffect> = "AlphaTestEffect";
+template<>
+constexpr const char* EffectTypeName<BasicEffect> = "BasicEffect";
+template<>
+constexpr const char* EffectTypeName<ColorMatrixEffect> = "ColorMatrixEffect";
+template<>
+constexpr const char* EffectTypeName<DualTextureEffect> = "DualTextureEffect";
+template<>
+constexpr const char* EffectTypeName<EnvironmentMapEffect> = "EnvironmentMapEffect";
+template<>
+constexpr const char* EffectTypeName<ShaderEffect> = "ShaderEffect";
+template<>
+constexpr const char* EffectTypeName<SkinnedEffect> = "SkinnedEffect";
+template<>
+constexpr const char* EffectTypeName<SkinnedPbrEffect> = "SkinnedPbrEffect";
+template<>
+constexpr const char* EffectTypeName<IEffectFog> = "IEffectFog";
+template<>
+constexpr const char* EffectTypeName<IEffectLights> = "IEffectLights";
+template<>
+constexpr const char* EffectTypeName<IEffectMatrices> = "IEffectMatrices";
 
-[[nodiscard]] CNA_Result GetBasicEffect(
-    const CNA_EffectHandle handle,
-    std::shared_ptr<EffectResource>* const outResource,
-    BasicEffect** const outBasic)
-{
-    std::shared_ptr<EffectResource> effect;
-    if (const CNA_Result result = GetEffect(handle, &effect);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    auto* const basic = dynamic_cast<BasicEffect*>(effect->value.get());
-    if (basic == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_HANDLE,
-            CNA_ERROR_CATEGORY_HANDLE,
-            "The Effect handle does not refer to a BasicEffect.");
-    }
-    if (outResource != nullptr) {
-        *outResource = std::move(effect);
-    }
-    *outBasic = basic;
-    return CNA_RESULT_SUCCESS;
-}
-
+/// The effect behind a handle as one concrete effect class; INVALID_HANDLE when it is another.
 template<typename TEffect>
 [[nodiscard]] CNA_Result GetStockEffect(
     const CNA_EffectHandle handle,
     std::shared_ptr<EffectResource>* const outResource,
-    TEffect** const outStockEffect,
-    const char* const typeName)
+    TEffect** const outStockEffect)
 {
     std::shared_ptr<EffectResource> effect;
     if (const CNA_Result result = GetEffect(handle, &effect);
@@ -797,13 +774,20 @@ template<typename TEffect>
         return Fail(
             CNA_RESULT_INVALID_HANDLE,
             CNA_ERROR_CATEGORY_HANDLE,
-            std::string("The Effect handle does not refer to a ") + typeName + ".");
+            std::string("The Effect handle does not refer to a ") + EffectTypeName<TEffect> + ".");
     }
     if (outResource != nullptr) {
         *outResource = std::move(effect);
     }
     *outStockEffect = stockEffect;
     return CNA_RESULT_SUCCESS;
+}
+
+/// The two-argument form the generated routes use.
+template<typename TEffect>
+[[nodiscard]] CNA_Result GetStockEffect(const CNA_EffectHandle handle, TEffect** const outEffect)
+{
+    return GetStockEffect(handle, nullptr, outEffect);
 }
 
 struct PbrEffectView final {
@@ -834,12 +818,12 @@ struct PbrEffectView final {
     return CNA_RESULT_SUCCESS;
 }
 
+/// The effect behind a handle as one effect interface; NOT_SUPPORTED when it does not implement it.
 template<typename TInterface>
 [[nodiscard]] CNA_Result GetEffectInterface(
     const CNA_EffectHandle handle,
     std::shared_ptr<EffectResource>* const outResource,
-    TInterface** const outInterface,
-    const char* const failureMessage)
+    TInterface** const outInterface)
 {
     std::shared_ptr<EffectResource> effect;
     if (const CNA_Result result = GetEffect(handle, &effect);
@@ -851,13 +835,22 @@ template<typename TInterface>
         return Fail(
             CNA_RESULT_NOT_SUPPORTED,
             CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-            failureMessage);
+            std::string("The Effect does not implement ") + EffectTypeName<TInterface> + ".");
     }
     if (outResource != nullptr) {
         *outResource = std::move(effect);
     }
     *outInterface = interfaceValue;
     return CNA_RESULT_SUCCESS;
+}
+
+/// The two-argument form the generated routes use.
+template<typename TInterface>
+[[nodiscard]] CNA_Result GetEffectInterface(
+    const CNA_EffectHandle handle,
+    TInterface** const outInterface)
+{
+    return GetEffectInterface(handle, nullptr, outInterface);
 }
 
 [[nodiscard]] CNA_Result GetDirectionalLight(
@@ -1215,22 +1208,6 @@ CNA_Result cna_effect_annotation_get_name_byte_count(
     });
 }
 
-CNA_Result cna_effect_annotation_copy_name(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(annotation->value->getNameProperty(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_effect_annotation_get_semantic_byte_count(
     const CNA_EffectAnnotationHandle annotationHandle,
     uint64_t* const outByteCount)
@@ -1247,76 +1224,6 @@ CNA_Result cna_effect_annotation_get_semantic_byte_count(
     });
 }
 
-CNA_Result cna_effect_annotation_copy_semantic(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(annotation->value->getSemanticProperty(), destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_boolean(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Boolean output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(annotation->value->GetValueBoolean());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_int32(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Int32 output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(annotation->value->GetValueInt32());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_single(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Single output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = annotation->value->GetValueSingle();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_annotation_get_value_string_byte_count(
     const CNA_EffectAnnotationHandle annotationHandle,
     uint64_t* const outByteCount)
@@ -1330,94 +1237,6 @@ CNA_Result cna_effect_annotation_get_value_string_byte_count(
         return GetStringByteCount(outByteCount, [&]() {
             return annotation->value->GetValueString();
         });
-    });
-}
-
-CNA_Result cna_effect_annotation_copy_value_string(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(annotation->value->GetValueString(), destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_vector2(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_Vector2* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Vector2 output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(annotation->value->GetValueVector2());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_vector3(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Vector3 output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(annotation->value->GetValueVector3());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_vector4(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_Vector4* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Vector4 output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(annotation->value->GetValueVector4());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_matrix(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectAnnotation Matrix output is null.");
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(annotation->value->GetValueMatrix());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1460,24 +1279,6 @@ CNA_Result cna_effect_annotation_collection_destroy(
             result,
             ErrorCategoryForResult(result),
             "The owned EffectAnnotationCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_effect_annotation_collection_get_count(
-    const CNA_EffectAnnotationCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The EffectAnnotationCollection count output is null.");
-        }
-        std::shared_ptr<AnnotationCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1654,22 +1455,6 @@ CNA_Result cna_effect_parameter_get_name_byte_count(
     });
 }
 
-CNA_Result cna_effect_parameter_copy_name(
-    const CNA_EffectParameterHandle parameterHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(parameter->value->getNameProperty(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_effect_parameter_get_semantic_byte_count(
     const CNA_EffectParameterHandle parameterHandle,
     uint64_t* const outByteCount)
@@ -1683,22 +1468,6 @@ CNA_Result cna_effect_parameter_get_semantic_byte_count(
         return GetStringByteCount(outByteCount, [&]() {
             return parameter->value->getSemanticProperty();
         });
-    });
-}
-
-CNA_Result cna_effect_parameter_copy_semantic(
-    const CNA_EffectParameterHandle parameterHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(parameter->value->getSemanticProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -2171,22 +1940,6 @@ CNA_Result cna_effect_parameter_get_value_string_byte_count(
     });
 }
 
-CNA_Result cna_effect_parameter_copy_value_string(
-    const CNA_EffectParameterHandle parameterHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(parameter->value->GetValueString(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_effect_parameter_set_value_string(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_StringView value)
@@ -2421,24 +2174,6 @@ CNA_Result cna_effect_parameter_collection_destroy(
     });
 }
 
-CNA_Result cna_effect_parameter_collection_get_count(
-    const CNA_EffectParameterCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The EffectParameterCollection count output is null.");
-        }
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_parameter_collection_add_create(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_EffectParameterCreateInfo* const createInfo,
@@ -2621,24 +2356,6 @@ CNA_Result cna_effect_pass_create_indexed_ext(
     });
 }
 
-CNA_Result cna_effect_pass_get_index_ext(
-    const CNA_EffectPassHandle passHandle,
-    uint32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The EffectPass index output is null.");
-        }
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = pass->value->getIndexInternal();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_pass_destroy(const CNA_EffectPassHandle passHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2671,22 +2388,6 @@ CNA_Result cna_effect_pass_get_name_byte_count(
     });
 }
 
-CNA_Result cna_effect_pass_copy_name(
-    const CNA_EffectPassHandle passHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(pass->value->getNameProperty(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_effect_pass_get_annotations(
     const CNA_EffectPassHandle passHandle,
     CNA_EffectAnnotationCollectionHandle* const outCollection)
@@ -2703,19 +2404,6 @@ CNA_Result cna_effect_pass_get_annotations(
         }
         return CreateAnnotationCollectionAlias(
             pass->value, &pass->value->getAnnotationsProperty(), outCollection);
-    });
-}
-
-CNA_Result cna_effect_pass_apply(const CNA_EffectPassHandle passHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        pass->value->Apply();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2747,24 +2435,6 @@ CNA_Result cna_effect_pass_collection_destroy(
             ? CNA_RESULT_SUCCESS
             : Fail(result, ErrorCategoryForResult(result),
                    "The owned EffectPassCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_effect_pass_collection_get_count(
-    const CNA_EffectPassCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The EffectPassCollection count output is null.");
-        }
-        std::shared_ptr<PassCollectionResource> collection;
-        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2934,24 +2604,6 @@ CNA_Result cna_effect_technique_create_reflected_ext(
     });
 }
 
-CNA_Result cna_effect_technique_get_index_ext(
-    const CNA_EffectTechniqueHandle techniqueHandle,
-    uint32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The EffectTechnique index output is null.");
-        }
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = technique->value->getIndexInternal();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_technique_destroy(
     const CNA_EffectTechniqueHandle techniqueHandle)
 {
@@ -2982,40 +2634,6 @@ CNA_Result cna_effect_technique_get_name_byte_count(
         return GetStringByteCount(outByteCount, [&]() {
             return technique->value->getNameProperty();
         });
-    });
-}
-
-CNA_Result cna_effect_technique_copy_name(
-    const CNA_EffectTechniqueHandle techniqueHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(technique->value->getNameProperty(), destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_effect_technique_get_identity(
-    const CNA_EffectTechniqueHandle techniqueHandle,
-    uint64_t* const outIdentity)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIdentity == nullptr) {
-            return InvalidArgument("The EffectTechnique identity output is null.");
-        }
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIdentity = technique->value->getIdInternal();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3094,24 +2712,6 @@ CNA_Result cna_effect_technique_collection_destroy(
             ? CNA_RESULT_SUCCESS
             : Fail(result, ErrorCategoryForResult(result),
                    "The owned EffectTechniqueCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_effect_technique_collection_get_count(
-    const CNA_EffectTechniqueCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The EffectTechniqueCollection count output is null.");
-        }
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3540,19 +3140,6 @@ CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
     });
 }
 
-CNA_Result cna_effect_apply(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->value->Apply();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_get_parameters(
     const CNA_EffectHandle effectHandle,
     CNA_EffectParameterCollectionHandle* const outCollection)
@@ -3702,25 +3289,6 @@ CNA_Result cna_effect_copy_type_name(
     });
 }
 
-CNA_Result cna_effect_get_is_compiled_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outIsCompiled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsCompiled == nullptr) {
-            return InvalidArgument("The Effect compiled-runtime output is null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The runtime itself is renderer-owned implementation, so its presence is what crosses.
-        *outIsCompiled = ToCBool(effect->value->GetCompiledRuntimePtr() != nullptr);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_get_vertex_source_byte_count(
     const CNA_EffectHandle effectHandle,
     uint64_t* const outByteCount)
@@ -3769,78 +3337,6 @@ CNA_Result cna_effect_copy_fragment_source(
     });
 }
 
-CNA_Result cna_effect_has_renderer(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasRenderer)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasRenderer == nullptr) {
-            return InvalidArgument("The Effect renderer-state output is null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasRenderer = ToCBool(effect->value->GetEffectRendererPtr() != nullptr);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_is_exact_stock_sprite_effect(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outIsExact)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsExact == nullptr) {
-            return InvalidArgument("The stock SpriteEffect identity output is null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsExact = ToCBool(effect->value->IsExactStockSpriteEffectEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_is_valid(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outIsValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsValid == nullptr) {
-            return InvalidArgument("The ShaderEffect validity output is null.");
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsValid = ToCBool(shader->IsEffectValid());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_has_renderer(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasRenderer)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasRenderer == nullptr) {
-            return InvalidArgument("The ShaderEffect renderer-state output is null.");
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasRenderer = ToCBool(shader->HasRenderer());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_shader_effect_set_uniform_matrix(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
@@ -3848,7 +3344,7 @@ CNA_Result cna_shader_effect_set_uniform_matrix(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3874,7 +3370,7 @@ CNA_Result cna_shader_effect_set_uniform_vector4(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3895,7 +3391,7 @@ CNA_Result cna_shader_effect_set_uniform_vector3(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3916,7 +3412,7 @@ CNA_Result cna_shader_effect_set_uniform_vector2(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3937,7 +3433,7 @@ CNA_Result cna_shader_effect_set_uniform_float(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3958,7 +3454,7 @@ CNA_Result cna_shader_effect_set_uniform_int32(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4005,7 +3501,7 @@ CNA_Result cna_shader_effect_declare_uniform_block_ext(
             return result;
         }
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4060,7 +3556,7 @@ CNA_Result cna_shader_effect_set_uniform_float_array(
             return result;
         }
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4095,7 +3591,7 @@ CNA_Result cna_shader_effect_set_uniform_vector2_array(
             return result;
         }
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4127,7 +3623,7 @@ CNA_Result cna_shader_effect_set_texture2d(
         }
         std::shared_ptr<EffectResource> effect;
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4162,7 +3658,7 @@ CNA_Result cna_shader_effect_set_texture_cube(
         }
         std::shared_ptr<EffectResource> effect;
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4197,7 +3693,7 @@ CNA_Result cna_shader_effect_set_texture3d(
         }
         std::shared_ptr<EffectResource> effect;
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4217,105 +3713,6 @@ CNA_Result cna_shader_effect_set_texture3d(
             std::static_pointer_cast<Texture>(texture->value),
             texture,
             &texture->activeEffectReferenceCount);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_get_world(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ShaderEffect world-matrix output is null.");
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(shader->getWorldProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_world(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->setWorldProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_get_view(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ShaderEffect view-matrix output is null.");
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(shader->getViewProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_view(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->setViewProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_get_projection(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ShaderEffect projection-matrix output is null.");
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(shader->getProjectionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_projection(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->setProjectionProperty(ToNative(value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4351,141 +3748,6 @@ CNA_Result cna_directional_light_destroy(
     });
 }
 
-CNA_Result cna_directional_light_get_diffuse_color(
-    const CNA_DirectionalLightHandle lightHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DirectionalLight diffuse-color output is null.");
-        }
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(light->value->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_set_diffuse_color(
-    const CNA_DirectionalLightHandle lightHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        light->value->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_get_direction(
-    const CNA_DirectionalLightHandle lightHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DirectionalLight direction output is null.");
-        }
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(light->value->getDirectionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_set_direction(
-    const CNA_DirectionalLightHandle lightHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        light->value->setDirectionProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_get_specular_color(
-    const CNA_DirectionalLightHandle lightHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DirectionalLight specular-color output is null.");
-        }
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(light->value->getSpecularColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_set_specular_color(
-    const CNA_DirectionalLightHandle lightHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        light->value->setSpecularColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_get_enabled(
-    const CNA_DirectionalLightHandle lightHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DirectionalLight enabled output is null.");
-        }
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(light->value->getEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_set_enabled(
-    const CNA_DirectionalLightHandle lightHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The DirectionalLight enabled value is not a CNA_Bool.");
-        }
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        light->value->setEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_basic_effect_create(
     const CNA_Handle graphicsDeviceHandle,
     CNA_EffectHandle* const outEffect)
@@ -4508,297 +3770,6 @@ CNA_Result cna_basic_effect_create(
     });
 }
 
-CNA_Result cna_effect_matrices_get_world(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect world-matrix output is null.");
-        }
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(matrices->getWorldProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_matrices_set_world(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        matrices->setWorldProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_matrices_get_view(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect view-matrix output is null.");
-        }
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(matrices->getViewProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_matrices_set_view(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        matrices->setViewProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_matrices_get_projection(
-    const CNA_EffectHandle effectHandle,
-    CNA_Matrix* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect projection-matrix output is null.");
-        }
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(matrices->getProjectionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_matrices_set_projection(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Matrix value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectMatrices* matrices = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &matrices,
-                "The Effect does not implement IEffectMatrices.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        matrices->setProjectionProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_get_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect fog-color output is null.");
-        }
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(fog->getFogColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_set_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        fog->setFogColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_get_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect fog-enabled output is null.");
-        }
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(fog->getFogEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_set_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The fog-enabled value is not a CNA_Bool.");
-        }
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        fog->setFogEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_get_start(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect fog-start output is null.");
-        }
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = fog->getFogStartProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_set_start(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        fog->setFogStartProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_get_end(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect fog-end output is null.");
-        }
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = fog->getFogEndProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_fog_set_end(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectFog* fog = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        fog->setFogEndProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_lights_get_ambient_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect ambient-light output is null.");
-        }
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights,
-                "The Effect does not implement IEffectLights.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(lights->getAmbientLightColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_lights_set_ambient_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights,
-                "The Effect does not implement IEffectLights.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        lights->setAmbientLightColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_lights_get_directional_light(
     const CNA_EffectHandle effectHandle,
     const uint32_t index,
@@ -4815,8 +3786,7 @@ CNA_Result cna_effect_lights_get_directional_light(
         std::shared_ptr<EffectResource> effect;
         IEffectLights* lights = nullptr;
         if (const CNA_Result result = GetEffectInterface(
-                effectHandle, &effect, &lights,
-                "The Effect does not implement IEffectLights.");
+                effectHandle, &effect, &lights);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4835,26 +3805,6 @@ CNA_Result cna_effect_lights_get_directional_light(
     });
 }
 
-CNA_Result cna_effect_lights_get_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The effect lighting-enabled output is null.");
-        }
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights,
-                "The Effect does not implement IEffectLights.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(lights->getLightingEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_lights_set_enabled(
     const CNA_EffectHandle effectHandle,
     const CNA_Bool value)
@@ -4865,8 +3815,7 @@ CNA_Result cna_effect_lights_set_enabled(
         }
         IEffectLights* lights = nullptr;
         if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights,
-                "The Effect does not implement IEffectLights.");
+                effectHandle, nullptr, &lights);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4885,294 +3834,6 @@ CNA_Result cna_effect_lights_set_enabled(
     });
 }
 
-CNA_Result cna_effect_lights_enable_default(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights,
-                "The Effect does not implement IEffectLights.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        lights->EnableDefaultLighting();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect vertex-color output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(basic->VertexColorEnabled);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The vertex-color value is not a CNA_Bool.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->VertexColorEnabled = value == CNA_TRUE;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_prefer_per_pixel_lighting(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect per-pixel-lighting output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(basic->getPreferPerPixelLightingProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_prefer_per_pixel_lighting(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The per-pixel-lighting value is not a CNA_Bool.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setPreferPerPixelLightingProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect diffuse-color output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(basic->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect emissive-color output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(basic->getEmissiveColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setEmissiveColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_specular_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect specular-color output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(basic->getSpecularColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_specular_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setSpecularColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_specular_power(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect specular-power output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = basic->getSpecularPowerProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_specular_power(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setSpecularPowerProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect alpha output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = basic->getAlphaProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setAlphaProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_get_texture_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BasicEffect texture-enabled output is null.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(basic->getTextureEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_basic_effect_set_texture_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The texture-enabled value is not a CNA_Bool.");
-        }
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->setTextureEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_basic_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
@@ -5186,7 +3847,7 @@ CNA_Result cna_basic_effect_get_texture(
         *outTexture = CNA_INVALID_HANDLE;
         std::shared_ptr<EffectResource> effect;
         BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, &effect, &basic);
+        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5208,7 +3869,7 @@ CNA_Result cna_basic_effect_set_texture(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<EffectResource> effect;
         BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetBasicEffect(effectHandle, &effect, &basic);
+        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5261,76 +3922,6 @@ CNA_Result cna_alpha_test_effect_create(
     });
 }
 
-CNA_Result cna_alpha_test_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The AlphaTestEffect diffuse-color output is null.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(alphaTest->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        alphaTest->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The AlphaTestEffect alpha output is null.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = alphaTest->getAlphaProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        alphaTest->setAlphaProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_alpha_test_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
@@ -5343,7 +3934,7 @@ CNA_Result cna_alpha_test_effect_get_texture(
         std::shared_ptr<EffectResource> effect;
         AlphaTestEffect* alphaTest = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &alphaTest, "AlphaTestEffect");
+                effectHandle, &effect, &alphaTest);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5364,7 +3955,7 @@ CNA_Result cna_alpha_test_effect_set_texture(
         std::shared_ptr<EffectResource> effect;
         AlphaTestEffect* alphaTest = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &alphaTest, "AlphaTestEffect");
+                effectHandle, &effect, &alphaTest);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5378,64 +3969,6 @@ CNA_Result cna_alpha_test_effect_set_texture(
     });
 }
 
-CNA_Result cna_alpha_test_effect_get_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The AlphaTestEffect vertex-color output is null.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(alphaTest->getVertexColorEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_set_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The AlphaTestEffect vertex-color value is not a CNA_Bool.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        alphaTest->setVertexColorEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_get_alpha_function(
-    const CNA_EffectHandle effectHandle,
-    CNA_CompareFunction* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The AlphaTestEffect comparison output is null.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<CNA_CompareFunction>(
-            alphaTest->getAlphaFunctionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_alpha_test_effect_set_alpha_function(
     const CNA_EffectHandle effectHandle,
     const CNA_CompareFunction value)
@@ -5446,46 +3979,11 @@ CNA_Result cna_alpha_test_effect_set_alpha_function(
         }
         AlphaTestEffect* alphaTest = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+                effectHandle, nullptr, &alphaTest);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         alphaTest->setAlphaFunctionProperty(static_cast<CompareFunction>(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_get_reference_alpha(
-    const CNA_EffectHandle effectHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The AlphaTestEffect reference-alpha output is null.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(alphaTest->getReferenceAlphaProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_alpha_test_effect_set_reference_alpha(
-    const CNA_EffectHandle effectHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        alphaTest->setReferenceAlphaProperty(static_cast<int>(value));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5512,76 +4010,6 @@ CNA_Result cna_dual_texture_effect_create(
     });
 }
 
-CNA_Result cna_dual_texture_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DualTextureEffect diffuse-color output is null.");
-        }
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(dualTexture->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dual_texture_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dualTexture->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dual_texture_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DualTextureEffect alpha output is null.");
-        }
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = dualTexture->getAlphaProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dual_texture_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dualTexture->setAlphaProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_dual_texture_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     const uint32_t textureIndex,
@@ -5600,7 +4028,7 @@ CNA_Result cna_dual_texture_effect_get_texture(
         std::shared_ptr<EffectResource> effect;
         DualTextureEffect* dualTexture = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &dualTexture, "DualTextureEffect");
+                effectHandle, &effect, &dualTexture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5626,7 +4054,7 @@ CNA_Result cna_dual_texture_effect_set_texture(
         std::shared_ptr<EffectResource> effect;
         DualTextureEffect* dualTexture = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &dualTexture, "DualTextureEffect");
+                effectHandle, &effect, &dualTexture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5645,44 +4073,6 @@ CNA_Result cna_dual_texture_effect_set_texture(
                     dualTexture->SetOwnedTexture2(std::move(texture));
                 }
             });
-    });
-}
-
-CNA_Result cna_dual_texture_effect_get_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The DualTextureEffect vertex-color output is null.");
-        }
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(dualTexture->getVertexColorEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_dual_texture_effect_set_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The DualTextureEffect vertex-color value is not a CNA_Bool.");
-        }
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dualTexture->setVertexColorEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -5708,111 +4098,6 @@ CNA_Result cna_environment_map_effect_create(
     });
 }
 
-CNA_Result cna_environment_map_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect diffuse-color output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(environmentMap->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_get_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect emissive-color output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(environmentMap->getEmissiveColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setEmissiveColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect alpha output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = environmentMap->getAlphaProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setAlphaProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_environment_map_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
@@ -5825,7 +4110,7 @@ CNA_Result cna_environment_map_effect_get_texture(
         std::shared_ptr<EffectResource> effect;
         EnvironmentMapEffect* environmentMap = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+                effectHandle, &effect, &environmentMap);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5846,7 +4131,7 @@ CNA_Result cna_environment_map_effect_set_texture(
         std::shared_ptr<EffectResource> effect;
         EnvironmentMapEffect* environmentMap = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+                effectHandle, &effect, &environmentMap);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5872,7 +4157,7 @@ CNA_Result cna_environment_map_effect_get_environment_map(
         std::shared_ptr<EffectResource> effect;
         EnvironmentMapEffect* environmentMap = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+                effectHandle, &effect, &environmentMap);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5893,7 +4178,7 @@ CNA_Result cna_environment_map_effect_set_environment_map(
         std::shared_ptr<EffectResource> effect;
         EnvironmentMapEffect* environmentMap = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+                effectHandle, &effect, &environmentMap);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5904,111 +4189,6 @@ CNA_Result cna_environment_map_effect_set_environment_map(
             [environmentMap](std::shared_ptr<TextureCube> texture) {
                 environmentMap->SetOwnedEnvironmentMap(std::move(texture));
             });
-    });
-}
-
-CNA_Result cna_environment_map_effect_get_amount(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect amount output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = environmentMap->getEnvironmentMapAmountProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_amount(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setEnvironmentMapAmountProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_get_specular(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect specular output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(environmentMap->getEnvironmentMapSpecularProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_specular(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setEnvironmentMapSpecularProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_get_fresnel_factor(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect Fresnel-factor output is null.");
-        }
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = environmentMap->getFresnelFactorProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_environment_map_effect_set_fresnel_factor(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        environmentMap->setFresnelFactorProperty(value);
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -6034,219 +4214,6 @@ CNA_Result cna_skinned_effect_create(
     });
 }
 
-CNA_Result cna_skinned_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect diffuse-color output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(skinned->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setDiffuseColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect emissive-color output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(skinned->getEmissiveColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_emissive_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setEmissiveColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_specular_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect specular-color output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(skinned->getSpecularColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_specular_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setSpecularColorProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_specular_power(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect specular-power output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = skinned->getSpecularPowerProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_specular_power(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setSpecularPowerProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect alpha output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = skinned->getAlphaProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setAlphaProperty(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_prefer_per_pixel_lighting(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect per-pixel-lighting output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(skinned->getPreferPerPixelLightingProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_prefer_per_pixel_lighting(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The SkinnedEffect per-pixel-lighting value is not a CNA_Bool.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setPreferPerPixelLightingProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
@@ -6259,7 +4226,7 @@ CNA_Result cna_skinned_effect_get_texture(
         std::shared_ptr<EffectResource> effect;
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &skinned, "SkinnedEffect");
+                effectHandle, &effect, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6280,7 +4247,7 @@ CNA_Result cna_skinned_effect_set_texture(
         std::shared_ptr<EffectResource> effect;
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &skinned, "SkinnedEffect");
+                effectHandle, &effect, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6294,25 +4261,6 @@ CNA_Result cna_skinned_effect_set_texture(
     });
 }
 
-CNA_Result cna_skinned_effect_get_weights_per_vertex(
-    const CNA_EffectHandle effectHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect weights-per-vertex output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(skinned->getWeightsPerVertexProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_effect_set_weights_per_vertex(
     const CNA_EffectHandle effectHandle,
     const int32_t value)
@@ -6323,7 +4271,7 @@ CNA_Result cna_skinned_effect_set_weights_per_vertex(
         }
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6349,7 +4297,7 @@ CNA_Result cna_skinned_effect_set_bone_transforms(
         (void)byteCount;
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6384,7 +4332,7 @@ CNA_Result cna_skinned_effect_copy_bone_transforms(
         }
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6393,44 +4341,6 @@ CNA_Result cna_skinned_effect_copy_bone_transforms(
         for (uint64_t index = 0U; index < requestedCount; ++index) {
             destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_get_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedEffect vertex-color output is null.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(skinned->VertexColorEnabled);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_effect_set_vertex_color_enabled(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The SkinnedEffect vertex-color value is not a CNA_Bool.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->VertexColorEnabled = value == CNA_TRUE;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6467,7 +4377,7 @@ CNA_Result cna_color_matrix_effect_get_matrix(
         }
         ColorMatrixEffect* colorMatrix = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+                effectHandle, nullptr, &colorMatrix);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -6484,76 +4394,13 @@ CNA_Result cna_color_matrix_effect_set_matrix(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ColorMatrixEffect* colorMatrix = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+                effectHandle, nullptr, &colorMatrix);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         std::array<float, 16> native{};
         std::copy(std::begin(value.values), std::end(value.values), native.begin());
         colorMatrix->SetColorMatrix(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_matrix_effect_get_offset(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector4* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ColorMatrixEffect offset output is null.");
-        }
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(colorMatrix->GetColorOffset());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_matrix_effect_set_offset(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector4 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        colorMatrix->SetColorOffset(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_matrix_effect_set_grayscale(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        colorMatrix->SetGrayscale();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_matrix_effect_reset(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        colorMatrix->Reset();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6602,26 +4449,6 @@ CNA_Result cna_skinned_pbr_effect_create(
     });
 }
 
-CNA_Result cna_pbr_effect_get_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR diffuse-color output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(view.pbr != nullptr
-            ? view.pbr->getDiffuseColorProperty()
-            : view.skinned->getDiffuseColorProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_diffuse_color(
     const CNA_EffectHandle effectHandle,
     const CNA_Vector3 value)
@@ -6637,26 +4464,6 @@ CNA_Result cna_pbr_effect_set_diffuse_color(
         } else {
             view.skinned->setDiffuseColorProperty(ToNative(value));
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_alpha(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR alpha output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getAlphaProperty()
-            : view.skinned->getAlphaProperty();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6747,26 +4554,6 @@ CNA_Result cna_pbr_effect_set_texture(
     });
 }
 
-CNA_Result cna_pbr_effect_get_metallic_factor(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR metallic-factor output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getMetallicFactorProperty()
-            : view.skinned->getMetallicFactorProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_metallic_factor(
     const CNA_EffectHandle effectHandle,
     const float value)
@@ -6786,26 +4573,6 @@ CNA_Result cna_pbr_effect_set_metallic_factor(
     });
 }
 
-CNA_Result cna_pbr_effect_get_roughness_factor(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR roughness-factor output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getRoughnessFactorProperty()
-            : view.skinned->getRoughnessFactorProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_roughness_factor(
     const CNA_EffectHandle effectHandle,
     const float value)
@@ -6821,26 +4588,6 @@ CNA_Result cna_pbr_effect_set_roughness_factor(
         } else {
             view.skinned->setRoughnessFactorProperty(value);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_emissive_factor(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR emissive-factor output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(view.pbr != nullptr
-            ? view.pbr->getEmissiveFactorProperty()
-            : view.skinned->getEmissiveFactorProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6934,26 +4681,6 @@ CNA_Result cna_texture_transform_ext_equals(
     });
 }
 
-CNA_Result cna_pbr_effect_get_ior_ext(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR index-of-refraction output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getIorEXTProperty()
-            : view.skinned->getIorEXTProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outEnabled)
@@ -7014,26 +4741,6 @@ CNA_Result cna_pbr_effect_set_ior_ext(const CNA_EffectHandle effectHandle, const
     });
 }
 
-CNA_Result cna_pbr_effect_get_specular_factor_ext(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR specular-factor output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getSpecularFactorEXTProperty()
-            : view.skinned->getSpecularFactorEXTProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_specular_factor_ext(
     const CNA_EffectHandle effectHandle,
     const float value)
@@ -7049,26 +4756,6 @@ CNA_Result cna_pbr_effect_set_specular_factor_ext(
         } else {
             view.skinned->setSpecularFactorEXTProperty(value);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_specular_color_factor_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_Vector3* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR specular-colour-factor output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(view.pbr != nullptr
-            ? view.pbr->getSpecularColorFactorEXTProperty()
-            : view.skinned->getSpecularColorFactorEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -7092,26 +4779,6 @@ CNA_Result cna_pbr_effect_set_specular_color_factor_ext(
     });
 }
 
-CNA_Result cna_pbr_effect_get_normal_scale_ext(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR normal-scale output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getNormalScaleEXTProperty()
-            : view.skinned->getNormalScaleEXTProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_normal_scale_ext(
     const CNA_EffectHandle effectHandle,
     const float value)
@@ -7127,26 +4794,6 @@ CNA_Result cna_pbr_effect_set_normal_scale_ext(
         } else {
             view.skinned->setNormalScaleEXTProperty(value);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_occlusion_strength_ext(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR occlusion-strength output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getOcclusionStrengthEXTProperty()
-            : view.skinned->getOcclusionStrengthEXTProperty();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -7429,26 +5076,6 @@ CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
     });
 }
 
-CNA_Result cna_pbr_effect_get_alpha_mode_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_AlphaModeEXT* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR alpha-mode output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<CNA_AlphaModeEXT>(view.pbr != nullptr
-            ? view.pbr->getAlphaModeEXTProperty()
-            : view.skinned->getAlphaModeEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_alpha_mode_ext(
     const CNA_EffectHandle effectHandle,
     const CNA_AlphaModeEXT value)
@@ -7468,26 +5095,6 @@ CNA_Result cna_pbr_effect_set_alpha_mode_ext(
         } else {
             view.skinned->setAlphaModeEXTProperty(native);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_alpha_cutoff_ext(
-    const CNA_EffectHandle effectHandle,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR alpha-cutoff output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = view.pbr != nullptr
-            ? view.pbr->getAlphaCutoffEXTProperty()
-            : view.skinned->getAlphaCutoffEXTProperty();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -7553,25 +5160,6 @@ CNA_Result cna_pbr_effect_set_double_sided_ext(
     });
 }
 
-CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
-    const CNA_EffectHandle effectHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinnedPbrEffect weights-per-vertex output is null.");
-        }
-        SkinnedPbrEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(skinned->getWeightsPerVertexProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
     const CNA_EffectHandle effectHandle,
     const int32_t value)
@@ -7583,7 +5171,7 @@ CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
         }
         SkinnedPbrEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -7609,7 +5197,7 @@ CNA_Result cna_skinned_pbr_effect_set_bone_transforms(
         (void)byteCount;
         SkinnedPbrEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -7645,7 +5233,7 @@ CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
         }
         SkinnedPbrEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+                effectHandle, nullptr, &skinned);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -8156,7 +5744,7 @@ CNA_Result cna_shader_effect_copy_compile_error_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -8208,7 +5796,7 @@ CNA_Result cna_shader_effect_set_uniform_vec3_array(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -8235,7 +5823,7 @@ CNA_Result cna_shader_effect_set_uniform_mat4_array(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -8378,3 +5966,6 @@ CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Effects.toml.
+#include "generated/Effects.inc"

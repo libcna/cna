@@ -1,0 +1,27 @@
+# Achievements routes, generated into src/generated/Achievements.inc,
+# which src/CnaCApiAchievements.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[achievement]
+lookup = "BorrowAchievement"
+object = "std::shared_ptr<AchievementResource>"
+
+[achievement.routes]
+cna_achievement_get_key_size = { size = "object->value->getKeyProperty()" }
+cna_achievement_copy_key = { copy = "object->value->getKeyProperty()" }
+cna_achievement_get_name_size = { size = "object->value->getNameProperty()" }
+cna_achievement_copy_name = { copy = "object->value->getNameProperty()" }
+cna_achievement_get_description_size = { size = "object->value->getDescriptionProperty()" }
+cna_achievement_copy_description = { copy = "object->value->getDescriptionProperty()" }
+cna_achievement_get_how_to_earn_size = { size = "object->value->getHowToEarnProperty()" }
+cna_achievement_copy_how_to_earn = { copy = "object->value->getHowToEarnProperty()" }
+
+[collection]
+lookup = "BorrowCollection"
+object = "std::shared_ptr<AchievementCollectionResource>"
+
+[collection.routes]
+cna_achievement_collection_get_count = { get = "object->value->getCountProperty()" }
+cna_achievement_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_achievement_collection_get_is_read_only = { get = "object->value->getIsReadOnlyProperty()" }
+cna_achievement_collection_remove_at = { call = "object->value->RemoveAt(static_cast<int>(index))" }
+cna_achievement_collection_clear = { call = "object->value->Clear()" }

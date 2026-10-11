@@ -1454,22 +1454,6 @@ CNA_Result cna_cnb_document_get_origin_size(
     });
 }
 
-CNA_Result cna_cnb_document_copy_origin(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(document->value->Origin(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_cnb_document_get_container_major(
     const CNA_CnbDocumentHandle documentHandle,
     uint16_t* const outMajor)
@@ -1822,23 +1806,6 @@ CNA_Result cna_cnb_document_get_metadata_asset_type_name_size(
     });
 }
 
-CNA_Result cna_cnb_document_copy_metadata_asset_type_name(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            document->value->Metadata().assetTypeName, destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_cnb_document_get_metadata_content_name_size(
     const CNA_CnbDocumentHandle documentHandle,
     uint64_t* const outByteCount)
@@ -1850,23 +1817,6 @@ CNA_Result cna_cnb_document_get_metadata_content_name_size(
             return result;
         }
         return ReportTextSize(document->value->Metadata().contentName, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_copy_metadata_content_name(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            document->value->Metadata().contentName, destination, capacity, outByteCount);
     });
 }
 
@@ -1976,22 +1926,6 @@ CNA_Result cna_cnb_document_copy_external_reference_name(
         return CopyText(
             document->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName,
             destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_require_asset(
-    const CNA_CnbDocumentHandle documentHandle,
-    const uint32_t expectedAssetTypeId,
-    const uint32_t maxSchemaVersion)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        document->value->RequireAsset(expectedAssetTypeId, maxSchemaVersion);
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2151,22 +2085,6 @@ CNA_Result cna_cnb_reader_get_context_size(
     });
 }
 
-CNA_Result cna_cnb_reader_copy_context(
-    const CNA_CnbReaderHandle readerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(reader->value->Context(), destination, capacity, outByteCount);
-    });
-}
-
 /*
  * The seven fixed-width reads are one shape repeated. Each leaves its output untouched on a
  * truncation, because the canonical read throws before it assigns and the assignment here is the
@@ -2299,34 +2217,6 @@ CNA_Result cna_cnb_reader_read_bytes(
         if (!bytes.empty()) {
             std::memcpy(destination, bytes.data(), bytes.size());
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_skip(
-    const CNA_CnbReaderHandle readerHandle,
-    const uint64_t byteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->Skip(byteCount);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_require_exhausted(const CNA_CnbReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->RequireExhausted();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4936,19 +4826,6 @@ CNA_Result cna_cnb_model_set_skeleton(
     });
 }
 
-CNA_Result cna_cnb_model_clear_skeleton(const CNA_CnbModelDataHandle modelHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->skeleton.reset();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_model_get_skeleton(
     const CNA_CnbModelDataHandle modelHandle,
     CNA_CnbSkeletonInfo* const outInfo)
@@ -6165,24 +6042,6 @@ CNA_Result cna_cnb_decode_song_stream_reference_size(
     });
 }
 
-CNA_Result cna_cnb_decode_song_stream_reference(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Cnb::DecodeSongFromCnb(*document->value).streamReference,
-            destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_decode_song_name_size(
     const CNA_CnbDocumentHandle documentHandle,
     uint64_t* const outBytes)
@@ -6194,23 +6053,6 @@ CNA_Result cna_cnb_decode_song_name_size(
             return result;
         }
         return ReportTextSize(Cnb::DecodeSongFromCnb(*document->value).name, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_decode_song_name(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Cnb::DecodeSongFromCnb(*document->value).name, destination, capacity, outBytes);
     });
 }
 
@@ -6290,24 +6132,6 @@ CNA_Result cna_cnb_decode_video_stream_reference_size(
             return result;
         }
         return ReportTextSize(Cnb::DecodeVideoFromCnb(*document->value).streamReference, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_decode_video_stream_reference(
-    const CNA_CnbDocumentHandle documentHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Cnb::DecodeVideoFromCnb(*document->value).streamReference,
-            destination, capacity, outBytes);
     });
 }
 
@@ -6996,22 +6820,6 @@ CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
     });
 }
 
-CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(compiled->value->assetTypeName, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_cnj_result_copy_bytes(
     const CNA_CnjToCnbResultHandle resultHandle,
     uint8_t* const destination,
@@ -7160,3 +6968,6 @@ CNA_Result cna_cnb_cnj_result_copy_external_reference(
             destination, capacity, outBytes);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Cnb.toml.
+#include "generated/Cnb.inc"

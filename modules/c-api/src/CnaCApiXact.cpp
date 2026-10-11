@@ -32,6 +32,7 @@ using CNA::C::Detail::CopyText;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::RemoveOwnedAudioResource;
@@ -79,11 +80,6 @@ struct CueResource final {
     std::shared_ptr<Cue> value;
     std::shared_ptr<SoundBankResource> parent;
 };
-
-[[nodiscard]] CNA_Result XactInvalidInput(const char* const message)
-{
-    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-}
 
 template<typename TResource>
 [[nodiscard]] CNA_Result GetResource(
@@ -160,7 +156,7 @@ template<typename TResource>
     std::string* const outText)
 {
     if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return XactInvalidInput(message);
+        return InvalidArgument(message);
     }
     outText->assign(view.data == nullptr ? "" : view.data, static_cast<std::size_t>(view.byte_length));
     return CNA_RESULT_SUCCESS;
@@ -198,13 +194,13 @@ template<typename TResource>
     if (listener == nullptr || listener->struct_size < sizeof(CNA_AudioListener) ||
         listener->struct_version != StructureVersion || !IsFinite(listener->forward) ||
         !IsFinite(listener->position) || !IsFinite(listener->up) || !IsFinite(listener->velocity)) {
-        return XactInvalidInput("The AudioListener structure is invalid.");
+        return InvalidArgument("The AudioListener structure is invalid.");
     }
     if (emitter == nullptr || emitter->struct_size < sizeof(CNA_AudioEmitter) ||
         emitter->struct_version != StructureVersion || !std::isfinite(emitter->doppler_scale) ||
         !IsFinite(emitter->forward) || !IsFinite(emitter->position) || !IsFinite(emitter->up) ||
         !IsFinite(emitter->velocity)) {
-        return XactInvalidInput("The AudioEmitter structure is invalid.");
+        return InvalidArgument("The AudioEmitter structure is invalid.");
     }
     outListener->setForwardProperty(ToNative(listener->forward));
     outListener->setPositionProperty(ToNative(listener->position));
@@ -230,7 +226,7 @@ template<typename TResource>
     }
     const auto& details = (*outEngine)->value->getRendererDetailsProperty();
     if (rendererIndex >= static_cast<uint64_t>(details.size())) {
-        return XactInvalidInput("The renderer index is outside the engine's renderer list.");
+        return InvalidArgument("The renderer index is outside the engine's renderer list.");
     }
     *outDetail = &details[static_cast<std::size_t>(rendererIndex)];
     return CNA_RESULT_SUCCESS;
@@ -245,7 +241,7 @@ template<typename TResource>
     CNA_Handle* const outEngine)
 {
     if (outEngine == nullptr) {
-        return XactInvalidInput("The AudioEngine output handle is null.");
+        return InvalidArgument("The AudioEngine output handle is null.");
     }
     *outEngine = CNA_INVALID_HANDLE;
     std::string nativeSettingsFile;
@@ -359,42 +355,6 @@ CNA_Result cna_audio_engine_destroy(const CNA_Handle engineHandle)
     });
 }
 
-CNA_Result cna_audio_engine_get_is_disposed(
-    const CNA_Handle engineHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return XactInvalidInput("The AudioEngine disposal output is null.");
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(engine->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_engine_get_renderer_count(
-    const CNA_Handle engineHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return XactInvalidInput("The renderer-count output is null.");
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(engine->value->getRendererDetailsProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_audio_engine_get_renderer_friendly_name_size(
     const CNA_Handle engineHandle,
     const uint64_t rendererIndex,
@@ -402,7 +362,7 @@ CNA_Result cna_audio_engine_get_renderer_friendly_name_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return XactInvalidInput("The renderer friendly-name size output is null.");
+            return InvalidArgument("The renderer friendly-name size output is null.");
         }
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* detail = nullptr;
@@ -442,7 +402,7 @@ CNA_Result cna_audio_engine_get_renderer_id_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return XactInvalidInput("The renderer identifier size output is null.");
+            return InvalidArgument("The renderer identifier size output is null.");
         }
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* detail = nullptr;
@@ -482,7 +442,7 @@ CNA_Result cna_audio_engine_get_renderer_text_size(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outBytes == nullptr) {
-            return XactInvalidInput("The renderer text size output is null.");
+            return InvalidArgument("The renderer text size output is null.");
         }
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* detail = nullptr;
@@ -522,7 +482,7 @@ CNA_Result cna_audio_engine_get_renderer_hash_code(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outHashCode == nullptr) {
-            return XactInvalidInput("The renderer hash-code output is null.");
+            return InvalidArgument("The renderer hash-code output is null.");
         }
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* detail = nullptr;
@@ -544,7 +504,7 @@ CNA_Result cna_audio_engine_renderers_equal(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return XactInvalidInput("The renderer equality output is null.");
+            return InvalidArgument("The renderer equality output is null.");
         }
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* first = nullptr;
@@ -572,7 +532,7 @@ CNA_Result cna_audio_engine_get_global_variable(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return XactInvalidInput("The global-variable output is null.");
+            return InvalidArgument("The global-variable output is null.");
         }
         std::string nativeName;
         if (const CNA_Result result =
@@ -597,7 +557,7 @@ CNA_Result cna_audio_engine_set_global_variable(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(value)) {
-            return XactInvalidInput("The global-variable value must be finite.");
+            return InvalidArgument("The global-variable value must be finite.");
         }
         std::string nativeName;
         if (const CNA_Result result =
@@ -615,53 +575,6 @@ CNA_Result cna_audio_engine_set_global_variable(
     });
 }
 
-CNA_Result cna_audio_engine_update(const CNA_Handle engineHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        engine->value->Update();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_engine_get_type_name_size(
-    const CNA_Handle engineHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The type-name size output is null.");
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = engine->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_engine_copy_type_name(
-    const CNA_Handle engineHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(engine->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_audio_engine_subscribe_disposing_ext(
     const CNA_Handle engineHandle,
     const CNA_AudioEventCallback callback,
@@ -670,11 +583,11 @@ CNA_Result cna_audio_engine_subscribe_disposing_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return XactInvalidInput("The audio registration output is null.");
+            return InvalidArgument("The audio registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return XactInvalidInput("The audio event callback is null.");
+            return InvalidArgument("The audio event callback is null.");
         }
         std::shared_ptr<EngineResource> engine;
         if (const CNA_Result result = GetEngine(engineHandle, &engine);
@@ -697,7 +610,7 @@ CNA_Result cna_audio_engine_get_category(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCategory == nullptr) {
-            return XactInvalidInput("The AudioCategory output handle is null.");
+            return InvalidArgument("The AudioCategory output handle is null.");
         }
         *outCategory = CNA_INVALID_HANDLE;
         std::string nativeName;
@@ -750,71 +663,11 @@ CNA_Result cna_audio_category_destroy(const CNA_Handle categoryHandle)
     });
 }
 
-CNA_Result cna_audio_category_get_name_size(
-    const CNA_Handle categoryHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The category-name size output is null.");
-        }
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = category->value->getNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_category_copy_name(
-    const CNA_Handle categoryHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(category->value->getNameProperty(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_audio_category_pause(const CNA_Handle categoryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        category->value->Pause();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_category_resume(const CNA_Handle categoryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        category->value->Resume();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_audio_category_set_volume(const CNA_Handle categoryHandle, const float volume)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(volume)) {
-            return XactInvalidInput("The category volume must be finite.");
+            return InvalidArgument("The category volume must be finite.");
         }
         std::shared_ptr<CategoryResource> category;
         if (const CNA_Result result = GetCategory(categoryHandle, &category);
@@ -833,7 +686,7 @@ CNA_Result cna_audio_category_stop(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
         if (!TryMapStopOptions(options, &nativeOptions)) {
-            return XactInvalidInput("The audio stop options are not a defined identity.");
+            return InvalidArgument("The audio stop options are not a defined identity.");
         }
         std::shared_ptr<CategoryResource> category;
         if (const CNA_Result result = GetCategory(categoryHandle, &category);
@@ -852,7 +705,7 @@ CNA_Result cna_audio_category_equals(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outEquals == nullptr) {
-            return XactInvalidInput("The category equality output is null.");
+            return InvalidArgument("The category equality output is null.");
         }
         std::shared_ptr<CategoryResource> category;
         std::shared_ptr<CategoryResource> other;
@@ -871,24 +724,6 @@ CNA_Result cna_audio_category_equals(
     });
 }
 
-CNA_Result cna_audio_category_get_hash_code(
-    const CNA_Handle categoryHandle,
-    int32_t* const outHashCode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHashCode == nullptr) {
-            return XactInvalidInput("The category hash-code output is null.");
-        }
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHashCode = static_cast<int32_t>(category->value->GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_wave_bank_create(
     const CNA_Handle engineHandle,
     const CNA_StringView filename,
@@ -896,7 +731,7 @@ CNA_Result cna_wave_bank_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWaveBank == nullptr) {
-            return XactInvalidInput("The WaveBank output handle is null.");
+            return InvalidArgument("The WaveBank output handle is null.");
         }
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
@@ -938,7 +773,7 @@ CNA_Result cna_wave_bank_create_streaming(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outWaveBank == nullptr) {
-            return XactInvalidInput("The WaveBank output handle is null.");
+            return InvalidArgument("The WaveBank output handle is null.");
         }
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
@@ -992,94 +827,6 @@ CNA_Result cna_wave_bank_destroy(const CNA_Handle waveBankHandle)
     });
 }
 
-CNA_Result cna_wave_bank_get_is_disposed(
-    const CNA_Handle waveBankHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return XactInvalidInput("The WaveBank disposal output is null.");
-        }
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(waveBank->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_wave_bank_get_is_prepared(
-    const CNA_Handle waveBankHandle,
-    CNA_Bool* const outIsPrepared)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsPrepared == nullptr) {
-            return XactInvalidInput("The WaveBank prepared output is null.");
-        }
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsPrepared = ToCBool(waveBank->value->getIsPreparedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_wave_bank_get_is_in_use(
-    const CNA_Handle waveBankHandle,
-    CNA_Bool* const outIsInUse)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsInUse == nullptr) {
-            return XactInvalidInput("The WaveBank in-use output is null.");
-        }
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsInUse = ToCBool(waveBank->value->getIsInUseProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_wave_bank_get_type_name_size(
-    const CNA_Handle waveBankHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The type-name size output is null.");
-        }
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = waveBank->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_wave_bank_copy_type_name(
-    const CNA_Handle waveBankHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(waveBank->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_wave_bank_subscribe_disposing_ext(
     const CNA_Handle waveBankHandle,
     const CNA_AudioEventCallback callback,
@@ -1088,11 +835,11 @@ CNA_Result cna_wave_bank_subscribe_disposing_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return XactInvalidInput("The audio registration output is null.");
+            return InvalidArgument("The audio registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return XactInvalidInput("The audio event callback is null.");
+            return InvalidArgument("The audio event callback is null.");
         }
         std::shared_ptr<WaveBankResource> waveBank;
         if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
@@ -1115,7 +862,7 @@ CNA_Result cna_sound_bank_create(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSoundBank == nullptr) {
-            return XactInvalidInput("The SoundBank output handle is null.");
+            return InvalidArgument("The SoundBank output handle is null.");
         }
         *outSoundBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
@@ -1176,42 +923,6 @@ CNA_Result cna_sound_bank_destroy(const CNA_Handle soundBankHandle)
     });
 }
 
-CNA_Result cna_sound_bank_get_is_disposed(
-    const CNA_Handle soundBankHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return XactInvalidInput("The SoundBank disposal output is null.");
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(soundBank->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sound_bank_get_is_in_use(
-    const CNA_Handle soundBankHandle,
-    CNA_Bool* const outIsInUse)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsInUse == nullptr) {
-            return XactInvalidInput("The SoundBank in-use output is null.");
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsInUse = ToCBool(soundBank->value->getIsInUseProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_bank_get_cue(
     const CNA_Handle soundBankHandle,
     const CNA_StringView name,
@@ -1219,7 +930,7 @@ CNA_Result cna_sound_bank_get_cue(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outCue == nullptr) {
-            return XactInvalidInput("The Cue output handle is null.");
+            return InvalidArgument("The Cue output handle is null.");
         }
         *outCue = CNA_INVALID_HANDLE;
         std::string nativeName;
@@ -1297,40 +1008,6 @@ CNA_Result cna_sound_bank_play_cue_3d(
     });
 }
 
-CNA_Result cna_sound_bank_get_type_name_size(
-    const CNA_Handle soundBankHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The type-name size output is null.");
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = soundBank->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sound_bank_copy_type_name(
-    const CNA_Handle soundBankHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(soundBank->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_sound_bank_subscribe_disposing_ext(
     const CNA_Handle soundBankHandle,
     const CNA_AudioEventCallback callback,
@@ -1339,11 +1016,11 @@ CNA_Result cna_sound_bank_subscribe_disposing_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return XactInvalidInput("The audio registration output is null.");
+            return InvalidArgument("The audio registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return XactInvalidInput("The audio event callback is null.");
+            return InvalidArgument("The audio event callback is null.");
         }
         std::shared_ptr<SoundBankResource> soundBank;
         if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
@@ -1385,7 +1062,7 @@ CNA_Result cna_cue_get_info(const CNA_Handle cueHandle, CNA_CueInfo* const outIn
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_CueInfo) ||
             outInfo->struct_version != StructureVersion) {
-            return XactInvalidInput("The Cue info output structure is invalid.");
+            return InvalidArgument("The Cue info output structure is invalid.");
         }
         std::shared_ptr<CueResource> cue;
         if (const CNA_Result result = GetCue(cueHandle, &cue);
@@ -1406,38 +1083,6 @@ CNA_Result cna_cue_get_info(const CNA_Handle cueHandle, CNA_CueInfo* const outIn
         };
         *outInfo = info;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_get_name_size(const CNA_Handle cueHandle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The cue-name size output is null.");
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = cue->value->getNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_copy_name(
-    const CNA_Handle cueHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(cue->value->getNameProperty(), destination, capacity, outBytes);
     });
 }
 
@@ -1471,7 +1116,7 @@ CNA_Result cna_cue_get_variable(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outValue == nullptr) {
-            return XactInvalidInput("The cue-variable output is null.");
+            return InvalidArgument("The cue-variable output is null.");
         }
         std::string nativeName;
         if (const CNA_Result result =
@@ -1496,7 +1141,7 @@ CNA_Result cna_cue_set_variable(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (!std::isfinite(value)) {
-            return XactInvalidInput("The cue-variable value must be finite.");
+            return InvalidArgument("The cue-variable value must be finite.");
         }
         std::string nativeName;
         if (const CNA_Result result =
@@ -1514,51 +1159,12 @@ CNA_Result cna_cue_set_variable(
     });
 }
 
-CNA_Result cna_cue_play(const CNA_Handle cueHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Play();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_pause(const CNA_Handle cueHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Pause();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_resume(const CNA_Handle cueHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Resume();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cue_stop(const CNA_Handle cueHandle, const CNA_AudioStopOptions options)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
         if (!TryMapStopOptions(options, &nativeOptions)) {
-            return XactInvalidInput("The audio stop options are not a defined identity.");
+            return InvalidArgument("The audio stop options are not a defined identity.");
         }
         std::shared_ptr<CueResource> cue;
         if (const CNA_Result result = GetCue(cueHandle, &cue);
@@ -1570,38 +1176,6 @@ CNA_Result cna_cue_stop(const CNA_Handle cueHandle, const CNA_AudioStopOptions o
     });
 }
 
-CNA_Result cna_cue_get_type_name_size(const CNA_Handle cueHandle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return XactInvalidInput("The type-name size output is null.");
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = cue->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_copy_type_name(
-    const CNA_Handle cueHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(cue->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cue_subscribe_disposing_ext(
     const CNA_Handle cueHandle,
     const CNA_AudioEventCallback callback,
@@ -1610,11 +1184,11 @@ CNA_Result cna_cue_subscribe_disposing_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outRegistration == nullptr) {
-            return XactInvalidInput("The audio registration output is null.");
+            return InvalidArgument("The audio registration output is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
         if (callback == nullptr) {
-            return XactInvalidInput("The audio event callback is null.");
+            return InvalidArgument("The audio event callback is null.");
         }
         std::shared_ptr<CueResource> cue;
         if (const CNA_Result result = GetCue(cueHandle, &cue);
@@ -1629,3 +1203,6 @@ CNA_Result cna_cue_subscribe_disposing_ext(
             outRegistration);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Xact.toml.
+#include "generated/Xact.inc"

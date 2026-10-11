@@ -1,0 +1,34 @@
+# Video routes, generated into src/generated/Video.inc,
+# which src/CnaCApiVideo.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[video]
+lookup = "BorrowVideo"
+object = "std::shared_ptr<VideoResource>"
+
+[video.routes]
+cna_video_set_duration = { call = "object->value->setDurationProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_video_set_audio_track_ext = { call = "object->value->SetAudioTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
+cna_video_set_video_track_ext = { call = "object->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
+
+[player_for_call]
+lookup = "BorrowPlayerForCall"
+object = "std::shared_ptr<VideoPlayerResource>"
+
+[player_for_call.routes]
+cna_video_player_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_video_player_get_is_looped = { get = "object->value->getIsLoopedProperty()" }
+cna_video_player_set_is_looped = { call = "object->value->setIsLoopedProperty(looped)" }
+cna_video_player_get_is_muted = { get = "object->value->getIsMutedProperty()" }
+cna_video_player_set_is_muted = { call = "object->value->setIsMutedProperty(muted)" }
+cna_video_player_get_play_position_ticks = { get = "object->value->getPlayPositionProperty().getTicksProperty()" }
+cna_video_player_get_state = { get = "object->value->getStateProperty()" }
+cna_video_player_get_volume = { get = "object->value->getVolumeProperty()" }
+cna_video_player_set_volume = { call = "object->value->setVolumeProperty(volume)" }
+cna_video_player_stop = { call = "object->value->Stop()" }
+cna_video_player_pause = { call = "object->value->Pause()" }
+cna_video_player_resume = { call = "object->value->Resume()" }
+cna_video_player_set_audio_track_ext = { call = "object->value->SetAudioTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
+cna_video_player_set_video_track_ext = { call = "object->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track))" }
+cna_video_player_dispose = { call = "object->value->Dispose()" }
+cna_video_player_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_video_player_copy_type_name = { copy = "object->value->GetTypeName()" }

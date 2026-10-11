@@ -1,0 +1,82 @@
+# Input routes, generated into src/generated/Input.inc,
+# which src/CnaCApiInput.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[keyboard_state]
+lookup = "ValidateKeyboardState"
+
+[keyboard_state.routes]
+cna_keyboard_state_get_pressed_key_count = { get = "CountPressedKeys(*state)" }
+cna_keyboard_state_get_hash_code = { get = "NativeKeyboardState(*state).GetHashCode()" }
+cna_keyboard_state_get_string_size = { size = "KeyboardState().ToString()" }
+cna_keyboard_state_copy_string = { copy = "KeyboardState().ToString()" }
+
+[state]
+lookup = "ValidateState"
+
+[state.routes]
+cna_gamepad_state_set_packet_number_ext = { call = "state->packet_number = packet_number" }
+# The canonical hash mixes only the button set and the packet number.
+cna_gamepad_state_get_hash_code = { get = "static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^ (static_cast<unsigned>(state->packet_number) * 31U)" }
+cna_gamepad_state_get_string_size = { size = "GamePadState().ToString()" }
+cna_gamepad_state_copy_string = { copy = "GamePadState().ToString()" }
+
+[mouse_state]
+lookup = "ValidateMouseState"
+
+[mouse_state.routes]
+cna_mouse_state_get_hash_code = { get = "NativeMouseState(*state).GetHashCode()" }
+cna_mouse_state_get_string_size = { size = "NativeMouseState(*state).ToString()" }
+cna_mouse_state_copy_string = { copy = "NativeMouseState(*state).ToString()" }
+
+[game]
+lookup = "ValidateActiveGameHandle"
+
+[game.routes]
+cna_mouse_get_window_handle = { get = "Mouse::getWindowHandleProperty()" }
+cna_mouse_set_window_handle = { call = "Mouse::setWindowHandleProperty(static_cast<std::uintptr_t>(window))" }
+cna_mouse_set_position = { call = "Mouse::SetPosition(static_cast<int>(x), static_cast<int>(y))" }
+cna_mouse_get_is_relative_mouse_mode_ext = { get = "Mouse::getIsRelativeMouseModeEXTProperty()" }
+cna_mouse_set_is_relative_mouse_mode_ext = { call = "Mouse::setIsRelativeMouseModeEXTProperty(enabled)" }
+cna_mouse_set_capture_ext = { get = "Mouse::SetCaptureEXT(enabled)" }
+cna_mouse_warp_global_ext = { get = "Mouse::WarpGlobalEXT(static_cast<int>(x), static_cast<int>(y))" }
+cna_mouse_raise_clicked_ext = { call = "Mouse::INTERNAL_onClicked(static_cast<int>(button))" }
+cna_mouse_reset_for_tests_ext = { call = "Mouse::ResetForTests()" }
+cna_text_input_raise_text_input_ext = { call = "TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(code_unit))" }
+cna_text_input_get_window_handle_ext = { get = "TextInputEXT::getWindowHandleProperty()" }
+cna_text_input_set_window_handle_ext = { call = "TextInputEXT::setWindowHandleProperty(static_cast<std::uintptr_t>(window))" }
+cna_text_input_is_active_ext = { get = "TextInputEXT::IsTextInputActive()" }
+cna_text_input_is_screen_keyboard_shown_ext = { get = "TextInputEXT::IsScreenKeyboardShown()" }
+cna_text_input_is_screen_keyboard_shown_for_window_ext = { get = "TextInputEXT::IsScreenKeyboardShown(static_cast<std::uintptr_t>(window))" }
+cna_text_input_start_ext = { call = "TextInputEXT::StartTextInput()" }
+cna_text_input_stop_ext = { call = "TextInputEXT::StopTextInput()" }
+cna_text_input_reset_for_tests_ext = { call = "TextInputEXT::ResetForTests()" }
+cna_touch_panel_get_display_width = { get = "TouchPanel::getDisplayWidthProperty()" }
+cna_touch_panel_set_display_width = { call = "TouchPanel::setDisplayWidthProperty(width)" }
+cna_touch_panel_get_display_height = { get = "TouchPanel::getDisplayHeightProperty()" }
+cna_touch_panel_set_display_height = { call = "TouchPanel::setDisplayHeightProperty(height)" }
+cna_touch_panel_get_display_orientation = { get = "TouchPanel::getDisplayOrientationProperty()" }
+cna_touch_panel_get_mouse_touch_emulation_enabled_ext = { get = "TouchPanel::getMouseTouchEmulationEnabledEXT()" }
+cna_touch_panel_set_mouse_touch_emulation_enabled_ext = { call = "TouchPanel::setMouseTouchEmulationEnabledEXT(enabled)" }
+cna_touch_panel_get_enabled_gestures = { get = "TouchPanel::getEnabledGesturesProperty()" }
+cna_touch_panel_get_is_gesture_available = { get = "TouchPanel::getIsGestureAvailableProperty()" }
+cna_touch_panel_get_window_handle = { get = "TouchPanel::getWindowHandleProperty()" }
+cna_touch_panel_set_window_handle = { call = "TouchPanel::setWindowHandleProperty(static_cast<std::uintptr_t>(window))" }
+cna_touch_panel_get_touch_device_exists_ext = { get = "TouchPanel::getTouchDeviceExistsProperty()" }
+cna_touch_panel_set_touch_device_exists_ext = { call = "TouchPanel::setTouchDeviceExistsProperty(exists)" }
+cna_touch_panel_update_ext = { call = "TouchPanel::Update()" }
+cna_touch_panel_reset_for_tests_ext = { call = "TouchPanel::ResetForTests()" }
+
+[cursor]
+lookup = "GetCursorResource"
+object = "std::shared_ptr<MouseCursorResource>"
+
+[cursor.routes]
+cna_mouse_cursor_dispose = { call = "object->value->Dispose()" }
+
+[touch_state]
+lookup = "ValidateTouchState"
+
+[touch_state.routes]
+cna_touch_state_get_is_read_only = { get = "TouchCollection().getIsReadOnlyProperty()" }
+cna_touch_state_get_is_empty_ext = { get = "state->touch_count == 0U" }
+cna_touch_state_clear = { call = "state->touch_count = 0U" }

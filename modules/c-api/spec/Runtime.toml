@@ -1,0 +1,20 @@
+# Runtime routes, generated into src/generated/Runtime.inc,
+# which src/CnaCApiRuntime.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[game]
+lookup = "GetGame"
+object = "std::shared_ptr<CGame>"
+
+[game.routes]
+cna_game_set_foreign_thread_calls_ext = { call = "CNA::C::Detail::SetForeignThreadCalls(enabled)" }
+cna_game_run_foreign_thread_calls_ext = { call = "CNA::C::Detail::RunForeignThreadCalls()" }
+cna_game_request_exit = { call = "object->Exit()" }
+
+[callable_game]
+lookup = "GetCallableGame"
+object = "std::shared_ptr<CGame>"
+
+[callable_game.routes]
+# A frame step drives the game, so it is refused from inside a lifecycle callback for the
+# same reason running or destroying the game is: it would re-enter the loop it is part of.
+cna_game_tick = { call = "object->Tick()" }

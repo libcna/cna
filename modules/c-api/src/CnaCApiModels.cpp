@@ -1711,96 +1711,6 @@ CNA_Result cna_model_bone_destroy(const CNA_ModelBoneHandle boneHandle)
     });
 }
 
-CNA_Result cna_model_bone_get_name_byte_count(
-    const CNA_ModelBoneHandle boneHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The ModelBone name byte-count output is null.");
-        }
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(
-            bone->node->value->getNameProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_bone_copy_name(
-    const CNA_ModelBoneHandle boneHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            bone->node->value->getNameProperty(),
-            destination,
-            capacity,
-            outByteCount);
-    });
-}
-
-CNA_Result cna_model_bone_get_index(
-    const CNA_ModelBoneHandle boneHandle,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The ModelBone index output is null.");
-        }
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(bone->node->value->getIndexProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_bone_get_transform(
-    const CNA_ModelBoneHandle boneHandle,
-    CNA_Matrix* const outTransform)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTransform == nullptr) {
-            return InvalidArgument("The ModelBone transform output is null.");
-        }
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTransform = ToC(bone->node->value->getTransformProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_bone_set_transform(
-    const CNA_ModelBoneHandle boneHandle,
-    const CNA_Matrix transform)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        bone->node->value->setTransformProperty(ToNative(transform));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_bone_get_parent(
     const CNA_ModelBoneHandle boneHandle,
     CNA_Bool* const outHasParent,
@@ -1912,24 +1822,6 @@ CNA_Result cna_model_bone_collection_destroy(
                 result,
                 ErrorCategoryForResult(result),
                 "The owned ModelBoneCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_model_bone_collection_get_count(
-    const CNA_ModelBoneCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The ModelBoneCollection count output is null.");
-        }
-        std::shared_ptr<BoneCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(CollectionNodes(*collection).size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2102,24 +1994,6 @@ CNA_Result cna_model_mesh_part_destroy(const CNA_ModelMeshPartHandle partHandle)
     });
 }
 
-CNA_Result cna_model_mesh_part_get_num_vertices(
-    const CNA_ModelMeshPartHandle partHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMeshPart vertex-count output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(part->value->getNumVerticesProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_set_num_vertices(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
@@ -2134,24 +2008,6 @@ CNA_Result cna_model_mesh_part_set_num_vertices(
         if (part->detachedValue != nullptr) {
             part->detachedValue->SetNumVertices(static_cast<int>(value));
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_part_get_primitive_count(
-    const CNA_ModelMeshPartHandle partHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMeshPart primitive-count output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(part->value->getPrimitiveCountProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2174,24 +2030,6 @@ CNA_Result cna_model_mesh_part_set_primitive_count(
     });
 }
 
-CNA_Result cna_model_mesh_part_get_start_index(
-    const CNA_ModelMeshPartHandle partHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMeshPart start-index output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(part->value->getStartIndexProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_set_start_index(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
@@ -2206,24 +2044,6 @@ CNA_Result cna_model_mesh_part_set_start_index(
         if (part->detachedValue != nullptr) {
             part->detachedValue->SetStartIndex(static_cast<int>(value));
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_part_get_vertex_offset(
-    const CNA_ModelMeshPartHandle partHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMeshPart vertex-offset output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(part->value->getVertexOffsetProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2370,21 +2190,6 @@ CNA_Result cna_model_mesh_part_get_tag(
     });
 }
 
-CNA_Result cna_model_mesh_part_set_tag(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_ModelMeshPartTag tag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->tag = tag;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_collection_create(
     const CNA_ModelMeshPartHandle* const partHandles,
     const uint64_t partCount,
@@ -2441,24 +2246,6 @@ CNA_Result cna_model_mesh_part_collection_destroy(
                 result,
                 ErrorCategoryForResult(result),
                 "The owned ModelMeshPartCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_model_mesh_part_collection_get_count(
-    const CNA_ModelMeshPartCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The ModelMeshPartCollection count output is null.");
-        }
-        std::shared_ptr<PartCollectionResource> collection;
-        if (const CNA_Result result = GetPartCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(PartList(*collection).size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2546,39 +2333,6 @@ CNA_Result cna_model_mesh_destroy(const CNA_ModelMeshHandle meshHandle)
     });
 }
 
-CNA_Result cna_model_mesh_get_bounding_sphere(
-    const CNA_ModelMeshHandle meshHandle,
-    CNA_BoundingSphere* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMesh bounding-sphere output is null.");
-        }
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToC(mesh->value->getBoundingSphereProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_set_bounding_sphere(
-    const CNA_ModelMeshHandle meshHandle,
-    const CNA_BoundingSphere value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        mesh->value->setBoundingSphereProperty(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_get_mesh_parts(
     const CNA_ModelMeshHandle meshHandle,
     CNA_ModelMeshPartCollectionHandle* const outParts)
@@ -2614,41 +2368,6 @@ CNA_Result cna_model_mesh_get_effects(
             return result;
         }
         return CreateEffectCollectionHandle(std::move(mesh), outEffects);
-    });
-}
-
-CNA_Result cna_model_mesh_get_name_byte_count(
-    const CNA_ModelMeshHandle meshHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The ModelMesh name byte-count output is null.");
-        }
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(mesh->value->getNameProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_copy_name(
-    const CNA_ModelMeshHandle meshHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            mesh->value->getNameProperty(), destination, capacity, outByteCount);
     });
 }
 
@@ -2720,21 +2439,6 @@ CNA_Result cna_model_mesh_get_tag(
             return result;
         }
         *outTag = mesh->tag;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_set_tag(
-    const CNA_ModelMeshHandle meshHandle,
-    const CNA_ModelMeshTag tag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        mesh->tag = tag;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2814,24 +2518,6 @@ CNA_Result cna_model_mesh_collection_destroy(
                 result,
                 ErrorCategoryForResult(result),
                 "The owned ModelMeshCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_model_mesh_collection_get_count(
-    const CNA_ModelMeshCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The ModelMeshCollection count output is null.");
-        }
-        std::shared_ptr<MeshCollectionResource> collection;
-        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->meshes.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2943,24 +2629,6 @@ CNA_Result cna_model_effect_collection_destroy(
                 result,
                 ErrorCategoryForResult(result),
                 "The owned ModelEffectCollection handle could not be released.");
-    });
-}
-
-CNA_Result cna_model_effect_collection_get_count(
-    const CNA_ModelEffectCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The ModelEffectCollection count output is null.");
-        }
-        std::shared_ptr<EffectCollectionResource> collection;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(collection->mesh->effects.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3232,21 +2900,6 @@ CNA_Result cna_model_get_tag(
     });
 }
 
-CNA_Result cna_model_set_tag(
-    const CNA_ModelHandle modelHandle,
-    const CNA_ModelTag tag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->tag = tag;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_set_owned_resources(
     const CNA_ModelHandle modelHandle,
     void* const context,
@@ -3269,24 +2922,6 @@ CNA_Result cna_model_set_owned_resources(
                 [release](void* const value) noexcept { release(value); });
         }
         model->value->setOwnedResources(std::move(owner));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_get_bone_transform_count(
-    const CNA_ModelHandle modelHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The Model bone-transform count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(model->bones.size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3822,24 +3457,6 @@ CNA_Result cna_morph_target_data_ext_destroy(
     });
 }
 
-CNA_Result cna_morph_target_data_ext_get_type_name_byte_count(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The MorphTargetDataEXT type-name count output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(data->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_morph_target_data_ext_copy_type_name(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     char* const destination,
@@ -3869,42 +3486,6 @@ CNA_Result cna_morph_target_data_ext_copy_type_name(
     });
 }
 
-CNA_Result cna_morph_target_data_ext_get_stride(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    int32_t* const outStride)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outStride == nullptr) {
-            return InvalidArgument("The MorphTargetDataEXT stride output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outStride = data->value->Stride;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_get_base_vertex_byte_count(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The MorphTargetDataEXT base-byte count output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     uint8_t* const destination,
@@ -3930,24 +3511,6 @@ CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
         if (!bytes.empty()) {
             std::memcpy(destination, bytes.data(), bytes.size());
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_get_target_count(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    uint64_t* const outTargetCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTargetCount == nullptr) {
-            return InvalidArgument("The MorphTargetDataEXT target-count output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTargetCount = static_cast<uint64_t>(data->value->PositionDeltas.size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4522,24 +4085,6 @@ CNA_Result cna_skinned_model_ext_set_skeleton(
     });
 }
 
-CNA_Result cna_skinned_model_ext_get_bone_count(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    uint64_t* const outBoneCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBoneCount == nullptr) {
-            return InvalidArgument("The SkinnedModelEXT bone-count output is null.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_model_ext_copy_parent_bone_indices(
     const CNA_SkinnedModelEXTHandle modelHandle,
     int32_t* const destination,
@@ -4649,24 +4194,6 @@ CNA_Result cna_skinned_model_ext_remove_clip(
             return result;
         }
         model->value->Clips.erase(copiedName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_model_ext_get_clip_count(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    uint64_t* const outClipCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outClipCount == nullptr) {
-            return InvalidArgument("The AnimationClipEXT count output is null.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outClipCount = static_cast<uint64_t>(model->value->Clips.size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5053,24 +4580,6 @@ CNA_Result cna_skinned_model_ext_remove_part(
     });
 }
 
-CNA_Result cna_skinned_model_ext_get_part_count(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    uint64_t* const outPartCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPartCount == nullptr) {
-            return InvalidArgument("The SkinnedModelEXT part-count output is null.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPartCount = static_cast<uint64_t>(model->parts.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_model_ext_get_part_name_byte_count_at(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t partIndex,
@@ -5220,59 +4729,6 @@ CNA_Result cna_skinning_data_destroy(const CNA_SkinningDataHandle dataHandle)
     });
 }
 
-CNA_Result cna_skinning_data_get_type_name_byte_count(
-    const CNA_SkinningDataHandle dataHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The SkinningData type-name size output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(data->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_copy_type_name(
-    const CNA_SkinningDataHandle dataHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            data->value->GetTypeName(), destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_skinning_data_get_bone_count(
-    const CNA_SkinningDataHandle dataHandle,
-    uint64_t* const outBoneCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBoneCount == nullptr) {
-            return InvalidArgument("The SkinningData bone-count output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBoneCount = static_cast<uint64_t>(data->value->BoneCount);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinning_data_copy_skeleton_hierarchy(
     const CNA_SkinningDataHandle dataHandle,
     int32_t* const destination,
@@ -5350,24 +4806,6 @@ CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
             [](const Matrix value) noexcept { return ToC(value); },
             "The SkinningData root-prefix output is invalid.",
             "The destination cannot hold all SkinningData root-prefix matrices.");
-    });
-}
-
-CNA_Result cna_skinning_data_get_clip_count(
-    const CNA_SkinningDataHandle dataHandle,
-    uint64_t* const outClipCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outClipCount == nullptr) {
-            return InvalidArgument("The SkinningData clip-count output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outClipCount = static_cast<uint64_t>(data->value->AnimationClips.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -5595,25 +5033,6 @@ CNA_Result cna_animation_player_update(
     });
 }
 
-CNA_Result cna_animation_player_get_current_position(
-    const CNA_AnimationPlayerHandle playerHandle,
-    double* const outPositionSeconds)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPositionSeconds == nullptr) {
-            return InvalidArgument("The AnimationPlayer position output is null.");
-        }
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPositionSeconds =
-            player->value->getCurrentPositionProperty().getTotalSecondsProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_animation_player_get_current_clip_info(
     const CNA_AnimationPlayerHandle playerHandle,
     CNA_Bool* const outHasClip,
@@ -5640,41 +5059,6 @@ CNA_Result cna_animation_player_get_current_clip_info(
         *outDurationSeconds = clip->Duration.getTotalSecondsProperty();
         *outTrackCount = static_cast<uint64_t>(clip->Tracks.size());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_animation_player_get_current_clip_name_byte_count(
-    const CNA_AnimationPlayerHandle playerHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The AnimationPlayer clip-name size output is null.");
-        }
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(player->currentClipName.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_animation_player_copy_current_clip_name(
-    const CNA_AnimationPlayerHandle playerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            player->currentClipName, destination, capacity, outByteCount);
     });
 }
 
@@ -5735,24 +5119,6 @@ CNA_Result cna_animation_player_copy_skin_transforms(
             [](const Matrix value) noexcept { return ToC(value); },
             "The AnimationPlayer skin-transform output is invalid.",
             "The destination cannot hold all AnimationPlayer skin transforms.");
-    });
-}
-
-CNA_Result cna_model_mesh_part_get_primitive_type_ext(
-    const CNA_ModelMeshPartHandle partHandle,
-    CNA_PrimitiveType* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ModelMeshPart primitive-type output is null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<CNA_PrimitiveType>(part->value->getPrimitiveTypeEXTProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -5909,25 +5275,6 @@ CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
             destination, capacity, outDeltaCount, ToCVector3,
             "The MorphTargetDataEXT tangent-delta output is invalid.",
             "The destination cannot hold all morph tangent deltas.");
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_get_recompute_flat_normals_ext(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    CNA_Bool* const outRecompute)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRecompute == nullptr) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT flat-normal output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRecompute = ToCBool(data->value->RecomputeFlatNormalsEXT);
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -6104,24 +5451,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_model_get_camera_count_ext(
-    const CNA_ModelHandle modelHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The Model camera-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(model->value->getCamerasEXTProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_get_camera_ext(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
@@ -6181,19 +5510,6 @@ CNA_Result cna_model_copy_camera_name_ext(
     });
 }
 
-CNA_Result cna_model_clear_cameras_ext(const CNA_ModelHandle modelHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->setCamerasEXTProperty({});
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_add_camera_ext(
     const CNA_ModelHandle modelHandle,
     const CNA_ModelCameraDescriptorEXT* const descriptor)
@@ -6229,24 +5545,6 @@ CNA_Result cna_model_add_camera_ext(
         std::vector<ModelCameraEXT> cameras = model->value->getCamerasEXTProperty();
         cameras.push_back(std::move(camera));
         model->value->setCamerasEXTProperty(std::move(cameras));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_get_skin_count_ext(
-    const CNA_ModelHandle modelHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The Model skin-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(model->value->getSkinsEXTProperty().size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -6479,25 +5777,6 @@ CNA_Result cna_model_get_bounding_sphere_ext(
     });
 }
 
-CNA_Result cna_model_get_material_variant_count_ext(
-    const CNA_ModelHandle modelHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The Model material-variant count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount =
-            static_cast<uint64_t>(model->value->getMaterialVariantNamesEXTProperty().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_get_material_variant_name_byte_count_ext(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
@@ -6542,39 +5821,6 @@ CNA_Result cna_model_copy_material_variant_name_ext(
         }
         return CopyText(
             names[static_cast<std::size_t>(index)], destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_model_get_material_variant_ext(
-    const CNA_ModelHandle modelHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The Model material-variant output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(model->value->getMaterialVariantEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_set_material_variant_ext(
-    const CNA_ModelHandle modelHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->setMaterialVariantEXTProperty(static_cast<int>(value));
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -6699,59 +5945,6 @@ CNA_Result cna_model_animations_ext_destroy(const CNA_ModelAnimationsEXTHandle h
             : Fail(
                 result, ErrorCategoryForResult(result),
                 "The ModelAnimationsEXT handle could not be released.");
-    });
-}
-
-CNA_Result cna_model_animations_ext_get_type_name_byte_count(
-    const CNA_ModelAnimationsEXTHandle handle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The ModelAnimationsEXT type-name byte-count output is null.");
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        if (const CNA_Result result = GetModelAnimations(handle, &animations);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(animations->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_animations_ext_copy_type_name(
-    const CNA_ModelAnimationsEXTHandle handle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelAnimationsResource> animations;
-        if (const CNA_Result result = GetModelAnimations(handle, &animations);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            animations->value->GetTypeName(), destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_model_animations_ext_get_clip_count(
-    const CNA_ModelAnimationsEXTHandle handle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The ModelAnimationsEXT clip-count output is null.");
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        if (const CNA_Result result = GetModelAnimations(handle, &animations);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(animations->value->Clips.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -6894,74 +6087,6 @@ CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
         *outPosedCount = static_cast<uint64_t>(
             ApplyBindPoseBoneTransformsEXT(*model->value, *data->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_get_skeleton_root_node_index_ext(
-    const CNA_SkinningDataHandle dataHandle,
-    int32_t* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinningData skeleton-root index output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = static_cast<int32_t>(data->value->SkeletonRootNodeIndexEXT);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_set_skeleton_root_node_index_ext(
-    const CNA_SkinningDataHandle dataHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data->value->SkeletonRootNodeIndexEXT = static_cast<int>(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_get_skeleton_root_name_byte_count_ext(
-    const CNA_SkinningDataHandle dataHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The SkinningData skeleton-root name output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(data->value->SkeletonRootNameEXT.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
-    const CNA_SkinningDataHandle dataHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            data->value->SkeletonRootNameEXT, destination, capacity, outByteCount);
     });
 }
 
@@ -7315,3 +6440,6 @@ CNA_Result cna_model_get_content_tag_foreign_object_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Models.toml.
+#include "generated/Models.inc"

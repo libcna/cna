@@ -1,0 +1,58 @@
+# Xact routes, generated into src/generated/Xact.inc,
+# which src/CnaCApiXact.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[engine]
+lookup = "GetEngine"
+object = "std::shared_ptr<EngineResource>"
+
+[engine.routes]
+cna_audio_engine_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_audio_engine_get_renderer_count = { get = "object->value->getRendererDetailsProperty().size()" }
+cna_audio_engine_update = { call = "object->value->Update()" }
+cna_audio_engine_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_audio_engine_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[category]
+lookup = "GetCategory"
+object = "std::shared_ptr<CategoryResource>"
+
+[category.routes]
+cna_audio_category_get_name_size = { size = "object->value->getNameProperty()" }
+cna_audio_category_copy_name = { copy = "object->value->getNameProperty()" }
+cna_audio_category_pause = { call = "object->value->Pause()" }
+cna_audio_category_resume = { call = "object->value->Resume()" }
+cna_audio_category_get_hash_code = { get = "object->value->GetHashCode()" }
+
+[wave_bank]
+lookup = "GetWaveBank"
+object = "std::shared_ptr<WaveBankResource>"
+
+[wave_bank.routes]
+cna_wave_bank_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_wave_bank_get_is_prepared = { get = "object->value->getIsPreparedProperty()" }
+cna_wave_bank_get_is_in_use = { get = "object->value->getIsInUseProperty()" }
+cna_wave_bank_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_wave_bank_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[sound_bank]
+lookup = "GetSoundBank"
+object = "std::shared_ptr<SoundBankResource>"
+
+[sound_bank.routes]
+cna_sound_bank_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_sound_bank_get_is_in_use = { get = "object->value->getIsInUseProperty()" }
+cna_sound_bank_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_sound_bank_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[cue]
+lookup = "GetCue"
+object = "std::shared_ptr<CueResource>"
+
+[cue.routes]
+cna_cue_get_name_size = { size = "object->value->getNameProperty()" }
+cna_cue_copy_name = { copy = "object->value->getNameProperty()" }
+cna_cue_play = { call = "object->value->Play()" }
+cna_cue_pause = { call = "object->value->Pause()" }
+cna_cue_resume = { call = "object->value->Resume()" }
+cna_cue_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_cue_copy_type_name = { copy = "object->value->GetTypeName()" }

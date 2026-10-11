@@ -1,0 +1,22 @@
+# MediaPlayer routes, generated into src/generated/MediaPlayer.inc,
+# which src/CnaCApiMediaPlayer.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[song]
+lookup = "BorrowSong"
+object = "std::shared_ptr<SongResource>"
+
+[song.routes]
+cna_media_player_detect_song_ended_by_elapsed_time_ext = { get = "MediaPlayer::DetectSongEndedByElapsedTime(object->value, System::TimeSpan(static_cast<SharpRuntime::longcs>(elapsed_ticks)))" }
+
+[queue]
+lookup = "BorrowQueue"
+object = "std::shared_ptr<MediaQueueResource>"
+
+[queue.routes]
+cna_media_queue_get_count = { get = "object->value->getCountProperty()" }
+cna_media_queue_get_active_song_index = { get = "object->value->getActiveSongIndexProperty()" }
+# The canonical setter stores the value unchecked, so C does not invent a range rule.
+cna_media_queue_set_active_song_index = { call = "object->value->setActiveSongIndexProperty(static_cast<SharpRuntime::intcs>(index))" }
+cna_media_queue_clear = { call = "object->value->Clear()" }
+cna_media_queue_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_media_queue_copy_type_name = { copy = "object->value->GetTypeName()" }

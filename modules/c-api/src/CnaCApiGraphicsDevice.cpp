@@ -92,7 +92,6 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
-using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -904,52 +903,6 @@ void ResetGraphicsDeviceAdapterState() noexcept
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_viewport_init(CNA_Viewport* const outValue)
-{
-    return StoreOutput(outValue, "The viewport output is null.", [] {
-        return ToC(Viewport());
-    });
-}
-
-CNA_Result cna_viewport_init_bounds(
-    const int32_t x,
-    const int32_t y,
-    const int32_t width,
-    const int32_t height,
-    CNA_Viewport* const outValue)
-{
-    return StoreOutput(outValue, "The viewport output is null.", [=] {
-        return ToC(Viewport(x, y, width, height));
-    });
-}
-
-CNA_Result cna_viewport_init_from_rectangle(
-    const CNA_Rectangle bounds,
-    CNA_Viewport* const outValue)
-{
-    return StoreOutput(outValue, "The viewport output is null.", [=] {
-        return ToC(Viewport(ToNative(bounds)));
-    });
-}
-
-CNA_Result cna_viewport_get_aspect_ratio(
-    const CNA_Viewport value,
-    float* const outAspectRatio)
-{
-    return StoreOutput(outAspectRatio, "The float output is null.", [=] {
-        return ToNative(value).getAspectRatioProperty();
-    });
-}
-
-CNA_Result cna_viewport_get_bounds(
-    const CNA_Viewport value,
-    CNA_Rectangle* const outBounds)
-{
-    return StoreOutput(outBounds, "The rectangle output is null.", [=] {
-        return ToC(ToNative(value).getBoundsProperty());
-    });
-}
-
 CNA_Result cna_viewport_set_bounds(
     CNA_Viewport* const viewport,
     const CNA_Rectangle bounds)
@@ -965,63 +918,6 @@ CNA_Result cna_viewport_set_bounds(
         native.setBoundsProperty(ToNative(bounds));
         *viewport = ToC(native);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_viewport_get_title_safe_area(
-    const CNA_Viewport value,
-    CNA_Rectangle* const outArea)
-{
-    return StoreOutput(outArea, "The rectangle output is null.", [=] {
-        return ToC(ToNative(value).getTitleSafeAreaProperty());
-    });
-}
-
-CNA_Result cna_viewport_project(
-    const CNA_Viewport value,
-    const CNA_Vector3 source,
-    const CNA_Matrix projection,
-    const CNA_Matrix view,
-    const CNA_Matrix world,
-    CNA_Vector3* const outValue)
-{
-    return StoreOutput(outValue, "The vector output is null.", [=] {
-        return ToC(ToNative(value).Project(
-            ToNative(source), ToNative(projection), ToNative(view), ToNative(world)));
-    });
-}
-
-CNA_Result cna_viewport_unproject(
-    const CNA_Viewport value,
-    const CNA_Vector3 source,
-    const CNA_Matrix projection,
-    const CNA_Matrix view,
-    const CNA_Matrix world,
-    CNA_Vector3* const outValue)
-{
-    return StoreOutput(outValue, "The vector output is null.", [=] {
-        return ToC(ToNative(value).Unproject(
-            ToNative(source), ToNative(projection), ToNative(view), ToNative(world)));
-    });
-}
-
-CNA_Result cna_viewport_get_string_size(
-    const CNA_Viewport value,
-    uint64_t* const outBytes)
-{
-    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
-        return static_cast<uint64_t>(ToNative(value).ToString().size());
-    });
-}
-
-CNA_Result cna_viewport_copy_string(
-    const CNA_Viewport value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CopyFormattedText(destination, capacity, outBytes, [=] {
-        return ToNative(value).ToString();
     });
 }
 
@@ -1866,17 +1762,6 @@ CNA_Result cna_graphics_device_get_index_buffer(
     });
 }
 
-CNA_Result cna_primitive_type_get_vertex_count(
-    const CNA_PrimitiveType primitiveType,
-    const int32_t primitiveCount,
-    int32_t* const outVertexCount)
-{
-    return StoreOutput(outVertexCount, "The vertex-count output is null.", [=] {
-        return static_cast<int32_t>(GraphicsDevice::PrimitiveVerts(
-            static_cast<PrimitiveType>(primitiveType), primitiveCount));
-    });
-}
-
 CNA_Result cna_graphics_device_draw_primitives(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_PrimitiveType primitiveType,
@@ -2382,3 +2267,6 @@ CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
             return static_cast<int32_t>(device.GetMaxComputeWorkGroupInvocationsEXT());
         });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsDevice.toml.
+#include "generated/GraphicsDevice.inc"

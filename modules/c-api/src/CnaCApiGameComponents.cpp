@@ -30,11 +30,9 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
 
@@ -468,24 +466,6 @@ CNA_Result cna_drawable_game_component_create(
     });
 }
 
-CNA_Result cna_game_component_get_is_drawable(
-    const CNA_GameComponentHandle component,
-    CNA_Bool* const outDrawable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDrawable == nullptr) {
-            return InvalidArgument("The drawable output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDrawable = ToCBool(resource->drawable != nullptr);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_component_get_game(
     const CNA_GameComponentHandle component,
     CNA_Handle* const outGame)
@@ -503,146 +483,6 @@ CNA_Result cna_game_component_get_game(
         // handle records; the handle is what a C caller can use.
         (void)&resource->value->getGameProperty();
         *outGame = resource->game;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_get_enabled(
-    const CNA_GameComponentHandle component,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The enabled output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEnabled = ToCBool(resource->value->getEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_set_enabled(
-    const CNA_GameComponentHandle component,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setEnabledProperty(enabled != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_get_update_order(
-    const CNA_GameComponentHandle component,
-    int32_t* const outOrder)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOrder == nullptr) {
-            return InvalidArgument("The update order output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOrder = static_cast<int32_t>(resource->value->getUpdateOrderProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_set_update_order(
-    const CNA_GameComponentHandle component,
-    const int32_t order)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setUpdateOrderProperty(static_cast<SharpRuntime::intcs>(order));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_drawable_game_component_get_draw_order(
-    const CNA_GameComponentHandle component,
-    int32_t* const outOrder)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOrder == nullptr) {
-            return InvalidArgument("The draw order output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOrder = static_cast<int32_t>(resource->drawable->getDrawOrderProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_drawable_game_component_set_draw_order(
-    const CNA_GameComponentHandle component,
-    const int32_t order)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->drawable->setDrawOrderProperty(static_cast<SharpRuntime::Int32>(order));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_drawable_game_component_get_visible(
-    const CNA_GameComponentHandle component,
-    CNA_Bool* const outVisible)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVisible == nullptr) {
-            return InvalidArgument("The visibility output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outVisible = ToCBool(resource->drawable->getVisibleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_drawable_game_component_set_visible(
-    const CNA_GameComponentHandle component,
-    const CNA_Bool visible)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(visible, "visible");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->drawable->setVisibleProperty(visible != CNA_FALSE);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -692,19 +532,6 @@ CNA_Result cna_game_component_compare_to(
     });
 }
 
-CNA_Result cna_game_component_initialize(const CNA_GameComponentHandle component)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Initialize();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_component_update(
     const CNA_GameComponentHandle component,
     const CNA_GameTime* const gameTime)
@@ -740,53 +567,6 @@ CNA_Result cna_drawable_game_component_draw(
         const GameTime value = ToGameTime(*gameTime);
         resource->drawable->Draw(value);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_dispose(const CNA_GameComponentHandle component)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_get_type_name_size(
-    const CNA_GameComponentHandle component,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_component_copy_type_name(
-    const CNA_GameComponentHandle component,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -892,22 +672,6 @@ CNA_Result cna_game_component_destroy(const CNA_GameComponentHandle component)
                 "The game component handle could not be released.");
         }
         CNA::C::Detail::RemoveOwnedGameComponent();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_components_get_count(const CNA_Handle gameHandle, uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The component count output is null.");
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(components->getCountProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1031,19 +795,6 @@ CNA_Result cna_game_components_remove_at(const CNA_Handle gameHandle, const uint
     });
 }
 
-CNA_Result cna_game_components_clear(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        components->Clear();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_components_contains(
     const CNA_Handle gameHandle,
     const CNA_GameComponentHandle component,
@@ -1151,40 +902,6 @@ CNA_Result cna_game_components_subscribe_removed(
     });
 }
 
-CNA_Result cna_game_components_get_type_name_size(
-    const CNA_Handle gameHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = components->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_components_copy_type_name(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(components->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_game_services_contains_ext(
     const CNA_Handle gameHandle,
     const CNA_GameServiceType service,
@@ -1234,3 +951,6 @@ CNA_Result cna_game_services_remove_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GameComponents.toml.
+#include "generated/GameComponents.inc"

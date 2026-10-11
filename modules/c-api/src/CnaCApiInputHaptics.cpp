@@ -423,21 +423,6 @@ CNA_Result cna_haptic_capabilities_equals(
     });
 }
 
-CNA_Result cna_haptics_get_count(const CNA_Handle gameHandle, uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The haptic device count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint32_t>(Haptics::GetHapticsEXT().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptics_get_id_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -549,77 +534,6 @@ CNA_Result cna_haptics_open_from_mouse(
     });
 }
 
-CNA_Result cna_haptics_get_is_joystick_haptic(
-    const CNA_Handle gameHandle,
-    const uint32_t joystickId,
-    CNA_Bool* const outHaptic)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHaptic == nullptr) {
-            return InvalidArgument("The joystick haptic-capability output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHaptic = ToCBool(Haptics::IsJoystickHapticEXT(joystickId));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptics_get_is_mouse_haptic(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outHaptic)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHaptic == nullptr) {
-            return InvalidArgument("The mouse haptic-capability output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHaptic = ToCBool(Haptics::IsMouseHapticEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_get_is_open(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outOpen)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOpen == nullptr) {
-            return InvalidArgument("The haptic device open-state output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOpen = ToCBool(device->IsOpenEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_get_name_size(
-    const CNA_HapticDeviceHandle deviceHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The haptic device name byte-count output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = device->GetNameEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_device_copy_name(
     const CNA_HapticDeviceHandle deviceHandle,
     char* const destination,
@@ -700,26 +614,6 @@ CNA_Result cna_haptic_device_init_rumble(
     });
 }
 
-CNA_Result cna_haptic_device_play_rumble(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const float strength,
-    const uint32_t lengthMs,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The rumble playback output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->PlayRumbleEXT(strength, lengthMs));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_device_stop_rumble(
     const CNA_HapticDeviceHandle deviceHandle,
     CNA_Bool* const outApplied)
@@ -788,79 +682,6 @@ CNA_Result cna_haptic_device_update_effect(
     });
 }
 
-CNA_Result cna_haptic_device_run_effect(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t effectId,
-    const uint32_t iterations,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The effect playback output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->RunEffectEXT(effectId, iterations));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_stop_effect(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t effectId,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The effect stop output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->StopEffectEXT(effectId));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_destroy_effect(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t effectId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        device->DestroyEffectEXT(effectId);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_get_effect_status(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t effectId,
-    CNA_Bool* const outPlaying)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlaying == nullptr) {
-            return InvalidArgument("The effect status output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPlaying = ToCBool(device->GetEffectStatusEXT(effectId));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_device_stop_all_effects(
     const CNA_HapticDeviceHandle deviceHandle,
     CNA_Bool* const outApplied)
@@ -871,44 +692,6 @@ CNA_Result cna_haptic_device_stop_all_effects(
             &HapticDevice::StopAllEffectsEXT,
             outApplied,
             "The stop-all-effects output is null.");
-    });
-}
-
-CNA_Result cna_haptic_device_set_gain(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t gain,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The gain output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->SetGainEXT(gain));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_set_autocenter(
-    const CNA_HapticDeviceHandle deviceHandle,
-    const int32_t autocenter,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The autocenter output is null.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->SetAutocenterEXT(autocenter));
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -938,19 +721,6 @@ CNA_Result cna_haptic_device_resume(
     });
 }
 
-CNA_Result cna_haptic_device_dispose(const CNA_HapticDeviceHandle deviceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        device->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_device_destroy(const CNA_HapticDeviceHandle deviceHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -969,3 +739,6 @@ CNA_Result cna_haptic_device_destroy(const CNA_HapticDeviceHandle deviceHandle)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/InputHaptics.toml.
+#include "generated/InputHaptics.inc"

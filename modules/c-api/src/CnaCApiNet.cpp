@@ -427,42 +427,6 @@ CNA_Result cna_network_session_properties_create(
     });
 }
 
-CNA_Result cna_network_session_properties_get_count(
-    const CNA_NetworkSessionPropertiesHandle propertiesHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The property-count output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(properties->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_properties_get_is_read_only(
-    const CNA_NetworkSessionPropertiesHandle propertiesHandle,
-    CNA_Bool* const outIsReadOnly)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsReadOnly == nullptr) {
-            return InvalidArgument("The read-only output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsReadOnly = ToCBool(properties->value->getIsReadOnlyProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_network_session_properties_get_item(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const int32_t index,
@@ -544,21 +508,6 @@ CNA_Result cna_network_session_properties_insert(
     });
 }
 
-CNA_Result cna_network_session_properties_remove_at(
-    const CNA_NetworkSessionPropertiesHandle propertiesHandle,
-    const int32_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        properties->value->RemoveAt(static_cast<int>(index));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_network_session_properties_add(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const CNA_OptionalInt32 value)
@@ -608,20 +557,6 @@ CNA_Result cna_network_session_properties_contains(
             return result;
         }
         *outContains = ToCBool(properties->value->Contains(ToNative(value)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_properties_clear(
-    const CNA_NetworkSessionPropertiesHandle propertiesHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        properties->value->Clear();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1140,21 +1075,6 @@ CNA_Result cna_packet_reader_get_position(
     });
 }
 
-CNA_Result cna_packet_reader_set_position(
-    const CNA_PacketReaderHandle readerHandle,
-    const int32_t position)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PacketReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->setPositionProperty(static_cast<int>(position));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_packet_reader_read_color(
     const CNA_PacketReaderHandle readerHandle,
     CNA_Color* const outValue)
@@ -1304,3 +1224,6 @@ CNA_Result cna_packet_reader_destroy(const CNA_PacketReaderHandle readerHandle)
             "The owned PacketReader handle could not be released.");
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Net.toml.
+#include "generated/Net.inc"

@@ -266,19 +266,6 @@ CNA_Result cna_album_get_is_disposed(const CNA_AlbumHandle album, CNA_Bool* cons
     });
 }
 
-CNA_Result cna_album_dispose(const CNA_AlbumHandle album)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_album_destroy(const CNA_AlbumHandle album)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -408,19 +395,6 @@ CNA_Result cna_album_collection_get_is_disposed(
     });
 }
 
-CNA_Result cna_album_collection_dispose(const CNA_AlbumCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<AlbumCollection>> resource;
-        if (const CNA_Result result = Borrow<AlbumCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_album_collection_destroy(const CNA_AlbumCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -494,19 +468,6 @@ CNA_Result cna_artist_get_is_disposed(const CNA_ArtistHandle artist, CNA_Bool* c
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_artist_dispose(const CNA_ArtistHandle artist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Artist>> resource;
-        if (const CNA_Result result = Borrow<Artist>(artist, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -639,19 +600,6 @@ CNA_Result cna_artist_collection_get_is_disposed(
     });
 }
 
-CNA_Result cna_artist_collection_dispose(const CNA_ArtistCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<ArtistCollection>> resource;
-        if (const CNA_Result result = Borrow<ArtistCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_artist_collection_destroy(const CNA_ArtistCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -725,19 +673,6 @@ CNA_Result cna_genre_get_is_disposed(const CNA_GenreHandle genre, CNA_Bool* cons
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_genre_dispose(const CNA_GenreHandle genre)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Genre>> resource;
-        if (const CNA_Result result = Borrow<Genre>(genre, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -870,19 +805,6 @@ CNA_Result cna_genre_collection_get_is_disposed(
     });
 }
 
-CNA_Result cna_genre_collection_dispose(const CNA_GenreCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<GenreCollection>> resource;
-        if (const CNA_Result result = Borrow<GenreCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_genre_collection_destroy(const CNA_GenreCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -956,19 +878,6 @@ CNA_Result cna_playlist_get_is_disposed(const CNA_PlaylistHandle playlist, CNA_B
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_playlist_dispose(const CNA_PlaylistHandle playlist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Playlist>> resource;
-        if (const CNA_Result result = Borrow<Playlist>(playlist, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1101,19 +1010,6 @@ CNA_Result cna_playlist_collection_get_is_disposed(
     });
 }
 
-CNA_Result cna_playlist_collection_dispose(const CNA_PlaylistCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<PlaylistCollection>> resource;
-        if (const CNA_Result result = Borrow<PlaylistCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_playlist_collection_destroy(const CNA_PlaylistCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1220,37 +1116,6 @@ CNA_Result cna_media_library_create_from_source(
                 ErrorCategoryForResult(result),
                 "The media library handle could not be created.");
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_library_get_is_disposed(
-    const CNA_MediaLibraryHandle library,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The media library disposal-state output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_library_dispose(const CNA_MediaLibraryHandle library)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1444,40 +1309,6 @@ CNA_Result cna_media_library_get_playlists(
             outPlaylists,
             [](const MediaLibrary& value) { return value.getPlaylistsProperty(); },
             "The playlist collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_type_name_size(
-    const CNA_MediaLibraryHandle library,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The media library type-name byte-count output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_library_copy_type_name(
-    const CNA_MediaLibraryHandle library,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1786,19 +1617,6 @@ CNA_Result cna_picture_get_is_disposed(const CNA_PictureHandle handle, CNA_Bool*
     });
 }
 
-CNA_Result cna_picture_dispose(const CNA_PictureHandle handle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Picture>> resource;
-        if (const CNA_Result result = Borrow<Picture>(handle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_picture_destroy(const CNA_PictureHandle handle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1906,19 +1724,6 @@ CNA_Result cna_picture_album_get_is_disposed(const CNA_PictureAlbumHandle handle
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_picture_album_dispose(const CNA_PictureAlbumHandle handle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
-        if (const CNA_Result result = Borrow<PictureAlbum>(handle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2030,19 +1835,6 @@ CNA_Result cna_picture_collection_get_is_disposed(
     });
 }
 
-CNA_Result cna_picture_collection_dispose(const CNA_PictureCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<PictureCollection>> resource;
-        if (const CNA_Result result = Borrow<PictureCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_picture_collection_destroy(const CNA_PictureCollectionHandle collection)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2113,19 +1905,6 @@ CNA_Result cna_picture_album_collection_get_is_disposed(
             *outDisposed = ToCBool(value.getIsDisposedProperty());
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_picture_album_collection_dispose(const CNA_PictureAlbumCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> resource;
-        if (const CNA_Result result = Borrow<PictureAlbumCollection>(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2616,3 +2395,6 @@ CNA_Result cna_media_library_save_picture_from_stream(
         return result;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/MediaLibrary.toml.
+#include "generated/MediaLibrary.inc"

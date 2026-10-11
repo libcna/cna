@@ -26,7 +26,6 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
-using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -363,46 +362,6 @@ CNA_Result cna_video_get_duration(const CNA_VideoHandle video, int64_t* const ou
     });
 }
 
-CNA_Result cna_video_set_duration(const CNA_VideoHandle video, const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoResource> resource;
-        if (const CNA_Result result = BorrowVideo(video, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setDurationProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_set_audio_track_ext(const CNA_VideoHandle video, const int32_t track)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoResource> resource;
-        if (const CNA_Result result = BorrowVideo(video, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetAudioTrackEXT(static_cast<SharpRuntime::intcs>(track));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_set_video_track_ext(const CNA_VideoHandle video, const int32_t track)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoResource> resource;
-        if (const CNA_Result result = BorrowVideo(video, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_video_get_file_name_size(const CNA_VideoHandle video, uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -521,135 +480,6 @@ CNA_Result cna_video_player_create(
     });
 }
 
-CNA_Result cna_video_player_get_is_disposed(
-    const CNA_VideoPlayerHandle player,
-    CNA_Bool* const outDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDisposed == nullptr) {
-            return InvalidArgument("The video player disposal-state output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDisposed = ToCBool(resource->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_get_is_looped(
-    const CNA_VideoPlayerHandle player,
-    CNA_Bool* const outLooped)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLooped == nullptr) {
-            return InvalidArgument("The video player loop-state output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outLooped = ToCBool(resource->value->getIsLoopedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_set_is_looped(
-    const CNA_VideoPlayerHandle player,
-    const CNA_Bool looped)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(looped, "looped");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setIsLoopedProperty(looped != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_get_is_muted(
-    const CNA_VideoPlayerHandle player,
-    CNA_Bool* const outMuted)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMuted == nullptr) {
-            return InvalidArgument("The video player mute-state output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outMuted = ToCBool(resource->value->getIsMutedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_set_is_muted(
-    const CNA_VideoPlayerHandle player,
-    const CNA_Bool muted)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(muted, "muted");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setIsMutedProperty(muted != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_get_play_position_ticks(
-    const CNA_VideoPlayerHandle player,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The video player position output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks =
-            static_cast<int64_t>(resource->value->getPlayPositionProperty().getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_get_state(
-    const CNA_VideoPlayerHandle player,
-    CNA_MediaState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The video player state output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_MediaState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_video_player_get_video(
     const CNA_VideoPlayerHandle player,
     CNA_VideoHandle* const outVideo,
@@ -671,37 +501,6 @@ CNA_Result cna_video_player_get_video(
         }
         *outVideo = resource->playingVideoHandle;
         *outAvailable = CNA_TRUE;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_get_volume(
-    const CNA_VideoPlayerHandle player,
-    float* const outVolume)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVolume == nullptr) {
-            return InvalidArgument("The video player volume output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outVolume = resource->value->getVolumeProperty();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_set_volume(const CNA_VideoPlayerHandle player, const float volume)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setVolumeProperty(volume);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -808,88 +607,6 @@ CNA_Result cna_video_player_play(
     });
 }
 
-CNA_Result cna_video_player_stop(const CNA_VideoPlayerHandle player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_pause(const CNA_VideoPlayerHandle player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Pause();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_resume(const CNA_VideoPlayerHandle player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Resume();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_set_audio_track_ext(
-    const CNA_VideoPlayerHandle player,
-    const int32_t track)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetAudioTrackEXT(static_cast<SharpRuntime::intcs>(track));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_set_video_track_ext(
-    const CNA_VideoPlayerHandle player,
-    const int32_t track)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetVideoTrackEXT(static_cast<SharpRuntime::intcs>(track));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_dispose(const CNA_VideoPlayerHandle player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_video_player_destroy(const CNA_VideoPlayerHandle player)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -909,36 +626,5 @@ CNA_Result cna_video_player_destroy(const CNA_VideoPlayerHandle player)
     });
 }
 
-CNA_Result cna_video_player_get_type_name_size(
-    const CNA_VideoPlayerHandle player,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The video player type-name byte-count output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_copy_type_name(
-    const CNA_VideoPlayerHandle player,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Video.toml.
+#include "generated/Video.inc"

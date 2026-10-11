@@ -1,0 +1,47 @@
+# Gamers routes, generated into src/generated/Gamers.inc,
+# which src/CnaCApiGamers.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[gamer_base]
+lookup = "BorrowGamerBase"
+object = "Gamer*"
+
+[gamer_base.routes]
+cna_gamer_get_display_name_size = { size = "object->getDisplayNameProperty()" }
+cna_gamer_copy_display_name = { copy = "object->getDisplayNameProperty()" }
+cna_gamer_get_gamertag_size = { size = "object->getGamertagProperty()" }
+cna_gamer_copy_gamertag = { copy = "object->getGamertagProperty()" }
+cna_gamer_get_text_size = { size = "object->ToString()" }
+cna_gamer_copy_text = { copy = "object->ToString()" }
+cna_gamer_get_is_disposed = { get = "object->getIsDisposedProperty()" }
+cna_gamer_set_tag = { call = "object->setTagProperty(std::any(tag))" }
+
+[signed_in]
+lookup = "BorrowSignedIn"
+object = "SignedInGamer*"
+
+[signed_in.routes]
+cna_signed_in_gamer_get_is_guest = { get = "object->getIsGuestProperty()" }
+cna_signed_in_gamer_get_is_signed_in_to_live = { get = "object->getIsSignedInToLiveProperty()" }
+cna_signed_in_gamer_get_party_size = { get = "object->getPartySizeProperty()" }
+# XNA's setter is internal; a C host without a party service may still drive it, and the
+# CNA party service overwrites it at the next gamer-services update.
+cna_signed_in_gamer_set_party_size = { call = "CNA::Internal::GamerServices::GamerAccess::setPartySize(*object, static_cast<int>(party_size))" }
+cna_signed_in_gamer_get_player_index = { get = "object->getPlayerIndexProperty()" }
+
+[profile]
+lookup = "BorrowProfile"
+object = "std::shared_ptr<GamerProfileResource>"
+
+[profile.routes]
+cna_gamer_profile_get_motto_size = { size = "object->value->getMottoProperty()" }
+cna_gamer_profile_copy_motto = { copy = "object->value->getMottoProperty()" }
+cna_gamer_profile_get_region_name_size = { size = "object->value->getRegionProperty().getNameProperty()" }
+cna_gamer_profile_copy_region_name = { copy = "object->value->getRegionProperty().getNameProperty()" }
+
+[collection]
+lookup = "BorrowCollection"
+object = "std::shared_ptr<GamerCollectionResource>"
+
+[collection.routes]
+cna_gamer_collection_get_count = { get = "object->friends->getCountProperty()" }
+cna_friend_collection_get_is_disposed = { get = "object->friends->getIsDisposedProperty()" }

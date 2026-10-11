@@ -439,21 +439,6 @@ CNA_Result cna_joystick_capabilities_equals(
     });
 }
 
-CNA_Result cna_joysticks_get_count(const CNA_Handle gameHandle, uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The joystick count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint32_t>(Joysticks::GetJoysticksEXT().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joysticks_get_info_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -867,38 +852,5 @@ CNA_Result cna_joysticks_unsubscribe_ext(
     });
 }
 
-CNA_Result cna_joysticks_raise_connected_ext(const CNA_Handle gameHandle, const uint32_t id)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Joysticks::ConnectedEXT.Invoke(id);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_joysticks_raise_disconnected_ext(const CNA_Handle gameHandle, const uint32_t id)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Joysticks::DisconnectedEXT.Invoke(id);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_joysticks_reset_for_tests_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Joysticks::ResetForTests();
-        return CNA_RESULT_SUCCESS;
-    });
-}
+// The mechanically regular routes of this family, generated from modules/c-api/spec/InputJoystick.toml.
+#include "generated/InputJoystick.inc"

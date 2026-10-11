@@ -786,34 +786,6 @@ CNA_Result cna_game_run_frame_ext(const CNA_Handle gameHandle, CNA_Bool* const o
     });
 }
 
-CNA_Result cna_game_set_foreign_thread_calls_ext(const CNA_Handle gameHandle, const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CGame> game;
-        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::C::Detail::SetForeignThreadCalls(enabled == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_run_foreign_thread_calls_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CGame> game;
-        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::C::Detail::RunForeignThreadCalls();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_run(const CNA_Handle gameHandle)
 {
     return CallWithExceptionBarrier([&]() {
@@ -827,18 +799,6 @@ CNA_Result cna_game_run(const CNA_Handle gameHandle)
     });
 }
 
-CNA_Result cna_game_request_exit(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<CGame> game;
-        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        game->Exit();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_clear(const CNA_Handle gameHandle, const CNA_Color color)
 {
     return CallWithExceptionBarrier([&]() {
@@ -847,21 +807,6 @@ CNA_Result cna_game_clear(const CNA_Handle gameHandle, const CNA_Color color)
             return result;
         }
         game->Clear(color);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_tick(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CGame> game;
-        // A frame step drives the game, so it is refused from inside a lifecycle callback for the
-        // same reason running or destroying the game is: it would re-enter the loop it is part of.
-        if (const CNA_Result result = GetCallableGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        game->Tick();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -972,3 +917,6 @@ CNA_Result cna_game_get_graphics_device(
         return game->BorrowGraphicsDevice(outGraphicsDevice);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Runtime.toml.
+#include "generated/Runtime.inc"

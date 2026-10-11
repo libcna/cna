@@ -607,54 +607,6 @@ CNA_Result cna_accelerometer_reading_equals(
     });
 }
 
-CNA_Result cna_accelerometer_reading_get_hash_code(const CNA_AccelerometerReading* const reading, uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The reading hash output is null.");
-        }
-        AccelerometerReading native;
-        if (const CNA_Result result = ToAccelerometerReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(native.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_reading_get_string_size(const CNA_AccelerometerReading* const reading, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading text byte-count output is null.");
-        }
-        AccelerometerReading native;
-        if (const CNA_Result result = ToAccelerometerReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = native.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_reading_copy_string(
-    const CNA_AccelerometerReading* const reading,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AccelerometerReading native;
-        if (const CNA_Result result = ToAccelerometerReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(native.ToString(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_accelerometer_reading_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -699,54 +651,6 @@ CNA_Result cna_gyroscope_reading_equals(
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_reading_get_hash_code(const CNA_GyroscopeReading* const reading, uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The reading hash output is null.");
-        }
-        GyroscopeReading native;
-        if (const CNA_Result result = ToGyroscopeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(native.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_reading_get_string_size(const CNA_GyroscopeReading* const reading, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading text byte-count output is null.");
-        }
-        GyroscopeReading native;
-        if (const CNA_Result result = ToGyroscopeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = native.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_reading_copy_string(
-    const CNA_GyroscopeReading* const reading,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GyroscopeReading native;
-        if (const CNA_Result result = ToGyroscopeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(native.ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -797,54 +701,6 @@ CNA_Result cna_attitude_reading_equals(
     });
 }
 
-CNA_Result cna_attitude_reading_get_hash_code(const CNA_AttitudeReading* const reading, uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The reading hash output is null.");
-        }
-        AttitudeReading native;
-        if (const CNA_Result result = ToAttitudeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(native.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_attitude_reading_get_string_size(const CNA_AttitudeReading* const reading, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading text byte-count output is null.");
-        }
-        AttitudeReading native;
-        if (const CNA_Result result = ToAttitudeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = native.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_attitude_reading_copy_string(
-    const CNA_AttitudeReading* const reading,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AttitudeReading native;
-        if (const CNA_Result result = ToAttitudeReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(native.ToString(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_attitude_reading_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -892,54 +748,6 @@ CNA_Result cna_compass_reading_equals(
     });
 }
 
-CNA_Result cna_compass_reading_get_hash_code(const CNA_CompassReading* const reading, uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The reading hash output is null.");
-        }
-        CompassReading native;
-        if (const CNA_Result result = ToCompassReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(native.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_reading_get_string_size(const CNA_CompassReading* const reading, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading text byte-count output is null.");
-        }
-        CompassReading native;
-        if (const CNA_Result result = ToCompassReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = native.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_reading_copy_string(
-    const CNA_CompassReading* const reading,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CompassReading native;
-        if (const CNA_Result result = ToCompassReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(native.ToString(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_compass_reading_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -984,54 +792,6 @@ CNA_Result cna_motion_reading_equals(
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_reading_get_hash_code(const CNA_MotionReading* const reading, uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The reading hash output is null.");
-        }
-        MotionReading native;
-        if (const CNA_Result result = ToMotionReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(native.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_reading_get_string_size(const CNA_MotionReading* const reading, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading text byte-count output is null.");
-        }
-        MotionReading native;
-        if (const CNA_Result result = ToMotionReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = native.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_reading_copy_string(
-    const CNA_MotionReading* const reading,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        MotionReading native;
-        if (const CNA_Result result = ToMotionReading(reading, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(native.ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -1093,21 +853,6 @@ CNA_Result cna_sensor_unsubscribe_ext(const CNA_SensorEventRegistrationHandle re
     });
 }
 
-CNA_Result cna_accelerometer_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The sensor support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(Accelerometer::getIsSupportedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_create(const CNA_Handle gameHandle, CNA_AccelerometerHandle* const outSensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1135,61 +880,6 @@ CNA_Result cna_accelerometer_create(const CNA_Handle gameHandle, CNA_Acceleromet
     });
 }
 
-CNA_Result cna_accelerometer_get_state(const CNA_AccelerometerHandle sensor, CNA_SensorState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The sensor state output is null.");
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_start(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Start();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_stop(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_dispose(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_get_current_value(
     const CNA_AccelerometerHandle sensor,
     CNA_AccelerometerReading* const outReading)
@@ -1204,57 +894,6 @@ CNA_Result cna_accelerometer_get_current_value(
             return result;
         }
         *outReading = MapAccelerometerReadingValue(resource->value->getCurrentValueProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_get_is_data_valid(const CNA_AccelerometerHandle sensor, CNA_Bool* const outValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValid == nullptr) {
-            return InvalidArgument("The sensor data-validity output is null.");
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValid = ToCBool(resource->value->getIsDataValidProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_get_time_between_updates_ticks(
-    const CNA_AccelerometerHandle sensor,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sensor interval output is null.");
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks = static_cast<int64_t>(
-            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_set_time_between_updates_ticks(
-    const CNA_AccelerometerHandle sensor,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setTimeBetweenUpdatesProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1291,105 +930,6 @@ CNA_Result cna_accelerometer_subscribe_current_value_changed(
     });
 }
 
-CNA_Result cna_accelerometer_inject_synthetic_update_ext(
-    const CNA_AccelerometerHandle sensor,
-    const float x,
-    const float y,
-    const float z)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->InjectSyntheticSensorUpdate(x, y, z);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_set_started_for_tests_ext(
-    const CNA_AccelerometerHandle sensor,
-    const CNA_Bool started)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(started, "started");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetStartedForTesting(started != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_set_supported_for_tests_ext(
-    const CNA_AccelerometerHandle sensor,
-    const CNA_Bool supported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetSupportedForTesting(supported != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_get_subsystem_held_for_tests_ext(
-    const CNA_AccelerometerHandle sensor,
-    CNA_Bool* const outHeld)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeld == nullptr) {
-            return InvalidArgument("The subsystem-hold output is null.");
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHeld = ToCBool(resource->value->GetSubsystemHeldForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_register_started_instance_for_tests_ext(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Accelerometer::RegisterStartedInstanceForTesting(*resource->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_unregister_started_instance_for_tests_ext(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Accelerometer::UnregisterStartedInstanceForTesting(*resource->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_dispatch_to_instances_for_tests_ext(
     const CNA_Handle gameHandle,
     const CNA_AccelerometerHandle* const sensors,
@@ -1421,95 +961,6 @@ CNA_Result cna_accelerometer_dispatch_to_instances_for_tests_ext(
     });
 }
 
-CNA_Result cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool shouldFail)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(shouldFail, "should_fail");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Accelerometer::SetEventWatchRegistrationFailureForTesting(shouldFail != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_get_dispatch_exception_count_for_tests_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The dispatch exception count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(Accelerometer::GetDispatchExceptionCountForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_get_last_dispatch_exception_message_size_for_tests_ext(
-    const CNA_Handle gameHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dispatch exception message byte-count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = Accelerometer::GetLastDispatchExceptionMessageForTesting().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_copy_last_dispatch_exception_message_for_tests_ext(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Accelerometer::GetLastDispatchExceptionMessageForTesting(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_accelerometer_is_sensor_connected_for_tests_ext(
-    const CNA_Handle gameHandle,
-    const int64_t sensorId,
-    CNA_Bool* const outConnected)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outConnected == nullptr) {
-            return InvalidArgument("The sensor connection output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outConnected = ToCBool(Accelerometer::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensorId)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
     const CNA_AccelerometerHandle sensor,
     const CNA_SensorEventCallback callback,
@@ -1531,38 +982,6 @@ CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
     });
 }
 
-CNA_Result cna_accelerometer_get_type_name_size(const CNA_AccelerometerHandle sensor, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The sensor type-name byte-count output is null.");
-        }
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_copy_type_name(
-    const CNA_AccelerometerHandle sensor,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_accelerometer_destroy(const CNA_AccelerometerHandle sensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1578,21 +997,6 @@ CNA_Result cna_accelerometer_destroy(const CNA_AccelerometerHandle sensor)
                 ErrorCategoryForResult(result),
                 "The sensor handle could not be released.");
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The sensor support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(Gyroscope::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1624,61 +1028,6 @@ CNA_Result cna_gyroscope_create(const CNA_Handle gameHandle, CNA_GyroscopeHandle
     });
 }
 
-CNA_Result cna_gyroscope_get_state(const CNA_GyroscopeHandle sensor, CNA_SensorState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The sensor state output is null.");
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_start(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Start();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_stop(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_dispose(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gyroscope_get_current_value(
     const CNA_GyroscopeHandle sensor,
     CNA_GyroscopeReading* const outReading)
@@ -1693,57 +1042,6 @@ CNA_Result cna_gyroscope_get_current_value(
             return result;
         }
         *outReading = MapGyroscopeReadingValue(resource->value->getCurrentValueProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_is_data_valid(const CNA_GyroscopeHandle sensor, CNA_Bool* const outValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValid == nullptr) {
-            return InvalidArgument("The sensor data-validity output is null.");
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValid = ToCBool(resource->value->getIsDataValidProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_time_between_updates_ticks(
-    const CNA_GyroscopeHandle sensor,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sensor interval output is null.");
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks = static_cast<int64_t>(
-            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_set_time_between_updates_ticks(
-    const CNA_GyroscopeHandle sensor,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setTimeBetweenUpdatesProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1780,105 +1078,6 @@ CNA_Result cna_gyroscope_subscribe_current_value_changed(
     });
 }
 
-CNA_Result cna_gyroscope_inject_synthetic_update_ext(
-    const CNA_GyroscopeHandle sensor,
-    const float x,
-    const float y,
-    const float z)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->InjectSyntheticSensorUpdate(x, y, z);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_set_started_for_tests_ext(
-    const CNA_GyroscopeHandle sensor,
-    const CNA_Bool started)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(started, "started");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetStartedForTesting(started != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_set_supported_for_tests_ext(
-    const CNA_GyroscopeHandle sensor,
-    const CNA_Bool supported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(supported, "supported");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetSupportedForTesting(supported != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_subsystem_held_for_tests_ext(
-    const CNA_GyroscopeHandle sensor,
-    CNA_Bool* const outHeld)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeld == nullptr) {
-            return InvalidArgument("The subsystem-hold output is null.");
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHeld = ToCBool(resource->value->GetSubsystemHeldForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_register_started_instance_for_tests_ext(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gyroscope::RegisterStartedInstanceForTesting(*resource->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_unregister_started_instance_for_tests_ext(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gyroscope::UnregisterStartedInstanceForTesting(*resource->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gyroscope_dispatch_to_instances_for_tests_ext(
     const CNA_Handle gameHandle,
     const CNA_GyroscopeHandle* const sensors,
@@ -1910,95 +1109,6 @@ CNA_Result cna_gyroscope_dispatch_to_instances_for_tests_ext(
     });
 }
 
-CNA_Result cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool shouldFail)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(shouldFail, "should_fail");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gyroscope::SetEventWatchRegistrationFailureForTesting(shouldFail != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_dispatch_exception_count_for_tests_ext(
-    const CNA_Handle gameHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The dispatch exception count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(Gyroscope::GetDispatchExceptionCountForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_last_dispatch_exception_message_size_for_tests_ext(
-    const CNA_Handle gameHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dispatch exception message byte-count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = Gyroscope::GetLastDispatchExceptionMessageForTesting().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Gyroscope::GetLastDispatchExceptionMessageForTesting(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_gyroscope_is_sensor_connected_for_tests_ext(
-    const CNA_Handle gameHandle,
-    const int64_t sensorId,
-    CNA_Bool* const outConnected)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outConnected == nullptr) {
-            return InvalidArgument("The sensor connection output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outConnected = ToCBool(Gyroscope::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensorId)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
     const CNA_GyroscopeHandle sensor,
     const CNA_SensorEventCallback callback,
@@ -2017,38 +1127,6 @@ CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
         resource->value->SetDisposalCleanupHookForTesting(
             [callback, context]() { callback(context); });
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_get_type_name_size(const CNA_GyroscopeHandle sensor, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The sensor type-name byte-count output is null.");
-        }
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_copy_type_name(
-    const CNA_GyroscopeHandle sensor,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -2359,58 +1437,6 @@ CNA_Result cna_accelerometer_reading_event_info_equals(
     });
 }
 
-CNA_Result cna_accelerometer_reading_event_info_get_hash_code(
-    const CNA_AccelerometerReadingEventInfo* const info,
-    uint64_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The hash output is null.");
-        }
-        AccelerometerReadingEventArgs args;
-        if (const CNA_Result result = ToAccelerometerReadingEventArgs(info, &args);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<uint64_t>(args.GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_reading_event_info_get_string_size(
-    const CNA_AccelerometerReadingEventInfo* const info,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The text size output is null.");
-        }
-        AccelerometerReadingEventArgs args;
-        if (const CNA_Result result = ToAccelerometerReadingEventArgs(info, &args);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = args.ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_accelerometer_reading_event_info_copy_string(
-    const CNA_AccelerometerReadingEventInfo* const info,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AccelerometerReadingEventArgs args;
-        if (const CNA_Result result = ToAccelerometerReadingEventArgs(info, &args);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(args.ToString(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_accelerometer_reading_event_info_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2489,21 +1515,6 @@ CNA_Result cna_accelerometer_subscribe_reading_changed(
     });
 }
 
-CNA_Result cna_compass_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The sensor support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(Compass::getIsSupportedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_compass_create(const CNA_Handle gameHandle, CNA_CompassHandle* const outSensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2531,61 +1542,6 @@ CNA_Result cna_compass_create(const CNA_Handle gameHandle, CNA_CompassHandle* co
     });
 }
 
-CNA_Result cna_compass_get_state(const CNA_CompassHandle sensor, CNA_SensorState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The sensor state output is null.");
-        }
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_start(const CNA_CompassHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Start();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_stop(const CNA_CompassHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_dispose(const CNA_CompassHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_compass_get_current_value(
     const CNA_CompassHandle sensor,
     CNA_CompassReading* const outReading)
@@ -2600,57 +1556,6 @@ CNA_Result cna_compass_get_current_value(
             return result;
         }
         *outReading = MapCompassReadingValue(resource->value->getCurrentValueProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_get_is_data_valid(const CNA_CompassHandle sensor, CNA_Bool* const outValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValid == nullptr) {
-            return InvalidArgument("The sensor data-validity output is null.");
-        }
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValid = ToCBool(resource->value->getIsDataValidProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_get_time_between_updates_ticks(
-    const CNA_CompassHandle sensor,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sensor interval output is null.");
-        }
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks = static_cast<int64_t>(
-            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_set_time_between_updates_ticks(
-    const CNA_CompassHandle sensor,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setTimeBetweenUpdatesProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2769,38 +1674,6 @@ CNA_Result cna_compass_inject_calibration_request_ext(const CNA_CompassHandle se
     });
 }
 
-CNA_Result cna_compass_get_type_name_size(const CNA_CompassHandle sensor, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_compass_copy_type_name(
-    const CNA_CompassHandle sensor,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_compass_destroy(const CNA_CompassHandle sensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -2816,21 +1689,6 @@ CNA_Result cna_compass_destroy(const CNA_CompassHandle sensor)
                 ErrorCategoryForResult(result),
                 "The sensor handle could not be released.");
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The sensor support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(Motion::getIsSupportedProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2862,80 +1720,6 @@ CNA_Result cna_motion_create(const CNA_Handle gameHandle, CNA_MotionHandle* cons
     });
 }
 
-CNA_Result cna_motion_get_state(const CNA_MotionHandle sensor, CNA_SensorState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The sensor state output is null.");
-        }
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_get_is_attitude_north_referenced_ext(
-    const CNA_MotionHandle sensor,
-    CNA_Bool* const outNorthReferenced)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNorthReferenced == nullptr) {
-            return InvalidArgument("The attitude-source output is null.");
-        }
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outNorthReferenced =
-            ToCBool(resource->value->getIsAttitudeNorthReferencedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_start(const CNA_MotionHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Start();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_stop(const CNA_MotionHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_dispose(const CNA_MotionHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_motion_get_current_value(
     const CNA_MotionHandle sensor,
     CNA_MotionReading* const outReading)
@@ -2950,57 +1734,6 @@ CNA_Result cna_motion_get_current_value(
             return result;
         }
         *outReading = MapMotionReadingValue(resource->value->getCurrentValueProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_get_is_data_valid(const CNA_MotionHandle sensor, CNA_Bool* const outValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValid == nullptr) {
-            return InvalidArgument("The sensor data-validity output is null.");
-        }
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValid = ToCBool(resource->value->getIsDataValidProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_get_time_between_updates_ticks(
-    const CNA_MotionHandle sensor,
-    int64_t* const outTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sensor interval output is null.");
-        }
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTicks = static_cast<int64_t>(
-            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_set_time_between_updates_ticks(
-    const CNA_MotionHandle sensor,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setTimeBetweenUpdatesProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3125,38 +1858,6 @@ CNA_Result cna_motion_inject_calibration_request_ext(const CNA_MotionHandle sens
     });
 }
 
-CNA_Result cna_motion_get_type_name_size(const CNA_MotionHandle sensor, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_copy_type_name(
-    const CNA_MotionHandle sensor,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_motion_destroy(const CNA_MotionHandle sensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -3175,3 +1876,6 @@ CNA_Result cna_motion_destroy(const CNA_MotionHandle sensor)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Sensors.toml.
+#include "generated/Sensors.inc"

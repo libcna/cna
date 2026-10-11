@@ -1,0 +1,15 @@
+# Curve routes, generated into src/generated/Curve.inc,
+# which src/CnaCApiCurve.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[curve_key]
+[curve_key.routes]
+cna_curve_key_init_position_value = { value = "CurveKey(position, value)" }
+cna_curve_key_init_tangents = { value = "CurveKey(position, value, tangent_in, tangent_out)" }
+
+[collection]
+lookup = "GetCollection"
+object = "std::shared_ptr<CurveKeyCollection>"
+
+[collection.routes]
+cna_curve_key_collection_clear = { call = "object->Clear()" }
+cna_curve_key_collection_remove_at = { call = "object->RemoveAt(index)" }

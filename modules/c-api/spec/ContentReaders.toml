@@ -1,0 +1,38 @@
+# ContentReaders routes, generated into src/generated/ContentReaders.inc,
+# which src/CnaCApiContentReaders.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[reader]
+lookup = "GetReader"
+object = "std::shared_ptr<ContentReaderResource>"
+
+[reader.routes]
+cna_content_reader_get_asset_name_size = { size = "object->value->getAssetNameProperty()" }
+cna_content_reader_copy_asset_name = { copy = "object->value->getAssetNameProperty()" }
+cna_content_reader_initialize_type_readers = { call = "object->value->InitializeTypeReaders()" }
+cna_content_reader_read_shared_resources = { call = "object->value->ReadSharedResources()" }
+
+[copy_reader_name]
+lookup = "CopyReaderName"
+object = "std::string"
+
+[copy_reader_name.routes]
+cna_content_type_reader_manager_get_is_registered = { get = "ContentTypeReaderManager::IsRegistered(object)" }
+
+[type_reader]
+lookup = "GetTypeReader"
+object = "std::shared_ptr<ContentTypeReaderResource>"
+
+[type_reader.routes]
+cna_content_type_reader_get_can_deserialize_into_existing_object = { get = "object->value->getCanDeserializeIntoExistingObjectProperty()" }
+cna_content_type_reader_get_target_type_name_size = { size = "object->value->getTargetTypeNameProperty()" }
+cna_content_type_reader_copy_target_type_name = { copy = "object->value->getTargetTypeNameProperty()" }
+cna_content_type_reader_get_type_version = { get = "object->value->getTypeVersionProperty()" }
+cna_content_type_reader_supports_version = { get = "object->value->SupportsVersion(static_cast<int>(serialized_version))" }
+
+[object_dictionary]
+lookup = "GetObjectDictionary"
+object = "std::shared_ptr<ObjectDictionaryResource>"
+
+[object_dictionary.routes]
+cna_object_dictionary_ext_get_runtime_type_name_size = { size = "object->value->GetTypeName()" }
+cna_object_dictionary_ext_get_count = { get = "object->value->getValuesProperty().size()" }

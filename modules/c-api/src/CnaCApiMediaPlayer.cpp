@@ -37,7 +37,6 @@ using CNA::C::Media::Detail::SongResource;
 
 namespace {
 
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
 
@@ -541,27 +540,6 @@ CNA_Result cna_media_player_program_exit_ext(const CNA_Handle gameHandle)
     });
 }
 
-CNA_Result cna_media_player_detect_song_ended_by_elapsed_time_ext(
-    const CNA_SongHandle song,
-    const int64_t elapsedTicks,
-    CNA_Bool* const outEnded)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnded == nullptr) {
-            return InvalidArgument("The song-ended output is null.");
-        }
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEnded = ToCBool(MediaPlayer::DetectSongEndedByElapsedTime(
-                        resource->value,
-                        System::TimeSpan(static_cast<SharpRuntime::longcs>(elapsedTicks))));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_media_player_subscribe_active_song_changed_ext(
     const CNA_MediaPlayerEventCallback callback,
     void* const context,
@@ -630,58 +608,6 @@ CNA_Result cna_media_player_raise_media_state_changed_ext(const CNA_Handle gameH
             MediaPlayer::OnMediaStateChanged();
             return CNA_RESULT_SUCCESS;
         });
-    });
-}
-
-CNA_Result cna_media_queue_get_count(
-    const CNA_MediaQueueHandle queue,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The media queue count output is null.");
-        }
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(resource->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_queue_get_active_song_index(
-    const CNA_MediaQueueHandle queue,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The media queue index output is null.");
-        }
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(resource->value->getActiveSongIndexProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_queue_set_active_song_index(
-    const CNA_MediaQueueHandle queue,
-    const int32_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical setter stores the value unchecked, so C does not invent a range rule.
-        resource->value->setActiveSongIndexProperty(static_cast<SharpRuntime::intcs>(index));
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -765,19 +691,6 @@ CNA_Result cna_media_queue_add(const CNA_MediaQueueHandle queue, const CNA_SongH
     });
 }
 
-CNA_Result cna_media_queue_clear(const CNA_MediaQueueHandle queue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Clear();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_media_queue_destroy(const CNA_MediaQueueHandle queue)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -797,36 +710,5 @@ CNA_Result cna_media_queue_destroy(const CNA_MediaQueueHandle queue)
     });
 }
 
-CNA_Result cna_media_queue_get_type_name_size(
-    const CNA_MediaQueueHandle queue,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The media queue type-name byte-count output is null.");
-        }
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_queue_copy_type_name(
-    const CNA_MediaQueueHandle queue,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
+// The mechanically regular routes of this family, generated from modules/c-api/spec/MediaPlayer.toml.
+#include "generated/MediaPlayer.inc"

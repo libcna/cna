@@ -653,60 +653,6 @@ CNA_Result cna_storage_device_show_selector_for_player_with_space(
     });
 }
 
-CNA_Result cna_storage_device_get_free_space(
-    const CNA_StorageDeviceHandle deviceHandle,
-    int64_t* const outFreeSpace)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFreeSpace == nullptr) {
-            return InvalidArgument("The storage free-space output is null.");
-        }
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFreeSpace = static_cast<int64_t>(device->value->getFreeSpaceProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_device_get_is_connected(
-    const CNA_StorageDeviceHandle deviceHandle,
-    CNA_Bool* const outIsConnected)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsConnected == nullptr) {
-            return InvalidArgument("The storage connection output is null.");
-        }
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsConnected = ToCBool(device->value->getIsConnectedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_device_get_total_space(
-    const CNA_StorageDeviceHandle deviceHandle,
-    int64_t* const outTotalSpace)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTotalSpace == nullptr) {
-            return InvalidArgument("The storage total-space output is null.");
-        }
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outTotalSpace = static_cast<int64_t>(device->value->getTotalSpaceProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_storage_device_delete_container(
     const CNA_StorageDeviceHandle deviceHandle,
     const CNA_StringView titleName)
@@ -858,100 +804,6 @@ CNA_Result cna_storage_container_open(
     });
 }
 
-CNA_Result cna_storage_container_get_display_name_size(
-    const CNA_StorageContainerHandle containerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The container display-name size output is null.");
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = container->value->getDisplayNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_container_copy_display_name(
-    const CNA_StorageContainerHandle containerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            container->value->getDisplayNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_storage_container_get_type_name_size(
-    const CNA_StorageContainerHandle containerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The container type-name size output is null.");
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = container->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_container_copy_type_name(
-    const CNA_StorageContainerHandle containerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            container->value->GetTypeName(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_storage_container_get_is_disposed(
-    const CNA_StorageContainerHandle containerHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The container disposal output is null.");
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(container->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_storage_container_get_storage_device(
     const CNA_StorageContainerHandle containerHandle,
     CNA_StorageDeviceHandle* const outDevice)
@@ -976,19 +828,6 @@ CNA_Result cna_storage_container_get_storage_device(
                 "The canonical container reported a different owning storage device.");
         }
         *outDevice = container->deviceHandle;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_storage_container_dispose(const CNA_StorageContainerHandle containerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        container->value->Dispose();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1531,19 +1370,6 @@ CNA_Result cna_storage_stream_get_can_seek(
     });
 }
 
-CNA_Result cna_storage_stream_flush(const CNA_StorageStreamHandle streamHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        stream->value->Flush();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1570,3 +1396,6 @@ CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Storage.toml.
+#include "generated/Storage.inc"

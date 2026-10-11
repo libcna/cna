@@ -358,40 +358,6 @@ CNA_Result cna_gamer_destroy(const CNA_GamerHandle gamerHandle)
     });
 }
 
-CNA_Result cna_gamer_get_display_name_size(
-    const CNA_GamerHandle gamerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The display-name size output is null.");
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = gamer->getDisplayNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_copy_display_name(
-    const CNA_GamerHandle gamerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(gamer->getDisplayNameProperty(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_gamer_set_display_name(
     const CNA_GamerHandle gamerHandle,
     const CNA_StringView displayName)
@@ -413,88 +379,6 @@ CNA_Result cna_gamer_set_display_name(
     });
 }
 
-CNA_Result cna_gamer_get_gamertag_size(const CNA_GamerHandle gamerHandle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The gamertag size output is null.");
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = gamer->getGamertagProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_copy_gamertag(
-    const CNA_GamerHandle gamerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(gamer->getGamertagProperty(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_gamer_get_text_size(const CNA_GamerHandle gamerHandle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The gamer text size output is null.");
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = gamer->ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_copy_text(
-    const CNA_GamerHandle gamerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(gamer->ToString(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_gamer_get_is_disposed(
-    const CNA_GamerHandle gamerHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The gamer disposal output is null.");
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(gamer->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const outTag)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -511,19 +395,6 @@ CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const 
         // value C did not put there reads back as zero rather than as a reinterpreted box.
         const uint64_t* const value = std::any_cast<uint64_t>(&tag);
         *outTag = value == nullptr ? UINT64_C(0) : *value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_set_tag(const CNA_GamerHandle gamerHandle, const uint64_t tag)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->setTagProperty(std::any(tag));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -763,95 +634,6 @@ CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
             return result;
         }
         *outHasGamer = CNA_TRUE;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_get_is_guest(
-    const CNA_SignedInGamerHandle gamerHandle,
-    CNA_Bool* const outIsGuest)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsGuest == nullptr) {
-            return InvalidArgument("The guest output is null.");
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsGuest = ToCBool(gamer->getIsGuestProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_get_is_signed_in_to_live(
-    const CNA_SignedInGamerHandle gamerHandle,
-    CNA_Bool* const outIsSignedInToLive)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsSignedInToLive == nullptr) {
-            return InvalidArgument("The online sign-in output is null.");
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsSignedInToLive = ToCBool(gamer->getIsSignedInToLiveProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_get_party_size(
-    const CNA_SignedInGamerHandle gamerHandle,
-    int32_t* const outPartySize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPartySize == nullptr) {
-            return InvalidArgument("The party-size output is null.");
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPartySize = static_cast<int32_t>(gamer->getPartySizeProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_set_party_size(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const int32_t partySize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // XNA's setter is internal; a C host without a party service may still drive it, and the
-        // CNA party service overwrites it at the next gamer-services update.
-        CNA::Internal::GamerServices::GamerAccess::setPartySize(*gamer, static_cast<int>(partySize));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_get_player_index(
-    const CNA_SignedInGamerHandle gamerHandle,
-    CNA_PlayerIndex* const outPlayerIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlayerIndex == nullptr) {
-            return InvalidArgument("The player-index output is null.");
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPlayerIndex = static_cast<CNA_PlayerIndex>(gamer->getPlayerIndexProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1175,78 +957,6 @@ CNA_Result cna_gamer_profile_get_info(
     });
 }
 
-CNA_Result cna_gamer_profile_get_motto_size(
-    const CNA_GamerProfileHandle profileHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The motto size output is null.");
-        }
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = profile->value->getMottoProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_profile_copy_motto(
-    const CNA_GamerProfileHandle profileHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(profile->value->getMottoProperty(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_gamer_profile_get_region_name_size(
-    const CNA_GamerProfileHandle profileHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The region-name size output is null.");
-        }
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = profile->value->getRegionProperty().getNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_profile_copy_region_name(
-    const CNA_GamerProfileHandle profileHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            profile->value->getRegionProperty().getNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_gamer_profile_get_picture_size(
     const CNA_GamerProfileHandle profileHandle,
     CNA_Bool* const outHasPicture,
@@ -1481,24 +1191,6 @@ CNA_Result cna_friend_gamer_copy_presence(
             return result;
         }
         return CopyText(friendGamer->getPresenceProperty(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_gamer_collection_get_count(
-    const CNA_GamerCollectionHandle collectionHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection count output is null.");
-        }
-        std::shared_ptr<GamerCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(collection->friends->getCountProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1808,24 +1500,6 @@ CNA_Result cna_gamer_enumerator_destroy(const CNA_GamerEnumeratorHandle enumerat
     });
 }
 
-CNA_Result cna_friend_collection_get_is_disposed(
-    const CNA_GamerCollectionHandle collectionHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The collection disposal output is null.");
-        }
-        std::shared_ptr<GamerCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(collection->friends->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_collection_destroy(const CNA_GamerCollectionHandle collectionHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1845,3 +1519,6 @@ CNA_Result cna_gamer_collection_destroy(const CNA_GamerCollectionHandle collecti
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Gamers.toml.
+#include "generated/Gamers.inc"

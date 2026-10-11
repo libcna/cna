@@ -45,7 +45,6 @@ using CNA::C::Detail::BorrowNetworkGamer;
 using CNA::C::Detail::BorrowNetworkSessionProperties;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedNetworkGamer;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -278,26 +277,6 @@ CNA_Result cna_available_network_session_get_host_gamertag_size(
     });
 }
 
-CNA_Result cna_available_network_session_copy_host_gamertag(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvailableSessionResource> session;
-        if (const CNA_Result result = GetSession(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            session->value->getHostGamertagProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_available_network_session_get_open_private_gamer_slots(
     const CNA_AvailableNetworkSessionHandle sessionHandle,
     int32_t* const outValue)
@@ -440,26 +419,6 @@ CNA_Result cna_available_network_session_get_connect_address_size_ext(
     });
 }
 
-CNA_Result cna_available_network_session_copy_connect_address_ext(
-    const CNA_AvailableNetworkSessionHandle sessionHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvailableSessionResource> session;
-        if (const CNA_Result result = GetSession(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            session->value->GetConnectAddress(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_available_network_session_get_connect_port_ext(
     const CNA_AvailableNetworkSessionHandle sessionHandle,
     uint16_t* const outValue)
@@ -558,24 +517,6 @@ CNA_Result cna_available_network_session_collection_create_ext(
     });
 }
 
-CNA_Result cna_available_network_session_collection_get_count(
-    const CNA_AvailableNetworkSessionCollectionHandle collectionHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection-count output is null.");
-        }
-        std::shared_ptr<AvailableSessionCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(collection->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_available_network_session_collection_copy_session(
     const CNA_AvailableNetworkSessionCollectionHandle collectionHandle,
     const int32_t index,
@@ -598,38 +539,6 @@ CNA_Result cna_available_network_session_collection_copy_session(
                 "The discovered-session index is outside the collection.");
         }
         return CreateSessionHandle(collection->value->getItem(index), outSession);
-    });
-}
-
-CNA_Result cna_available_network_session_collection_get_is_disposed(
-    const CNA_AvailableNetworkSessionCollectionHandle collectionHandle,
-    CNA_Bool* const outIsDisposed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The disposal output is null.");
-        }
-        std::shared_ptr<AvailableSessionCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDisposed = ToCBool(collection->value->getIsDisposedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_available_network_session_collection_dispose(
-    const CNA_AvailableNetworkSessionCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvailableSessionCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1291,26 +1200,6 @@ CNA_Result cna_network_session_get_type_name_size(
             outBytes,
             "The type-name size output is null.",
             [outBytes](NetworkSession& session) { *outBytes = session.GetTypeName().size(); });
-    });
-}
-
-CNA_Result cna_network_session_copy_type_name(
-    const CNA_NetworkSessionHandle sessionHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            session->value->GetTypeName(),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 
@@ -2645,24 +2534,6 @@ CNA_Result cna_local_network_gamer_create_ext(
     });
 }
 
-CNA_Result cna_local_network_gamer_get_is_data_available(
-    const CNA_NetworkGamerHandle gamerHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The packet-availability output is null.");
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(gamer->getIsDataAvailableProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_local_network_gamer_get_signed_in_gamer(
     const CNA_NetworkGamerHandle gamerHandle,
     CNA_SignedInGamerHandle* const outSignedInGamer)
@@ -2704,19 +2575,6 @@ CNA_Result cna_local_network_gamer_enable_send_voice(
             return result;
         }
         gamer->EnableSendVoice(remote, enable != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_local_network_gamer_send_party_invites(const CNA_NetworkGamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendPartyInvites();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3008,20 +2866,6 @@ CNA_Result cna_local_network_gamer_send_packet_writer_to(
     });
 }
 
-CNA_Result cna_local_network_gamer_clear_packet_queue_ext(
-    const CNA_NetworkGamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->ClearPacketQueue();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_local_network_gamer_enqueue_packet_ext(
     const CNA_NetworkGamerHandle gamerHandle,
     const CNA_NetworkEventInfo* const eventInfo)
@@ -3068,3 +2912,6 @@ CNA_Result cna_local_network_gamer_enqueue_packet_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/NetSessions.toml.
+#include "generated/NetSessions.inc"

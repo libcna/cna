@@ -460,26 +460,6 @@ CNA_Result cna_keyboard_state_is_key_up(
     });
 }
 
-CNA_Result cna_keyboard_state_get_pressed_key_count(
-    const CNA_KeyboardState* const state,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The pressed-key count output is null.");
-        }
-        if (const CNA_Result result = ValidateKeyboardState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = CountPressedKeys(*state);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_keyboard_state_copy_pressed_keys(
     const CNA_KeyboardState* const state,
     CNA_Key* const destination,
@@ -1585,19 +1565,6 @@ CNA_Result cna_gamepad_state_get_triggers(
     });
 }
 
-CNA_Result cna_gamepad_state_set_packet_number_ext(
-    CNA_GamePadState* const state,
-    const int32_t packetNumber)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        state->packet_number = packetNumber;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_state_equals(
     const CNA_GamePadState* const left,
     const CNA_GamePadState* const right,
@@ -1642,55 +1609,6 @@ CNA_Result cna_gamepad_state_not_equals(
         }
         *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_get_hash_code(
-    const CNA_GamePadState* const state,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The gamepad snapshot hash output is null.");
-        }
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical hash mixes only the button set and the packet number.
-        *outHash = static_cast<int32_t>(
-            static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^
-            (static_cast<unsigned>(state->packet_number) * 31U));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_get_string_size(
-    const CNA_GamePadState* const state,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The gamepad snapshot text output is null.");
-        }
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = GamePadState().ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_copy_string(
-    const CNA_GamePadState* const state,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(GamePadState().ToString(), destination, capacity, outBytes);
     });
 }
 
@@ -2491,55 +2409,6 @@ CNA_Result cna_keyboard_state_not_equals(
     });
 }
 
-CNA_Result cna_keyboard_state_get_hash_code(
-    const CNA_KeyboardState* const state,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The keyboard hash output is null.");
-        }
-        if (const CNA_Result result = ValidateKeyboardState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<int32_t>(NativeKeyboardState(*state).GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_keyboard_state_get_string_size(
-    const CNA_KeyboardState* const state,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The keyboard text output is null.");
-        }
-        if (const CNA_Result result = ValidateKeyboardState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = KeyboardState().ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_keyboard_state_copy_string(
-    const CNA_KeyboardState* const state,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateKeyboardState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(KeyboardState().ToString(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_keyboard_get_state_for_player(
     const CNA_Handle gameHandle,
     const CNA_PlayerIndex playerIndex,
@@ -2882,152 +2751,6 @@ CNA_Result cna_mouse_state_not_equals(
     });
 }
 
-CNA_Result cna_mouse_state_get_hash_code(
-    const CNA_MouseState* const state,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The mouse hash output is null.");
-        }
-        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHash = static_cast<int32_t>(NativeMouseState(*state).GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_state_get_string_size(
-    const CNA_MouseState* const state,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The mouse text output is null.");
-        }
-        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = NativeMouseState(*state).ToString().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_state_copy_string(
-    const CNA_MouseState* const state,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            NativeMouseState(*state).ToString(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_mouse_get_window_handle(const CNA_Handle gameHandle, uint64_t* const outWindow)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWindow == nullptr) {
-            return InvalidArgument("The mouse window-handle output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWindow = static_cast<uint64_t>(Mouse::getWindowHandleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_set_window_handle(const CNA_Handle gameHandle, const uint64_t window)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Mouse::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_set_position(const CNA_Handle gameHandle, const int32_t x, const int32_t y)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Mouse::SetPosition(static_cast<int>(x), static_cast<int>(y));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_get_is_relative_mouse_mode_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The relative-mode output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEnabled = ToCBool(Mouse::getIsRelativeMouseModeEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_set_is_relative_mouse_mode_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Mouse::setIsRelativeMouseModeEXTProperty(enabled != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_set_capture_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool enabled,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The mouse capture output is null.");
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(Mouse::SetCaptureEXT(enabled != CNA_FALSE));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_mouse_get_global_position_ext(
     const CNA_Handle gameHandle,
     int32_t* const outX,
@@ -3046,25 +2769,6 @@ CNA_Result cna_mouse_get_global_position_ext(
         Mouse::GetGlobalPositionEXT(x, y);
         *outX = static_cast<int32_t>(x);
         *outY = static_cast<int32_t>(y);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_warp_global_ext(
-    const CNA_Handle gameHandle,
-    const int32_t x,
-    const int32_t y,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The mouse warp output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(Mouse::WarpGlobalEXT(static_cast<int>(x), static_cast<int>(y)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3118,30 +2822,6 @@ CNA_Result cna_mouse_unsubscribe_clicked_ext(
             releaseResult,
             CNA::C::Detail::ErrorCategoryForResult(releaseResult),
             "The mouse clicked registration handle could not be released.");
-    });
-}
-
-CNA_Result cna_mouse_raise_clicked_ext(const CNA_Handle gameHandle, const int32_t button)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Mouse::INTERNAL_onClicked(static_cast<int>(button));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_mouse_reset_for_tests_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Mouse::ResetForTests();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3287,19 +2967,6 @@ CNA_Result cna_mouse_cursor_create_from_texture2d(
             static_cast<int>(originY)));
         resource->value = resource->owned.get();
         return CreateCursorHandle(std::move(resource), outCursor);
-    });
-}
-
-CNA_Result cna_mouse_cursor_dispose(const CNA_MouseCursorHandle cursor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MouseCursorResource> resource;
-        if (const CNA_Result result = GetCursorResource(cursor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3565,20 +3232,6 @@ CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle 
     });
 }
 
-CNA_Result cna_text_input_raise_text_input_ext(
-    const CNA_Handle gameHandle,
-    const uint16_t codeUnit)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(codeUnit));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_text_input_raise_text_editing_ext(
     const CNA_Handle gameHandle,
     const CNA_StringView text,
@@ -3652,111 +3305,6 @@ CNA_Result cna_text_input_raise_text_editing_candidates_ext(
     });
 }
 
-CNA_Result cna_text_input_get_window_handle_ext(
-    const CNA_Handle gameHandle,
-    uint64_t* const outWindow)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWindow == nullptr) {
-            return InvalidArgument("The text-input window-handle output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWindow = static_cast<uint64_t>(TextInputEXT::getWindowHandleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_set_window_handle_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t window)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_is_active_ext(const CNA_Handle gameHandle, CNA_Bool* const outActive)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outActive == nullptr) {
-            return InvalidArgument("The text-input active output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outActive = ToCBool(TextInputEXT::IsTextInputActive());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_is_screen_keyboard_shown_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outShown)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outShown == nullptr) {
-            return InvalidArgument("The screen-keyboard output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outShown = ToCBool(TextInputEXT::IsScreenKeyboardShown());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_is_screen_keyboard_shown_for_window_ext(
-    const CNA_Handle gameHandle,
-    const uint64_t window,
-    CNA_Bool* const outShown)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outShown == nullptr) {
-            return InvalidArgument("The screen-keyboard output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outShown = ToCBool(TextInputEXT::IsScreenKeyboardShown(static_cast<std::uintptr_t>(window)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_start_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::StartTextInput();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_stop_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::StopTextInput();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_text_input_start_with_type_ext(
     const CNA_Handle gameHandle,
     const CNA_TextInputType type)
@@ -3790,18 +3338,6 @@ CNA_Result cna_text_input_set_input_rectangle_ext(
             static_cast<int>(rectangle.y),
             static_cast<int>(rectangle.width),
             static_cast<int>(rectangle.height)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_text_input_reset_for_tests_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::ResetForTests();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4292,40 +3828,6 @@ CNA_Result cna_touch_state_init_from_locations(
     });
 }
 
-CNA_Result cna_touch_state_get_is_read_only(
-    const CNA_TouchState* const state,
-    CNA_Bool* const outReadOnly)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReadOnly == nullptr) {
-            return InvalidArgument("The touch-state read-only output is null.");
-        }
-        if (const CNA_Result result = ValidateTouchState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outReadOnly = ToCBool(TouchCollection().getIsReadOnlyProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_state_get_is_empty_ext(
-    const CNA_TouchState* const state,
-    CNA_Bool* const outEmpty)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEmpty == nullptr) {
-            return InvalidArgument("The touch-state empty output is null.");
-        }
-        if (const CNA_Result result = ValidateTouchState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEmpty = ToCBool(state->touch_count == 0U);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_state_contains(
     const CNA_TouchState* const state,
     const CNA_TouchLocation* const item,
@@ -4463,18 +3965,6 @@ CNA_Result cna_touch_state_add(
     });
 }
 
-CNA_Result cna_touch_state_clear(CNA_TouchState* const state)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateTouchState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        state->touch_count = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_state_remove(
     CNA_TouchState* const state,
     const CNA_TouchLocation* const item,
@@ -4565,122 +4055,6 @@ CNA_Result cna_touch_state_insert(
     });
 }
 
-CNA_Result cna_touch_panel_get_display_width(
-    const CNA_Handle gameHandle,
-    int32_t* const outWidth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr) {
-            return InvalidArgument("The touch-panel display-width output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWidth = static_cast<int32_t>(TouchPanel::getDisplayWidthProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_set_display_width(
-    const CNA_Handle gameHandle,
-    const int32_t width)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setDisplayWidthProperty(width);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_display_height(
-    const CNA_Handle gameHandle,
-    int32_t* const outHeight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeight == nullptr) {
-            return InvalidArgument("The touch-panel display-height output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHeight = static_cast<int32_t>(TouchPanel::getDisplayHeightProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_set_display_height(
-    const CNA_Handle gameHandle,
-    const int32_t height)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setDisplayHeightProperty(height);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_display_orientation(
-    const CNA_Handle gameHandle,
-    CNA_DisplayOrientation* const outOrientation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOrientation == nullptr) {
-            return InvalidArgument("The touch-panel orientation output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOrientation =
-            static_cast<CNA_DisplayOrientation>(TouchPanel::getDisplayOrientationProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_mouse_touch_emulation_enabled_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The mouse-touch-emulation output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEnabled = ToCBool(TouchPanel::getMouseTouchEmulationEnabledEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_set_mouse_touch_emulation_enabled_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setMouseTouchEmulationEnabledEXT(enabled == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_panel_set_display_orientation(
     const CNA_Handle gameHandle,
     const CNA_DisplayOrientation orientation)
@@ -4694,23 +4068,6 @@ CNA_Result cna_touch_panel_set_display_orientation(
             return result;
         }
         TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_enabled_gestures(
-    const CNA_Handle gameHandle,
-    CNA_GestureType* const outGestures)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGestures == nullptr) {
-            return InvalidArgument("The enabled-gestures output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outGestures = static_cast<CNA_GestureType>(TouchPanel::getEnabledGesturesProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4729,89 +4086,6 @@ CNA_Result cna_touch_panel_set_enabled_gestures(
             return result;
         }
         TouchPanel::setEnabledGesturesProperty(static_cast<GestureType>(gestures));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_is_gesture_available(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAvailable == nullptr) {
-            return InvalidArgument("The gesture-available output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable = ToCBool(TouchPanel::getIsGestureAvailableProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_window_handle(
-    const CNA_Handle gameHandle,
-    uint64_t* const outWindow)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWindow == nullptr) {
-            return InvalidArgument("The touch-panel window-handle output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWindow = static_cast<uint64_t>(TouchPanel::getWindowHandleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_set_window_handle(
-    const CNA_Handle gameHandle,
-    const uint64_t window)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_get_touch_device_exists_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outExists)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outExists == nullptr) {
-            return InvalidArgument("The touch-device-exists output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outExists = ToCBool(TouchPanel::getTouchDeviceExistsProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_set_touch_device_exists_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool exists)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(exists, "exists");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setTouchDeviceExistsProperty(exists != CNA_FALSE);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4909,26 +4183,5 @@ CNA_Result cna_touch_panel_set_finger_ext(
     });
 }
 
-CNA_Result cna_touch_panel_update_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::Update();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_reset_for_tests_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::ResetForTests();
-        return CNA_RESULT_SUCCESS;
-    });
-}
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Input.toml.
+#include "generated/Input.inc"

@@ -24,7 +24,6 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -154,28 +153,6 @@ template<typename TCallable>
 }
 
 } // namespace
-
-CNA_Result cna_curve_key_init_position_value(
-    const float position,
-    const float value,
-    CNA_CurveKey* const outKey)
-{
-    return StoreOutput(outKey, "The CurveKey output is null.", [=] {
-        return ToC(CurveKey(position, value));
-    });
-}
-
-CNA_Result cna_curve_key_init_tangents(
-    const float position,
-    const float value,
-    const float tangentIn,
-    const float tangentOut,
-    CNA_CurveKey* const outKey)
-{
-    return StoreOutput(outKey, "The CurveKey output is null.", [=] {
-        return ToC(CurveKey(position, value, tangentIn, tangentOut));
-    });
-}
 
 CNA_Result cna_curve_key_init_full(
     const float position,
@@ -566,20 +543,6 @@ CNA_Result cna_curve_key_collection_add(
     });
 }
 
-CNA_Result cna_curve_key_collection_clear(
-    const CNA_CurveKeyCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->Clear();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_curve_key_collection_clone(
     const CNA_CurveKeyCollectionHandle collectionHandle,
     CNA_CurveKeyCollectionHandle* const outCollection)
@@ -728,21 +691,6 @@ CNA_Result cna_curve_key_collection_remove(
         }
         const CNA_Bool result = ToCBool(collection->Remove(ToNative(key)));
         *outRemoved = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_curve_key_collection_remove_at(
-    const CNA_CurveKeyCollectionHandle collectionHandle,
-    const int32_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->RemoveAt(index);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1074,3 +1022,6 @@ CNA_Result cna_curve_compute_tangent_in_out(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Curve.toml.
+#include "generated/Curve.inc"

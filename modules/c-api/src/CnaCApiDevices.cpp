@@ -785,118 +785,6 @@ CNA_Result cna_devices_ext_is_available(CNA_Bool* const outAvailable)
     });
 }
 
-CNA_Result cna_vibrate_controller_start(const CNA_Handle gameHandle, const int64_t durationTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        VibrateController::getDefaultProperty()->Start(ToDuration(durationTicks));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_start_with_intensity_ext(
-    const CNA_Handle gameHandle,
-    const int64_t durationTicks,
-    const float intensity)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        VibrateController::getDefaultProperty()->Start(ToDuration(durationTicks), intensity);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_start_left_right_ext(
-    const CNA_Handle gameHandle,
-    const float largeMotor,
-    const float smallMotor,
-    const int64_t durationTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        VibrateController::getDefaultProperty()->StartLeftRight(
-            largeMotor,
-            smallMotor,
-            ToDuration(durationTicks));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_stop(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        VibrateController::getDefaultProperty()->Stop();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_get_is_supported_ext(
-    const CNA_Handle gameHandle,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The vibration support output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported =
-            ToCBool(VibrateController::getDefaultProperty()->getIsSupportedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_get_device_name_size_ext(
-    const CNA_Handle gameHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The device name size output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = VibrateController::getDefaultProperty()->getDeviceNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vibrate_controller_copy_device_name_ext(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            VibrateController::getDefaultProperty()->getDeviceNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_vibrate_controller_set_test_backend_ext(
     const CNA_Handle gameHandle,
     const CNA_Bool installed,
@@ -2807,3 +2695,6 @@ CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
 }
 
 #endif // CNA_DEVICES
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Devices.toml.
+#include "generated/Devices.inc"

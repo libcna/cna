@@ -1,0 +1,30 @@
+# Storage routes, generated into src/generated/Storage.inc,
+# which src/CnaCApiStorage.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[device]
+lookup = "GetDevice"
+object = "std::shared_ptr<StorageDeviceResource>"
+
+[device.routes]
+cna_storage_device_get_free_space = { get = "object->value->getFreeSpaceProperty()" }
+cna_storage_device_get_is_connected = { get = "object->value->getIsConnectedProperty()" }
+cna_storage_device_get_total_space = { get = "object->value->getTotalSpaceProperty()" }
+
+[container]
+lookup = "GetContainer"
+object = "std::shared_ptr<StorageContainerResource>"
+
+[container.routes]
+cna_storage_container_get_display_name_size = { size = "object->value->getDisplayNameProperty()" }
+cna_storage_container_copy_display_name = { copy = "object->value->getDisplayNameProperty()" }
+cna_storage_container_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_storage_container_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_storage_container_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_storage_container_dispose = { call = "object->value->Dispose()" }
+
+[stream]
+lookup = "GetStream"
+object = "std::shared_ptr<StorageStreamResource>"
+
+[stream.routes]
+cna_storage_stream_flush = { call = "object->value->Flush()" }

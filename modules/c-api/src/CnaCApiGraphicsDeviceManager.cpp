@@ -25,7 +25,6 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
@@ -383,24 +382,6 @@ CNA_Result cna_graphics_device_manager_create(
     });
 }
 
-CNA_Result cna_graphics_device_manager_get_graphics_profile(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_GraphicsProfile* const outProfile)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outProfile == nullptr) {
-            return InvalidArgument("The graphics profile output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outProfile = static_cast<CNA_GraphicsProfile>(resource->value->getGraphicsProfileProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_manager_set_graphics_profile(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_GraphicsProfile profile)
@@ -443,99 +424,6 @@ CNA_Result cna_graphics_device_manager_get_graphics_device(
     });
 }
 
-CNA_Result cna_graphics_device_manager_get_is_full_screen(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_Bool* const outFullScreen)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFullScreen == nullptr) {
-            return InvalidArgument("The full-screen output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFullScreen = ToCBool(resource->value->getIsFullScreenProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_is_full_screen(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_Bool fullScreen)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(fullScreen, "full_screen");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setIsFullScreenProperty(fullScreen != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_prefer_multi_sampling(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_Bool* const outPrefer)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPrefer == nullptr) {
-            return InvalidArgument("The multisampling output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPrefer = ToCBool(resource->value->getPreferMultiSamplingProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_prefer_multi_sampling(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_Bool prefer)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(prefer, "prefer");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferMultiSamplingProperty(prefer != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_format(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_SurfaceFormat* const outFormat)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFormat == nullptr) {
-            return InvalidArgument("The back-buffer format output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFormat =
-            static_cast<CNA_SurfaceFormat>(resource->value->getPreferredBackBufferFormatProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_format(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_SurfaceFormat format)
@@ -555,93 +443,6 @@ CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_format(
     });
 }
 
-CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_width(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    int32_t* const outWidth)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr) {
-            return InvalidArgument("The back-buffer width output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outWidth = static_cast<int32_t>(resource->value->getPreferredBackBufferWidthProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_width(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const int32_t width)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferredBackBufferWidthProperty(
-            static_cast<SharpRuntime::intcs>(width));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_preferred_back_buffer_height(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    int32_t* const outHeight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHeight == nullptr) {
-            return InvalidArgument("The back-buffer height output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHeight = static_cast<int32_t>(resource->value->getPreferredBackBufferHeightProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_height(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const int32_t height)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferredBackBufferHeightProperty(
-            static_cast<SharpRuntime::intcs>(height));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_preferred_depth_stencil_format(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_DepthFormat* const outFormat)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFormat == nullptr) {
-            return InvalidArgument("The depth format output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFormat = static_cast<CNA_DepthFormat>(
-            resource->value->getPreferredDepthStencilFormatProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_manager_set_preferred_depth_stencil_format(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_DepthFormat format)
@@ -657,98 +458,6 @@ CNA_Result cna_graphics_device_manager_set_preferred_depth_stencil_format(
         }
         resource->value->setPreferredDepthStencilFormatProperty(
             static_cast<DepthFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_synchronize_with_vertical_retrace(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_Bool* const outSynchronize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSynchronize == nullptr) {
-            return InvalidArgument("The vertical-retrace output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSynchronize =
-            ToCBool(resource->value->getSynchronizeWithVerticalRetraceProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_synchronize_with_vertical_retrace(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_Bool synchronize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(synchronize, "synchronize");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setSynchronizeWithVerticalRetraceProperty(synchronize != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_supported_orientations(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_DisplayOrientation* const outOrientations)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOrientations == nullptr) {
-            return InvalidArgument("The orientation output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outOrientations = static_cast<CNA_DisplayOrientation>(
-            resource->value->getSupportedOrientationsProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_supported_orientations(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_DisplayOrientation orientations)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setSupportedOrientationsProperty(
-            static_cast<DisplayOrientation>(orientations));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_preferred_presentation_mode_ext(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_PresentationMode* const outMode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMode == nullptr) {
-            return InvalidArgument("The presentation mode output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outMode = static_cast<CNA_PresentationMode>(
-            resource->value->getPreferredPresentationModeProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -811,24 +520,6 @@ CNA_Result cna_graphics_device_manager_create_device(
     });
 }
 
-CNA_Result cna_graphics_device_manager_begin_draw(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_Bool* const outShouldDraw)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outShouldDraw == nullptr) {
-            return InvalidArgument("The draw decision output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outShouldDraw = ToCBool(resource->value->BeginDraw());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_manager_end_draw(const CNA_GraphicsDeviceManagerHandle manager)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -838,53 +529,6 @@ CNA_Result cna_graphics_device_manager_end_draw(const CNA_GraphicsDeviceManagerH
             return result;
         }
         return RequestDeviceChange([&]() { resource->value->EndDraw(); });
-    });
-}
-
-CNA_Result cna_graphics_device_manager_dispose(const CNA_GraphicsDeviceManagerHandle manager)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_type_name_size(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = resource->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_copy_type_name(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1061,3 +705,6 @@ void ResetGraphicsDeviceManagerState() noexcept
 }
 
 } // namespace CNA::C::Detail
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsDeviceManager.toml.
+#include "generated/GraphicsDeviceManager.inc"

@@ -1,0 +1,51 @@
+# Audio routes, generated into src/generated/Audio.inc,
+# which src/CnaCApiAudio.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[sound_effect]
+lookup = "GetSoundEffect"
+object = "std::shared_ptr<SoundEffectResource>"
+
+[sound_effect.routes]
+cna_sound_effect_get_duration_ticks = { get = "object->value->getDurationProperty().getTicksProperty()" }
+cna_sound_effect_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_sound_effect_get_name_size = { size = "object->value->getNameProperty()" }
+cna_sound_effect_copy_name = { copy = "object->value->getNameProperty()" }
+cna_sound_effect_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_sound_effect_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[sound_effect_instance]
+lookup = "GetSoundEffectInstance"
+object = "std::shared_ptr<SoundEffectInstanceResource>"
+
+[sound_effect_instance.routes]
+cna_sound_effect_instance_play = { call = "object->value->Play()" }
+cna_sound_effect_instance_pause = { call = "object->value->Pause()" }
+cna_sound_effect_instance_resume = { call = "object->value->Resume()" }
+cna_sound_effect_instance_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_sound_effect_instance_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_sound_effect_instance_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[game]
+lookup = "ValidateActiveGameHandle"
+
+[game.routes]
+cna_sound_effect_get_master_volume = { get = "SoundEffect::getMasterVolumeProperty()" }
+cna_sound_effect_set_master_volume = { call = "SoundEffect::setMasterVolumeProperty(volume)" }
+cna_sound_effect_get_distance_scale = { get = "SoundEffect::getDistanceScaleProperty()" }
+cna_sound_effect_set_distance_scale = { call = "SoundEffect::setDistanceScaleProperty(scale)" }
+cna_sound_effect_get_doppler_scale = { get = "SoundEffect::getDopplerScaleProperty()" }
+cna_sound_effect_set_doppler_scale = { call = "SoundEffect::setDopplerScaleProperty(scale)" }
+cna_sound_effect_get_speed_of_sound = { get = "SoundEffect::getSpeedOfSoundProperty()" }
+cna_sound_effect_set_speed_of_sound = { call = "SoundEffect::setSpeedOfSoundProperty(speed)" }
+cna_microphone_get_count = { get = "Microphone::getAllProperty().size()" }
+cna_microphone_check_all_buffers_ext = { call = "Microphone::CheckAllBuffers()" }
+
+[sound_effect_to_play]
+lookup = "GetSoundEffectToPlay"
+object = "std::shared_ptr<SoundEffectResource>"
+
+[sound_effect_to_play.routes]
+cna_sound_effect_play = { get = "object->value->Play()" }
+# Pan is range-checked by the canonical route and pitch is clamped; the asymmetry is
+# reported rather than evened out here.
+cna_sound_effect_play_with_settings = { get = "object->value->Play(volume, pitch, pan)" }

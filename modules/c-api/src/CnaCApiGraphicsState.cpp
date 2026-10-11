@@ -28,8 +28,8 @@ namespace {
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::ToCBlendState;
 using CNA::C::Detail::ToCBool;
@@ -125,14 +125,6 @@ template<typename T>
         value->struct_version == StructureVersion;
 }
 
-[[nodiscard]] CNA_Result InvalidStateDescriptor(const char* const typeName)
-{
-    return Fail(
-        CNA_RESULT_INVALID_ARGUMENT,
-        CNA_ERROR_CATEGORY_ARGUMENT,
-        typeName);
-}
-
 } // namespace
 
 namespace CNA::C::Detail {
@@ -154,7 +146,7 @@ CNA_Result ToNativeBlendState(
         !IsColorWriteChannels(source->color_write_channels1) ||
         !IsColorWriteChannels(source->color_write_channels2) ||
         !IsColorWriteChannels(source->color_write_channels3)) {
-        return InvalidStateDescriptor("The BlendState descriptor is invalid.");
+        return InvalidArgument("The BlendState descriptor is invalid.");
     }
 
     BlendState result;
@@ -202,7 +194,7 @@ CNA_Result ToNativeDepthStencilState(
         !IsStencilOperation(source->counter_clockwise_stencil_fail) ||
         !IsStencilOperation(source->counter_clockwise_stencil_depth_buffer_fail) ||
         !IsStencilOperation(source->counter_clockwise_stencil_pass)) {
-        return InvalidStateDescriptor("The DepthStencilState descriptor is invalid.");
+        return InvalidArgument("The DepthStencilState descriptor is invalid.");
     }
 
     DepthStencilState result;
@@ -243,7 +235,7 @@ CNA_Result ToNativeRasterizerState(
         !IsFillMode(source->fill_mode) || !std::isfinite(source->depth_bias) ||
         !std::isfinite(source->slope_scale_depth_bias) ||
         !IsCanonicalBool(source->multi_sample_anti_alias) || !IsCanonicalBool(source->scissor_test_enable)) {
-        return InvalidStateDescriptor("The RasterizerState descriptor is invalid.");
+        return InvalidArgument("The RasterizerState descriptor is invalid.");
     }
 
     RasterizerState result;
@@ -268,7 +260,7 @@ CNA_Result ToNativeSamplerState(
         !IsTextureAddressMode(source->address_v) ||
         !IsTextureAddressMode(source->address_w) || !IsTextureFilter(source->filter) ||
         !std::isfinite(source->mip_map_level_of_detail_bias)) {
-        return InvalidStateDescriptor("The SamplerState descriptor is invalid.");
+        return InvalidArgument("The SamplerState descriptor is invalid.");
     }
 
     SamplerState result;
@@ -384,7 +376,7 @@ CNA_Result cna_blend_state_init(
 {
     return CallWithExceptionBarrier([&]() {
         if (outState == nullptr) {
-            return InvalidStateDescriptor("The BlendState output is null.");
+            return InvalidArgument("The BlendState output is null.");
         }
         switch (preset) {
             case CNA_BLEND_STATE_PRESET_DEFAULT: {
@@ -405,7 +397,7 @@ CNA_Result cna_blend_state_init(
                 ToCBlendState(BlendState::Opaque, outState);
                 return CNA_RESULT_SUCCESS;
             default:
-                return InvalidStateDescriptor("The BlendState preset is invalid.");
+                return InvalidArgument("The BlendState preset is invalid.");
         }
     });
 }
@@ -416,7 +408,7 @@ CNA_Result cna_depth_stencil_state_init(
 {
     return CallWithExceptionBarrier([&]() {
         if (outState == nullptr) {
-            return InvalidStateDescriptor("The DepthStencilState output is null.");
+            return InvalidArgument("The DepthStencilState output is null.");
         }
         switch (preset) {
             case CNA_DEPTH_STENCIL_STATE_PRESET_DEFAULT:
@@ -429,7 +421,7 @@ CNA_Result cna_depth_stencil_state_init(
                 ToCDepthStencilState(DepthStencilState::None, outState);
                 return CNA_RESULT_SUCCESS;
             default:
-                return InvalidStateDescriptor("The DepthStencilState preset is invalid.");
+                return InvalidArgument("The DepthStencilState preset is invalid.");
         }
     });
 }
@@ -440,7 +432,7 @@ CNA_Result cna_rasterizer_state_init(
 {
     return CallWithExceptionBarrier([&]() {
         if (outState == nullptr) {
-            return InvalidStateDescriptor("The RasterizerState output is null.");
+            return InvalidArgument("The RasterizerState output is null.");
         }
         switch (preset) {
             case CNA_RASTERIZER_STATE_PRESET_DEFAULT: {
@@ -458,7 +450,7 @@ CNA_Result cna_rasterizer_state_init(
                 ToCRasterizerState(RasterizerState::CullNone, outState);
                 return CNA_RESULT_SUCCESS;
             default:
-                return InvalidStateDescriptor("The RasterizerState preset is invalid.");
+                return InvalidArgument("The RasterizerState preset is invalid.");
         }
     });
 }
@@ -469,7 +461,7 @@ CNA_Result cna_sampler_state_init(
 {
     return CallWithExceptionBarrier([&]() {
         if (outState == nullptr) {
-            return InvalidStateDescriptor("The SamplerState output is null.");
+            return InvalidArgument("The SamplerState output is null.");
         }
         switch (preset) {
             case CNA_SAMPLER_STATE_PRESET_DEFAULT: {
@@ -496,7 +488,7 @@ CNA_Result cna_sampler_state_init(
                 ToCSamplerState(SamplerState::PointWrap, outState);
                 return CNA_RESULT_SUCCESS;
             default:
-                return InvalidStateDescriptor("The SamplerState preset is invalid.");
+                return InvalidArgument("The SamplerState preset is invalid.");
         }
     });
 }
@@ -507,7 +499,7 @@ CNA_Result cna_graphics_device_get_blend_state(
 {
     return CallWithExceptionBarrier([&]() {
         if (!HasSupportedOutputHeader(outState)) {
-            return InvalidStateDescriptor("The BlendState output structure is invalid.");
+            return InvalidArgument("The BlendState output structure is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -547,7 +539,7 @@ CNA_Result cna_graphics_device_get_depth_stencil_state(
 {
     return CallWithExceptionBarrier([&]() {
         if (!HasSupportedOutputHeader(outState)) {
-            return InvalidStateDescriptor("The DepthStencilState output structure is invalid.");
+            return InvalidArgument("The DepthStencilState output structure is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -587,7 +579,7 @@ CNA_Result cna_graphics_device_get_rasterizer_state(
 {
     return CallWithExceptionBarrier([&]() {
         if (!HasSupportedOutputHeader(outState)) {
-            return InvalidStateDescriptor("The RasterizerState output structure is invalid.");
+            return InvalidArgument("The RasterizerState output structure is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -631,7 +623,7 @@ CNA_Result cna_graphics_device_get_sampler_state(
         if (!HasSupportedOutputHeader(outState) ||
             (stage != CNA_SHADER_STAGE_PIXEL && stage != CNA_SHADER_STAGE_VERTEX) ||
             slot >= CNA_MAX_SAMPLERS) {
-            return InvalidStateDescriptor("The sampler-state query is invalid.");
+            return InvalidArgument("The sampler-state query is invalid.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -656,7 +648,7 @@ CNA_Result cna_graphics_device_set_sampler_state(
     return CallWithExceptionBarrier([&]() {
         if ((stage != CNA_SHADER_STAGE_PIXEL && stage != CNA_SHADER_STAGE_VERTEX) ||
             slot >= CNA_MAX_SAMPLERS) {
-            return InvalidStateDescriptor("The sampler-state slot is invalid.");
+            return InvalidArgument("The sampler-state slot is invalid.");
         }
         SamplerState nativeState;
         if (const CNA_Result result = ToNativeSamplerState(state, &nativeState);

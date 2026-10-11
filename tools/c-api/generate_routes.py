@@ -28,8 +28,9 @@ Spec format. Each top-level table is one group of routes sharing how they reach 
     cna_basic_effect_get_alpha = { get = "object->getAlphaProperty()" }
     cna_basic_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
 
-A group without ``lookup`` holds routes that take no handle. A group whose lookup only validates
-(``ValidateActiveGameHandle``) omits ``object``. Each route is ``name = { <kind> = "<C++>" }``:
+A lookup receives the route's first parameter -- usually a handle, sometimes a struct or a string
+it validates -- unconverted. A group without ``lookup`` holds routes that take no handle. A group
+whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. Each route is ``name = { <kind> = "<C++>" }``:
 
 ``value``  (args..., T* out)          ``*out`` = the expression; no handle.
 ``get``    (handle, args..., T* out)   ``*out`` = the expression, after the lookup.
@@ -162,8 +163,10 @@ def null_check(route: str, param: Param, indent: str) -> list[str]:
 
 
 def returns_on_failure(call: str, indent: str) -> list[str]:
-    return [f"{indent}if (const CNA_Result result = {call}; result != CNA_RESULT_SUCCESS) {{",
-            f"{indent}    return result;",
+    # camelCase locals cannot collide with the headers' snake_case parameter names.
+    return [f"{indent}if (const CNA_Result routeResult = {call};",
+            f"{indent}    routeResult != CNA_RESULT_SUCCESS) {{",
+            f"{indent}    return routeResult;",
             f"{indent}}}"]
 
 
@@ -193,8 +196,8 @@ class Route:
     def _check_shape(self) -> None:
         params = list(self.params)
         if self.has_lookup:
-            if not params or self.types.kind_of(params[0].type) != "handle" or params[0].pointer:
-                raise self._fail("a route in a group with a lookup takes its handle first")
+            if not params:
+                raise self._fail("a route in a group with a lookup passes it its first parameter")
             self.handle, params = params[0], params[1:]
         elif self.kind in ("get", "call"):
             raise self._fail(f"'{self.kind}' needs a group with a lookup")
@@ -230,9 +233,11 @@ class Route:
                 raise self._fail(f"input '{param.name}' has type {param.type}, which this "
                                  "generator does not convert; write the route by hand")
         self.inputs = params
-        if self.has_lookup and "object" in self.group and any(
-                p.name == "object" for p in self.params):
-            raise self._fail("a parameter is named 'object', which the generated code uses")
+        names = {p.name for p in self.params}
+        locals_ = {"object", "routeResult"} | {f"c_{p.name}" for p in self.inputs}
+        if names & locals_:
+            raise self._fail(f"a parameter is named {', '.join(sorted(names & locals_))}, "
+                             "which the generated code uses for a local")
 
     # The C parameter is renamed when the expression sees a converted local under its name.
     def _converted(self, param: Param) -> bool:

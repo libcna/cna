@@ -253,44 +253,6 @@ CNA_Result cna_content_reader_get_content_manager(
     });
 }
 
-CNA_Result cna_content_reader_get_asset_name_size(
-    const CNA_ContentReaderHandle readerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The asset-name size output is null.");
-        }
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = reader->value->getAssetNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_reader_copy_asset_name(
-    const CNA_ContentReaderHandle readerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            reader->value->getAssetNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_content_reader_get_version(
     const CNA_ContentReaderHandle readerHandle,
     int32_t* const outVersion)
@@ -476,32 +438,6 @@ CNA_Result cna_content_reader_read_object_tag(
                 const std::any value = reader.ReadObject();
                 *outHasValue = ToCBool(value.has_value());
             });
-    });
-}
-
-CNA_Result cna_content_reader_initialize_type_readers(const CNA_ContentReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->InitializeTypeReaders();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_reader_read_shared_resources(const CNA_ContentReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->ReadSharedResources();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -832,25 +768,6 @@ CNA_Result cna_content_type_reader_manager_clear_type_creators(void)
     });
 }
 
-CNA_Result cna_content_type_reader_manager_get_is_registered(
-    const CNA_StringView canonicalName,
-    CNA_Bool* const outIsRegistered)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsRegistered == nullptr) {
-            return InvalidArgument("The registration output is null.");
-        }
-        std::string canonicalNameCopy;
-        if (const CNA_Result result = CopyReaderName(canonicalName, &canonicalNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsRegistered =
-            ToCBool(ContentTypeReaderManager::IsRegistered(canonicalNameCopy));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_content_type_reader_manager_create_reader(
     const CNA_StringView canonicalName,
     CNA_ContentTypeReaderHandle* const outTypeReader)
@@ -909,99 +826,6 @@ CNA_Result cna_known_unsupported_content_type_reader_create(
                 std::move(targetTypeNameCopy),
                 static_cast<UnsupportedContentReaderReason>(reason)),
             outTypeReader);
-    });
-}
-
-CNA_Result cna_content_type_reader_get_can_deserialize_into_existing_object(
-    const CNA_ContentTypeReaderHandle typeReaderHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The in-place deserialization output is null.");
-        }
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(typeReader->value->getCanDeserializeIntoExistingObjectProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_type_reader_get_target_type_name_size(
-    const CNA_ContentTypeReaderHandle typeReaderHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The target type-name size output is null.");
-        }
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = typeReader->value->getTargetTypeNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_type_reader_copy_target_type_name(
-    const CNA_ContentTypeReaderHandle typeReaderHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            typeReader->value->getTargetTypeNameProperty(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_content_type_reader_get_type_version(
-    const CNA_ContentTypeReaderHandle typeReaderHandle,
-    int32_t* const outVersion)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVersion == nullptr) {
-            return InvalidArgument("The type-version output is null.");
-        }
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outVersion = static_cast<int32_t>(typeReader->value->getTypeVersionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_type_reader_supports_version(
-    const CNA_ContentTypeReaderHandle typeReaderHandle,
-    const int32_t serializedVersion,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The version-support output is null.");
-        }
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBool(typeReader->value->SupportsVersion(static_cast<int>(serializedVersion)));
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1917,24 +1741,6 @@ template <typename T>
 
 } // namespace
 
-CNA_Result cna_object_dictionary_ext_get_runtime_type_name_size(
-    const CNA_ObjectDictionaryHandle dictionaryHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dictionary runtime type-name size output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(dictionary->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     char* const destination,
@@ -1952,24 +1758,6 @@ CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
         }
         return CopyText(
             dictionary->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_object_dictionary_ext_get_count(
-    const CNA_ObjectDictionaryHandle dictionaryHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The dictionary count output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(dictionary->value->getValuesProperty().size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2479,3 +2267,6 @@ bool TryGetForeignReferenceObject(const System::Object* const tag, void** const 
 }
 
 } // namespace CNA::C::Detail
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/ContentReaders.toml.
+#include "generated/ContentReaders.inc"

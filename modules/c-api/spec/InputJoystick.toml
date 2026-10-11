@@ -1,0 +1,11 @@
+# InputJoystick routes, generated into src/generated/InputJoystick.inc,
+# which src/CnaCApiInputJoystick.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[game]
+lookup = "ValidateActiveGameHandle"
+
+[game.routes]
+cna_joysticks_get_count = { get = "Joysticks::GetJoysticksEXT().size()" }
+cna_joysticks_raise_connected_ext = { call = "Joysticks::ConnectedEXT.Invoke(id)" }
+cna_joysticks_raise_disconnected_ext = { call = "Joysticks::DisconnectedEXT.Invoke(id)" }
+cna_joysticks_reset_for_tests_ext = { call = "Joysticks::ResetForTests()" }

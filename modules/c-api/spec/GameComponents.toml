@@ -1,0 +1,37 @@
+# GameComponents routes, generated into src/generated/GameComponents.inc,
+# which src/CnaCApiGameComponents.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[component]
+lookup = "BorrowComponent"
+object = "std::shared_ptr<ComponentResource>"
+
+[component.routes]
+cna_game_component_get_is_drawable = { get = "object->drawable != nullptr" }
+cna_game_component_get_enabled = { get = "object->value->getEnabledProperty()" }
+cna_game_component_set_enabled = { call = "object->value->setEnabledProperty(enabled)" }
+cna_game_component_get_update_order = { get = "object->value->getUpdateOrderProperty()" }
+cna_game_component_set_update_order = { call = "object->value->setUpdateOrderProperty(static_cast<SharpRuntime::intcs>(order))" }
+cna_game_component_initialize = { call = "object->value->Initialize()" }
+cna_game_component_dispose = { call = "object->value->Dispose()" }
+cna_game_component_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_game_component_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[drawable]
+lookup = "BorrowDrawable"
+object = "std::shared_ptr<ComponentResource>"
+
+[drawable.routes]
+cna_drawable_game_component_get_draw_order = { get = "object->drawable->getDrawOrderProperty()" }
+cna_drawable_game_component_set_draw_order = { call = "object->drawable->setDrawOrderProperty(static_cast<SharpRuntime::Int32>(order))" }
+cna_drawable_game_component_get_visible = { get = "object->drawable->getVisibleProperty()" }
+cna_drawable_game_component_set_visible = { call = "object->drawable->setVisibleProperty(visible)" }
+
+[components]
+lookup = "BorrowComponents"
+object = "GameComponentCollection*"
+
+[components.routes]
+cna_game_components_get_count = { get = "object->getCountProperty()" }
+cna_game_components_clear = { call = "object->Clear()" }
+cna_game_components_get_type_name_size = { size = "object->GetTypeName()" }
+cna_game_components_copy_type_name = { copy = "object->GetTypeName()" }

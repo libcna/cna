@@ -238,29 +238,6 @@ CNA_Result cna_content_manager_create(
     });
 }
 
-CNA_Result cna_content_manager_get_root_directory_size(
-    const CNA_Handle contentManagerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The root-directory size output is null.");
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = contentManager->value->getRootDirectoryProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_content_manager_copy_root_directory(
     const CNA_Handle contentManagerHandle,
     char* const destination,
@@ -322,21 +299,6 @@ CNA_Result cna_content_manager_set_root_directory(
             return result;
         }
         contentManager->value->setRootDirectoryProperty(std::move(rootDirectoryCopy));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_unload(const CNA_Handle contentManagerHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        contentManager->value->Unload();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -900,38 +862,6 @@ CNA_Result cna_content_manager_copy_normalized_key(
     });
 }
 
-CNA_Result cna_content_manager_register_builtin_loaders(const CNA_Handle contentManagerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        contentManager->value->RegisterBuiltinLoaders();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_get_has_service_provider(
-    const CNA_Handle contentManagerHandle,
-    CNA_Bool* const outHasServiceProvider)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasServiceProvider == nullptr) {
-            return InvalidArgument("The service-provider presence output is null.");
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasServiceProvider =
-            ToCBool(contentManager->value->getServiceProviderProperty() != nullptr);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_content_manager_get_graphics_device(
     const CNA_Handle contentManagerHandle,
     CNA_Handle* const outGraphicsDevice)
@@ -989,37 +919,6 @@ CNA_Result cna_content_manager_set_graphics_device(
         }
         contentManager->value->setGraphicsDevice(*graphicsDevice->value);
         contentManager->graphicsDevice = graphicsDeviceHandle;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_refresh_content_manifest(const CNA_Handle contentManagerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        contentManager->value->RefreshContentManifest();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_get_manifest_entry_count(
-    const CNA_Handle contentManagerHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The manifest entry-count output is null.");
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = contentManager->value->GetContentManifest().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1142,24 +1041,6 @@ CNA_Result cna_content_manager_copy_manifest_xnb_reader_name(
             destination,
             capacity,
             outBytes);
-    });
-}
-
-CNA_Result cna_content_manager_get_xnb_reader_usage_count(
-    const CNA_Handle contentManagerHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The reader-usage count output is null.");
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = SortedReaderUsage(contentManager).size();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1366,3 +1247,6 @@ CNA_Result GetContentManagerObject(
 }
 
 } // namespace CNA::C::Detail
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Content.toml.
+#include "generated/Content.inc"

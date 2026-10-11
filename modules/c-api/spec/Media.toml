@@ -1,0 +1,21 @@
+# Media routes, generated into src/generated/Media.inc,
+# which src/CnaCApiMedia.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[song]
+lookup = "BorrowSong"
+object = "std::shared_ptr<SongResource>"
+
+[song.routes]
+cna_song_set_duration = { call = "object->value->setDurationProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_song_set_play_count = { call = "object->value->setPlayCountProperty(static_cast<SharpRuntime::intcs>(play_count))" }
+cna_song_dispose = { call = "object->value->Dispose()" }
+
+[song_collection]
+lookup = "BorrowSongCollection"
+object = "std::shared_ptr<SongCollectionResource>"
+
+[song_collection.routes]
+cna_song_collection_get_count = { get = "object->value->getCountProperty()" }
+cna_song_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
+cna_song_collection_dispose = { call = "object->value->Dispose()" }
+cna_song_collection_get_type_name_size = { size = "object->value->GetTypeName()" }

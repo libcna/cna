@@ -1,0 +1,26 @@
+# InputHaptics routes, generated into src/generated/InputHaptics.inc,
+# which src/CnaCApiInputHaptics.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[game]
+lookup = "ValidateActiveGameHandle"
+
+[game.routes]
+cna_haptics_get_count = { get = "Haptics::GetHapticsEXT().size()" }
+cna_haptics_get_is_joystick_haptic = { get = "Haptics::IsJoystickHapticEXT(joystick_id)" }
+cna_haptics_get_is_mouse_haptic = { get = "Haptics::IsMouseHapticEXT()" }
+
+[device]
+lookup = "BorrowDevice"
+object = "std::shared_ptr<HapticDevice>"
+
+[device.routes]
+cna_haptic_device_get_is_open = { get = "object->IsOpenEXT()" }
+cna_haptic_device_get_name_size = { size = "object->GetNameEXT()" }
+cna_haptic_device_play_rumble = { get = "object->PlayRumbleEXT(strength, length_ms)" }
+cna_haptic_device_run_effect = { get = "object->RunEffectEXT(effect_id, iterations)" }
+cna_haptic_device_stop_effect = { get = "object->StopEffectEXT(effect_id)" }
+cna_haptic_device_destroy_effect = { call = "object->DestroyEffectEXT(effect_id)" }
+cna_haptic_device_get_effect_status = { get = "object->GetEffectStatusEXT(effect_id)" }
+cna_haptic_device_set_gain = { get = "object->SetGainEXT(gain)" }
+cna_haptic_device_set_autocenter = { get = "object->SetAutocenterEXT(autocenter)" }
+cna_haptic_device_dispose = { call = "object->Dispose()" }
