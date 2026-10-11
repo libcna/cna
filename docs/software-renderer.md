@@ -172,6 +172,27 @@ real rendering discrepancy. The comparator was also checked against a deliberate
 rather than always passing. `SOFTWARE-156` reduced the historical default tolerance of 40 to the
 measured one-byte bound; a wider tolerance now has to be an explicit, evidence-backed choice.
 
+## Investigating a compiled Effect regression
+
+The compiled-Effect parity work (`SOFTWARE-164/165`, `SOFTWARE-355..484`) settled on one procedure,
+recorded only task by task in `plans/plan_software.md` and the ledger. Follow it for any new
+compiled Effect regression:
+
+1. Inspect one MojoShader `state_*` validator, opcode-table restriction, FIXME, or Software
+   interpreter branch.
+2. Construct paired Microsoft assembly programs that differ in exactly one operand/profile rule,
+   each with a nearby Microsoft-accepted control so a rejection is not merely bad assembly syntax.
+3. Add a forged shared CNA fixture (`tests/support/CNA/TestSupport/CompiledEffectFixtures.hpp`)
+   with negative and positive controls.
+4. Prove both Software and EasyGL red before changing production code.
+5. Make the narrowest shared or renderer-local repair.
+6. Run targeted and broad regressions.
+7. Update the plan and the ledger in the same task commit.
+8. Keep searching after the repair.
+
+Check opcode-specific operand forms and profile boundaries, not only unsupported opcodes: a parser
+can execute an opcode and still accept invalid classic bytecode.
+
 ## Current XNA/Core capabilities and intentional boundaries (2026-09-13)
 
 - **Classic compiled XNA Effects are executable in opt-in builds** (`SOFTWARE-161..165`). The public bytecode
