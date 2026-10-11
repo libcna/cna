@@ -661,8 +661,8 @@ private:
 /** @brief The process-wide registry every C handle lives in. */
 [[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
 
-/** @brief The object kind's name as diagnostics spell it ("ModelBone", "SoundEffectInstance"). */
-[[nodiscard]] std::string_view ObjectKindName(ObjectKind kind) noexcept;
+/** @brief "The <kind> handle is invalid for this call.", a static string for each kind. */
+[[nodiscard]] std::string_view InvalidHandleMessage(ObjectKind kind) noexcept;
 
 /**
  * @brief Looks a handle up as one object kind, recording the diagnostic when it is not one.
@@ -682,9 +682,7 @@ template<typename TObject>
     if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
     }
-    std::string message("The ");
-    message.append(ObjectKindName(kind)).append(" handle is invalid for this call.");
-    return Fail(result, ErrorCategoryForResult(result), message);
+    return Fail(result, ErrorCategoryForResult(result), InvalidHandleMessage(kind));
 }
 
 } // namespace CNA::C::Detail

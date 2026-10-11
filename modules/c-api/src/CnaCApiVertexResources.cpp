@@ -5,6 +5,7 @@
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -20,6 +21,7 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -143,35 +145,6 @@ static_assert(sizeof(int) == sizeof(int32_t));
         result,
         ErrorCategoryForResult(result),
         "The VertexDeclaration handle could not be created.");
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result CopyString(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The string output buffer is invalid.");
-        }
-        const std::string value = std::forward<TCallable>(callable)();
-        *outByteCount = static_cast<uint64_t>(value.size());
-        if (capacity < value.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete type name.");
-        }
-        if (!value.empty()) {
-            std::memcpy(destination, value.data(), value.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 } // namespace
@@ -357,13 +330,13 @@ CNA_Result cna_vertex_declaration_copy_type_name(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    std::shared_ptr<VertexDeclaration> declaration;
-    if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CopyString(destination, capacity, outByteCount, [&] {
-        return declaration->GetTypeName();
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexDeclaration> declaration;
+        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(declaration->GetTypeName(), destination, capacity, outByteCount);
     });
 }
 
