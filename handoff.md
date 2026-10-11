@@ -132,6 +132,13 @@ The single authoritative list. Every entry below was checked against the code on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
+8. **Two C API input checks are weaker than their siblings** (found 2026-10-11 while centralizing
+   the C API helpers; behaviour deliberately left unchanged). The achievement, gamer,
+   gamer-property, guide and XACT routes read text with `ReadTextBytes`, which does not validate
+   UTF-8, although `docs/c-api/STRINGS_AND_BUFFERS.md` requires UTF-8 input and every other family
+   refuses malformed text with `CNA_RESULT_ENCODING` (`ReadText`). And the GraphicsDeviceManager's
+   `IsPresentationParameters` (`CnaCApiGraphicsDeviceManager.cpp`) accepts non-canonical
+   `CNA_Bool` fields and non-zero `reserved` bytes that the Display routes' check refuses.
 
 ### 5.2 Limitations
 
