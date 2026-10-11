@@ -4,9 +4,9 @@
 // buffers, compute programs, sampled texture arrays, storage textures, GPU timers and the layout
 // builder they share with the descriptor-contract `ShaderEffect` route.
 //
-// ORDERING (docs/adr/0001-modern-gpu-ordering-lifetime.md)
+// ORDERING (docs/graphics-resource-lifetime.md, section 1)
 //
-// ADR 0001 promises one device order for every public call. This renderer defers draws: a bind
+// CNA promises one device order for every public call. This renderer defers draws: a bind
 // cycle's draws are recorded into render passes only when the cycle is flushed. Every modern
 // operation here therefore first flushes the draws already queued (keeping the cycle's contents --
 // a continuation loads, it never re-applies the cycle's discard or clear), then encodes its own work

@@ -376,9 +376,9 @@ the timestamp path is unaffected.
 
 ### Portable ordering and lifetime contract
 
-`MOD-2202` is fixed by `docs/adr/0001-modern-gpu-ordering-lifetime.md`. Vulkan does not define a
-separate application-visible ordering model: XNA work, modern copies/compute/indirect work and
-presentation form one public-call order on the selected graphics/compute queue. The renderer, not
+The rules every renderer follows are in `docs/graphics-resource-lifetime.md` section 1. Vulkan
+does not define a separate application-visible ordering model: XNA work and presentation form one
+public-call order on the graphics queue. The renderer, not
 the application, owns pipeline barriers, image layouts, render-pass breaks and fence values.
 
 The existing XNA Vulkan paths snapshot mutable draw state, retain deferred render-target

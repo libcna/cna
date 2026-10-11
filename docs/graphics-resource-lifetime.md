@@ -4,19 +4,89 @@ This document describes how GPU resources are created, tracked, and destroyed in
 It applies to `Texture2D`, `VertexBuffer`, `IndexBuffer`, `RenderTarget2D`, and any
 future class that inherits `GraphicsResource` and holds a renderer handle.
 
-`docs/adr/0001-modern-gpu-ordering-lifetime.md` is the normative contract for ordering,
-deferred-command retention, synchronization and physical native-handle retirement. This document
-describes the public wrapper/event mechanics and the currently implemented renderer paths.
+Section 1 states the rules every renderer follows for ordering, deferred-command retention,
+synchronization and native-handle retirement. Where an older renderer note disagrees, section 1
+wins. The remaining sections describe the public wrapper/event mechanics and the current renderer
+paths.
 
 ---
 
-## 1. Ownership Model
+## 1. Ordering, Synchronization and Native Retirement
 
-Every GPU-backed resource owns a renderer-side object. Existing XNA resources hold a
-`std::unique_ptr<IXxxRenderer>` (for example `IVertexBufferRenderer` or `ITexture2DRenderer`). A
-modern resource whose accepted work may outlive its public wrapper may instead own an internal
-shared record, as `Texture2DArray` does; that sharing never reaches the public API and exists only
-for command/fence retention.
+1. **One observable device order.** Every accepted GPU operation on a `GraphicsDevice` (clear,
+   draw, present, upload, copy, readback, query) belongs to one order: the call order on the
+   device's graphics thread. A renderer may batch, merge passes or record work later, but the
+   result must equal that sequence:
+   - a call snapshots every mutable value and state its operation needs before returning;
+   - a deferred record never reads a public wrapper, caller buffer or state object later;
+   - an upload or state change issued after a draw cannot change that draw;
+   - `Present` commits the preceding work without moving later work before it;
+   - a synchronous readback observes all earlier work its result depends on.
+
+   Internal work may overlap only when no observable data, state or lifetime dependency exists.
+
+2. **Graphics-thread ownership.** `GraphicsDevice` and resource calls, including `Dispose`, are
+   single-threaded and belong to the thread that owns the device's context or command stream. CNA
+   promises no concurrent mutation, binding, submission or disposal. CPU values may be prepared
+   elsewhere. A renderer's internal off-thread compilation or retirement does not make the public
+   API thread-safe.
+
+3. **Snapshot and retain, never borrow.** Public wrappers keep exclusive ownership. Renderer
+   commands retain an internal native record, never the public object's address. A deferred
+   renderer copies descriptors, ranges, shader values, state and caller bytes when it accepts a
+   call, and keeps every referenced buffer, texture, sampler, pipeline, descriptor and query alive
+   until both recording and GPU execution have finished. Descriptor caches evict every entry that
+   names a dying native handle before that handle can be recycled. An immediate renderer may consume
+   the data before returning, but it still never keeps an unowned pointer.
+
+4. **Disposal is logically immediate and physically fence-safe.** `Dispose()` makes the object
+   disposed at once (sections 3–5) but does not cancel accepted work. The native object is
+   destroyed at once if nothing uses it, kept while a deferred CPU record references it, and retired
+   against the submission's completion token while submitted GPU work references it. Routine
+   disposal never waits for the whole device or queue: Vulkan uses fence values, Metal command-buffer
+   completion and WebGPU work-done completion, while GL and D3D11 rely on their native ordering and
+   reference lifetime and delete on the owning context thread. Device shutdown is the one terminal
+   boundary. It may discard unsubmitted records, wait for submitted work and drain retirement before
+   destroying the device. A lost device may abandon handles under its API's loss rules.
+
+5. **Readback blocks only for its result.** A synchronous readback submits the work that its
+   requested resource, range and mip need, then waits for that copy's completion. It never waits for
+   device-wide idle and flushes no unrelated later work:
+   - GL: the prior commands, then `glReadPixels` or buffer mapping on the owning context;
+   - D3D11: a copy to a staging resource, then `Map`;
+   - Vulkan: the copy is recorded, its ordered prefix submitted, and its fence awaited;
+   - Metal: a blit to a CPU-visible buffer, then a wait for that command buffer;
+   - WebGPU: a copy to a mappable buffer, pumping only until that map completes.
+
+   Frame-slot reuse and presentation may apply bounded back-pressure. Disposal, upload and draw
+   must never turn into a global wait.
+
+6. **Validate before touching native state.** A call is rejected before any native allocation,
+   descriptor update, recording or submission when it uses a disposed object or another device's
+   resource, invalid enums or flags, zero, negative or overflowing sizes and ranges, an undeclared
+   usage, an unsupported format, a value beyond a device limit, or a broken alignment, mip or slot
+   rule. Calls consult the capability profile cached when the device was created. They never try a
+   native call and treat a driver error as feature discovery. A capability stays unreported until
+   allocation, use, synchronization, disposal and validation tests pass; a native feature bit alone
+   is not enough. If a valid allocation still fails, the renderer cleans up and reports the failure
+   without publishing a half-built resource.
+
+7. **Synchronization belongs to the renderer.** The renderer derives barriers, layout transitions,
+   pass breaks and cache visibility from declared usage and call order. The public API exposes no
+   Vulkan layout or stage mask, Metal hazard mode, GL barrier bit or WebGPU usage object, and the
+   application never needs one for correctness.
+
+8. **No native objects in the public API.** Public descriptors and handles hold CNA value types
+   only. Native device, queue, command-buffer, buffer, image, view, descriptor, fence and layout
+   values stay inside renderer modules. Renderer test introspection may expose counters, but it is
+   never needed to use a resource correctly.
+
+---
+
+## 2. Ownership Model
+
+Every GPU-backed resource owns a renderer-side object, held as a
+`std::unique_ptr<IXxxRenderer>` (for example `IVertexBufferRenderer` or `ITexture2DRenderer`).
 
 `GraphicsResource` itself does not hold a renderer pointer. The derived class is
 responsible for declaring and managing `renderer_`.
@@ -28,7 +98,7 @@ flight.
 
 ---
 
-## 2. When Public and Native Ownership End
+## 3. When Public and Native Ownership End
 
 Public ownership ends **when `Dispose()` is called**, not when the C++ object is destroyed. Derived
 classes achieve this by overriding `Dispose(bool)`:
@@ -58,11 +128,10 @@ occur. Call `Dispose()` explicitly when subscribers need the `Disposing` notific
 | `IndexBuffer`      | `renderer_.reset()` → `GraphicsResource::Dispose(bool)` |
 | `Texture2D`        | `renderer_.reset()` → `Texture::Dispose(bool)` → `GraphicsResource::Dispose(bool)` |
 | `RenderTarget2D`   | `renderer_.reset()` → `Texture2D::Dispose(bool)` → … |
-| `Texture2DArray`   | internal shared-record reset → `GraphicsResource::Dispose(bool)` |
 
 ---
 
-## 3. GraphicsDevice Tracking List
+## 4. GraphicsDevice Tracking List
 
 `GraphicsDevice` maintains an internal `std::vector<GraphicsResource*> resources_` that
 holds a raw (non-owning) pointer to every resource created with that device.
@@ -101,7 +170,7 @@ below) invalidates that protection.
 
 ---
 
-## 4. ResourceCreated / ResourceDestroyed Events
+## 5. ResourceCreated / ResourceDestroyed Events
 
 `GraphicsDevice` exposes two events:
 
@@ -125,7 +194,7 @@ register, do not fire `ResourceCreated`, and do not fire `ResourceDestroyed`.
 
 ---
 
-## 5. Move Semantics
+## 6. Move Semantics
 
 Move construction and move assignment transfer `unique_ptr` ownership without
 duplicating or releasing the GPU handle:
@@ -152,11 +221,12 @@ The `GraphicsResource` base's `resources_` pointer entry is **not** updated duri
 move. If you move a tracked resource, the device still holds the original address.
 Avoid moving tracked resources out of their original storage location.
 
-`Texture2DArray` deletes both move operations, so its tracked address cannot change.
+A new `GraphicsResource`-derived class should delete both move operations unless device tracking
+updates its registered address.
 
 ---
 
-## 6. Resources Without a Device
+## 7. Resources Without a Device
 
 Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 `GraphicsDevice`. In that case:
@@ -168,16 +238,16 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 
 ---
 
-## 7. Renderer-Specific Caveats
+## 8. Renderer-Specific Caveats
 
 ### EasyGL
 
 - GL object IDs are freed by the renderer destructor (`glDeleteTextures`,
   `glDeleteBuffers`, `glDeleteFramebuffers`). This must happen while the SDL/OpenGL
   context is current.
-- Existing immediate GL calls execute in public order. A future modern resource must detach a
-  current binding and retain any CNA-side deferred record on disposal; it must not add a new
-  caller-side "unbind first" rule.
+- GL calls execute immediately in public order. A resource that needs a CNA-side deferred record
+  detaches its current binding and retains that record on disposal itself; callers never have to
+  unbind first.
 - If the GL context is lost (window resize, driver crash), renderers may hold invalid
   IDs. Current EasyGL does not implement context-loss recovery; the safest approach is
   to dispose all resources and recreate from scratch.
@@ -189,15 +259,9 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
   (`VkDevice`) is still valid at that point.
 - The disposal order guaranteed by `GraphicsDevice::Dispose()` (resources first, device
   renderer second) satisfies this requirement automatically.
-- Existing XNA textures, buffers, effects, render targets and queries detach deferred wrapper
-  pointers and retire referenced native handles after the consuming frame fence. `MOD-2252` proves
-  that storage buffers, compute programs, storage images, texture arrays and GPU timers use the same
-  mechanism across submit, resize and device-first teardown. Applications must not call
+- Textures, buffers, effects, render targets and queries detach deferred wrapper pointers and
+  retire referenced native handles after the consuming frame fence. Applications must not call
   `vkDeviceWaitIdle` (nor can they access the native device).
-- Compute descriptor snapshots do not own shared resource records indefinitely. Pending commands
-  retain their exact records through command recording; destruction then evicts every descriptor
-  snapshot that names the dying buffer or image view and retires both behind the same frame fence.
-  This preserves submitted work and prevents recycled native handles from selecting stale bindings.
 
 ### SDL_Renderer
 
@@ -208,7 +272,7 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 
 ---
 
-## 8. Quick Reference
+## 9. Quick Reference
 
 | Question | Answer |
 |---|---|

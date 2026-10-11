@@ -14,7 +14,7 @@ ownership. Derived by reading every member of every public header in
 The layer's public API uses exactly three ownership shapes. If a future public API needs a fourth,
 that is a design decision worth arguing rather than an implementation detail. Renderer-internal
 records may use shared lifetime identity solely to retain already accepted work, as required by
-ADR 0001; no public `shared_ptr` is exposed.
+`docs/graphics-resource-lifetime.md` section 1; no public `shared_ptr` is exposed.
 
 | Shape | Spelling | Who deletes | What it means for the caller |
 |---|---|---|---|
@@ -32,7 +32,7 @@ object's storage disappears.
 Public ownership and in-flight native lifetime are deliberately different. A deferred renderer may
 retain an internal native resource record after a public wrapper is disposed, solely until the
 accepted command and its completion token are finished. This is required by
-`docs/adr/0001-modern-gpu-ordering-lifetime.md`; it neither makes the public object shared nor lets a
+`docs/graphics-resource-lifetime.md` section 1; it neither makes the public object shared nor lets a
 caller keep using it after disposal.
 
 ## The owned/borrowed pair idiom
