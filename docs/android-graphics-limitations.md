@@ -5,7 +5,7 @@ renderer-selection logic is `if(EMSCRIPTEN) WEBGL2 elseif(CMAKE_SYSTEM_NAME STRE
 SDL_RENDERER` — Android's `CMAKE_SYSTEM_NAME` is `"Android"`, not `"Linux"`, even under the NDK
 toolchain, so it falls into the `SDL_RENDERER` branch). This document is the Task 460 status
 write-up for Android graphics support specifically — audio, input, and sensor/device support on
-Android are already covered in detail elsewhere (`docs/devices-build.md`, `noxna_devices.md`,
+Android are already covered in detail elsewhere (`docs/devices-build.md`, `docs/cna-devices.md`,
 `plan_devices*.md`) and are out of scope here.
 
 ## Status headline: the Android cross-compile currently fails before reaching any CNA/graphics code

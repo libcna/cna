@@ -30,7 +30,7 @@ namespace CNA::Devices
      * macOS, and **Android** (confirmed by reading
      * `third_party/SDL/src/dialog/{windows,unix,cocoa,android}/` directly, not
      * assumed) — this is *not* a desktop-only capability, contrary to an earlier,
-     * uncorroborated assumption in `noxna_devices.md`'s original analysis. No backend
+     * uncorroborated assumption in the original `CNA::Devices` analysis. No backend
      * exists for iOS or Web/Emscripten (confirmed by their absence from
      * `third_party/SDL/src/dialog/` and from `third_party/SDL/CMakeLists.txt`'s own
      * per-platform dialog-source selection) — `getIsSupportedProperty()` reports this

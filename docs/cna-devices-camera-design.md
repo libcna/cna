@@ -51,7 +51,7 @@ per-platform renderers directly (not assumed):
   `mediafoundation` (Windows), `coremedia` (macOS/iOS), `android`, and
   **`emscripten`** (browser `getUserMedia`) — `pipewire` (newer Linux desktops) and a
   `dummy` fallback also exist. This is the best cross-platform coverage of any
-  capability surveyed in `noxna_devices.md`, better than the original analysis
+  capability surveyed in the original `CNA::Devices` analysis, better than it
   expected.
 
 ## 2. The permission/state machine this needs
@@ -75,9 +75,9 @@ This mirrors `SensorState`'s own honesty principle (`Microsoft::Devices::Sensors
 closed in `plans/plan_devices.md`): a consumer must always be able to cheaply ask "can I use
 this right now" rather than finding out by a confusing runtime failure.
 
-## 3. The texture-upload bridge — simpler than `noxna_devices.md` originally assumed
+## 3. The texture-upload bridge — simpler than the original analysis assumed
 
-`noxna_devices.md`'s original Section 4.9 flagged this as the hardest part, assuming
+The original `CNA::Devices` analysis flagged this as the hardest part, assuming
 it would need graphics-renderer-specific code. **Re-reading this codebase's actual
 texture pipeline found it is already solved, generically, by existing infrastructure:**
 
