@@ -411,7 +411,7 @@ default, so registered tests inherit the launcher's `DISPLAY`; the live desktop 
 ## Git Commits — Always Commit After Finishing a Task
 
 **Always create a commit as soon as a task is finished** (build verified, tests passing,
-plan/`AUDIT.md`/`NEXT.md` updated) — do not wait for an explicit "commit" request for each
+plan/`AUDIT.md`/`handoff.md` updated) — do not wait for an explicit "commit" request for each
 individual task. Do not push unless the user explicitly asks to push.
 
 - Stage only the files that belong to the completed task, by explicit name

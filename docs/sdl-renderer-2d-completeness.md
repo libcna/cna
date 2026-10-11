@@ -170,7 +170,7 @@ as SDL_Renderer `ctest` entries and passing.
 
 Two architecture/behavior decisions were deliberately **not** guessed at and remain open pending a
 project-owner call. Both are documented in full in `plans/plan_graphics.md` (rows 686/687 and 725) and in
-`NEXT.md` §5 ("Known bugs and limitations").
+`handoff.md` §5 ("Known bugs and limitations").
 
 ### Tasks 686/687 — `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch`
 

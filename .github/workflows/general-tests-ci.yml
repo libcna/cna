@@ -16,7 +16,7 @@
 #
 # There is no known-failure allowlist: the last entry, EasyGL_GraphicsDevice_ReferenceStencil, was
 # fixed by REMED-GFX-236 and re-verified passing on 2026-10-10. Any failing test fails the job; the
-# current known defects are listed in NEXT.md section 5.
+# current known defects are listed in handoff.md section 5.
 name: general-tests-ci
 
 on:

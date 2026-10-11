@@ -9,7 +9,7 @@
 > project-owner architecture decision. **Do not treat the percentages and bug counts in this report
 > as current** — they are a dated snapshot of Task 500's 2026-07-09 milestone declaration, kept
 > below for its methodology (how the numbers were computed), not as a live status. For current
-> status, see `NEXT.md` §5 (the actively maintained bug list) and
+> status, see `handoff.md` §5 (the actively maintained bug list) and
 > `docs/graphics-renderer-feature-matrix.md`.
 
 **Written for Task 499 (`plans/plan_graphics.md` Phase 55).** This project has historically described

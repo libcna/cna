@@ -136,7 +136,7 @@ Real, currently-open caveats worth knowing about instead:
   handful of smaller, permanent, intentional deviations (e.g. `GetHashCode()` returns
   `std::size_t` not `int`; a couple of `Texture2D` methods have looser null/argument validation
   than FNA) that are unlikely to affect a typical port but are documented there in full.
-- `NEXT.md` §5 is the actively-maintained current bug list — check it directly for anything not
+- `handoff.md` §5 is the actively-maintained current bug list — check it directly for anything not
   covered above before committing to a renderer.
 
 ## What doesn't work at all yet
@@ -359,12 +359,12 @@ included) — not repeated here.
 | Any 3D call (`BasicEffect`, `Model::Draw`, render targets with depth, etc.) throws `std::runtime_error` | You're on **SDL_Renderer** | Not a bug — SDL_Renderer is 2D-only by design (see "Choosing a renderer" above). Switch to EasyGL/Vulkan for 3D. |
 | Blank/black window, or GL-based renderers (EasyGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
 | Pixel-comparison example/tests fail after an intentional rendering change | Golden images are stale references, not a bug | Re-run the specific test with `CNA_UPDATE_GOLDEN=1` set to regenerate the golden PNG, then review the diff before committing it |
-| Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple renderers' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`NEXT.md` §2) | Run renderer test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |
+| Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple renderers' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`handoff.md` §7) | Run renderer test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |
 
 ### Is it a bug, or a known limitation?
 
 Before filing anything, check `docs/xna-4-api-coverage.md`'s "Per-renderer Graphics support" table
-(Task 484), "Known deviations from XNA/FNA" list (Task 485), and `NEXT.md` §5 (the actively
+(Task 484), "Known deviations from XNA/FNA" list (Task 485), and `handoff.md` §5 (the actively
 maintained current bug list) — most currently-open gaps already have a task number and a documented
 root cause (e.g. Vulkan's `RasterizerState.DepthBias` no-op, `EnvironmentMapEffect`/`SkinnedEffect`'s
 dropped `DirectionalLight1`/`2`). If your symptom isn't listed there, it's more likely a genuinely new

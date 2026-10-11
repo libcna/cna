@@ -471,7 +471,7 @@ MinGW cross-compiles too (`ccache x86_64-w64-mingw32-g++ …`), same as the nati
 ## Git Commits — Always Commit After Finishing a Task
 
 **Always create a commit as soon as a task is finished** (build verified, tests passing,
-plan/`AUDIT.md`/`NEXT.md` updated) — do not wait for an explicit "commit" request for each
+plan/`AUDIT.md`/`handoff.md` updated) — do not wait for an explicit "commit" request for each
 individual task. Do not push unless the user explicitly asks to push.
 
 - Stage only the files that belong to the completed task, by explicit name
@@ -560,8 +560,7 @@ are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`
 former `ASCII` identity was replaced by the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`
 (`modules/graphics-ext/`, see `docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
 with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
-without a fresh owner instruction -- see `plans/plan_renderer_cleanup.md` and
-`docs/removed-renderers.md`.
+without a fresh owner instruction -- see `docs/removed-renderers.md`.
 
 `WEBGPU` is experimental but past a 2D baseline, with a real 3D route (stock effects, instancing,
 render targets, MSAA, fog parity, GPU-native compressed textures, stencil ops) and Emscripten

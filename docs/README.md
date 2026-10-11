@@ -9,7 +9,7 @@ on it) rather than assuming either way.
 
 ## Start here
 
-- **[`../NEXT.md`](../NEXT.md)** (repo root) — the current state of the project. Its §5 is the
+- **[`../handoff.md`](../handoff.md)** (repo root) — the current state of the project. Its §5 is the
   **one** authoritative list of current known bugs and limitations; treat it as the source of truth
   for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live
   bug list.
@@ -168,5 +168,5 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
 
 *This index was written 2026-07-11 and last reconciled 2026-10-10. It is a map, not a guarantee — a
 file listed above without a "refreshed"/"current" note may still contain stale claims. When in
-doubt, prefer `../NEXT.md` §5, `renderer-registry.md` and `graphics-renderer-feature-matrix.md`
+doubt, prefer `../handoff.md` §5, `renderer-registry.md` and `graphics-renderer-feature-matrix.md`
 over any other file.*

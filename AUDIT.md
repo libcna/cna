@@ -4,7 +4,7 @@
 > on) are the per-class audit. The dated notes between here and those tables, and the task
 > write-ups after them, are a historical log. Current API-surface coverage is generated into
 > [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md); current known
-> bugs and limitations are in [`NEXT.md`](NEXT.md) §5.
+> bugs and limitations are in [`handoff.md`](handoff.md) §5.
 
 > **XACTBUILD-001 / SAMPLE-122 (2026-10-03):** BuildXact now sends genuine `/WINDOWS`/`/XBOX360`
 > switches and shares the effect compiler's Wine path spelling. Three invocation regressions fail

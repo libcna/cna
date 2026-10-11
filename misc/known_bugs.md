@@ -1,7 +1,7 @@
 # Known bugs — measurement records
 
 **This is not a bug list.** The one authoritative list of current known bugs and limitations is
-[`NEXT.md`](../NEXT.md) §5, and only that list says whether something is open. This file keeps the
+[`handoff.md`](../handoff.md) §5, and only that list says whether something is open. This file keeps the
 measurements behind some of its entries: what was measured, against which reference, and what the
 correction is. When the §5 entry is closed, delete its record here in the same commit. Section
 numbers are stable references, so a removed record leaves a gap.
@@ -20,7 +20,7 @@ Removed on 2026-10-10 because they were found fixed: §2 EasyGL letterbox viewpo
 **Found:** 2026-09-08, through SAMPLE-073 (SoccerPitch).
 **Fixed in:** EasyGL (`2ce1cf2ff`) and DirectX 11 (`23e8edbee`, DX-256); SDL_GPU, WebGPU and
 Metal scale it as well.
-**Open in:** `vulkan` (`NEXT.md` §5.1 item 1).
+**Open in:** `vulkan` (`handoff.md` §5.1 item 1).
 
 ### The false premise
 

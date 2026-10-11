@@ -7,7 +7,7 @@
 > the same fix); it remains unconnected on EasyGL (Task 872). §4 and the summary table below
 > describe the pre-fix investigation and are kept for their diagnostic detail — the ❌/"not fixed"
 > markers for Vulkan in them are historical, not current. See `AUDIT.md`'s `DepthStencilState` row
-> or `NEXT.md` §5 for current status.
+> or `handoff.md` §5 for current status.
 
 Phase 37 (`plans/plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
 conformance against FNA across EasyGL and Vulkan. This document

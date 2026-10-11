@@ -6,7 +6,7 @@
 > upload on both hardware renderers. **Task 918** (EasyGL `TextureFilter::Anisotropic`
 > falling back to trilinear, §7) is also fixed (2026-07-09) — EasyGL now issues a real
 > `GL_EXT_texture_filter_anisotropic` call. The ❌ markers for these in §6/§7 and the summary table
-> below are historical. See `docs/xna-4-api-coverage.md`'s per-class table or `NEXT.md` §5 for
+> below are historical. See `docs/xna-4-api-coverage.md`'s per-class table or `handoff.md` §5 for
 > current status.
 
 Phase 35 (`plans/plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture

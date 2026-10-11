@@ -4,7 +4,7 @@ Capabilities XNA has and CNA does not, **measured** against a specific XNA behav
 with the case that found them. Nothing here is wrong, it is absent — or present as a deliberate
 divergence — and closing it is a decision rather than a repair.
 
-**Status lives in [`NEXT.md`](../NEXT.md) §5**, the one authoritative list of current bugs and
+**Status lives in [`handoff.md`](../handoff.md) §5**, the one authoritative list of current bugs and
 limitations; this file only keeps the measurement behind each gap listed there. When a gap closes,
 remove it from both in the same commit. Entry numbers are stable evidence references, so removing a
 closed entry leaves a number gap.
