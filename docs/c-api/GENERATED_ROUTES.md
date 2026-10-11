@@ -14,7 +14,7 @@ hand-written, and generation exists so that this code stands out.
 | What each generated route does | `modules/c-api/spec/<Family>.toml` |
 | Generated route definitions — never edit | `modules/c-api/src/generated/<Family>.inc` |
 | Hand-written routes and the family's lookups | `modules/c-api/src/CnaCApi<Family>.cpp`, which ends with `#include "generated/<Family>.inc"` |
-| Exception barrier, error recording, `CNA_Bool` rules, text input (`ReadText`), handle registry and `LookupHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
+| Exception barrier, error recording, `CNA_Bool` rules, text input (`ReadText`), the handle registry with `LookupHandle`, `CreateHandle` and `ReleaseHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
 | Output pointers, versioned structures, text and array size-then-copy | `modules/c-api/src/CnaCApiOutput.hpp` |
 | C ↔ C++ value conversions (`ToNative`, `ToC`) and C enum range checks | `modules/c-api/src/CnaCApiMarshal.hpp` |
 | The generator | `tools/c-api/generate_routes.py` |
