@@ -97,56 +97,9 @@ CNA_Result cna_math_closest_msaa_power(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_point_init(CNA_Point* const outValue)
-{
-    return StoreOutput(outValue, "The point output is null.", [] {
-        return CNA_Point{0, 0};
-    });
-}
-
-CNA_Result cna_point_init_xy(
-    const int32_t x,
-    const int32_t y,
-    CNA_Point* const outValue)
-{
-    return StoreOutput(outValue, "The point output is null.", [=] {
-        return CNA_Point{x, y};
-    });
-}
-
 CNA_Result cna_point_get_zero(CNA_Point* const outValue)
 {
     return cna_point_init(outValue);
-}
-
-CNA_Result cna_point_add(
-    const CNA_Point left,
-    const CNA_Point right,
-    CNA_Point* const outValue)
-{
-    return StoreOutput(outValue, "The point output is null.", [=] {
-        return CNA_Point{WrapAdd(left.x, right.x), WrapAdd(left.y, right.y)};
-    });
-}
-
-CNA_Result cna_point_subtract(
-    const CNA_Point left,
-    const CNA_Point right,
-    CNA_Point* const outValue)
-{
-    return StoreOutput(outValue, "The point output is null.", [=] {
-        return CNA_Point{WrapSubtract(left.x, right.x), WrapSubtract(left.y, right.y)};
-    });
-}
-
-CNA_Result cna_point_multiply(
-    const CNA_Point left,
-    const CNA_Point right,
-    CNA_Point* const outValue)
-{
-    return StoreOutput(outValue, "The point output is null.", [=] {
-        return CNA_Point{WrapMultiply(left.x, right.x), WrapMultiply(left.y, right.y)};
-    });
 }
 
 CNA_Result cna_point_divide(
@@ -172,73 +125,9 @@ CNA_Result cna_point_divide(
     });
 }
 
-CNA_Result cna_rectangle_init(CNA_Rectangle* const outValue)
-{
-    return StoreOutput(outValue, "The rectangle output is null.", [] {
-        return CNA_Rectangle{0, 0, 0, 0};
-    });
-}
-
-CNA_Result cna_rectangle_init_xywh(
-    const int32_t x,
-    const int32_t y,
-    const int32_t width,
-    const int32_t height,
-    CNA_Rectangle* const outValue)
-{
-    return StoreOutput(outValue, "The rectangle output is null.", [=] {
-        return CNA_Rectangle{x, y, width, height};
-    });
-}
-
 CNA_Result cna_rectangle_get_empty(CNA_Rectangle* const outValue)
 {
     return cna_rectangle_init(outValue);
-}
-
-CNA_Result cna_rectangle_get_left(
-    const CNA_Rectangle value,
-    int32_t* const outEdge)
-{
-    return StoreOutput(outEdge, "The edge output is null.", [=] {
-        return value.x;
-    });
-}
-
-CNA_Result cna_rectangle_get_right(
-    const CNA_Rectangle value,
-    int32_t* const outEdge)
-{
-    return StoreOutput(outEdge, "The edge output is null.", [=] {
-        return RectangleRight(value);
-    });
-}
-
-CNA_Result cna_rectangle_get_top(
-    const CNA_Rectangle value,
-    int32_t* const outEdge)
-{
-    return StoreOutput(outEdge, "The edge output is null.", [=] {
-        return value.y;
-    });
-}
-
-CNA_Result cna_rectangle_get_bottom(
-    const CNA_Rectangle value,
-    int32_t* const outEdge)
-{
-    return StoreOutput(outEdge, "The edge output is null.", [=] {
-        return RectangleBottom(value);
-    });
-}
-
-CNA_Result cna_rectangle_get_location(
-    const CNA_Rectangle value,
-    CNA_Point* const outLocation)
-{
-    return StoreOutput(outLocation, "The point output is null.", [=] {
-        return CNA_Point{value.x, value.y};
-    });
 }
 
 CNA_Result cna_rectangle_set_location(
@@ -253,55 +142,12 @@ CNA_Result cna_rectangle_set_location(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_get_center(
-    const CNA_Rectangle value,
-    CNA_Point* const outCenter)
-{
-    return StoreOutput(outCenter, "The point output is null.", [=] {
-        return CNA_Point{
-            WrapAdd(value.x, value.width / 2),
-            WrapAdd(value.y, value.height / 2)
-        };
-    });
-}
-
-CNA_Result cna_rectangle_get_is_empty(
-    const CNA_Rectangle value,
-    CNA_Bool* const outIsEmpty)
-{
-    return StoreOutput(outIsEmpty, "The Boolean output is null.", [=] {
-        return ToCBool(value.x == 0 && value.y == 0 && value.width == 0 && value.height == 0);
-    });
-}
-
-CNA_Result cna_rectangle_contains_xy(
-    const CNA_Rectangle value,
-    const int32_t x,
-    const int32_t y,
-    CNA_Bool* const outContains)
-{
-    return StoreOutput(outContains, "The Boolean output is null.", [=] {
-        return ToCBool(RectangleContainsPoint(value, x, y));
-    });
-}
-
 CNA_Result cna_rectangle_contains_point(
     const CNA_Rectangle value,
     const CNA_Point point,
     CNA_Bool* const outContains)
 {
     return cna_rectangle_contains_xy(value, point.x, point.y, outContains);
-}
-
-CNA_Result cna_rectangle_contains_rectangle(
-    const CNA_Rectangle value,
-    const CNA_Rectangle candidate,
-    CNA_Bool* const outContains)
-{
-    return StoreOutput(outContains, "The Boolean output is null.", [=] {
-        return ToCBool(value.x <= candidate.x && RectangleRight(candidate) <= RectangleRight(value) &&
-            value.y <= candidate.y && RectangleBottom(candidate) <= RectangleBottom(value));
-    });
 }
 
 CNA_Result cna_rectangle_offset_point(
@@ -337,16 +183,6 @@ CNA_Result cna_rectangle_inflate(
     value->width = WrapAdd(value->width, WrapMultiply(horizontalValue, 2));
     value->height = WrapAdd(value->height, WrapMultiply(verticalValue, 2));
     return CNA_RESULT_SUCCESS;
-}
-
-CNA_Result cna_rectangle_intersects(
-    const CNA_Rectangle left,
-    const CNA_Rectangle right,
-    CNA_Bool* const outIntersects)
-{
-    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
-        return ToCBool(RectanglesIntersect(left, right));
-    });
 }
 
 CNA_Result cna_rectangle_intersect(

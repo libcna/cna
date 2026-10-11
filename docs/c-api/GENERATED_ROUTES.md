@@ -64,7 +64,10 @@ The generator takes the signature from the header and the conversions from the C
 - the result is converted by the output's type: `ToC` for a marshaled struct, `ToCBool` for
   `CNA_Bool`, `static_cast` for an enumeration or a number; any other C structure is assigned as
   the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
-  decide ownership, so they are a `result`.
+  decide ownership, so they are a `result`;
+- a group that says `raw = true` works on the C structures themselves — Point and Rectangle
+  arithmetic, which wraps like XNA's integers: struct parameters are passed as declared and a
+  struct result is assigned as the expression builds it.
 
 An argument the route refuses is written beside the kind, as the condition under which it is
 invalid, over the parameters exactly as the caller passed them:

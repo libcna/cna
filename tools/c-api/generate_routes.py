@@ -63,7 +63,8 @@ to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, and a
 validated as canonical and read as ``bool``. Every other parameter is passed as declared. The
 result is converted back by the output's C type: ToC for a marshaled struct, ToCBool for
 CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
-expression builds it.
+expression builds it. A group that says ``raw = true`` works on the C structures themselves:
+its struct parameters are passed as declared and a struct result is assigned as built.
 
 A route may add ``invalid_if = "<C++ condition>"`` (or a list of them): an argument the route
 refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(volume)"``. The
@@ -298,7 +299,10 @@ class Route:
 
     # The C parameter is renamed when the expression sees a converted local under its name.
     def _converted(self, param: Param) -> bool:
-        return not param.pointer and self.types.kind_of(param.type) in ("marshaled", "bool")
+        kind = self.types.kind_of(param.type)
+        if kind == "marshaled" and self.group.get("raw"):
+            return False
+        return not param.pointer and kind in ("marshaled", "bool")
 
     # The second handle may itself be named `other`; the definition renames it, as the ABI allows.
     def _renamed(self, param: Param) -> bool:
@@ -343,7 +347,7 @@ class Route:
         lines = []
         for param in self.inputs:
             kind = self.types.kind_of(param.type)
-            if kind == "marshaled":
+            if kind == "marshaled" and self._converted(param):
                 lines.append(f"{indent}const auto {param.name} = "
                              f"{DETAIL}ToNative({self._c_name(param)});")
             elif kind == "bool":
@@ -376,6 +380,8 @@ class Route:
         output = self.outputs[0]
         kind = self.types.kind_of(output.type)
         if kind == "marshaled":
+            if self.group.get("raw"):
+                return self.expression  # the C structure itself, built by the expression
             return f"{DETAIL}ToC({self.expression})"
         if kind == "bool":
             return f"{DETAIL}ToCBool({self.expression})"
@@ -458,7 +464,7 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
         if not isinstance(group, dict) or "routes" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] has no [{group_name}.routes] table")
         unknown = set(group) - {"lookup", "object", "owner", "other", "arguments",
-                                "accepts_null_handle", "feature", "unavailable", "routes"}
+                                "accepts_null_handle", "feature", "unavailable", "raw", "routes"}
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
@@ -470,6 +476,8 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
                                  or set(group["other"]) != {"lookup", "object"}):
             raise SpecError(f"{spec.name}: [{group_name}] other must be "
                             "{ lookup = \"...\", object = \"...\" }")
+        if "raw" in group and group["raw"] is not True:
+            raise SpecError(f"{spec.name}: [{group_name}] raw is either true or left out")
         if ("feature" in group) != ("unavailable" in group):
             raise SpecError(f"{spec.name}: [{group_name}] needs both feature and unavailable")
         if "arguments" in group and (not isinstance(group["arguments"], int) or group["arguments"] < 1):

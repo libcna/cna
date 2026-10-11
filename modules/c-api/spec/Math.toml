@@ -33,3 +33,32 @@ cna_rectangle_not_equals = { value = "left != right" }
 cna_rectangle_get_hash_code = { value = "value.GetHashCode()" }
 cna_rectangle_get_string_size = { size = "value.ToString()" }
 cna_rectangle_copy_string = { copy = "value.ToString()" }
+
+# Point and Rectangle arithmetic wraps like XNA's 32-bit integers and is written over the C
+# structures themselves (WrapAdd, RectangleRight and their neighbours in CnaCApiMath.cpp).
+[point_values]
+raw = true
+
+[point_values.routes]
+cna_point_init = { value = "CNA_Point{0, 0}" }
+cna_point_init_xy = { value = "CNA_Point{x, y}" }
+cna_point_add = { value = "CNA_Point{WrapAdd(left.x, right.x), WrapAdd(left.y, right.y)}" }
+cna_point_subtract = { value = "CNA_Point{WrapSubtract(left.x, right.x), WrapSubtract(left.y, right.y)}" }
+cna_point_multiply = { value = "CNA_Point{WrapMultiply(left.x, right.x), WrapMultiply(left.y, right.y)}" }
+
+[rectangle_values]
+raw = true
+
+[rectangle_values.routes]
+cna_rectangle_init = { value = "CNA_Rectangle{0, 0, 0, 0}" }
+cna_rectangle_init_xywh = { value = "CNA_Rectangle{x, y, width, height}" }
+cna_rectangle_get_left = { value = "value.x" }
+cna_rectangle_get_right = { value = "RectangleRight(value)" }
+cna_rectangle_get_top = { value = "value.y" }
+cna_rectangle_get_bottom = { value = "RectangleBottom(value)" }
+cna_rectangle_get_location = { value = "CNA_Point{value.x, value.y}" }
+cna_rectangle_get_center = { value = "CNA_Point{WrapAdd(value.x, value.width / 2), WrapAdd(value.y, value.height / 2)}" }
+cna_rectangle_get_is_empty = { value = "value.x == 0 && value.y == 0 && value.width == 0 && value.height == 0" }
+cna_rectangle_contains_xy = { value = "RectangleContainsPoint(value, x, y)" }
+cna_rectangle_contains_rectangle = { value = "value.x <= candidate.x && RectangleRight(candidate) <= RectangleRight(value) && value.y <= candidate.y && RectangleBottom(candidate) <= RectangleBottom(value)" }
+cna_rectangle_intersects = { value = "RectanglesIntersect(left, right)" }

@@ -356,3 +356,233 @@ CNA_Result cna_rectangle_copy_string(
         return value.ToString();
     });
 }
+
+CNA_Result cna_point_init(
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_init: out_value is null.");
+        }
+        *out_value = CNA_Point{0, 0};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_point_init_xy(
+    const int32_t x,
+    const int32_t y,
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_init_xy: out_value is null.");
+        }
+        *out_value = CNA_Point{x, y};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_point_add(
+    const CNA_Point left,
+    const CNA_Point right,
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_add: out_value is null.");
+        }
+        *out_value = CNA_Point{WrapAdd(left.x, right.x), WrapAdd(left.y, right.y)};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_point_subtract(
+    const CNA_Point left,
+    const CNA_Point right,
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_subtract: out_value is null.");
+        }
+        *out_value = CNA_Point{WrapSubtract(left.x, right.x), WrapSubtract(left.y, right.y)};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_point_multiply(
+    const CNA_Point left,
+    const CNA_Point right,
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_multiply: out_value is null.");
+        }
+        *out_value = CNA_Point{WrapMultiply(left.x, right.x), WrapMultiply(left.y, right.y)};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_init(
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_init: out_value is null.");
+        }
+        *out_value = CNA_Rectangle{0, 0, 0, 0};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_init_xywh(
+    const int32_t x,
+    const int32_t y,
+    const int32_t width,
+    const int32_t height,
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_init_xywh: out_value is null.");
+        }
+        *out_value = CNA_Rectangle{x, y, width, height};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_left(
+    const CNA_Rectangle value,
+    int32_t* const out_edge)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_edge == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_left: out_edge is null.");
+        }
+        *out_edge = static_cast<int32_t>(value.x);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_right(
+    const CNA_Rectangle value,
+    int32_t* const out_edge)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_edge == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_right: out_edge is null.");
+        }
+        *out_edge = static_cast<int32_t>(RectangleRight(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_top(
+    const CNA_Rectangle value,
+    int32_t* const out_edge)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_edge == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_top: out_edge is null.");
+        }
+        *out_edge = static_cast<int32_t>(value.y);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_bottom(
+    const CNA_Rectangle value,
+    int32_t* const out_edge)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_edge == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_bottom: out_edge is null.");
+        }
+        *out_edge = static_cast<int32_t>(RectangleBottom(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_location(
+    const CNA_Rectangle value,
+    CNA_Point* const out_location)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_location == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_location: out_location is null.");
+        }
+        *out_location = CNA_Point{value.x, value.y};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_center(
+    const CNA_Rectangle value,
+    CNA_Point* const out_center)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_center == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_center: out_center is null.");
+        }
+        *out_center = CNA_Point{WrapAdd(value.x, value.width / 2), WrapAdd(value.y, value.height / 2)};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_is_empty(
+    const CNA_Rectangle value,
+    CNA_Bool* const out_is_empty)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_empty == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_is_empty: out_is_empty is null.");
+        }
+        *out_is_empty = CNA::C::Detail::ToCBool(value.x == 0 && value.y == 0 && value.width == 0 && value.height == 0);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_contains_xy(
+    const CNA_Rectangle value,
+    const int32_t x,
+    const int32_t y,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_contains_xy: out_contains is null.");
+        }
+        *out_contains = CNA::C::Detail::ToCBool(RectangleContainsPoint(value, x, y));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_contains_rectangle(
+    const CNA_Rectangle value,
+    const CNA_Rectangle candidate,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_contains_rectangle: out_contains is null.");
+        }
+        *out_contains = CNA::C::Detail::ToCBool(value.x <= candidate.x && RectangleRight(candidate) <= RectangleRight(value) && value.y <= candidate.y && RectangleBottom(candidate) <= RectangleBottom(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_intersects(
+    const CNA_Rectangle left,
+    const CNA_Rectangle right,
+    CNA_Bool* const out_intersects)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_intersects == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_intersects: out_intersects is null.");
+        }
+        *out_intersects = CNA::C::Detail::ToCBool(RectanglesIntersect(left, right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
