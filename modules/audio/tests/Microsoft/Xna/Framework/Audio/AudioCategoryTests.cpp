@@ -1443,8 +1443,8 @@ TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
 // FACT_STATE_PLAYING (FACT.c:2647/2651), so a Paused cue still counts toward its category's
 // instanceLimit. This was flagged as a possible gap by a Phase 12 audit pass, but investigating
 // CNA's own Cue::Pause() (Cue.cpp) shows it never changes state_ away from State::Playing --
-// pause is tracked entirely via the independent paused_ bool (matching NEXT.md's own documented
-// invariant, "Cue::Pause()/IsPaused never clear/depend on IsPlaying"). This test empirically
+// pause is tracked entirely via the independent paused_ bool (the invariant that
+// Cue::Pause()/IsPaused never clear or depend on IsPlaying). This test empirically
 // confirms AudioEngine::CheckCategoryInstanceLimit's `state_ == Playing` check therefore already
 // counts a Paused cue correctly, with no code change needed -- a "confirmed correct, not a bug"
 // regression lock, not a new fix.

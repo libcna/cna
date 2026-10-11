@@ -52,7 +52,7 @@
 //   readback, proving the Bones[72] register upload doesn't corrupt the draw even when trivial.
 // Check P -- SkinnedEffect, OneLight bucket: ONE active light -- exact readback, different from
 //   Check O, proving correct bucket selection.
-// Check Q -- regression for the NEXT.md-documented "RenderTarget2D sampled as an ordinary
+// Check Q -- regression for the fixed "RenderTarget2D sampled as an ordinary
 //   texture crashes on the next draw" bug: a D3D9RenderTargetRenderer is created, bound, Clear()ed
 //   to a known color, unbound, then used directly as params.texture0 for an ordinary unlit+
 //   textured BasicEffect draw (same shape as Check A). The real root cause (found and fixed the
@@ -581,7 +581,7 @@ protected:
                   "exact readback (80,48,16) -- different from Check O, proves correct bucket selection");
         }
 
-        // Check Q: RenderTarget2D sampled as an ordinary texture (NEXT.md's documented crash).
+        // Check Q: RenderTarget2D sampled as an ordinary texture (formerly crashed on the next draw).
         {
             auto rt = renderer.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::Depth24Stencil8),
                                                    false, false, 0);

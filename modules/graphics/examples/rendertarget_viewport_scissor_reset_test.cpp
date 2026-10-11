@@ -10,8 +10,8 @@
 // incorrectly survive a real render target switch.
 //
 // This test proves both the property-level fix AND a real GPU-level effect (ScissorRectangle is
-// wired to the renderer's actual scissor test, unlike Viewport which has no renderer wiring yet on
-// any renderer - see the known-limitations note in NEXT.md):
+// wired to the renderer's actual scissor test, unlike Viewport, which had no renderer wiring on any
+// renderer when this test was written):
 //   1. Enable ScissorTestEnable=true with the scissor rect set to the RIGHT HALF of the
 //      backbuffer; clear black, draw full-screen green - confirms the scissor genuinely clips
 //      (left stays black, right is green), matching Task 209's own established methodology.

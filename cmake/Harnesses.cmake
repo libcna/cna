@@ -1,7 +1,7 @@
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
-# independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
-# the approved Phase 6 plan for why this exists separately from every Phase 5 single-process test.
+# independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. It is separate
+# from the single-process tests because only one real NetworkSession can exist per process.
 # Uses POSIX-only <sys/resource.h>/posix_spawn -- excluded on the same platforms its own consumer
 # test (TwoProcessLoopbackTest.cpp) already is, above, rather than only excluding the test source
 # and leaving this executable target to fail the build on its own.

@@ -31,7 +31,7 @@ TEST(ENetHostHandleTest, CreateHostBindsToEphemeralPort) {
 #ifdef __EMSCRIPTEN__
     GTEST_SKIP() << "Emscripten's SOCKFS bind()/getsockname() shim never reports back a real "
                     "OS-assigned ephemeral port (always echoes back the literal port requested, "
-                    "0 in this case) - a permanent platform limitation, not a CNA bug. See NEXT.md.";
+                    "0 in this case) - a permanent platform limitation, not a CNA bug.";
 #endif
     ENetHostHandle server = ENetHostHandle::CreateHost(0, 4, 2);
     EXPECT_TRUE(server.IsValid());

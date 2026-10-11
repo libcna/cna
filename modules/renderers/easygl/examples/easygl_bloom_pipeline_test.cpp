@@ -11,7 +11,7 @@
 //
 // Scene: a small bright white square on an otherwise black background (mimicking BloomSample's
 // sunset+tank scene, minus the 3D geometry/model-loading machinery that's explicitly out of this
-// task's scope -- see NEXT.md, Task 946 is scoped to the shader-conversion workflow itself, not a
+// task's scope -- Task 946 is scoped to the shader-conversion workflow itself, not a
 // full sample port). BloomThreshold=0.25 lets the bright square straight through the extract pass;
 // the background (black, well below threshold) is fully suppressed.
 //

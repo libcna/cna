@@ -21,7 +21,7 @@
 //
 // Task 912 (Bgfx registration): the read-back is retried (Clear+Draw+Read, up to 20x) until
 // non-black — Bgfx's GetBackBufferData() only reliably reflects the first read call per rendered
-// frame (NEXT.md §5); sampling a freshly-filled-then-unbound RT via SpriteBatch within the same
+// frame; sampling a freshly-filled-then-unbound RT via SpriteBatch within the same
 // un-advanced bgfx frame can read back stale/black content on that very first read. This is the
 // same established convention bgfx_rendertarget2d_mip_test.cpp already uses, applied here so this
 // shared test can finally be registered for Bgfx too (previously EasyGL/Vulkan only) — confirmed

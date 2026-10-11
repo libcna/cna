@@ -716,7 +716,7 @@ namespace CNA::Internal::Net
 
     // Raw UDP broadcast/unicast has no equivalent on the Web platform at all (no browser, and no
     // Node.js `ws` package, can send a raw datagram) - this is a permanent platform constraint,
-    // not a TODO (see NEXT.md and this class's own header doc comment).
+    // not a TODO (see this class's own header doc comment).
 
     void ENetDiscoveryService::RegisterHost(NetworkSession*, uint16_t) { }
     void ENetDiscoveryService::UnregisterHost(NetworkSession*) { }

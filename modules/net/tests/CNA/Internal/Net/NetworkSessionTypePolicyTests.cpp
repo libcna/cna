@@ -61,7 +61,7 @@ namespace {
     };
 
     // Matches ENetBackendTests.cpp's SystemLinkSessionFixture: only one real NetworkSession can
-    // exist per process (activeSession_ gate — see NEXT.md section 4/5), so each loop iteration
+    // exist per process (activeSession_ gate), so each loop iteration
     // below constructs and disposes exactly one before moving to the next type.
     struct SyntheticSessionFixture {
         SignedInGamer signedIn;

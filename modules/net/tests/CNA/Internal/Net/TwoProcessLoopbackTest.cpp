@@ -6,7 +6,7 @@
 // ENet/UDP connection. Every other loopback test in this suite (ENetBackendTests.cpp,
 // ENetDiscoveryServiceTests.cpp) proves the transport works within a single process — one real
 // NetworkSession plus a raw ENetHostHandle/socket standing in for "the other machine", since only
-// one real NetworkSession can exist per process (see NEXT.md section 4/5). This test is the first
+// one real NetworkSession can exist per process. This test is the first
 // to prove the same transport works across genuinely separate address spaces.
 //
 // The host's real bound port is handed to the client out-of-band (via a pipe on the host's

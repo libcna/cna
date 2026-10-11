@@ -52,7 +52,7 @@ using Microsoft::Xna::Framework::Net::NetworkSessionType;
 
 namespace {
     // NetworkSession::Create()/BeginCreate() gates on a single process-wide activeSession_ (a
-    // real, preserved FNA constraint — see NEXT.md section 4/5): only one real NetworkSession can
+    // real, preserved FNA constraint): only one real NetworkSession can
     // be alive in this test binary at a time. So Task 5.4's loopback tests below each use exactly
     // one real NetworkSession, paired with a raw ENetHostHandle (from Task 5.1) standing in for
     // "the other machine" — never two real NetworkSession instances at once.
@@ -77,7 +77,7 @@ namespace {
 
 #ifdef __EMSCRIPTEN__
     // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
-    // ephemeral port (see NEXT.md), so the raw ENetHostHandle "fake host" stand-ins below (playing
+    // ephemeral port, so the raw ENetHostHandle "fake host" stand-ins below (playing
     // "the other machine" for Client* tests) need a fixed port too - distinct from ENetBackend's
     // own kEmscriptenHostPort (61191), which the real NetworkSession under test binds to
     // independently via its own constructor in these same tests.

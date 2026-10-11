@@ -51,7 +51,7 @@ namespace CNA::Internal::Net
 
 #ifdef __EMSCRIPTEN__
         // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
-        // ephemeral port (see NEXT.md) - hosting on Web must request a fixed, known port instead
+        // ephemeral port - hosting on Web must request a fixed, known port instead
         // of relying on ENET_PORT_ANY (0) + read-back. Only reachable in practice by a Node.js-run
         // dedicated relay/server build: a real browser tab can never accept incoming connections
         // at all (browsers cannot open listening sockets), so hosting is moot there regardless.
@@ -1751,7 +1751,7 @@ namespace CNA::Internal::Net
         }
 
 #ifdef __EMSCRIPTEN__
-        // A real browser tab can never bind/listen (see NEXT.md), so the "client" role here is
+        // A real browser tab can never bind/listen, so the "client" role here is
         // rebuilt as a pure outbound-only host instead of reusing whatever StartHosting's
         // constructor call already bound - matching what a real browser can actually do.
         Sessions()[session] = std::make_unique<SessionState>(

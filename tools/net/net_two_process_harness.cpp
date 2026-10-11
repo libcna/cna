@@ -4,8 +4,8 @@
 // Task 6.1: a small standalone (non-GTest) executable that plays either the "host" or "client"
 // role in a real two-process ENet loopback test. Every Phase 5 test proved the ENet backend works
 // within a single process (one real NetworkSession plus a raw ENetHostHandle/socket standing in
-// for "the other machine" — see NEXT.md section 4/5 for why only one real NetworkSession can
-// exist per process). This harness is spawned twice, as two genuinely independent OS processes,
+// for "the other machine", because only one real NetworkSession can exist per process). This
+// harness is spawned twice, as two genuinely independent OS processes,
 // by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp, to prove the same real transport works
 // across separate address spaces too.
 //
@@ -765,7 +765,7 @@ namespace {
     // CnaTests, where countless earlier tests already have; and (2) forcing an actual bind
     // failure by occupying the discovery port with another socket doesn't work at all - this port
     // is deliberately designed so any two REUSEADDR-set UDP sockets can coexist on it (see
-    // ENetDiscoveryService.cpp's own EnsureSocket, Task 6.5's note, and NEXT.md), so a
+    // ENetDiscoveryService.cpp's own EnsureSocket and Task 6.5's note), so a
     // port-conflict approach is inherently racy/unreliable (confirmed empirically: it failed for
     // the wrong reason under real CnaTests suite ordering). Instead, this lowers RLIMIT_NOFILE to
     // exactly one more than the number of file descriptors already open (stdin/stdout/stderr, the

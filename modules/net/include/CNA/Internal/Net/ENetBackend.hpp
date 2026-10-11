@@ -130,7 +130,7 @@ namespace CNA::Internal::Net
         /**
          * @brief Connects session to a remote host and begins the ClientHello/ServerWelcome
          * handshake, exercising the same transport session's own EndJoin() would eventually use
-         * (bypassing EndJoin's pre-existing activeAction-stranding bug — see NEXT.md).
+         * (written to bypass an activeAction-stranding bug EndJoin had at the time).
          *
          * No-op if RealNetworkingEnabled(session's type) is false. session must already have (or
          * be able to start) its own registered ENet host, since even a "client" role peer owns

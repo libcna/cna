@@ -3191,8 +3191,8 @@ TEST(CueTest, GetTypeNameIsDottedXnaName)
 // subsequent call in the loop. Confirmed by direct instrumentation: all 200 "iterations" read
 // back the *identical* categoryIndex from iteration 1 -- this was really a single weighted draw,
 // not 200 independent trials, which is what actually made the test's pass/fail outcome depend on
-// one random draw's ~1% chance of landing on the low-weight entry (matching NEXT.md's "un-seeded
-// RNG" flake description) rather than a smooth statistical average across genuinely independent
+// one random draw's ~1% chance of landing on the low-weight entry (the flake once blamed on an
+// un-seeded RNG) rather than a smooth statistical average across genuinely independent
 // samples. Fixed by creating a fresh `Cue` (a fresh "playthrough", matching how a real game would
 // call `SoundBank::PlayCue()` repeatedly, never replaying one `Cue` object) each iteration.
 TEST(CueTest, PlayWeightedVariationFavorsHigherWeightEntryStatistically)

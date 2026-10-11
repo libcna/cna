@@ -36,7 +36,7 @@ using Microsoft::Xna::Framework::Net::NetworkSessionType;
 
 namespace {
     // Matches ENetBackendTests.cpp's SystemLinkSessionFixture: only one real NetworkSession can
-    // exist per process (activeSession_ gate in BeginCreate/BeginFind — see NEXT.md section 4/5),
+    // exist per process (activeSession_ gate in BeginCreate/BeginFind),
     // so every test here builds exactly one, RAII-disposed on scope exit.
     struct SystemLinkSessionFixture {
         SignedInGamer signedIn;
@@ -77,15 +77,15 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
 
 #ifdef __EMSCRIPTEN__
     // ENetDiscoveryService is permanently disabled on Emscripten — raw UDP broadcast/unicast has
-    // no equivalent on the Web platform (see NEXT.md and the class's own header doc comment).
+    // no equivalent on the Web platform (see the class's own header doc comment).
     EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink).empty());
 #else
     // ENetBackend::StartHosting (called from the fixture's own NetworkSession constructor)
     // already registered host.session with ENetDiscoveryService. FindSessions is a standalone
     // static call with no activeSession_ involvement, so — unlike NetworkSession::Find() itself,
     // which would throw InvalidOperationException here since host.session already occupies
-    // activeSession_ — it can be exercised directly in the same process as a live host. See
-    // NEXT.md for why the full public Find() path can't be end-to-end tested this way.
+    // activeSession_ — it can be exercised directly in the same process as a live host, which is
+    // also why the full public Find() path can't be end-to-end tested this way.
     std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
 
     // Deduped to exactly one entry even though the query reaches this host via two paths
@@ -188,7 +188,7 @@ TEST(ENetDiscoveryServiceTest, UnregisterHostIsSafeForAnUnregisteredOrMismatched
 
     std::vector<AvailableNetworkSession> found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
 #ifdef __EMSCRIPTEN__
-    // ENetDiscoveryService is permanently disabled on Emscripten (see NEXT.md) — always empty.
+    // ENetDiscoveryService is permanently disabled on Emscripten — always empty.
     EXPECT_TRUE(found.empty());
 #else
     EXPECT_EQ(found.size(), 1u);

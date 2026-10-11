@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9 stock-effect draw does not support the requested PrimitiveType value");
         }
 
-        /// Real root cause of the NEXT.md-documented "RenderTarget2D sampled as an ordinary
+        /// Real root cause of the former "RenderTarget2D sampled as an ordinary
         /// texture crashes on the next draw" bug: GpuDrawParams::texture0/texture1 are declared as
         /// `const ITextureRenderer*`, and D3D9RenderTargetRenderer (a RenderTarget2D's own renderer)
         /// implements IRenderTargetRenderer : ITextureRenderer -- a real, legal runtime type this

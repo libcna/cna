@@ -192,8 +192,7 @@ TEST(AvatarDescriptionTest, EndGetFromGamerRejectsResultNotFromBegin) {
 // NOTE: BeginGetFromGamer's "throws ObjectDisposedException if gamer.IsDisposed" path is not
 // tested here - Gamer (the base class) has no publicly or CNAEXT-accessible way to become
 // disposed anywhere in this codebase (isDisposed_ is a protected field never set by any
-// existing Gamer/SignedInGamer/NetworkGamer code path). Not fixed as part of this port; see
-// NEXT.md's known-limitations table.
+// existing Gamer/SignedInGamer/NetworkGamer code path). Not fixed as part of this port.
 
 // ---------------------------------------------------------------------------
 // XNA-MISSING-018: AvatarDescription.Changed is an instance event.

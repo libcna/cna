@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 664: Vulkan SpriteBatch multi-Begin/End-per-frame regression test.
 //
-// Confirmed bug (session 2026-07-02, tracked in plans/plan_graphics.md/NEXT.md §5): on the Vulkan
+// Confirmed bug (session 2026-07-02, tracked in plans/plan_graphics.md; fixed by 7dd71cd88): on the Vulkan
 // renderer, if a single SpriteBatch object runs multiple independent Begin()/Draw()/End() cycles
 // within one frame, only the LAST cycle's draws ever end up on screen -- earlier cycles vanish.
 //

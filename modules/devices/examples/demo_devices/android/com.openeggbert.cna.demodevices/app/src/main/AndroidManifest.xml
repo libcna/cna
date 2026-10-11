@@ -55,8 +55,8 @@
 
     <!-- Devices demo (plans/plan_devices.md Task DEVICES-0123): Microsoft.Devices.Sensors
          hardware, all optional; this diagnostic demo must still install on
-         devices missing any one of these (per NEXT.md's "do not require Android
-         sensors in the manifest unless the app explicitly needs them" rule). -->
+         devices missing any one of these (Android sensors are not required in
+         the manifest unless the app explicitly needs them). -->
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
