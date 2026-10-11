@@ -193,35 +193,6 @@ CNA_Result cna_avatar_description_get_from_gamer(
     });
 }
 
-CNA_Result cna_avatar_description_get_info(
-    const CNA_AvatarDescriptionHandle descriptionHandle,
-    CNA_AvatarDescriptionInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The AvatarDescription info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvatarDescriptionResource> description;
-        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_AvatarDescriptionInfo info = {
-            sizeof(CNA_AvatarDescriptionInfo),
-            StructureVersion,
-            static_cast<CNA_AvatarBodyType>(description->value->getBodyTypeProperty()),
-            description->value->getHeightProperty(),
-            static_cast<uint64_t>(description->value->getDescriptionProperty().size()),
-            ToCBool(description->value->getIsValidProperty()),
-            {0U, 0U, 0U, 0U, 0U, 0U, 0U}
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_avatar_description_copy_description(
     const CNA_AvatarDescriptionHandle descriptionHandle,
     uint8_t* const destination,
@@ -304,55 +275,6 @@ CNA_Result cna_avatar_animation_create(
     });
 }
 
-CNA_Result cna_avatar_animation_get_info(
-    const CNA_AvatarAnimationHandle animationHandle,
-    CNA_AvatarAnimationInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The AvatarAnimation info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_AvatarAnimationInfo info = {
-            sizeof(CNA_AvatarAnimationInfo),
-            StructureVersion,
-            static_cast<int32_t>(animation->value->getBoneTransformsProperty().getCountProperty()),
-            ToCBool(animation->value->getIsDisposedProperty()),
-            {0U, 0U, 0U},
-            static_cast<int64_t>(animation->value->getCurrentPositionProperty().getTicksProperty()),
-            static_cast<int64_t>(animation->value->getLengthProperty().getTicksProperty())
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_animation_get_expression(
-    const CNA_AvatarAnimationHandle animationHandle,
-    CNA_AvatarExpression* const outExpression)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outExpression, "The AvatarExpression output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outExpression = ToC(animation->value->getExpressionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_avatar_animation_get_bone_transform_at(
     const CNA_AvatarAnimationHandle animationHandle,
     const int32_t index,
@@ -400,33 +322,6 @@ CNA_Result cna_avatar_renderer_create(
             description->value.get(),
             useLoadingEffect == CNA_TRUE);
         return CreateHandle(ObjectKind::AvatarRenderer, resource, outRenderer);
-    });
-}
-
-CNA_Result cna_avatar_renderer_get_info(
-    const CNA_AvatarRendererHandle rendererHandle,
-    CNA_AvatarRendererInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The AvatarRenderer info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_AvatarRendererInfo info = {
-            sizeof(CNA_AvatarRendererInfo),
-            StructureVersion,
-            static_cast<CNA_AvatarRendererState>(renderer->value->getStateProperty()),
-            ToCBool(renderer->value->getIsDisposedProperty()),
-            {0U, 0U, 0U}
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
     });
 }
 

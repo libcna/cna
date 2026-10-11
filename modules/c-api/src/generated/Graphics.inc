@@ -77,3 +77,29 @@ CNA_Result cna_sprite_batch_get_type_name_size(
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
     });
 }
+
+CNA_Result cna_texture2d_get_info(
+    const CNA_Handle texture,
+    CNA_Texture2DInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_texture2d_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Texture2DResource> object{};
+        if (const CNA_Result routeResult = GetTexture2D(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_Texture2DInfo{
+            .struct_size = sizeof(CNA_Texture2DInfo),
+            .struct_version = StructureVersion,
+            .width = static_cast<uint32_t>(object->value->getWidthProperty()),
+            .height = static_cast<uint32_t>(object->value->getHeightProperty()),
+            .level_count = static_cast<uint32_t>(object->value->getLevelCountProperty()),
+            .format = MapSurfaceFormat(object->value->getFormatProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}

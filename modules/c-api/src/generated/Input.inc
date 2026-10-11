@@ -836,6 +836,24 @@ CNA_Result cna_touch_panel_raise_touch_event_ext(
     });
 }
 
+CNA_Result cna_touch_panel_read_gesture(
+    const CNA_Handle game,
+    CNA_GestureSample* const out_sample)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_sample, "cna_touch_panel_read_gesture: out_sample is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_sample = MapGestureSample(TouchPanel::ReadGesture());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_mouse_cursor_dispose(
     const CNA_MouseCursorHandle cursor)
 {

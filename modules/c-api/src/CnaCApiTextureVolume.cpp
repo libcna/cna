@@ -496,34 +496,6 @@ CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
     });
 }
 
-CNA_Result cna_texture3d_get_info(
-    const CNA_Handle textureHandle,
-    CNA_Texture3DInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The Texture3D info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_Texture3DInfo{
-            sizeof(CNA_Texture3DInfo),
-            StructureVersion,
-            static_cast<uint32_t>(texture->value->getWidthProperty()),
-            static_cast<uint32_t>(texture->value->getHeightProperty()),
-            static_cast<uint32_t>(texture->value->getDepthProperty()),
-            static_cast<uint32_t>(texture->value->getLevelCountProperty()),
-            static_cast<CNA_SurfaceFormat>(texture->value->getFormatProperty()),
-            0U};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture3d_set_data(
     const CNA_Handle textureHandle,
     const CNA_Texture3DTransfer* const transfer,
@@ -723,32 +695,6 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
             return result;
         }
         RemoveOwnedGraphicsResourceFor(texture->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texturecube_get_info(
-    const CNA_Handle textureHandle,
-    CNA_TextureCubeInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The TextureCube info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_TextureCubeInfo{
-            sizeof(CNA_TextureCubeInfo),
-            StructureVersion,
-            static_cast<uint32_t>(texture.value->getSizeProperty()),
-            static_cast<uint32_t>(texture.value->getLevelCountProperty()),
-            static_cast<CNA_SurfaceFormat>(texture.value->getFormatProperty()),
-            0U};
         return CNA_RESULT_SUCCESS;
     });
 }

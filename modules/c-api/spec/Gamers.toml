@@ -40,6 +40,18 @@ cna_gamer_profile_copy_motto = { copy = "object->value->getMottoProperty()" }
 cna_gamer_profile_get_region_name_size = { size = "object->value->getRegionProperty().getNameProperty()" }
 cna_gamer_profile_copy_region_name = { copy = "object->value->getRegionProperty().getNameProperty()" }
 cna_gamer_profile_destroy = { release = "object->value->Dispose()" }
+cna_gamer_profile_get_info = { versioned = true, get = '''
+CNA_GamerProfileInfo{
+    sizeof(CNA_GamerProfileInfo),
+    StructureVersion,
+    static_cast<int32_t>(object->value->getGamerScoreProperty()),
+    static_cast<CNA_GamerZone>(object->value->getGamerZoneProperty()),
+    static_cast<int32_t>(object->value->getTitlesPlayedProperty()),
+    static_cast<int32_t>(object->value->getTotalAchievementsProperty()),
+    object->value->getReputationProperty(),
+    ToCBool(object->value->getIsDisposedProperty()),
+    {0U, 0U, 0U}
+}''' }
 
 [collection]
 lookup = "BorrowCollection"
@@ -58,6 +70,24 @@ owner = "std::shared_ptr<GamerResource>"
 [friend.routes]
 cna_friend_gamer_get_presence_size = { size = "object->getPresenceProperty()" }
 cna_friend_gamer_copy_presence = { copy = "object->getPresenceProperty()" }
+cna_friend_gamer_get_info = { versioned = true, get = '''
+CNA_FriendGamerInfo{
+    sizeof(CNA_FriendGamerInfo),
+    StructureVersion,
+    ToCBool(object->getFriendRequestReceivedFromProperty()),
+    ToCBool(object->getFriendRequestSentToProperty()),
+    ToCBool(object->getHasVoiceProperty()),
+    ToCBool(object->getInviteAcceptedProperty()),
+    ToCBool(object->getInviteReceivedFromProperty()),
+    ToCBool(object->getInviteRejectedProperty()),
+    ToCBool(object->getInviteSentToProperty()),
+    ToCBool(object->getIsAwayProperty()),
+    ToCBool(object->getIsBusyProperty()),
+    ToCBool(object->getIsJoinableProperty()),
+    ToCBool(object->getIsOnlineProperty()),
+    ToCBool(object->getIsPlayingProperty()),
+    {0U, 0U, 0U, 0U}
+}''' }
 
 [signed_in_and_gamer]
 lookup = "BorrowSignedIn"

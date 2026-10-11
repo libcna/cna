@@ -290,6 +290,35 @@ CNA_Result cna_sound_effect_instance_set_pan(
     });
 }
 
+CNA_Result cna_sound_effect_instance_get_info(
+    const CNA_Handle instance,
+    CNA_SoundEffectInstanceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_sound_effect_instance_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SoundEffectInstanceResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_SoundEffectInstanceInfo{
+            sizeof(CNA_SoundEffectInstanceInfo),
+            StructureVersion,
+            MapSoundState(object->value->getStateProperty()),
+            ToCBool(object->value->getIsLoopedProperty()),
+            {0U, 0U, 0U},
+            object->value->getVolumeProperty(),
+            object->value->getPitchProperty(),
+            object->value->getPanProperty(),
+            0U
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sound_effect_get_master_volume(
     const CNA_Handle game,
     float* const out_volume)

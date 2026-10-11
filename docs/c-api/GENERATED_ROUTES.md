@@ -86,6 +86,20 @@ The generator takes the signature from the header and the conversions from the C
   arithmetic, which wraps like XNA's integers: struct parameters are passed as declared and a
   struct result is assigned as the expression builds it.
 
+An output that is a versioned structure (`struct_size`, `struct_version`) says `versioned = true`,
+and is then refused unless it is a version 1 structure large enough for this build. A long
+expression may span lines in a `'''` string; the generated route keeps its layout:
+
+```toml
+cna_texture_get_info = { versioned = true, get = '''
+CNA_TextureInfo{
+    sizeof(CNA_TextureInfo),
+    StructureVersion,
+    static_cast<uint32_t>(object.value->getLevelCountProperty()),
+    static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty())
+}''' }
+```
+
 An argument the route refuses is written beside the kind, as the condition under which it is
 invalid, over the parameters exactly as the caller passed them:
 
@@ -98,7 +112,8 @@ The route then answers `CNA_RESULT_INVALID_ARGUMENT`, with the condition in the 
 
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
-null destination with a capacity; for `result`, every non-const `out_*` pointer, and a handle
+null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
+`result`, every non-const `out_*` pointer, and a handle
 output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
 `invalid_if` conditions, then the lookup (and `other`'s), whose own result is returned when it
 refuses. So a call with two faults always reports the null output.

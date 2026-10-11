@@ -68,6 +68,35 @@ CNA_Result cna_leaderboard_reader_get_identity(
     });
 }
 
+CNA_Result cna_leaderboard_reader_get_info(
+    const CNA_LeaderboardReaderHandle reader,
+    CNA_LeaderboardReaderInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_leaderboard_reader_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<LeaderboardReaderResource> object{};
+        if (const CNA_Result routeResult = BorrowReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_LeaderboardReaderInfo{
+            sizeof(CNA_LeaderboardReaderInfo),
+            StructureVersion,
+            static_cast<int32_t>(object->value->getPageStartProperty()),
+            static_cast<int32_t>(object->value->getTotalLeaderboardSizeProperty()),
+            static_cast<int32_t>(object->value->getEntriesProperty().getCountProperty()),
+            ToCBool(object->value->getIsDisposedProperty()),
+            ToCBool(object->value->getCanPageDownProperty()),
+            ToCBool(object->value->getCanPageUpProperty()),
+            0U
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_leaderboard_entry_destroy(
     const CNA_LeaderboardEntryHandle entry)
 {
@@ -92,6 +121,32 @@ CNA_Result cna_leaderboard_entry_set_rating(
             return routeResult;
         }
         object->Value()->setRatingProperty(static_cast<long long>(rating));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_leaderboard_entry_get_info(
+    const CNA_LeaderboardEntryHandle entry,
+    CNA_LeaderboardEntryInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_leaderboard_entry_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<LeaderboardEntryResource> object{};
+        if (const CNA_Result routeResult = BorrowEntry(entry, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_LeaderboardEntryInfo{
+            sizeof(CNA_LeaderboardEntryInfo),
+            StructureVersion,
+            static_cast<int32_t>(object->Value()->getRankingEXTProperty()),
+            ToCBool(object->Value()->getGamerProperty() != nullptr),
+            {0U, 0U, 0U},
+            static_cast<int64_t>(object->Value()->getRatingProperty())
+        };
         return CNA_RESULT_SUCCESS;
     });
 }

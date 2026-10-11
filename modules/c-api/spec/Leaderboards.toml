@@ -10,6 +10,18 @@ cna_leaderboard_reader_destroy = { release = "object->value->Dispose()" }
 cna_leaderboard_reader_page_down = { call = "object->value->PageDown()" }
 cna_leaderboard_reader_page_up = { call = "object->value->PageUp()" }
 cna_leaderboard_reader_get_identity = { result = "ToCIdentity(object->value->getLeaderboardIdentityProperty(), out_identity)" }
+cna_leaderboard_reader_get_info = { versioned = true, get = '''
+CNA_LeaderboardReaderInfo{
+    sizeof(CNA_LeaderboardReaderInfo),
+    StructureVersion,
+    static_cast<int32_t>(object->value->getPageStartProperty()),
+    static_cast<int32_t>(object->value->getTotalLeaderboardSizeProperty()),
+    static_cast<int32_t>(object->value->getEntriesProperty().getCountProperty()),
+    ToCBool(object->value->getIsDisposedProperty()),
+    ToCBool(object->value->getCanPageDownProperty()),
+    ToCBool(object->value->getCanPageUpProperty()),
+    0U
+}''' }
 
 [entry]
 lookup = "BorrowEntry"
@@ -18,6 +30,15 @@ object = "std::shared_ptr<LeaderboardEntryResource>"
 [entry.routes]
 cna_leaderboard_entry_destroy = { release = true }
 cna_leaderboard_entry_set_rating = { call = "object->Value()->setRatingProperty(static_cast<long long>(rating))" }
+cna_leaderboard_entry_get_info = { versioned = true, get = '''
+CNA_LeaderboardEntryInfo{
+    sizeof(CNA_LeaderboardEntryInfo),
+    StructureVersion,
+    static_cast<int32_t>(object->Value()->getRankingEXTProperty()),
+    ToCBool(object->Value()->getGamerProperty() != nullptr),
+    {0U, 0U, 0U},
+    static_cast<int64_t>(object->Value()->getRatingProperty())
+}''' }
 
 [to_native_identity]
 lookup = "ToNativeIdentity"

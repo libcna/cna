@@ -292,36 +292,6 @@ CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandl
     });
 }
 
-CNA_Result cna_index_buffer_get_info(
-    const CNA_IndexBufferHandle indexBufferHandle,
-    CNA_IndexBufferInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The IndexBuffer info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_IndexBufferInfo{
-            sizeof(CNA_IndexBufferInfo),
-            StructureVersion,
-            buffer->value->getIndexCountProperty(),
-            static_cast<CNA_IndexElementSize>(
-                buffer->value->getIndexElementSizeProperty()),
-            static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
-            ToCBool(buffer->dynamic),
-            CNA_FALSE,
-            ToCBool(buffer->value->HasRenderer()),
-            0U};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace {
 
 /// Applies one windowed upload, in the element width the transfer selected.

@@ -45,6 +45,34 @@ CNA_Result cna_texture3d_copy_type_name(
     });
 }
 
+CNA_Result cna_texture3d_get_info(
+    const CNA_Handle texture,
+    CNA_Texture3DInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_texture3d_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Texture3DResource> object{};
+        if (const CNA_Result routeResult = GetOwnedTexture3D(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_Texture3DInfo{
+            sizeof(CNA_Texture3DInfo),
+            StructureVersion,
+            static_cast<uint32_t>(object->value->getWidthProperty()),
+            static_cast<uint32_t>(object->value->getHeightProperty()),
+            static_cast<uint32_t>(object->value->getDepthProperty()),
+            static_cast<uint32_t>(object->value->getLevelCountProperty()),
+            static_cast<CNA_SurfaceFormat>(object->value->getFormatProperty()),
+            0U
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_texturecube_get_type_name_byte_count(
     const CNA_Handle texture,
     uint64_t* const out_byte_count)
@@ -78,5 +106,31 @@ CNA_Result cna_texturecube_copy_type_name(
             return routeResult;
         }
         return CopyTypeName(*object.value, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_texturecube_get_info(
+    const CNA_Handle texture,
+    CNA_TextureCubeInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_texturecube_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        TextureCubeResourceView object{};
+        if (const CNA_Result routeResult = GetOwnedTextureCube(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_TextureCubeInfo{
+            sizeof(CNA_TextureCubeInfo),
+            StructureVersion,
+            static_cast<uint32_t>(object.value->getSizeProperty()),
+            static_cast<uint32_t>(object.value->getLevelCountProperty()),
+            static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty()),
+            0U
+        };
+        return CNA_RESULT_SUCCESS;
     });
 }

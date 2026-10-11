@@ -66,6 +66,10 @@ CNA_Bool, static_cast for an enumeration or a number; any other C structure is a
 expression builds it. A group that says ``raw = true`` works on the C structures themselves:
 its struct parameters are passed as declared and a struct result is assigned as built.
 
+A ``value`` or ``get`` whose output is a versioned structure (``struct_size``, ``struct_version``)
+says ``versioned = true``: the output is then refused unless it is a version 1 structure large
+enough for this build, rather than only when it is null.
+
 A route may add ``invalid_if = "<C++ condition>"`` (or a list of them): an argument the route
 refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(volume)"``. The
 condition reads the parameters as the caller passed them, before any conversion, and is checked
@@ -88,6 +92,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import textwrap
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -188,6 +193,16 @@ def null_check(route: str, param: Param, indent: str) -> list[str]:
             f"{indent}}}"]
 
 
+def expand_lines(lines: list[str]) -> list[str]:
+    """Lines holding a multi-line expression, its continuation lines indented under the first."""
+    out = []
+    for line in lines:
+        first, *rest = line.split("\n")
+        indent = first[:len(first) - len(first.lstrip())]
+        out += [first] + [indent + part if part.strip() else "" for part in rest]
+    return out
+
+
 def returns_on_failure(call: str, indent: str) -> list[str]:
     # camelCase locals cannot collide with the headers' snake_case parameter names.
     return [f"{indent}if (const CNA_Result routeResult = {call};",
@@ -204,7 +219,7 @@ class Route:
         if not isinstance(entry, dict) or len([k for k in entry if k in KINDS]) != 1:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
-        unknown = set(entry) - set(KINDS) - {"invalid_if"}
+        unknown = set(entry) - set(KINDS) - {"invalid_if", "versioned"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         refusals = entry.get("invalid_if", [])
@@ -212,12 +227,17 @@ class Route:
         if not isinstance(self.refusals, list) or not all(
                 isinstance(r, str) and r for r in self.refusals):
             raise SpecError(f"{name}: invalid_if takes a C++ condition in quotes, or a list of them")
+        self.versioned = entry.get("versioned", False)
+        if self.versioned is not False and self.versioned is not True:
+            raise SpecError(f"{name}: versioned is either true or left out")
         self.kind = next(k for k in entry if k in KINDS)
         self.expression = entry[self.kind]
         if self.kind == "release" and self.expression is True:
             self.expression = ""
         if not isinstance(self.expression, str):
             raise SpecError(f"{name}: '{self.kind}' takes a C++ expression in quotes")
+        # A long expression may span lines (a TOML ''' string); it keeps its own layout.
+        self.expression = textwrap.dedent(self.expression).strip("\n")
         if name not in types.routes:
             raise SpecError(f"{name}: no public header declares this route; declare it first")
         self.params = types.routes[name]
@@ -226,6 +246,8 @@ class Route:
         self._check_shape()
         if self.refusals and self.kind == "copy" and not self.has_lookup:
             raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if")
+        if self.versioned and self.kind not in ("value", "get"):
+            raise SpecError(f"{name}: only a 'value' or 'get' output can be versioned")
 
     def _fail(self, problem: str) -> SpecError:
         declared = ", ".join(p.declaration() for p in self.params) or "void"
@@ -398,7 +420,12 @@ class Route:
                      + self._locals(i)
                      + [f"{i}return {self.expression};", "    });"])
         lines = [f"    return {DETAIL}CallWithExceptionBarrier([&]() -> CNA_Result {{"]
-        if self.kind in ("value", "get", "size"):
+        if self.versioned:
+            output = self.outputs[0].name
+            lines += returns_on_failure(
+                f'{DETAIL}ValidateVersionedStructure({output}, "{self.name}: {output} is null or '
+                f'not a version 1 structure.")', i)
+        elif self.kind in ("value", "get", "size"):
             lines += null_check(self.name, self.outputs[0], i)
         elif self.kind == "copy":
             lines += returns_on_failure(
@@ -431,7 +458,7 @@ class Route:
             destination, capacity, out_bytes = (p.name for p in self.outputs)
             lines += [f"{i}return {DETAIL}CopyText({self.expression}, {destination}, "
                       f"{capacity}, {out_bytes});"]
-        return lines + ["    });"]
+        return expand_lines(lines + ["    });"])
 
     def unavailable_body(self) -> list[str]:
         """The stub a build without the group's feature compiles instead."""
@@ -554,6 +581,14 @@ def _expect(call: str, wanted: str, route: str, contract: str, gated: bool = Fal
     return f'    failures += {check}({call}, {wanted}, "{route}", {contract});'
 
 
+def _versioned_header(route: Route, version: str) -> list[str]:
+    """Stamps the shared output stand-in of a versioned route with a header of `version`."""
+    output = route.outputs[0]
+    standin = _standin("o", output.type)
+    return [f"    {standin}.struct_size = (uint32_t)sizeof({output.type});",
+            f"    {standin}.struct_version = {version};"]
+
+
 def _takes_handle(route: Route) -> bool:
     return (route.has_lookup and not route.handle.pointer
             and route.types.kind_of(route.handle.type) == "handle")
@@ -633,6 +668,10 @@ def render_contract_test(routes: list[Route]) -> str:
             lines.append(_expect(f"{r.name}({_arguments(r, **{output: 'NULL'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name, f'"a null {output}"',
                                  "feature" in r.group))
+            if r.versioned:
+                lines += _versioned_header(r, "0U")
+                lines.append(_expect(f"{r.name}({_arguments(r)})", "CNA_RESULT_INVALID_ARGUMENT",
+                                     r.name, f'"a {output} of version 0"', "feature" in r.group))
         elif r.kind == "copy":
             destination, capacity, out_bytes = (p.name for p in r.outputs)
             lines.append(_expect(f"{r.name}({_arguments(r, **{destination: 'NULL', capacity: '1U'})})",
@@ -653,6 +692,8 @@ def render_contract_test(routes: list[Route]) -> str:
             cleared = [o for o in r.outputs
                        if r.kind == "result" and r.types.kind_of(o.type) == "handle"]
             lines += [f"    {_standin('o', o.type)} = UINT64_C(0xDEAD);" for o in cleared]
+            if r.versioned:
+                lines += _versioned_header(r, "1U")
             check = [_expect(f"{r.name}({_arguments(r, handle)})",
                              "CNA_RESULT_INVALID_HANDLE", r.name, "what", "feature" in r.group,
                              bool(r.refusals))]

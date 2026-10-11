@@ -128,36 +128,6 @@ CNA_Result cna_achievement_create_ext(
     });
 }
 
-CNA_Result cna_achievement_get_info(
-    const CNA_AchievementHandle achievementHandle,
-    CNA_AchievementInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The Achievement info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_AchievementInfo info = {
-            sizeof(CNA_AchievementInfo),
-            StructureVersion,
-            static_cast<int32_t>(achievement->value->getGamerScoreProperty()),
-            ToCBool(achievement->value->getDisplayBeforeEarnedProperty()),
-            ToCBool(achievement->value->getEarnedOnlineProperty()),
-            ToCBool(achievement->value->getIsEarnedProperty()),
-            0U,
-            static_cast<int64_t>(achievement->value->getEarnedDateTimeProperty().getTicksProperty())
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_achievement_get_picture_size(
     const CNA_AchievementHandle achievementHandle,
     uint64_t* const outBytes)

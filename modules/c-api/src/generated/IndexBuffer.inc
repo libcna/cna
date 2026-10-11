@@ -45,3 +45,32 @@ CNA_Result cna_index_buffer_copy_type_name(
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_index_buffer_get_info(
+    const CNA_IndexBufferHandle index_buffer,
+    CNA_IndexBufferInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_index_buffer_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<IndexBufferResource> object{};
+        if (const CNA_Result routeResult = GetBuffer(index_buffer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_IndexBufferInfo{
+            sizeof(CNA_IndexBufferInfo),
+            StructureVersion,
+            object->value->getIndexCountProperty(),
+            static_cast<CNA_IndexElementSize>(object->value->getIndexElementSizeProperty()),
+            static_cast<CNA_BufferUsage>(object->value->getBufferUsageProperty()),
+            ToCBool(object->dynamic),
+            CNA_FALSE,
+            ToCBool(object->value->HasRenderer()),
+            0U
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}

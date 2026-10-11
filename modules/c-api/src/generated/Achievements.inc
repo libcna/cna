@@ -170,6 +170,34 @@ CNA_Result cna_achievement_destroy(
     });
 }
 
+CNA_Result cna_achievement_get_info(
+    const CNA_AchievementHandle achievement,
+    CNA_AchievementInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_achievement_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AchievementResource> object{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_AchievementInfo{
+            sizeof(CNA_AchievementInfo),
+            StructureVersion,
+            static_cast<int32_t>(object->value->getGamerScoreProperty()),
+            ToCBool(object->value->getDisplayBeforeEarnedProperty()),
+            ToCBool(object->value->getEarnedOnlineProperty()),
+            ToCBool(object->value->getIsEarnedProperty()),
+            0U,
+            static_cast<int64_t>(object->value->getEarnedDateTimeProperty().getTicksProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_achievement_collection_get_count(
     const CNA_AchievementCollectionHandle collection,
     int32_t* const out_count)

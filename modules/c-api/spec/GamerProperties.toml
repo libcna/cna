@@ -20,3 +20,10 @@ cna_property_dictionary_create_ext = { result = "CNA::C::Detail::CreateOwnedProp
 [values]
 [values.routes]
 cna_game_defaults_init = { value = "ToC(GameDefaults::CreateInternal())" }
+
+[signed_in]
+lookup = "BorrowSignedIn"
+object = "SignedInGamer*"
+
+[signed_in.routes]
+cna_signed_in_gamer_get_game_defaults = { get = "ToC(object->getGameDefaultsProperty())", versioned = true }

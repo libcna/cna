@@ -15,6 +15,17 @@ cna_achievement_copy_description = { copy = "object->value->getDescriptionProper
 cna_achievement_get_how_to_earn_size = { size = "object->value->getHowToEarnProperty()" }
 cna_achievement_copy_how_to_earn = { copy = "object->value->getHowToEarnProperty()" }
 cna_achievement_destroy = { release = true }
+cna_achievement_get_info = { versioned = true, get = '''
+CNA_AchievementInfo{
+    sizeof(CNA_AchievementInfo),
+    StructureVersion,
+    static_cast<int32_t>(object->value->getGamerScoreProperty()),
+    ToCBool(object->value->getDisplayBeforeEarnedProperty()),
+    ToCBool(object->value->getEarnedOnlineProperty()),
+    ToCBool(object->value->getIsEarnedProperty()),
+    0U,
+    static_cast<int64_t>(object->value->getEarnedDateTimeProperty().getTicksProperty())
+}''' }
 
 [collection]
 lookup = "BorrowCollection"

@@ -318,37 +318,6 @@ CNA_Result cna_leaderboard_reader_begin_read_from_gamers(
     });
 }
 
-CNA_Result cna_leaderboard_reader_get_info(
-    const CNA_LeaderboardReaderHandle readerHandle,
-    CNA_LeaderboardReaderInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The LeaderboardReader info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_LeaderboardReaderInfo info = {
-            sizeof(CNA_LeaderboardReaderInfo),
-            StructureVersion,
-            static_cast<int32_t>(reader->value->getPageStartProperty()),
-            static_cast<int32_t>(reader->value->getTotalLeaderboardSizeProperty()),
-            static_cast<int32_t>(reader->value->getEntriesProperty().getCountProperty()),
-            ToCBool(reader->value->getIsDisposedProperty()),
-            ToCBool(reader->value->getCanPageDownProperty()),
-            ToCBool(reader->value->getCanPageUpProperty()),
-            0U
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_leaderboard_reader_get_entry_at(
     const CNA_LeaderboardReaderHandle readerHandle,
     const int32_t index,
@@ -404,34 +373,6 @@ CNA_Result cna_leaderboard_reader_begin_page_up(
         if (callback != nullptr) {
             callback(context);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_entry_get_info(
-    const CNA_LeaderboardEntryHandle entryHandle,
-    CNA_LeaderboardEntryInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The LeaderboardEntry info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_LeaderboardEntryInfo info = {
-            sizeof(CNA_LeaderboardEntryInfo),
-            StructureVersion,
-            static_cast<int32_t>(entry->Value()->getRankingEXTProperty()),
-            ToCBool(entry->Value()->getGamerProperty() != nullptr),
-            {0U, 0U, 0U},
-            static_cast<int64_t>(entry->Value()->getRatingProperty())
-        };
-        *outInfo = info;
         return CNA_RESULT_SUCCESS;
     });
 }

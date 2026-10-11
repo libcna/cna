@@ -382,27 +382,6 @@ CNA_Result cna_haptic_capabilities_equals(
     });
 }
 
-CNA_Result cna_haptic_device_get_capabilities(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_HapticCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outCapabilities,
-                "The haptic capabilities output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCapabilities = MapCapabilities(device->GetCapabilitiesEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_device_get_is_effect_supported(
     const CNA_HapticDeviceHandle deviceHandle,
     const CNA_HapticEffect* const effect,

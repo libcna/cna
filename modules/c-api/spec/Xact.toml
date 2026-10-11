@@ -57,6 +57,19 @@ cna_cue_pause = { call = "object->value->Pause()" }
 cna_cue_resume = { call = "object->value->Resume()" }
 cna_cue_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_cue_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_cue_get_info = { versioned = true, get = '''
+CNA_CueInfo{
+    sizeof(CNA_CueInfo),
+    StructureVersion,
+    ToCBool(object->value->getIsCreatedProperty()),
+    ToCBool(object->value->getIsDisposedProperty()),
+    ToCBool(object->value->getIsPausedProperty()),
+    ToCBool(object->value->getIsPlayingProperty()),
+    ToCBool(object->value->getIsPreparedProperty()),
+    ToCBool(object->value->getIsPreparingProperty()),
+    ToCBool(object->value->getIsStoppedProperty()),
+    ToCBool(object->value->getIsStoppingProperty())
+}''' }
 
 [calls]
 [calls.routes]

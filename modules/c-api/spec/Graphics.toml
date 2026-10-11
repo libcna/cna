@@ -16,3 +16,18 @@ object = "std::shared_ptr<SpriteBatchResource>"
 
 [sprite_batch.routes]
 cna_sprite_batch_get_type_name_size = { size = "object->value->GetTypeName()" }
+
+[texture2_d]
+lookup = "GetTexture2D"
+object = "std::shared_ptr<Texture2DResource>"
+
+[texture2_d.routes]
+cna_texture2d_get_info = { versioned = true, get = '''
+CNA_Texture2DInfo{
+    .struct_size = sizeof(CNA_Texture2DInfo),
+    .struct_version = StructureVersion,
+    .width = static_cast<uint32_t>(object->value->getWidthProperty()),
+    .height = static_cast<uint32_t>(object->value->getHeightProperty()),
+    .level_count = static_cast<uint32_t>(object->value->getLevelCountProperty()),
+    .format = MapSurfaceFormat(object->value->getFormatProperty())
+}''' }

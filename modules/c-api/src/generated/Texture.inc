@@ -26,6 +26,31 @@ CNA_Result cna_texture2d_get_type_name_byte_count(
     });
 }
 
+CNA_Result cna_texture2d_get_storage_info(
+    const CNA_Handle texture,
+    CNA_Texture2DStorageInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_texture2d_get_storage_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Texture2DResource> object{};
+        if (const CNA_Result routeResult = GetOwnedTexture2D(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_Texture2DStorageInfo{
+            sizeof(CNA_Texture2DStorageInfo),
+            StructureVersion,
+            ToCBool(object->value->HasRenderer()),
+            object->value->GetCpuPixelsWeak().expired() ? CNA_FALSE : CNA_TRUE,
+            {0U, 0U, 0U, 0U, 0U, 0U}
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_texture2d_create_standalone(
     CNA_Handle* const out_texture)
 {
@@ -109,6 +134,30 @@ CNA_Result cna_texture_validate_get_data_format(
             return CNA::C::Detail::InvalidArgument("cna_texture_validate_get_data_format: invalid because !IsSurfaceFormat(format) || element_size_in_bytes <= 0.");
         }
         Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(format), element_size_in_bytes);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_get_info(
+    const CNA_Handle texture,
+    CNA_TextureInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_texture_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        TextureResourceView object{};
+        if (const CNA_Result routeResult = GetOwnedTexture(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_TextureInfo{
+            sizeof(CNA_TextureInfo),
+            StructureVersion,
+            static_cast<uint32_t>(object.value->getLevelCountProperty()),
+            static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty())
+        };
         return CNA_RESULT_SUCCESS;
     });
 }

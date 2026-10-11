@@ -7,6 +7,16 @@ object = "std::shared_ptr<AvatarDescriptionResource>"
 
 [description.routes]
 cna_avatar_description_destroy = { release = true }
+cna_avatar_description_get_info = { versioned = true, get = '''
+CNA_AvatarDescriptionInfo{
+    sizeof(CNA_AvatarDescriptionInfo),
+    StructureVersion,
+    static_cast<CNA_AvatarBodyType>(object->value->getBodyTypeProperty()),
+    object->value->getHeightProperty(),
+    static_cast<uint64_t>(object->value->getDescriptionProperty().size()),
+    ToCBool(object->value->getIsValidProperty()),
+    {0U, 0U, 0U, 0U, 0U, 0U, 0U}
+}''' }
 
 [animation]
 lookup = "BorrowAnimation"
@@ -16,6 +26,17 @@ object = "std::shared_ptr<AvatarAnimationResource>"
 cna_avatar_animation_destroy = { release = "object->value->Dispose()" }
 cna_avatar_animation_set_current_position = { call = "object->value->setCurrentPositionProperty(System::TimeSpan(position_ticks))" }
 cna_avatar_animation_update = { call = "object->value->Update(System::TimeSpan(elapsed_ticks), loop)" }
+cna_avatar_animation_get_info = { versioned = true, get = '''
+CNA_AvatarAnimationInfo{
+    sizeof(CNA_AvatarAnimationInfo),
+    StructureVersion,
+    static_cast<int32_t>(object->value->getBoneTransformsProperty().getCountProperty()),
+    ToCBool(object->value->getIsDisposedProperty()),
+    {0U, 0U, 0U},
+    static_cast<int64_t>(object->value->getCurrentPositionProperty().getTicksProperty()),
+    static_cast<int64_t>(object->value->getLengthProperty().getTicksProperty())
+}''' }
+cna_avatar_animation_get_expression = { get = "ToC(object->value->getExpressionProperty())", versioned = true }
 
 [renderer]
 lookup = "BorrowRenderer"
@@ -23,6 +44,14 @@ object = "std::shared_ptr<AvatarRendererResource>"
 
 [renderer.routes]
 cna_avatar_renderer_destroy = { release = "object->value->Dispose()" }
+cna_avatar_renderer_get_info = { versioned = true, get = '''
+CNA_AvatarRendererInfo{
+    sizeof(CNA_AvatarRendererInfo),
+    StructureVersion,
+    static_cast<CNA_AvatarRendererState>(object->value->getStateProperty()),
+    ToCBool(object->value->getIsDisposedProperty()),
+    {0U, 0U, 0U}
+}''' }
 
 [calls]
 [calls.routes]

@@ -346,6 +346,35 @@ CNA_Result cna_gamer_profile_destroy(
     });
 }
 
+CNA_Result cna_gamer_profile_get_info(
+    const CNA_GamerProfileHandle profile,
+    CNA_GamerProfileInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_gamer_profile_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<GamerProfileResource> object{};
+        if (const CNA_Result routeResult = BorrowProfile(profile, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_GamerProfileInfo{
+            sizeof(CNA_GamerProfileInfo),
+            StructureVersion,
+            static_cast<int32_t>(object->value->getGamerScoreProperty()),
+            static_cast<CNA_GamerZone>(object->value->getGamerZoneProperty()),
+            static_cast<int32_t>(object->value->getTitlesPlayedProperty()),
+            static_cast<int32_t>(object->value->getTotalAchievementsProperty()),
+            object->value->getReputationProperty(),
+            ToCBool(object->value->getIsDisposedProperty()),
+            {0U, 0U, 0U}
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_gamer_collection_get_count(
     const CNA_GamerCollectionHandle collection,
     int32_t* const out_count)
@@ -432,6 +461,42 @@ CNA_Result cna_friend_gamer_copy_presence(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->getPresenceProperty(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_friend_gamer_get_info(
+    const CNA_GamerHandle gamer,
+    CNA_FriendGamerInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_friend_gamer_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<GamerResource> owner{};
+        FriendGamer* object{};
+        if (const CNA_Result routeResult = BorrowFriend(gamer, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_FriendGamerInfo{
+            sizeof(CNA_FriendGamerInfo),
+            StructureVersion,
+            ToCBool(object->getFriendRequestReceivedFromProperty()),
+            ToCBool(object->getFriendRequestSentToProperty()),
+            ToCBool(object->getHasVoiceProperty()),
+            ToCBool(object->getInviteAcceptedProperty()),
+            ToCBool(object->getInviteReceivedFromProperty()),
+            ToCBool(object->getInviteRejectedProperty()),
+            ToCBool(object->getInviteSentToProperty()),
+            ToCBool(object->getIsAwayProperty()),
+            ToCBool(object->getIsBusyProperty()),
+            ToCBool(object->getIsJoinableProperty()),
+            ToCBool(object->getIsOnlineProperty()),
+            ToCBool(object->getIsPlayingProperty()),
+            {0U, 0U, 0U, 0U}
+        };
+        return CNA_RESULT_SUCCESS;
     });
 }
 

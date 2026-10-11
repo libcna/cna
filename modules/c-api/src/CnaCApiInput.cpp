@@ -3245,28 +3245,6 @@ CNA_Result cna_touch_panel_set_enabled_gestures(
     });
 }
 
-CNA_Result cna_touch_panel_read_gesture(
-    const CNA_Handle gameHandle,
-    CNA_GestureSample* const outSample)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outSample,
-                "The gesture-sample output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // An empty queue throws canonically; the firewall reports that as an invalid state rather
-        // than inventing a default sample, so "no gesture" stays distinguishable from a real one.
-        *outSample = MapGestureSample(TouchPanel::ReadGesture());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_panel_enqueue_gesture_ext(
     const CNA_Handle gameHandle,
     const CNA_GestureSample* const sample)

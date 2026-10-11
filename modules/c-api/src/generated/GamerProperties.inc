@@ -95,3 +95,22 @@ CNA_Result cna_game_defaults_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_signed_in_gamer_get_game_defaults(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_GameDefaults* const out_defaults)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_defaults, "cna_signed_in_gamer_get_game_defaults: out_defaults is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        SignedInGamer* object{};
+        if (const CNA_Result routeResult = BorrowSignedIn(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_defaults = ToC(object->getGameDefaultsProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}

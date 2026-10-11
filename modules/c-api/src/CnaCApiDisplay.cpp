@@ -278,42 +278,6 @@ CNA_Result cna_display_mode_equals(
     });
 }
 
-CNA_Result cna_graphics_adapter_get_info(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    CNA_GraphicsAdapterInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The graphics-adapter output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_GraphicsAdapterInfo{
-            .struct_size = sizeof(CNA_GraphicsAdapterInfo),
-            .struct_version = StructureVersion,
-            .adapter_index = adapterIndex,
-            .is_default_adapter = ToCBool(adapter->getIsDefaultAdapterProperty()),
-            .is_wide_screen = ToCBool(adapter->getIsWideScreenProperty()),
-            .use_null_device = ToCBool(adapter->getUseNullDeviceProperty()),
-            .use_reference_device = ToCBool(adapter->getUseReferenceDeviceProperty()),
-            .vendor_id = adapter->getVendorIdProperty(),
-            .device_id = adapter->getDeviceIdProperty(),
-            .revision = adapter->getRevisionProperty(),
-            .subsystem_id = adapter->getSubSystemIdProperty(),
-            .description_byte_length = adapter->getDescriptionProperty().size(),
-            .device_name_byte_length = adapter->getDeviceNameProperty().size()};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_adapter_get_current_display_mode(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,

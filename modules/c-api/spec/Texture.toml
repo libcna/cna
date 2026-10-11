@@ -7,6 +7,14 @@ object = "std::shared_ptr<Texture2DResource>"
 
 [owned_texture2_d.routes]
 cna_texture2d_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+cna_texture2d_get_storage_info = { versioned = true, get = '''
+CNA_Texture2DStorageInfo{
+    sizeof(CNA_Texture2DStorageInfo),
+    StructureVersion,
+    ToCBool(object->value->HasRenderer()),
+    object->value->GetCpuPixelsWeak().expired() ? CNA_FALSE : CNA_TRUE,
+    {0U, 0U, 0U, 0U, 0U, 0U}
+}''' }
 
 [calls]
 [calls.routes]
@@ -19,3 +27,16 @@ cna_texture_get_block_size_squared = { value = "Texture::GetBlockSizeSquaredEXT(
 cna_texture_get_format_size = { value = "Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_texture_get_pixel_store_alignment = { value = "Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_texture_validate_get_data_format = { call = "Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(format), element_size_in_bytes)", invalid_if = "!IsSurfaceFormat(format) || element_size_in_bytes <= 0" }
+
+[owned_texture]
+lookup = "GetOwnedTexture"
+object = "TextureResourceView"
+
+[owned_texture.routes]
+cna_texture_get_info = { versioned = true, get = '''
+CNA_TextureInfo{
+    sizeof(CNA_TextureInfo),
+    StructureVersion,
+    static_cast<uint32_t>(object.value->getLevelCountProperty()),
+    static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty())
+}''' }

@@ -327,6 +327,25 @@ CNA_Result cna_haptic_device_copy_name(
     });
 }
 
+CNA_Result cna_haptic_device_get_capabilities(
+    const CNA_HapticDeviceHandle device,
+    CNA_HapticCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_capabilities, "cna_haptic_device_get_capabilities: out_capabilities is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<HapticDevice> object{};
+        if (const CNA_Result routeResult = BorrowDevice(device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_capabilities = MapCapabilities(object->GetCapabilitiesEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_haptics_get_id_at(
     const CNA_Handle game,
     const uint32_t index,

@@ -477,6 +477,36 @@ CNA_Result cna_cue_copy_type_name(
     });
 }
 
+CNA_Result cna_cue_get_info(
+    const CNA_Handle cue,
+    CNA_CueInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_cue_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CueResource> object{};
+        if (const CNA_Result routeResult = GetCue(cue, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_CueInfo{
+            sizeof(CNA_CueInfo),
+            StructureVersion,
+            ToCBool(object->value->getIsCreatedProperty()),
+            ToCBool(object->value->getIsDisposedProperty()),
+            ToCBool(object->value->getIsPausedProperty()),
+            ToCBool(object->value->getIsPlayingProperty()),
+            ToCBool(object->value->getIsPreparedProperty()),
+            ToCBool(object->value->getIsPreparingProperty()),
+            ToCBool(object->value->getIsStoppedProperty()),
+            ToCBool(object->value->getIsStoppingProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_audio_engine_create_with_renderer(
     const CNA_Handle game,
     const CNA_StringView settings_file,

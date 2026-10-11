@@ -22,6 +22,33 @@ CNA_Result cna_avatar_description_destroy(
     });
 }
 
+CNA_Result cna_avatar_description_get_info(
+    const CNA_AvatarDescriptionHandle description,
+    CNA_AvatarDescriptionInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_avatar_description_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarDescriptionResource> object{};
+        if (const CNA_Result routeResult = BorrowDescription(description, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_AvatarDescriptionInfo{
+            sizeof(CNA_AvatarDescriptionInfo),
+            StructureVersion,
+            static_cast<CNA_AvatarBodyType>(object->value->getBodyTypeProperty()),
+            object->value->getHeightProperty(),
+            static_cast<uint64_t>(object->value->getDescriptionProperty().size()),
+            ToCBool(object->value->getIsValidProperty()),
+            {0U, 0U, 0U, 0U, 0U, 0U, 0U}
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_avatar_animation_destroy(
     const CNA_AvatarAnimationHandle animation)
 {
@@ -72,6 +99,52 @@ CNA_Result cna_avatar_animation_update(
     });
 }
 
+CNA_Result cna_avatar_animation_get_info(
+    const CNA_AvatarAnimationHandle animation,
+    CNA_AvatarAnimationInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_avatar_animation_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarAnimationResource> object{};
+        if (const CNA_Result routeResult = BorrowAnimation(animation, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_AvatarAnimationInfo{
+            sizeof(CNA_AvatarAnimationInfo),
+            StructureVersion,
+            static_cast<int32_t>(object->value->getBoneTransformsProperty().getCountProperty()),
+            ToCBool(object->value->getIsDisposedProperty()),
+            {0U, 0U, 0U},
+            static_cast<int64_t>(object->value->getCurrentPositionProperty().getTicksProperty()),
+            static_cast<int64_t>(object->value->getLengthProperty().getTicksProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_avatar_animation_get_expression(
+    const CNA_AvatarAnimationHandle animation,
+    CNA_AvatarExpression* const out_expression)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_expression, "cna_avatar_animation_get_expression: out_expression is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarAnimationResource> object{};
+        if (const CNA_Result routeResult = BorrowAnimation(animation, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_expression = ToC(object->value->getExpressionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_avatar_renderer_destroy(
     const CNA_AvatarRendererHandle renderer)
 {
@@ -83,6 +156,31 @@ CNA_Result cna_avatar_renderer_destroy(
         }
         object->value->Dispose();
         return CNA::C::Detail::ReleaseHandle(renderer);
+    });
+}
+
+CNA_Result cna_avatar_renderer_get_info(
+    const CNA_AvatarRendererHandle renderer,
+    CNA_AvatarRendererInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_avatar_renderer_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarRendererResource> object{};
+        if (const CNA_Result routeResult = BorrowRenderer(renderer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_AvatarRendererInfo{
+            sizeof(CNA_AvatarRendererInfo),
+            StructureVersion,
+            static_cast<CNA_AvatarRendererState>(object->value->getStateProperty()),
+            ToCBool(object->value->getIsDisposedProperty()),
+            {0U, 0U, 0U}
+        };
+        return CNA_RESULT_SUCCESS;
     });
 }
 

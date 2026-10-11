@@ -246,6 +246,32 @@ CNA_Result cna_effect_annotation_get_value_string_byte_count(
     });
 }
 
+CNA_Result cna_effect_annotation_get_info(
+    const CNA_EffectAnnotationHandle annotation,
+    CNA_EffectAnnotationInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_effect_annotation_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AnnotationResource> object{};
+        if (const CNA_Result routeResult = GetAnnotation(annotation, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_EffectAnnotationInfo{
+            sizeof(CNA_EffectAnnotationInfo),
+            StructureVersion,
+            object->value->getRowCountProperty(),
+            object->value->getColumnCountProperty(),
+            static_cast<CNA_EffectParameterClass>(object->value->getParameterClassProperty()),
+            static_cast<CNA_EffectParameterType>(object->value->getParameterTypeProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_effect_annotation_collection_get_count(
     const CNA_EffectAnnotationCollectionHandle collection,
     uint64_t* const out_count)
@@ -372,6 +398,32 @@ CNA_Result cna_effect_parameter_get_value_string_byte_count(
             return routeResult;
         }
         return CNA::C::Detail::ReportTextSize(object->value->GetValueString(), out_byte_count);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_info(
+    const CNA_EffectParameterHandle parameter,
+    CNA_EffectParameterInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_effect_parameter_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ParameterResource> object{};
+        if (const CNA_Result routeResult = GetParameter(parameter, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_EffectParameterInfo{
+            sizeof(CNA_EffectParameterInfo),
+            StructureVersion,
+            object->value->getRowCountProperty(),
+            object->value->getColumnCountProperty(),
+            static_cast<CNA_EffectParameterClass>(object->value->getParameterClassProperty()),
+            static_cast<CNA_EffectParameterType>(object->value->getParameterTypeProperty())
+        };
+        return CNA_RESULT_SUCCESS;
     });
 }
 

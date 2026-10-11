@@ -803,37 +803,6 @@ CNA_Result cna_gamer_unsubscribe_ext(const CNA_Handle registration)
     });
 }
 
-CNA_Result cna_gamer_profile_get_info(
-    const CNA_GamerProfileHandle profileHandle,
-    CNA_GamerProfileInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The GamerProfile info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_GamerProfileInfo info = {
-            sizeof(CNA_GamerProfileInfo),
-            StructureVersion,
-            static_cast<int32_t>(profile->value->getGamerScoreProperty()),
-            static_cast<CNA_GamerZone>(profile->value->getGamerZoneProperty()),
-            static_cast<int32_t>(profile->value->getTitlesPlayedProperty()),
-            static_cast<int32_t>(profile->value->getTotalAchievementsProperty()),
-            profile->value->getReputationProperty(),
-            ToCBool(profile->value->getIsDisposedProperty()),
-            {0U, 0U, 0U}
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_profile_get_picture_size(
     const CNA_GamerProfileHandle profileHandle,
     CNA_Bool* const outHasPicture,
@@ -967,44 +936,6 @@ CNA_Result cna_friend_collection_create_ext(
         resource->friends =
             std::make_shared<FriendCollection>(FriendCollection::CreateInternal(nativeFriends));
         return CreateHandle(ObjectKind::GamerCollection, resource, outCollection);
-    });
-}
-
-CNA_Result cna_friend_gamer_get_info(
-    const CNA_GamerHandle gamerHandle,
-    CNA_FriendGamerInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The FriendGamer info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<GamerResource> gamer;
-        FriendGamer* friendGamer = nullptr;
-        if (const CNA_Result result = BorrowFriend(gamerHandle, &gamer, &friendGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_FriendGamerInfo info = {
-            sizeof(CNA_FriendGamerInfo),
-            StructureVersion,
-            ToCBool(friendGamer->getFriendRequestReceivedFromProperty()),
-            ToCBool(friendGamer->getFriendRequestSentToProperty()),
-            ToCBool(friendGamer->getHasVoiceProperty()),
-            ToCBool(friendGamer->getInviteAcceptedProperty()),
-            ToCBool(friendGamer->getInviteReceivedFromProperty()),
-            ToCBool(friendGamer->getInviteRejectedProperty()),
-            ToCBool(friendGamer->getInviteSentToProperty()),
-            ToCBool(friendGamer->getIsAwayProperty()),
-            ToCBool(friendGamer->getIsBusyProperty()),
-            ToCBool(friendGamer->getIsJoinableProperty()),
-            ToCBool(friendGamer->getIsOnlineProperty()),
-            ToCBool(friendGamer->getIsPlayingProperty()),
-            {0U, 0U, 0U, 0U}
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
     });
 }
 

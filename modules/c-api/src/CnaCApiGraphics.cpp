@@ -1000,34 +1000,6 @@ CNA_Result cna_texture2d_create(
     });
 }
 
-CNA_Result cna_texture2d_get_info(
-    const CNA_Handle textureHandle,
-    CNA_Texture2DInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The Texture2D info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Texture2DInfo info = {
-            .struct_size = sizeof(CNA_Texture2DInfo),
-            .struct_version = StructureVersion,
-            .width = static_cast<uint32_t>(texture->value->getWidthProperty()),
-            .height = static_cast<uint32_t>(texture->value->getHeightProperty()),
-            .level_count = static_cast<uint32_t>(texture->value->getLevelCountProperty()),
-            .format = MapSurfaceFormat(texture->value->getFormatProperty())
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture2d_set_data_rgba8(
     const CNA_Handle textureHandle,
     const CNA_Color* const pixels,

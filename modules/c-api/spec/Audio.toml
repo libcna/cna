@@ -28,6 +28,18 @@ cna_sound_effect_instance_stop = { call = "object->value->Stop(immediate)" }
 cna_sound_effect_instance_set_volume = { call = "object->value->setVolumeProperty(volume)", invalid_if = "!std::isfinite(volume)" }
 cna_sound_effect_instance_set_pitch = { call = "object->value->setPitchProperty(pitch)", invalid_if = "!std::isfinite(pitch)" }
 cna_sound_effect_instance_set_pan = { call = "object->value->setPanProperty(pan)", invalid_if = "!std::isfinite(pan) || pan < -1.0F || pan > 1.0F" }
+cna_sound_effect_instance_get_info = { versioned = true, get = '''
+CNA_SoundEffectInstanceInfo{
+    sizeof(CNA_SoundEffectInstanceInfo),
+    StructureVersion,
+    MapSoundState(object->value->getStateProperty()),
+    ToCBool(object->value->getIsLoopedProperty()),
+    {0U, 0U, 0U},
+    object->value->getVolumeProperty(),
+    object->value->getPitchProperty(),
+    object->value->getPanProperty(),
+    0U
+}''' }
 
 [game]
 lookup = "ValidateActiveGameHandle"

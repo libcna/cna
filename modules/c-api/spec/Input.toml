@@ -71,6 +71,9 @@ cna_touch_panel_reset_for_tests_ext = { call = "TouchPanel::ResetForTests()" }
 cna_keyboard_get_mod_state_ext = { get = "MapKeyModifiers(Keyboard::GetModStateEXT())" }
 cna_touch_panel_set_display_orientation = { call = "TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation))", invalid_if = "(orientation & ~DisplayOrientationAll) != 0U" }
 cna_touch_panel_raise_touch_event_ext = { call = "TouchPanel::INTERNAL_onTouchEvent(finger_id, static_cast<TouchLocationState>(state), x, y, dx, dy)", invalid_if = "!IsValidTouchLocationState(state)" }
+# An empty queue throws canonically; the firewall reports that as an invalid state rather
+# than inventing a default sample, so "no gesture" stays distinguishable from a real one.
+cna_touch_panel_read_gesture = { get = "MapGestureSample(TouchPanel::ReadGesture())", versioned = true }
 
 [cursor]
 lookup = "GetCursorResource"

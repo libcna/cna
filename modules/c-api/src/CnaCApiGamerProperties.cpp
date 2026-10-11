@@ -189,26 +189,6 @@ CNA_Result CreateOwnedPropertyDictionary(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_signed_in_gamer_get_game_defaults(
-    const CNA_SignedInGamerHandle gamerHandle,
-    CNA_GameDefaults* const outDefaults)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outDefaults, "The GameDefaults output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDefaults = ToC(gamer->getGameDefaultsProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_property_dictionary_contains_key(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const CNA_StringView key,

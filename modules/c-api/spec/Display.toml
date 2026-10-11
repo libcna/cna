@@ -31,3 +31,19 @@ arguments = 2
 
 [adapter.routes]
 cna_graphics_adapter_is_profile_supported = { get = "object->IsProfileSupported(static_cast<GraphicsProfile>(profile))", invalid_if = "!IsGraphicsProfile(profile)" }
+cna_graphics_adapter_get_info = { versioned = true, get = '''
+CNA_GraphicsAdapterInfo{
+    .struct_size = sizeof(CNA_GraphicsAdapterInfo),
+    .struct_version = StructureVersion,
+    .adapter_index = adapter_index,
+    .is_default_adapter = ToCBool(object->getIsDefaultAdapterProperty()),
+    .is_wide_screen = ToCBool(object->getIsWideScreenProperty()),
+    .use_null_device = ToCBool(object->getUseNullDeviceProperty()),
+    .use_reference_device = ToCBool(object->getUseReferenceDeviceProperty()),
+    .vendor_id = object->getVendorIdProperty(),
+    .device_id = object->getDeviceIdProperty(),
+    .revision = object->getRevisionProperty(),
+    .subsystem_id = object->getSubSystemIdProperty(),
+    .description_byte_length = object->getDescriptionProperty().size(),
+    .device_name_byte_length = object->getDeviceNameProperty().size()
+}''' }

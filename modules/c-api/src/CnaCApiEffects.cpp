@@ -1140,34 +1140,6 @@ CNA_Result cna_effect_annotation_destroy(const CNA_EffectAnnotationHandle annota
     });
 }
 
-CNA_Result cna_effect_annotation_get_info(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    CNA_EffectAnnotationInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The EffectAnnotation info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_EffectAnnotationInfo{
-            sizeof(CNA_EffectAnnotationInfo),
-            StructureVersion,
-            annotation->value->getRowCountProperty(),
-            annotation->value->getColumnCountProperty(),
-            static_cast<CNA_EffectParameterClass>(
-                annotation->value->getParameterClassProperty()),
-            static_cast<CNA_EffectParameterType>(
-                annotation->value->getParameterTypeProperty())};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_create(
     CNA_EffectAnnotationCollectionHandle* const outCollection)
 {
@@ -1295,34 +1267,6 @@ CNA_Result cna_effect_parameter_destroy(const CNA_EffectParameterHandle paramete
             result,
             ErrorCategoryForResult(result),
             "The owned EffectParameter handle could not be released.");
-    });
-}
-
-CNA_Result cna_effect_parameter_get_info(
-    const CNA_EffectParameterHandle parameterHandle,
-    CNA_EffectParameterInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The EffectParameter info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_EffectParameterInfo{
-            sizeof(CNA_EffectParameterInfo),
-            StructureVersion,
-            parameter->value->getRowCountProperty(),
-            parameter->value->getColumnCountProperty(),
-            static_cast<CNA_EffectParameterClass>(
-                parameter->value->getParameterClassProperty()),
-            static_cast<CNA_EffectParameterType>(
-                parameter->value->getParameterTypeProperty())};
-        return CNA_RESULT_SUCCESS;
     });
 }
 

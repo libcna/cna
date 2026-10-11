@@ -8,3 +8,15 @@ object = "std::shared_ptr<IndexBufferResource>"
 [buffer.routes]
 cna_index_buffer_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
 cna_index_buffer_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_index_buffer_get_info = { versioned = true, get = '''
+CNA_IndexBufferInfo{
+    sizeof(CNA_IndexBufferInfo),
+    StructureVersion,
+    object->value->getIndexCountProperty(),
+    static_cast<CNA_IndexElementSize>(object->value->getIndexElementSizeProperty()),
+    static_cast<CNA_BufferUsage>(object->value->getBufferUsageProperty()),
+    ToCBool(object->dynamic),
+    CNA_FALSE,
+    ToCBool(object->value->HasRenderer()),
+    0U
+}''' }

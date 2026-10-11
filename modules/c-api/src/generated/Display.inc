@@ -141,3 +141,38 @@ CNA_Result cna_graphics_adapter_is_profile_supported(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_graphics_adapter_get_info(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    CNA_GraphicsAdapterInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_graphics_adapter_get_info: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<void> owner{};
+        GraphicsAdapter* object{};
+        if (const CNA_Result routeResult = GetAdapter(graphics_device, adapter_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_GraphicsAdapterInfo{
+            .struct_size = sizeof(CNA_GraphicsAdapterInfo),
+            .struct_version = StructureVersion,
+            .adapter_index = adapter_index,
+            .is_default_adapter = ToCBool(object->getIsDefaultAdapterProperty()),
+            .is_wide_screen = ToCBool(object->getIsWideScreenProperty()),
+            .use_null_device = ToCBool(object->getUseNullDeviceProperty()),
+            .use_reference_device = ToCBool(object->getUseReferenceDeviceProperty()),
+            .vendor_id = object->getVendorIdProperty(),
+            .device_id = object->getDeviceIdProperty(),
+            .revision = object->getRevisionProperty(),
+            .subsystem_id = object->getSubSystemIdProperty(),
+            .description_byte_length = object->getDescriptionProperty().size(),
+            .device_name_byte_length = object->getDeviceNameProperty().size()
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}

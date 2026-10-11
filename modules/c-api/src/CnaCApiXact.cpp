@@ -806,36 +806,6 @@ CNA_Result cna_cue_destroy(const CNA_Handle cueHandle)
     });
 }
 
-CNA_Result cna_cue_get_info(const CNA_Handle cueHandle, CNA_CueInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The Cue info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_CueInfo info = {
-            sizeof(CNA_CueInfo),
-            StructureVersion,
-            ToCBool(cue->value->getIsCreatedProperty()),
-            ToCBool(cue->value->getIsDisposedProperty()),
-            ToCBool(cue->value->getIsPausedProperty()),
-            ToCBool(cue->value->getIsPlayingProperty()),
-            ToCBool(cue->value->getIsPreparedProperty()),
-            ToCBool(cue->value->getIsPreparingProperty()),
-            ToCBool(cue->value->getIsStoppedProperty()),
-            ToCBool(cue->value->getIsStoppingProperty())
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cue_apply_3d(
     const CNA_Handle cueHandle,
     const CNA_AudioListener* const listener,

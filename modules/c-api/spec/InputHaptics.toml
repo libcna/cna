@@ -29,6 +29,7 @@ cna_haptic_device_set_autocenter = { get = "object->SetAutocenterEXT(autocenter)
 cna_haptic_device_dispose = { call = "object->Dispose()" }
 cna_haptic_device_destroy = { release = true }
 cna_haptic_device_copy_name = { copy = "object->GetNameEXT()" }
+cna_haptic_device_get_capabilities = { get = "MapCapabilities(object->GetCapabilitiesEXT())", versioned = true }
 
 [enumerated_haptic]
 lookup = "BorrowEnumeratedHaptic"

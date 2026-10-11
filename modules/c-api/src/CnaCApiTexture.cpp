@@ -639,30 +639,6 @@ void DispatchGetData(
 
 } // namespace
 
-CNA_Result cna_texture_get_info(
-    const CNA_Handle textureHandle,
-    CNA_TextureInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The texture info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureResourceView texture;
-        if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_TextureInfo{
-            sizeof(CNA_TextureInfo),
-            StructureVersion,
-            static_cast<uint32_t>(texture.value->getLevelCountProperty()),
-            static_cast<CNA_SurfaceFormat>(texture.value->getFormatProperty())};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture_validate_format(const CNA_SurfaceFormat format)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -823,31 +799,6 @@ CNA_Result cna_texture2d_set_data_rgba8_bytes(
                 "The raw RGBA8 Texture2D upload must exactly match its dimensions.");
         }
         texture->value->SetDataRGBA(rgbaBytes, static_cast<int>(pixelCount));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texture2d_get_storage_info(
-    const CNA_Handle textureHandle,
-    CNA_Texture2DStorageInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The Texture2D storage-info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = CNA_Texture2DStorageInfo{
-            sizeof(CNA_Texture2DStorageInfo),
-            StructureVersion,
-            ToCBool(texture->value->HasRenderer()),
-            texture->value->GetCpuPixelsWeak().expired() ? CNA_FALSE : CNA_TRUE,
-            {0U, 0U, 0U, 0U, 0U, 0U}};
         return CNA_RESULT_SUCCESS;
     });
 }

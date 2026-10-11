@@ -353,37 +353,6 @@ CNA_Result cna_sound_effect_destroy(const CNA_Handle soundEffectHandle)
     });
 }
 
-CNA_Result cna_sound_effect_instance_get_info(
-    const CNA_Handle instanceHandle,
-    CNA_SoundEffectInstanceInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The SoundEffectInstance info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_SoundEffectInstanceInfo info = {
-            sizeof(CNA_SoundEffectInstanceInfo),
-            StructureVersion,
-            MapSoundState(instance->value->getStateProperty()),
-            ToCBool(instance->value->getIsLoopedProperty()),
-            {0U, 0U, 0U},
-            instance->value->getVolumeProperty(),
-            instance->value->getPitchProperty(),
-            instance->value->getPanProperty(),
-            0U
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_effect_instance_set_is_looped(
     const CNA_Handle instanceHandle,
     const CNA_Bool isLooped)
