@@ -745,18 +745,6 @@ CNA_Result cna_joystick_state_equals(
     });
 }
 
-CNA_Result cna_joystick_state_destroy(const CNA_JoystickStateHandle state)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickStateEXT> snapshot;
-        if (const CNA_Result result = BorrowState(state, &snapshot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(state);
-    });
-}
-
 CNA_Result cna_joysticks_subscribe_connected_ext(
     const CNA_JoystickHotplugCallback callback,
     void* const context,

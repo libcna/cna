@@ -1,0 +1,10 @@
+# CoreExt routes, generated into src/generated/CoreExt.inc,
+# which src/CnaCApiCoreExt.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[fallback_record]
+lookup = "BorrowFallbackRecord"
+object = "const CNA::GraphicsRendererFallbackRecord*"
+
+[fallback_record.routes]
+cna_graphics_renderer_fallback_get_message_size_ext = { size = "object->message" }
+cna_graphics_renderer_fallback_copy_message_ext = { copy = "object->message" }

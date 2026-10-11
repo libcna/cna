@@ -26,7 +26,6 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -126,18 +125,6 @@ CNA_Result cna_achievement_create_ext(
                 isEarned != CNA_FALSE,
                 System::DateTime(earnedDateTimeTicks)),
             outAchievement);
-    });
-}
-
-CNA_Result cna_achievement_destroy(const CNA_AchievementHandle achievementHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(achievementHandle);
     });
 }
 
@@ -252,20 +239,6 @@ CNA_Result cna_achievement_collection_create_ext(
         return PublishCollection(
             AchievementCollection::CreateInternal(std::move(values)),
             outCollection);
-    });
-}
-
-CNA_Result cna_achievement_collection_destroy(
-    const CNA_AchievementCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Dispose();
-        return ReleaseHandle(collectionHandle);
     });
 }
 

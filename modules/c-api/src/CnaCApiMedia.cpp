@@ -28,7 +28,6 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReadText;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Media::MediaSource;
@@ -445,18 +444,6 @@ CNA_Result cna_song_copy_handle_text_ext(
     });
 }
 
-CNA_Result cna_song_destroy(const CNA_SongHandle song)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(song);
-    });
-}
-
 CNA_Result cna_song_equals(
     const CNA_SongHandle left,
     const CNA_SongHandle right,
@@ -571,18 +558,6 @@ CNA_Result cna_song_collection_get_at(
         borrowed->library = resource->library;
         borrowed->value = element;
         return PublishSong(std::move(borrowed), outSong);
-    });
-}
-
-CNA_Result cna_song_collection_destroy(const CNA_SongCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(collection);
     });
 }
 

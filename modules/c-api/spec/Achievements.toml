@@ -14,6 +14,7 @@ cna_achievement_get_description_size = { size = "object->value->getDescriptionPr
 cna_achievement_copy_description = { copy = "object->value->getDescriptionProperty()" }
 cna_achievement_get_how_to_earn_size = { size = "object->value->getHowToEarnProperty()" }
 cna_achievement_copy_how_to_earn = { copy = "object->value->getHowToEarnProperty()" }
+cna_achievement_destroy = { release = true }
 
 [collection]
 lookup = "BorrowCollection"
@@ -25,3 +26,4 @@ cna_achievement_collection_get_is_disposed = { get = "object->value->getIsDispos
 cna_achievement_collection_get_is_read_only = { get = "object->value->getIsReadOnlyProperty()" }
 cna_achievement_collection_remove_at = { call = "object->value->RemoveAt(static_cast<int>(index))" }
 cna_achievement_collection_clear = { call = "object->value->Clear()" }
+cna_achievement_collection_destroy = { release = "object->value->Dispose()" }

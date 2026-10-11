@@ -558,18 +558,6 @@ CNA_Result cna_media_library_create_from_source(
     });
 }
 
-CNA_Result cna_media_library_destroy(const CNA_MediaLibraryHandle library)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(library);
-    });
-}
-
 CNA_Result cna_media_library_get_media_source_type(
     const CNA_MediaLibraryHandle library,
     CNA_MediaSourceType* const outType)

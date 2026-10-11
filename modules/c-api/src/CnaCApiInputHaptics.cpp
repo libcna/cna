@@ -31,7 +31,6 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateVersionedStructure;
 
@@ -701,18 +700,6 @@ CNA_Result cna_haptic_device_resume(
             &HapticDevice::ResumeEXT,
             outApplied,
             "The resume output is null.");
-    });
-}
-
-CNA_Result cna_haptic_device_destroy(const CNA_HapticDeviceHandle deviceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(deviceHandle);
     });
 }
 

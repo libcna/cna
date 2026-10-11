@@ -23,7 +23,6 @@ namespace {
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -339,40 +338,6 @@ CNA_Result cna_index_buffer_get_info(
     });
 }
 
-CNA_Result cna_index_buffer_get_type_name_byte_count(
-    const CNA_IndexBufferHandle indexBufferHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The IndexBuffer type-name byte-count output is null.");
-        }
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(buffer->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_index_buffer_copy_type_name(
-    const CNA_IndexBufferHandle indexBufferHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(buffer->value->GetTypeName(), destination, capacity, outByteCount);
-    });
-}
-
 namespace {
 
 /// Applies one windowed upload, in the element width the transfer selected.
@@ -610,3 +575,6 @@ CNA_Result cna_index_buffer_unsubscribe_content_lost(
             "The ContentLost registration handle could not be released.");
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/IndexBuffer.toml.
+#include "generated/IndexBuffer.inc"

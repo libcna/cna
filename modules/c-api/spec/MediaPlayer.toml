@@ -20,6 +20,7 @@ cna_media_queue_set_active_song_index = { call = "object->value->setActiveSongIn
 cna_media_queue_clear = { call = "object->value->Clear()" }
 cna_media_queue_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_media_queue_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_media_queue_destroy = { release = true }
 
 [active_game_handle]
 lookup = "ValidateActiveGameHandle"

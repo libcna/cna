@@ -228,6 +228,19 @@ CNA_Result cna_video_copy_type_name(
     });
 }
 
+CNA_Result cna_video_destroy(
+    const CNA_VideoHandle video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VideoResource> object{};
+        if (const CNA_Result routeResult = BorrowVideo(video, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(video);
+    });
+}
+
 CNA_Result cna_video_player_get_is_disposed(
     const CNA_VideoPlayerHandle player,
     CNA_Bool* const out_disposed)
@@ -507,5 +520,18 @@ CNA_Result cna_video_player_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_video_player_destroy(
+    const CNA_VideoPlayerHandle player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VideoPlayerResource> object{};
+        if (const CNA_Result routeResult = BorrowPlayerForCall(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(player);
     });
 }

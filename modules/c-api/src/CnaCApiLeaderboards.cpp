@@ -28,7 +28,6 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -365,19 +364,6 @@ CNA_Result cna_leaderboard_reader_begin_read_from_gamers(
     });
 }
 
-CNA_Result cna_leaderboard_reader_destroy(const CNA_LeaderboardReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->Dispose();
-        return ReleaseHandle(readerHandle);
-    });
-}
-
 CNA_Result cna_leaderboard_reader_get_info(
     const CNA_LeaderboardReaderHandle readerHandle,
     CNA_LeaderboardReaderInfo* const outInfo)
@@ -447,32 +433,6 @@ CNA_Result cna_leaderboard_reader_get_entry_at(
     });
 }
 
-CNA_Result cna_leaderboard_reader_page_down(const CNA_LeaderboardReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->PageDown();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_reader_page_up(const CNA_LeaderboardReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->PageUp();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_leaderboard_reader_begin_page_down(
     const CNA_LeaderboardReaderHandle readerHandle,
     const CNA_GamerAsyncCallback callback,
@@ -532,18 +492,6 @@ CNA_Result cna_leaderboard_entry_create_ext(
     });
 }
 
-CNA_Result cna_leaderboard_entry_destroy(const CNA_LeaderboardEntryHandle entryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(entryHandle);
-    });
-}
-
 CNA_Result cna_leaderboard_entry_get_info(
     const CNA_LeaderboardEntryHandle entryHandle,
     CNA_LeaderboardEntryInfo* const outInfo)
@@ -567,21 +515,6 @@ CNA_Result cna_leaderboard_entry_get_info(
             static_cast<int64_t>(entry->Value()->getRatingProperty())
         };
         *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_entry_set_rating(
-    const CNA_LeaderboardEntryHandle entryHandle,
-    const int64_t rating)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        entry->Value()->setRatingProperty(static_cast<long long>(rating));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -684,3 +617,6 @@ CNA_Result cna_leaderboard_entry_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Leaderboards.toml.
+#include "generated/Leaderboards.inc"

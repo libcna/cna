@@ -13,3 +13,11 @@ object = "std::shared_ptr<CurveKeyCollection>"
 [collection.routes]
 cna_curve_key_collection_clear = { call = "object->Clear()" }
 cna_curve_key_collection_remove_at = { call = "object->RemoveAt(index)" }
+cna_curve_key_collection_destroy = { release = true }
+
+[curve]
+lookup = "GetCurve"
+object = "std::shared_ptr<Curve>"
+
+[curve.routes]
+cna_curve_destroy = { release = true }

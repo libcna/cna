@@ -892,24 +892,6 @@ CNA_Result cna_texture2d_set_data_rgba8_bytes(
     });
 }
 
-CNA_Result cna_texture2d_get_type_name_byte_count(
-    const CNA_Handle textureHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The Texture2D type-name byte-count output is null.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = texture->value->GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture2d_copy_type_name(
     const CNA_Handle textureHandle,
     char* const destination,
@@ -1185,3 +1167,6 @@ CNA_Result cna_texture2d_save_file(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Texture.toml.
+#include "generated/Texture.inc"

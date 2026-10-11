@@ -66,3 +66,16 @@ CNA_Result cna_joysticks_reset_for_tests_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_joystick_state_destroy(
+    const CNA_JoystickStateHandle state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(state, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(state);
+    });
+}

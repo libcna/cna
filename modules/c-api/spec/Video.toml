@@ -21,6 +21,7 @@ cna_video_copy_file_name = { copy = "object->value->getFileNameProperty()" }
 cna_video_get_has_graphics_device = { get = "object->value->getGraphicsDeviceProperty() != nullptr" }
 cna_video_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_video_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_video_destroy = { release = true }
 
 [player_for_call]
 lookup = "BorrowPlayerForCall"
@@ -44,3 +45,4 @@ cna_video_player_set_video_track_ext = { call = "object->value->SetVideoTrackEXT
 cna_video_player_dispose = { call = "object->value->Dispose()" }
 cna_video_player_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_video_player_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_video_player_destroy = { release = true }

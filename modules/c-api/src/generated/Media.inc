@@ -248,6 +248,19 @@ CNA_Result cna_song_get_type_name_size(
     });
 }
 
+CNA_Result cna_song_destroy(
+    const CNA_SongHandle song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(song);
+    });
+}
+
 CNA_Result cna_song_collection_get_count(
     const CNA_SongCollectionHandle collection,
     int32_t* const out_count)
@@ -312,5 +325,18 @@ CNA_Result cna_song_collection_get_type_name_size(
             return routeResult;
         }
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_song_collection_destroy(
+    const CNA_SongCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SongCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowSongCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }

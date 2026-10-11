@@ -1,0 +1,24 @@
+# Avatars routes, generated into src/generated/Avatars.inc,
+# which src/CnaCApiAvatars.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[description]
+lookup = "BorrowDescription"
+object = "std::shared_ptr<AvatarDescriptionResource>"
+
+[description.routes]
+cna_avatar_description_destroy = { release = true }
+
+[animation]
+lookup = "BorrowAnimation"
+object = "std::shared_ptr<AvatarAnimationResource>"
+
+[animation.routes]
+cna_avatar_animation_destroy = { release = "object->value->Dispose()" }
+cna_avatar_animation_set_current_position = { call = "object->value->setCurrentPositionProperty(System::TimeSpan(position_ticks))" }
+
+[renderer]
+lookup = "BorrowRenderer"
+object = "std::shared_ptr<AvatarRendererResource>"
+
+[renderer.routes]
+cna_avatar_renderer_destroy = { release = "object->value->Dispose()" }

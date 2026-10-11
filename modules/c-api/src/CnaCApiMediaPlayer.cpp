@@ -395,17 +395,5 @@ CNA_Result cna_media_queue_add(const CNA_MediaQueueHandle queue, const CNA_SongH
     });
 }
 
-CNA_Result cna_media_queue_destroy(const CNA_MediaQueueHandle queue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(queue);
-    });
-}
-
 // The mechanically regular routes of this family, generated from modules/c-api/spec/MediaPlayer.toml.
 #include "generated/MediaPlayer.inc"

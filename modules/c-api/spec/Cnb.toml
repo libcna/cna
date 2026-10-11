@@ -22,6 +22,7 @@ object = "std::shared_ptr<CnbReaderResource>"
 cna_cnb_reader_copy_context = { copy = "object->value->Context()" }
 cna_cnb_reader_skip = { call = "object->value->Skip(byte_count)" }
 cna_cnb_reader_require_exhausted = { call = "object->value->RequireExhausted()" }
+cna_cnb_reader_destroy = { release = true }
 
 [model]
 lookup = "GetModel"
@@ -29,6 +30,7 @@ object = "std::shared_ptr<CnbModelResource>"
 
 [model.routes]
 cna_cnb_model_clear_skeleton = { call = "object->value->skeleton.reset()" }
+cna_cnb_model_destroy = { release = true }
 
 [compiled_cnj]
 lookup = "GetCompiledCnj"
@@ -36,3 +38,60 @@ object = "std::shared_ptr<CnjToCnbResultResource>"
 
 [compiled_cnj.routes]
 cna_cnb_cnj_result_copy_asset_type_name = { copy = "object->value->assetTypeName" }
+cna_cnb_cnj_result_destroy = { release = true }
+
+[byte_writer]
+lookup = "GetByteWriter"
+object = "std::shared_ptr<CnbByteWriterResource>"
+
+[byte_writer.routes]
+cna_cnb_byte_writer_destroy = { release = true }
+
+[writer]
+lookup = "GetWriter"
+object = "std::shared_ptr<CnbWriterResource>"
+
+[writer.routes]
+cna_cnb_writer_destroy = { release = true }
+
+[texture_data]
+lookup = "GetTextureData"
+object = "std::shared_ptr<CnbTextureDataResource>"
+
+[texture_data.routes]
+cna_cnb_texture_data_destroy = { release = true }
+
+[compile_result]
+lookup = "GetCompileResult"
+object = "std::shared_ptr<CnbModelFromCnjResource>"
+
+[compile_result.routes]
+cna_cnb_model_from_cnj_destroy = { release = true }
+
+[sprite_font]
+lookup = "GetSpriteFont"
+object = "std::shared_ptr<CnbSpriteFontResource>"
+
+[sprite_font.routes]
+cna_cnb_sprite_font_data_destroy = { release = true }
+
+[sound_effect]
+lookup = "GetSoundEffect"
+object = "std::shared_ptr<CnbSoundEffectResource>"
+
+[sound_effect.routes]
+cna_cnb_sound_effect_data_destroy = { release = true }
+
+[animation_clip]
+lookup = "GetAnimationClip"
+object = "std::shared_ptr<CnbAnimationClipResource>"
+
+[animation_clip.routes]
+cna_cnb_animation_clip_destroy = { release = true }
+
+[loader]
+lookup = "GetLoader"
+object = "std::shared_ptr<CnbLoaderResource>"
+
+[loader.routes]
+cna_cnb_loader_destroy = { release = true }

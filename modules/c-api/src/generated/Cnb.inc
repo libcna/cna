@@ -166,6 +166,19 @@ CNA_Result cna_cnb_reader_require_exhausted(
     });
 }
 
+CNA_Result cna_cnb_reader_destroy(
+    const CNA_CnbReaderHandle reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(reader);
+    });
+}
+
 CNA_Result cna_cnb_model_clear_skeleton(
     const CNA_CnbModelDataHandle model)
 {
@@ -177,6 +190,19 @@ CNA_Result cna_cnb_model_clear_skeleton(
         }
         object->value->skeleton.reset();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_destroy(
+    const CNA_CnbModelDataHandle model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(model);
     });
 }
 
@@ -193,5 +219,122 @@ CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->assetTypeName, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_destroy(
+    const CNA_CnjToCnbResultHandle result)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> object{};
+        if (const CNA_Result routeResult = GetCompiledCnj(result, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(result);
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_destroy(
+    const CNA_CnbByteWriterHandle writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(writer);
+    });
+}
+
+CNA_Result cna_cnb_writer_destroy(
+    const CNA_CnbWriterHandle writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(writer);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_destroy(
+    const CNA_CnbTextureDataHandle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> object{};
+        if (const CNA_Result routeResult = GetTextureData(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(texture);
+    });
+}
+
+CNA_Result cna_cnb_model_from_cnj_destroy(
+    const CNA_CnbModelFromCnjHandle result)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbModelFromCnjResource> object{};
+        if (const CNA_Result routeResult = GetCompileResult(result, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(result);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_destroy(
+    const CNA_CnbSpriteFontDataHandle font)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> object{};
+        if (const CNA_Result routeResult = GetSpriteFont(font, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(font);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_destroy(
+    const CNA_CnbSoundEffectDataHandle sound)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSoundEffectResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffect(sound, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(sound);
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_destroy(
+    const CNA_CnbAnimationClipHandle clip)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbAnimationClipResource> object{};
+        if (const CNA_Result routeResult = GetAnimationClip(clip, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(clip);
+    });
+}
+
+CNA_Result cna_cnb_loader_destroy(
+    const CNA_CnbLoaderHandle loader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbLoaderResource> object{};
+        if (const CNA_Result routeResult = GetLoader(loader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(loader);
     });
 }

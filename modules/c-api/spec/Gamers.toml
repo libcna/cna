@@ -37,6 +37,7 @@ cna_gamer_profile_get_motto_size = { size = "object->value->getMottoProperty()" 
 cna_gamer_profile_copy_motto = { copy = "object->value->getMottoProperty()" }
 cna_gamer_profile_get_region_name_size = { size = "object->value->getRegionProperty().getNameProperty()" }
 cna_gamer_profile_copy_region_name = { copy = "object->value->getRegionProperty().getNameProperty()" }
+cna_gamer_profile_destroy = { release = "object->value->Dispose()" }
 
 [collection]
 lookup = "BorrowCollection"
@@ -45,3 +46,4 @@ object = "std::shared_ptr<GamerCollectionResource>"
 [collection.routes]
 cna_gamer_collection_get_count = { get = "object->friends->getCountProperty()" }
 cna_friend_collection_get_is_disposed = { get = "object->friends->getIsDisposedProperty()" }
+cna_gamer_collection_destroy = { release = "object->friends->Dispose()" }

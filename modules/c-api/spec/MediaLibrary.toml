@@ -113,6 +113,7 @@ cna_media_library_get_is_disposed = { get = "object->value->getIsDisposedPropert
 cna_media_library_dispose = { call = "object->value->Dispose()" }
 cna_media_library_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_media_library_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_media_library_destroy = { release = true }
 
 [picture]
 lookup = "Borrow<Picture>"

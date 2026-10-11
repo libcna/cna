@@ -751,6 +751,19 @@ CNA_Result cna_accelerometer_copy_type_name(
     });
 }
 
+CNA_Result cna_accelerometer_destroy(
+    const CNA_AccelerometerHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(sensor);
+    });
+}
+
 CNA_Result cna_gyroscope_get_state(
     const CNA_GyroscopeHandle sensor,
     CNA_SensorState* const out_state)
@@ -998,6 +1011,19 @@ CNA_Result cna_gyroscope_copy_type_name(
     });
 }
 
+CNA_Result cna_gyroscope_destroy(
+    const CNA_GyroscopeHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(sensor);
+    });
+}
+
 CNA_Result cna_accelerometer_reading_event_info_get_hash_code(
     const CNA_AccelerometerReadingEventInfo* const info,
     uint64_t* const out_hash)
@@ -1193,6 +1219,19 @@ CNA_Result cna_compass_copy_type_name(
     });
 }
 
+CNA_Result cna_compass_destroy(
+    const CNA_CompassHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Compass>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Compass>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(sensor);
+    });
+}
+
 CNA_Result cna_motion_get_state(
     const CNA_MotionHandle sensor,
     CNA_SensorState* const out_state)
@@ -1352,5 +1391,18 @@ CNA_Result cna_motion_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_motion_destroy(
+    const CNA_MotionHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Motion>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Motion>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(sensor);
     });
 }

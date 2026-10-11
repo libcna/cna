@@ -1,0 +1,9 @@
+# Texture routes, generated into src/generated/Texture.inc,
+# which src/CnaCApiTexture.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[owned_texture2_d]
+lookup = "GetOwnedTexture2D"
+object = "std::shared_ptr<Texture2DResource>"
+
+[owned_texture2_d.routes]
+cna_texture2d_get_type_name_byte_count = { size = "object->value->GetTypeName()" }

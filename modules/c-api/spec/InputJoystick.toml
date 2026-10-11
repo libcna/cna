@@ -9,3 +9,10 @@ cna_joysticks_get_count = { get = "Joysticks::GetJoysticksEXT().size()" }
 cna_joysticks_raise_connected_ext = { call = "Joysticks::ConnectedEXT.Invoke(id)" }
 cna_joysticks_raise_disconnected_ext = { call = "Joysticks::DisconnectedEXT.Invoke(id)" }
 cna_joysticks_reset_for_tests_ext = { call = "Joysticks::ResetForTests()" }
+
+[state]
+lookup = "BorrowState"
+object = "std::shared_ptr<JoystickStateEXT>"
+
+[state.routes]
+cna_joystick_state_destroy = { release = true }

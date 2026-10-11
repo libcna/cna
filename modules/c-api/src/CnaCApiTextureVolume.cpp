@@ -544,24 +544,6 @@ CNA_Result cna_texture3d_get_info(
     });
 }
 
-CNA_Result cna_texture3d_get_type_name_byte_count(
-    const CNA_Handle textureHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The Texture3D type-name byte-count output is null.");
-        }
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(texture->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture3d_copy_type_name(
     const CNA_Handle textureHandle,
     char* const destination,
@@ -813,24 +795,6 @@ CNA_Result cna_texturecube_get_info(
     });
 }
 
-CNA_Result cna_texturecube_get_type_name_byte_count(
-    const CNA_Handle textureHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The TextureCube type-name byte-count output is null.");
-        }
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(texture.value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texturecube_copy_type_name(
     const CNA_Handle textureHandle,
     char* const destination,
@@ -937,3 +901,6 @@ CNA_Result cna_texturecube_get_data(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/TextureVolume.toml.
+#include "generated/TextureVolume.inc"

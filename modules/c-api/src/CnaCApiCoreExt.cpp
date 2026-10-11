@@ -1057,40 +1057,6 @@ CNA_Result cna_graphics_renderer_get_fallback_at_ext(
     });
 }
 
-CNA_Result cna_graphics_renderer_fallback_get_message_size_ext(
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The fallback message size output is null.");
-        }
-        const CNA::GraphicsRendererFallbackRecord* record = nullptr;
-        if (const CNA_Result result = BorrowFallbackRecord(index, &record);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(record->message.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_fallback_copy_message_ext(
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const CNA::GraphicsRendererFallbackRecord* record = nullptr;
-        if (const CNA_Result result = BorrowFallbackRecord(index, &record);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(record->message, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_graphics_renderer_fallback_reason_get_name_size_ext(
     const CNA_GraphicsRendererFallbackReason reason,
     uint64_t* const outBytes)
@@ -1246,3 +1212,6 @@ CNA_Result cna_assembly_copy_title_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/CoreExt.toml.
+#include "generated/CoreExt.inc"

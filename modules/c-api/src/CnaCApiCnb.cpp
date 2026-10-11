@@ -1927,18 +1927,6 @@ CNA_Result cna_cnb_reader_create(
     });
 }
 
-CNA_Result cna_cnb_reader_destroy(const CNA_CnbReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(readerHandle);
-    });
-}
-
 CNA_Result cna_cnb_reader_get_remaining(
     const CNA_CnbReaderHandle readerHandle,
     uint64_t* const outRemaining)
@@ -2220,18 +2208,6 @@ CNA_Result cna_cnb_byte_writer_create_from_bytes(
     });
 }
 
-CNA_Result cna_cnb_byte_writer_destroy(const CNA_CnbByteWriterHandle writerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(writerHandle);
-    });
-}
-
 /* The seven fixed-width writes are one shape repeated, exactly as the seven reads are. */
 #define CNA_CNB_DEFINE_WRITE(routeName, cType, canonicalCall)                                  \
     CNA_Result routeName(const CNA_CnbByteWriterHandle writerHandle, const cType value)        \
@@ -2413,18 +2389,6 @@ CNA_Result cna_cnb_writer_create(
         const auto resource = std::make_shared<CnbWriterResource>();
         resource->value = std::make_shared<Cnb::CnbWriter>(assetTypeId, assetSchemaVersion);
         return CreateHandle(ObjectKind::CnbWriter, resource, outWriter);
-    });
-}
-
-CNA_Result cna_cnb_writer_destroy(const CNA_CnbWriterHandle writerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(writerHandle);
     });
 }
 
@@ -2825,18 +2789,6 @@ CNA_Result cna_cnb_texture_data_create_rgba8(
             Cnb::MakeRgba8Texture2DData(
                 width, height, std::vector<uint8_t>(span.begin(), span.end())),
             outTexture);
-    });
-}
-
-CNA_Result cna_cnb_texture_data_destroy(const CNA_CnbTextureDataHandle textureHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(textureHandle);
     });
 }
 
@@ -3271,18 +3223,6 @@ CNA_Result cna_cnb_model_create(CNA_CnbModelDataHandle* const outModel)
         }
         *outModel = CNA_INVALID_HANDLE;
         return CreateModel(Cnb::CnbModelData{}, outModel);
-    });
-}
-
-CNA_Result cna_cnb_model_destroy(const CNA_CnbModelDataHandle modelHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(modelHandle);
     });
 }
 
@@ -5171,18 +5111,6 @@ CNA_Result cna_cnb_build_model_from_cnj(
     });
 }
 
-CNA_Result cna_cnb_model_from_cnj_destroy(const CNA_CnbModelFromCnjHandle resultHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(resultHandle);
-    });
-}
-
 CNA_Result cna_cnb_model_from_cnj_take_model(
     const CNA_CnbModelFromCnjHandle resultHandle,
     CNA_CnbModelDataHandle* const outModel)
@@ -5409,18 +5337,6 @@ CNA_Result cna_cnb_sprite_font_data_create(CNA_CnbSpriteFontDataHandle* const ou
         }
         *outFont = CNA_INVALID_HANDLE;
         return CreateSpriteFont(Cnb::CnbSpriteFontData{}, outFont);
-    });
-}
-
-CNA_Result cna_cnb_sprite_font_data_destroy(const CNA_CnbSpriteFontDataHandle fontHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(fontHandle);
     });
 }
 
@@ -5724,18 +5640,6 @@ CNA_Result cna_cnb_sound_effect_data_create(
         data.loopLength = info->loop_length;
         data.samples.assign(source.begin(), source.end());
         return CreateSoundEffect(std::move(data), outSound);
-    });
-}
-
-CNA_Result cna_cnb_sound_effect_data_destroy(const CNA_CnbSoundEffectDataHandle soundHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSoundEffectResource> sound;
-        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(soundHandle);
     });
 }
 
@@ -6078,18 +5982,6 @@ CNA_Result cna_cnb_decode_animation_clip(
     });
 }
 
-CNA_Result cna_cnb_animation_clip_destroy(const CNA_CnbAnimationClipHandle clipHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbAnimationClipResource> clip;
-        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(clipHandle);
-    });
-}
-
 CNA_Result cna_cnb_animation_clip_get(
     const CNA_CnbAnimationClipHandle clipHandle,
     double* const outDurationSeconds,
@@ -6373,18 +6265,6 @@ CNA_Result cna_cnb_loader_registry_register_builtins(void)
     });
 }
 
-CNA_Result cna_cnb_loader_destroy(const CNA_CnbLoaderHandle loaderHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbLoaderResource> loader;
-        if (const CNA_Result result = GetLoader(loaderHandle, &loader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(loaderHandle);
-    });
-}
-
 CNA_Result cna_cnb_loader_invoke(
     const CNA_CnbLoaderHandle loaderHandle,
     const CNA_CnbDocumentHandle documentHandle,
@@ -6600,18 +6480,6 @@ CNA_Result cna_cnb_compile_cnj(
         }
         return CreateCompiledCnj(
             Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_destroy(const CNA_CnjToCnbResultHandle resultHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(resultHandle);
     });
 }
 

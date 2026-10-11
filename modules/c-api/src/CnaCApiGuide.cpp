@@ -979,19 +979,6 @@ CNA_Result cna_gamer_services_dispatcher_set_window_handle(const uint64_t window
     });
 }
 
-CNA_Result cna_gamer_services_dispatcher_initialize(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::Game* game = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GamerServicesDispatcher::Initialize(game->getServicesProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_services_dispatcher_update(void)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1064,3 +1051,6 @@ CNA_Result cna_gamer_services_component_create(
             outComponent);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Guide.toml.
+#include "generated/Guide.inc"

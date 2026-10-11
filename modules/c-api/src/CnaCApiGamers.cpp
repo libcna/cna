@@ -911,19 +911,6 @@ CNA_Result cna_gamer_profile_copy_picture(const CNA_GamerProfileHandle handle,ui
     });
 }
 
-CNA_Result cna_gamer_profile_destroy(const CNA_GamerProfileHandle profileHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GamerProfileResource> profile;
-        if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        profile->value->Dispose();
-        return ReleaseHandle(profileHandle);
-    });
-}
-
 CNA_Result cna_friend_gamer_create_ext(
     const CNA_StringView gamertag,
     const CNA_StringView displayName,
@@ -1384,19 +1371,6 @@ CNA_Result cna_gamer_enumerator_destroy(const CNA_GamerEnumeratorHandle enumerat
         auto cursor = enumerator->collection->friends->GetEnumerator();
         cursor.Dispose();
         return ReleaseHandle(enumeratorHandle);
-    });
-}
-
-CNA_Result cna_gamer_collection_destroy(const CNA_GamerCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GamerCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->friends->Dispose();
-        return ReleaseHandle(collectionHandle);
     });
 }
 

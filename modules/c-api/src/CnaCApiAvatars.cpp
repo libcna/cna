@@ -35,7 +35,6 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -232,18 +231,6 @@ CNA_Result cna_avatar_description_get_from_gamer(
     });
 }
 
-CNA_Result cna_avatar_description_destroy(const CNA_AvatarDescriptionHandle descriptionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarDescriptionResource> description;
-        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(descriptionHandle);
-    });
-}
-
 CNA_Result cna_avatar_description_get_info(
     const CNA_AvatarDescriptionHandle descriptionHandle,
     CNA_AvatarDescriptionInfo* const outInfo)
@@ -354,19 +341,6 @@ CNA_Result cna_avatar_animation_create(
     });
 }
 
-CNA_Result cna_avatar_animation_destroy(const CNA_AvatarAnimationHandle animationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        animation->value->Dispose();
-        return ReleaseHandle(animationHandle);
-    });
-}
-
 CNA_Result cna_avatar_animation_get_info(
     const CNA_AvatarAnimationHandle animationHandle,
     CNA_AvatarAnimationInfo* const outInfo)
@@ -391,21 +365,6 @@ CNA_Result cna_avatar_animation_get_info(
             static_cast<int64_t>(animation->value->getLengthProperty().getTicksProperty())
         };
         *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_animation_set_current_position(
-    const CNA_AvatarAnimationHandle animationHandle,
-    const int64_t positionTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        animation->value->setCurrentPositionProperty(System::TimeSpan(positionTicks));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -496,19 +455,6 @@ CNA_Result cna_avatar_renderer_create(
             description->value.get(),
             useLoadingEffect == CNA_TRUE);
         return CreateHandle(ObjectKind::AvatarRenderer, resource, outRenderer);
-    });
-}
-
-CNA_Result cna_avatar_renderer_destroy(const CNA_AvatarRendererHandle rendererHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        renderer->value->Dispose();
-        return ReleaseHandle(rendererHandle);
     });
 }
 
@@ -746,3 +692,6 @@ CNA_Result cna_avatar_renderer_draw_bones(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Avatars.toml.
+#include "generated/Avatars.inc"

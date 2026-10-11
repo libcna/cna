@@ -1,0 +1,16 @@
+# Display routes, generated into src/generated/Display.inc,
+# which src/CnaCApiDisplay.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[adapter_context]
+lookup = "GetAdapterContext"
+object = "std::shared_ptr<void>"
+
+[adapter_context.routes]
+cna_graphics_adapter_get_count = { get = "GraphicsAdapter::getAdaptersProperty().size()" }
+
+[borrowed_graphics_device]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+
+[borrowed_graphics_device.routes]
+cna_graphics_device_reset = { call = "object->value->Reset()" }

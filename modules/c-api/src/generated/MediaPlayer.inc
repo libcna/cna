@@ -126,6 +126,19 @@ CNA_Result cna_media_queue_copy_type_name(
     });
 }
 
+CNA_Result cna_media_queue_destroy(
+    const CNA_MediaQueueHandle queue)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaQueueResource> object{};
+        if (const CNA_Result routeResult = BorrowQueue(queue, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(queue);
+    });
+}
+
 CNA_Result cna_media_player_get_game_has_control(
     const CNA_Handle game,
     CNA_Bool* const out_has_control)

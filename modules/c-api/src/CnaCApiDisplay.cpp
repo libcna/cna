@@ -285,24 +285,6 @@ CNA_Result cna_display_mode_equals(
     });
 }
 
-CNA_Result cna_graphics_adapter_get_count(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr) {
-            return InvalidArgument("The graphics-adapter count output is null.");
-        }
-        std::shared_ptr<void> context;
-        if (const CNA_Result result = GetAdapterContext(graphicsDeviceHandle, &context);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = GraphicsAdapter::getAdaptersProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_adapter_get_info(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
@@ -723,20 +705,6 @@ CNA_Result cna_graphics_device_get_native_window_handle(
     });
 }
 
-CNA_Result cna_graphics_device_reset(const CNA_Handle graphicsDeviceHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        graphicsDevice->value->Reset();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_create(
     const uint32_t adapterIndex,
     const uint32_t graphicsProfile,
@@ -834,3 +802,6 @@ CNA_Result cna_graphics_device_reset_with_parameters(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Display.toml.
+#include "generated/Display.inc"

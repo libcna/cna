@@ -949,18 +949,6 @@ CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
     });
 }
 
-CNA_Result cna_accelerometer_destroy(const CNA_AccelerometerHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Accelerometer>> resource;
-        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(sensor);
-    });
-}
-
 CNA_Result cna_gyroscope_create(const CNA_Handle gameHandle, CNA_GyroscopeHandle* const outSensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1079,18 +1067,6 @@ CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
         resource->value->SetDisposalCleanupHookForTesting(
             [callback, context]() { callback(context); });
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_destroy(const CNA_GyroscopeHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Gyroscope>> resource;
-        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(sensor);
     });
 }
 
@@ -1611,18 +1587,6 @@ CNA_Result cna_compass_inject_calibration_request_ext(const CNA_CompassHandle se
     });
 }
 
-CNA_Result cna_compass_destroy(const CNA_CompassHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Compass>> resource;
-        if (const CNA_Result result = BorrowSensor<Compass>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(sensor);
-    });
-}
-
 CNA_Result cna_motion_create(const CNA_Handle gameHandle, CNA_MotionHandle* const outSensor)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1777,18 +1741,6 @@ CNA_Result cna_motion_inject_calibration_request_ext(const CNA_MotionHandle sens
             return NoTestBackend();
         }
         return DeliverTestCalibration(state);
-    });
-}
-
-CNA_Result cna_motion_destroy(const CNA_MotionHandle sensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SensorResource<Motion>> resource;
-        if (const CNA_Result result = BorrowSensor<Motion>(sensor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(sensor);
     });
 }
 

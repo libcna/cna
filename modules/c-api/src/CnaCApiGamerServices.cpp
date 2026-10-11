@@ -213,24 +213,6 @@ CNA_Result cna_signed_in_gamer_create_ext(
     });
 }
 
-CNA_Result cna_signed_in_gamer_get_gamertag_size(
-    const CNA_SignedInGamerHandle gamerHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The gamertag size output is null.");
-        }
-        std::shared_ptr<SignedInGamerResource> gamer;
-        if (const CNA_Result result = GetSignedInGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = gamer->value->getGamertagProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_signed_in_gamer_copy_gamertag(
     const CNA_SignedInGamerHandle gamerHandle,
     char* const destination,
@@ -351,3 +333,6 @@ CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uin
     return CNA_RESULT_SUCCESS;
 }
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GamerServices.toml.
+#include "generated/GamerServices.inc"

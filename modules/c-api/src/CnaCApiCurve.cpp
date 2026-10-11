@@ -23,7 +23,6 @@ using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -411,19 +410,6 @@ CNA_Result cna_curve_key_collection_create(
     });
 }
 
-CNA_Result cna_curve_key_collection_destroy(
-    const CNA_CurveKeyCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(collectionHandle);
-    });
-}
-
 CNA_Result cna_curve_key_collection_get_count(
     const CNA_CurveKeyCollectionHandle collectionHandle,
     uint64_t* const outCount)
@@ -686,18 +672,6 @@ CNA_Result cna_curve_create(CNA_CurveHandle* const outCurve)
         return CreateHandle(ObjectKind::Curve,
             curve,
             outCurve);
-    });
-}
-
-CNA_Result cna_curve_destroy(const CNA_CurveHandle curveHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(curveHandle);
     });
 }
 

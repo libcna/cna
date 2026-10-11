@@ -53,6 +53,7 @@ using-declarations and helpers. The route kinds are:
 | `call` | `(first, args...)` | look up `first`, then run the expression |
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
 | `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol |
+| `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
 
 The generator takes the signature from the header and the conversions from the C types:
 
@@ -75,8 +76,8 @@ that only validates (`ValidateActiveGameHandle`) is written without `object`.
 
 ## What stays hand-written
 
-- creation and destruction, and any route that returns a handle: they decide ownership, parent
-  objects and the game's resource counts (`OWNERSHIP.md`);
+- creation, any route that returns a handle, and any destroy that does more than release the
+  handle: they decide ownership, parent objects and the game's resource counts (`OWNERSHIP.md`);
 - events, callbacks and subscriptions;
 - bulk transfers, arrays and versioned info structures;
 - routes that combine several objects or validate one argument against another;

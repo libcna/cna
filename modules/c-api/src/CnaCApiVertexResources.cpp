@@ -21,7 +21,6 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -324,22 +323,6 @@ CNA_Result cna_vertex_declaration_get_type_name_byte_count(
     });
 }
 
-CNA_Result cna_vertex_declaration_copy_type_name(
-    const CNA_VertexDeclarationHandle declarationHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexDeclaration> declaration;
-        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(declaration->GetTypeName(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_vertex_buffer_binding_init(
     const CNA_VertexBufferHandle vertexBuffer,
     const int32_t vertexOffset,
@@ -371,3 +354,6 @@ CNA_Result cna_vertex_buffer_binding_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/VertexResources.toml.
+#include "generated/VertexResources.inc"

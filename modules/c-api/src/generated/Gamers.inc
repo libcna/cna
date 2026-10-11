@@ -294,6 +294,20 @@ CNA_Result cna_gamer_profile_copy_region_name(
     });
 }
 
+CNA_Result cna_gamer_profile_destroy(
+    const CNA_GamerProfileHandle profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GamerProfileResource> object{};
+        if (const CNA_Result routeResult = BorrowProfile(profile, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Dispose();
+        return CNA::C::Detail::ReleaseHandle(profile);
+    });
+}
+
 CNA_Result cna_gamer_collection_get_count(
     const CNA_GamerCollectionHandle collection,
     int32_t* const out_count)
@@ -327,5 +341,19 @@ CNA_Result cna_friend_collection_get_is_disposed(
         }
         *out_is_disposed = CNA::C::Detail::ToCBool(object->friends->getIsDisposedProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_collection_destroy(
+    const CNA_GamerCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GamerCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->friends->Dispose();
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }

@@ -924,6 +924,19 @@ CNA_Result cna_media_library_copy_type_name(
     });
 }
 
+CNA_Result cna_media_library_destroy(
+    const CNA_MediaLibraryHandle library)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaLibraryResource> object{};
+        if (const CNA_Result routeResult = BorrowLibraryResource(library, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(library);
+    });
+}
+
 CNA_Result cna_picture_dispose(
     const CNA_PictureHandle picture)
 {

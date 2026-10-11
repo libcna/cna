@@ -240,3 +240,16 @@ CNA_Result cna_haptic_device_dispose(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_haptic_device_destroy(
+    const CNA_HapticDeviceHandle device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<HapticDevice> object{};
+        if (const CNA_Result routeResult = BorrowDevice(device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(device);
+    });
+}

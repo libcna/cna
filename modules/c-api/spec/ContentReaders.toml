@@ -38,3 +38,10 @@ object = "std::shared_ptr<ObjectDictionaryResource>"
 [object_dictionary.routes]
 cna_object_dictionary_ext_get_runtime_type_name_size = { size = "object->value->GetTypeName()" }
 cna_object_dictionary_ext_get_count = { get = "object->value->getValuesProperty().size()" }
+
+[reflective_builder]
+lookup = "GetReflectiveBuilder"
+object = "std::shared_ptr<ReflectiveBuilderResource>"
+
+[reflective_builder.routes]
+cna_reflective_type_reader_builder_destroy = { release = true }

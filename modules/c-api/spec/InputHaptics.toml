@@ -24,3 +24,4 @@ cna_haptic_device_get_effect_status = { get = "object->GetEffectStatusEXT(effect
 cna_haptic_device_set_gain = { get = "object->SetGainEXT(gain)" }
 cna_haptic_device_set_autocenter = { get = "object->SetAutocenterEXT(autocenter)" }
 cna_haptic_device_dispose = { call = "object->Dispose()" }
+cna_haptic_device_destroy = { release = true }

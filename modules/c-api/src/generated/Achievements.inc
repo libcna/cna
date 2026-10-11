@@ -141,6 +141,19 @@ CNA_Result cna_achievement_copy_how_to_earn(
     });
 }
 
+CNA_Result cna_achievement_destroy(
+    const CNA_AchievementHandle achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AchievementResource> object{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(achievement);
+    });
+}
+
 CNA_Result cna_achievement_collection_get_count(
     const CNA_AchievementCollectionHandle collection,
     int32_t* const out_count)
@@ -221,5 +234,19 @@ CNA_Result cna_achievement_collection_clear(
         }
         object->value->Clear();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_achievement_collection_destroy(
+    const CNA_AchievementCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Dispose();
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }

@@ -85,6 +85,7 @@ cna_accelerometer_register_started_instance_for_tests_ext = { call = "Accelerome
 cna_accelerometer_unregister_started_instance_for_tests_ext = { call = "Accelerometer::UnregisterStartedInstanceForTesting(*object->value)" }
 cna_accelerometer_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_accelerometer_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_accelerometer_destroy = { release = true }
 
 [gyroscope]
 lookup = "BorrowSensor<Gyroscope>"
@@ -106,6 +107,7 @@ cna_gyroscope_register_started_instance_for_tests_ext = { call = "Gyroscope::Reg
 cna_gyroscope_unregister_started_instance_for_tests_ext = { call = "Gyroscope::UnregisterStartedInstanceForTesting(*object->value)" }
 cna_gyroscope_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_gyroscope_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_gyroscope_destroy = { release = true }
 
 [accelerometer_reading_event_args]
 lookup = "ToAccelerometerReadingEventArgs"
@@ -130,6 +132,7 @@ cna_compass_get_time_between_updates_ticks = { get = "object->value->getTimeBetw
 cna_compass_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
 cna_compass_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_compass_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_compass_destroy = { release = true }
 
 [motion]
 lookup = "BorrowSensor<Motion>"
@@ -146,3 +149,4 @@ cna_motion_get_time_between_updates_ticks = { get = "object->value->getTimeBetwe
 cna_motion_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
 cna_motion_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_motion_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_motion_destroy = { release = true }

@@ -67,3 +67,29 @@ CNA_Result cna_curve_key_collection_remove_at(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_curve_key_collection_destroy(
+    const CNA_CurveKeyCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
+    });
+}
+
+CNA_Result cna_curve_destroy(
+    const CNA_CurveHandle curve)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(curve);
+    });
+}

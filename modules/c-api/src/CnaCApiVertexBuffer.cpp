@@ -35,7 +35,6 @@ namespace {
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -494,40 +493,6 @@ CNA_Result cna_vertex_buffer_copy_declaration_elements(
     });
 }
 
-CNA_Result cna_vertex_buffer_get_type_name_byte_count(
-    const CNA_VertexBufferHandle vertexBufferHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The VertexBuffer type-name byte-count output is null.");
-        }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(buffer->value->GetTypeName().size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_buffer_copy_type_name(
-    const CNA_VertexBufferHandle vertexBufferHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(buffer->value->GetTypeName(), destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_vertex_buffer_set_data(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_VertexBufferTransfer* const transfer,
@@ -960,3 +925,6 @@ CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/VertexBuffer.toml.
+#include "generated/VertexBuffer.inc"

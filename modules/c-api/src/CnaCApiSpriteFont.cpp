@@ -282,43 +282,6 @@ CNA_Result cna_sprite_font_copy_glyphs(
     });
 }
 
-CNA_Result cna_sprite_font_set_default_character(
-    const CNA_Handle spriteFontHandle,
-    const CNA_Bool hasValue,
-    const CNA_Char16 value)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!IsCanonicalBool(hasValue)) {
-            return InvalidArgument("The SpriteFont default-character presence flag is invalid.");
-        }
-        std::shared_ptr<SpriteFontResource> spriteFont;
-        if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        spriteFont->value->setDefaultCharacterProperty(
-            hasValue == CNA_TRUE
-                ? std::optional<SharpRuntime::charcs>(static_cast<SharpRuntime::charcs>(value))
-                : std::nullopt);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sprite_font_set_line_spacing(
-    const CNA_Handle spriteFontHandle,
-    const int32_t lineSpacing)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<SpriteFontResource> spriteFont;
-        if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        spriteFont->value->setLineSpacingProperty(lineSpacing);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sprite_font_set_spacing(
     const CNA_Handle spriteFontHandle,
     const float spacing)
@@ -395,3 +358,6 @@ CNA_Result GetOwnedSpriteFont(
 }
 
 } // namespace CNA::C::Detail
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/SpriteFont.toml.
+#include "generated/SpriteFont.inc"

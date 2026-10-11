@@ -20,6 +20,7 @@ cna_song_get_track_number = { get = "object->value->getTrackNumberProperty()" }
 cna_song_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_song_get_hash_code = { get = "object->value->GetHashCode()" }
 cna_song_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_song_destroy = { release = true }
 
 [song_collection]
 lookup = "BorrowSongCollection"
@@ -30,3 +31,4 @@ cna_song_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_song_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_song_collection_dispose = { call = "object->value->Dispose()" }
 cna_song_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_song_collection_destroy = { release = true }

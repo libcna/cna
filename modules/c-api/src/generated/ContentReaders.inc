@@ -246,3 +246,16 @@ CNA_Result cna_object_dictionary_ext_get_count(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_reflective_type_reader_builder_destroy(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> object{};
+        if (const CNA_Result routeResult = GetReflectiveBuilder(builder, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(builder);
+    });
+}

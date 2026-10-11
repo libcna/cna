@@ -791,33 +791,6 @@ CNA_Result cna_input_devices_raise_keyboard_disconnected_ext(
     });
 }
 
-CNA_Result cna_input_devices_reset_for_tests_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        InputDevices::ResetForTests();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_clipboard_get_text_size(const CNA_Handle gameHandle, uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The clipboard text byte-count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = Clipboard::GetTextEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_clipboard_copy_text(
     const CNA_Handle gameHandle,
     char* const destination,
@@ -856,21 +829,6 @@ CNA_Result cna_clipboard_set_text(const CNA_Handle gameHandle, const CNA_StringV
     });
 }
 
-CNA_Result cna_clipboard_get_has_text(const CNA_Handle gameHandle, CNA_Bool* const outHasText)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasText == nullptr) {
-            return InvalidArgument("The clipboard text-presence output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasText = ToCBool(Clipboard::HasTextEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_power_get_info(
     const CNA_Handle gameHandle,
     CNA_PowerState* const outState,
@@ -894,3 +852,6 @@ CNA_Result cna_power_get_info(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/InputDevices.toml.
+#include "generated/InputDevices.inc"

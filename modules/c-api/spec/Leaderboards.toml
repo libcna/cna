@@ -1,0 +1,19 @@
+# Leaderboards routes, generated into src/generated/Leaderboards.inc,
+# which src/CnaCApiLeaderboards.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[reader]
+lookup = "BorrowReader"
+object = "std::shared_ptr<LeaderboardReaderResource>"
+
+[reader.routes]
+cna_leaderboard_reader_destroy = { release = "object->value->Dispose()" }
+cna_leaderboard_reader_page_down = { call = "object->value->PageDown()" }
+cna_leaderboard_reader_page_up = { call = "object->value->PageUp()" }
+
+[entry]
+lookup = "BorrowEntry"
+object = "std::shared_ptr<LeaderboardEntryResource>"
+
+[entry.routes]
+cna_leaderboard_entry_destroy = { release = true }
+cna_leaderboard_entry_set_rating = { call = "object->Value()->setRatingProperty(static_cast<long long>(rating))" }

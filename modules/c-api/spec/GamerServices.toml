@@ -1,0 +1,9 @@
+# GamerServices routes, generated into src/generated/GamerServices.inc,
+# which src/CnaCApiGamerServices.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[signed_in_gamer]
+lookup = "GetSignedInGamer"
+object = "std::shared_ptr<SignedInGamerResource>"
+
+[signed_in_gamer.routes]
+cna_signed_in_gamer_get_gamertag_size = { size = "object->value->getGamertagProperty()" }

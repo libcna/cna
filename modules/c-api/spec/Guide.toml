@@ -1,0 +1,9 @@
+# Guide routes, generated into src/generated/Guide.inc,
+# which src/CnaCApiGuide.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[game_object]
+lookup = "CNA::C::Detail::GetGameObject"
+object = "Microsoft::Xna::Framework::Game*"
+
+[game_object.routes]
+cna_gamer_services_dispatcher_initialize = { call = "GamerServicesDispatcher::Initialize(object->getServicesProperty())" }

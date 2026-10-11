@@ -31,7 +31,6 @@ namespace {
 
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ReleaseHandle;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::MediaState;
@@ -286,18 +285,6 @@ CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const 
     });
 }
 
-CNA_Result cna_video_destroy(const CNA_VideoHandle video)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoResource> resource;
-        if (const CNA_Result result = BorrowVideo(video, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(video);
-    });
-}
-
 CNA_Result cna_video_player_create(
     const CNA_Handle gameHandle,
     CNA_VideoPlayerHandle* const outPlayer)
@@ -444,18 +431,6 @@ CNA_Result cna_video_player_play(
         resource->video = videoResource;
         resource->playingVideoHandle = video;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_video_player_destroy(const CNA_VideoPlayerHandle player)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(player);
     });
 }
 

@@ -1,0 +1,16 @@
+# TextureVolume routes, generated into src/generated/TextureVolume.inc,
+# which src/CnaCApiTextureVolume.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[owned_texture3_d]
+lookup = "GetOwnedTexture3D"
+object = "std::shared_ptr<Texture3DResource>"
+
+[owned_texture3_d.routes]
+cna_texture3d_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+
+[owned_texture_cube]
+lookup = "GetOwnedTextureCube"
+object = "TextureCubeResourceView"
+
+[owned_texture_cube.routes]
+cna_texturecube_get_type_name_byte_count = { size = "object.value->GetTypeName()" }

@@ -33,7 +33,6 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 
@@ -235,54 +234,6 @@ CNA_Result cna_property_dictionary_create_ext(CNA_PropertyDictionaryHandle* cons
         return CNA::C::Detail::CreateOwnedPropertyDictionary(
             std::make_shared<PropertyDictionary>(PropertyDictionary::CreateInternal({})),
             outDictionary);
-    });
-}
-
-CNA_Result cna_property_dictionary_destroy(const CNA_PropertyDictionaryHandle dictionaryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(dictionaryHandle);
-    });
-}
-
-CNA_Result cna_property_dictionary_get_count(
-    const CNA_PropertyDictionaryHandle dictionaryHandle,
-    int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The property count output is null.");
-        }
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<int32_t>(dictionary->value->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_property_dictionary_get_is_read_only(
-    const CNA_PropertyDictionaryHandle dictionaryHandle,
-    CNA_Bool* const outIsReadOnly)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsReadOnly == nullptr) {
-            return InvalidArgument("The read-only output is null.");
-        }
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsReadOnly = ToCBool(dictionary->value->getIsReadOnlyProperty());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -773,19 +724,6 @@ CNA_Result cna_property_dictionary_remove(
     });
 }
 
-CNA_Result cna_property_dictionary_clear(const CNA_PropertyDictionaryHandle dictionaryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dictionary->value->Clear();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_property_dictionary_get_key_size_at(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const int32_t index,
@@ -833,3 +771,6 @@ CNA_Result cna_property_dictionary_copy_key_at(
             outBytes);
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GamerProperties.toml.
+#include "generated/GamerProperties.inc"

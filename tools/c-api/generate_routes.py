@@ -40,6 +40,8 @@ whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. Eac
                                        the byte count of the text the expression yields.
 ``copy``   ([handle,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)
                                        the size-then-copy text protocol for the expression.
+``release`` (handle)                   a destroy with no bookkeeping: after the lookup, run the
+                                       statement (``true`` for none) and release the handle.
 
 Inside an expression every route parameter is available under its header name, already converted
 to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, and a CNA_Bool is
@@ -76,7 +78,7 @@ HEADER_DIR = C_API_DIR / "include" / "CNA" / "C"
 MARSHAL_HEADER = SOURCE_DIR / "CnaCApiMarshal.hpp"
 
 DETAIL = "CNA::C::Detail::"
-KINDS = ("value", "get", "call", "size", "copy")
+KINDS = ("value", "get", "call", "size", "copy", "release")
 NUMBERS = {"float", "double", "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t",
            "int64_t", "uint64_t", "size_t"}
 
@@ -184,6 +186,10 @@ class Route:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         self.kind = next(k for k in entry if k in KINDS)
         self.expression = entry[self.kind]
+        if self.kind == "release" and self.expression is True:
+            self.expression = ""
+        if not isinstance(self.expression, str):
+            raise SpecError(f"{name}: '{self.kind}' takes a C++ expression in quotes")
         if name not in types.routes:
             raise SpecError(f"{name}: no public header declares this route; declare it first")
         self.params = types.routes[name]
@@ -200,7 +206,7 @@ class Route:
             if not params:
                 raise self._fail("a route in a group with a lookup passes it its first parameter")
             self.handle, params = params[0], params[1:]
-        elif self.kind in ("get", "call"):
+        elif self.kind in ("get", "call", "release"):
             raise self._fail(f"'{self.kind}' needs a group with a lookup")
         else:
             self.handle = None
@@ -217,6 +223,9 @@ class Route:
             if not params or params[-1].type != "uint64_t" or not params[-1].pointer:
                 raise self._fail("'size' needs a final uint64_t* byte-count output")
             self.outputs = [params.pop()]
+        elif self.kind == "release":
+            if params or self.types.kind_of(self.handle.type) != "handle":
+                raise self._fail("'release' takes only the handle it destroys")
         elif self.kind == "copy":
             tail = params[-3:]
             if (len(tail) != 3 or tail[0].type != "char" or not tail[0].pointer or tail[0].const
@@ -312,6 +321,10 @@ class Route:
                       f"{i}return CNA_RESULT_SUCCESS;"]
         elif self.kind == "call":
             lines += [f"{i}{self.expression};", f"{i}return CNA_RESULT_SUCCESS;"]
+        elif self.kind == "release":
+            if self.expression:
+                lines.append(f"{i}{self.expression};")
+            lines.append(f"{i}return {DETAIL}ReleaseHandle({self.handle.name});")
         elif self.kind == "size":
             lines += [f"{i}return {DETAIL}ReportTextSize({self.expression}, "
                       f"{self.outputs[0].name});"]
@@ -459,11 +472,15 @@ def render_contract_test(routes: list[Route]) -> str:
             lines.append(_expect(f"{r.name}({_arguments(r, **{out_bytes: 'NULL'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name, '"a null out_bytes"'))
     lines += ["    return failures;", "}", "",
-              "static int handles_are_refused(const CNA_Handle handle, const char* const what)",
+              "/* `handle` goes to every route but the curve routes, which get `curve_routes_handle`. */",
+              "static int handles_are_refused(const CNA_Handle handle,",
+              "                               const CNA_Handle curve_routes_handle,",
+              "                               const char* const what)",
               "{", "    int failures = 0;"]
     for r in routes:
         if _takes_handle(r):
-            lines.append(_expect(f"{r.name}({_arguments(r, 'handle')})",
+            handle = "curve_routes_handle" if r.handle.type == "CNA_CurveHandle" else "handle"
+            lines.append(_expect(f"{r.name}({_arguments(r, handle)})",
                                  "CNA_RESULT_INVALID_HANDLE", r.name, "what"))
     lines += ["    return failures;", "}", "",
               "static int text_protocol_holds(void)", "{",
@@ -496,24 +513,25 @@ def render_contract_test(routes: list[Route]) -> str:
               "int main(void)", "{",
               "    int failures = null_outputs_are_refused();",
               "    CNA_CurveHandle curve = CNA_INVALID_HANDLE;",
-              "    CNA_PacketWriterHandle destroyed = CNA_INVALID_HANDLE;",
+              "    CNA_PacketWriterHandle writer = CNA_INVALID_HANDLE;",
               "",
-              '    failures += handles_are_refused(CNA_INVALID_HANDLE, "the null handle");',
-              "    /* A live handle of a kind no generated route takes. */",
-              "    if (cna_curve_create(&curve) != CNA_RESULT_SUCCESS) {",
-              '        printf("cna_curve_create failed\\n");',
+              "    failures += handles_are_refused(CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, "
+              '"the null handle");',
+              "    /* Live handles of a kind the route does not take. */",
+              "    if (cna_curve_create(&curve) != CNA_RESULT_SUCCESS ||",
+              "        cna_packet_writer_create(16, &writer) != CNA_RESULT_SUCCESS) {",
+              '        printf("could not create the decoy handles\\n");',
               "        return 1;",
               "    }",
-              '    failures += handles_are_refused(curve, "a live Curve handle");',
-              "    (void)cna_curve_destroy(curve);",
-              "    /* A handle whose object is gone. */",
-              "    if (cna_packet_writer_create(16, &destroyed) != CNA_RESULT_SUCCESS ||",
-              "        cna_packet_writer_destroy(destroyed) != CNA_RESULT_SUCCESS) {",
-              '        printf("could not make a destroyed handle\\n");',
+              '    failures += handles_are_refused(curve, writer, "a live handle of another kind");',
+              "    /* Handles whose objects are gone. */",
+              "    if (cna_curve_destroy(curve) != CNA_RESULT_SUCCESS ||",
+              "        cna_packet_writer_destroy(writer) != CNA_RESULT_SUCCESS) {",
+              '        printf("could not destroy the decoy handles\\n");',
               "        return 1;",
               "    }",
-              '    failures += handles_are_refused(destroyed, "a destroyed handle");',
-              '    failures += handles_are_refused(curve, "a destroyed Curve handle");',
+              '    failures += handles_are_refused(writer, curve, "a destroyed handle");',
+              '    failures += handles_are_refused(curve, writer, "a destroyed handle");',
               "    failures += text_protocol_holds();",
               "",
               f'    printf("%d failed checks across {len(routes)} generated routes\\n", failures);',

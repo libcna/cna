@@ -49,7 +49,6 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReleaseStorageStream;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
@@ -1185,19 +1184,6 @@ CNA_Result cna_reflective_type_reader_builder_create(
         resource->registration->create = createCallback;
         resource->registration->createContext = context;
         return CreateHandle(ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
-    });
-}
-
-CNA_Result cna_reflective_type_reader_builder_destroy(
-    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(builderHandle);
     });
 }
 
