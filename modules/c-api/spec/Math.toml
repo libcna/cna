@@ -1,0 +1,35 @@
+# MathHelper, Point and Rectangle value routes, generated into src/generated/Math.inc,
+# which src/CnaCApiMath.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[math]
+[math.routes]
+cna_math_barycentric = { value = "MathHelper::Barycentric(value1, value2, value3, amount1, amount2)" }
+cna_math_catmull_rom = { value = "MathHelper::CatmullRom(value1, value2, value3, value4, amount)" }
+cna_math_clamp_float = { value = "MathHelper::Clamp(value, minimum, maximum)" }
+cna_math_distance = { value = "MathHelper::Distance(value1, value2)" }
+cna_math_hermite = { value = "MathHelper::Hermite(value1, tangent1, value2, tangent2, amount)" }
+cna_math_lerp = { value = "MathHelper::Lerp(value1, value2, amount)" }
+cna_math_max = { value = "MathHelper::Max(value1, value2)" }
+cna_math_min = { value = "MathHelper::Min(value1, value2)" }
+cna_math_smooth_step = { value = "MathHelper::SmoothStep(value1, value2, amount)" }
+cna_math_to_degrees = { value = "MathHelper::ToDegrees(radians)" }
+cna_math_to_radians = { value = "MathHelper::ToRadians(degrees)" }
+cna_math_wrap_angle = { value = "MathHelper::WrapAngle(angle)" }
+cna_math_clamp_int32 = { value = "MathHelper::Clamp(value, minimum, maximum)" }
+cna_math_within_epsilon = { value = "MathHelper::WithinEpsilon(value1, value2)" }
+
+[point]
+[point.routes]
+cna_point_equals = { value = "left.Equals(right)" }
+cna_point_not_equals = { value = "left != right" }
+cna_point_get_hash_code = { value = "value.GetHashCode()" }
+cna_point_get_string_size = { size = "value.ToString()" }
+cna_point_copy_string = { copy = "value.ToString()" }
+
+[rectangle]
+[rectangle.routes]
+cna_rectangle_equals = { value = "left.Equals(right)" }
+cna_rectangle_not_equals = { value = "left != right" }
+cna_rectangle_get_hash_code = { value = "value.GetHashCode()" }
+cna_rectangle_get_string_size = { size = "value.ToString()" }
+cna_rectangle_copy_string = { copy = "value.ToString()" }

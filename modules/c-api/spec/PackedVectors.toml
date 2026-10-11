@@ -1,0 +1,8 @@
+# Packed-vector value routes, generated into src/generated/PackedVectors.inc,
+# which src/CnaCApiPackedVectors.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[half]
+[half.routes]
+cna_half_from_single = { value = "HalfTypeHelper::Convert(value)" }
+cna_half_from_single_bits = { value = "HalfTypeHelper::Convert(single_bits)" }
+cna_half_to_single = { value = "HalfTypeHelper::Convert(half)" }

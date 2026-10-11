@@ -1,0 +1,33 @@
+# Color value routes, generated into src/generated/Color.inc,
+# which src/CnaCApiColor.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[vector4]
+[vector4.routes]
+cna_color_init_vector4 = { value = "Color(vector)" }
+cna_color_from_non_premultiplied_vector4 = { value = "Color::FromNonPremultiplied(vector)" }
+
+[vector3]
+[vector3.routes]
+cna_color_init_vector3 = { value = "Color(vector)" }
+
+[color]
+[color.routes]
+cna_color_init_float_rgb = { value = "Color(r, g, b)" }
+cna_color_init_float_rgba = { value = "Color(r, g, b, a)" }
+cna_color_init_int_rgb = { value = "Color(r, g, b)" }
+cna_color_init_int_rgba = { value = "Color(r, g, b, a)" }
+cna_color_init_bytes_rgb = { value = "Color(r, g, b)" }
+cna_color_init_bytes_rgba = { value = "Color(r, g, b, a)" }
+cna_color_get_packed_value = { value = "color.getPackedValueProperty()" }
+cna_color_get_debug_string_byte_count = { value = "color.getDebugDisplayStringProperty().size()" }
+cna_color_copy_debug_string = { copy = "color.getDebugDisplayStringProperty()" }
+cna_color_equals = { value = "left.Equals(right)" }
+cna_color_not_equals = { value = "left != right" }
+cna_color_to_vector3 = { value = "color.ToVector3()" }
+cna_color_to_vector4 = { value = "color.ToVector4()" }
+cna_color_get_hash_code = { value = "color.GetHashCode()" }
+cna_color_get_string_byte_count = { value = "color.ToString().size()" }
+cna_color_copy_string = { copy = "color.ToString()" }
+cna_color_lerp = { value = "Color::Lerp(value1, value2, amount)" }
+cna_color_from_non_premultiplied_int = { value = "Color(PremultiplyUnchecked(r, a), PremultiplyUnchecked(g, a), PremultiplyUnchecked(b, a), a)" }
+cna_color_multiply = { value = "Color::Multiply(color, scale)" }

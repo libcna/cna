@@ -1,0 +1,107 @@
+# Plane, Ray and bounding-volume value routes, generated into src/generated/Geometry.inc,
+# which src/CnaCApiGeometry.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[plane]
+[plane.routes]
+cna_plane_init = { value = "Plane()" }
+cna_plane_init_abcd = { value = "Plane(a, b, c, d)" }
+cna_plane_dot = { value = "plane.Dot(value)" }
+cna_plane_dot_coordinate = { value = "plane.DotCoordinate(value)" }
+cna_plane_dot_normal = { value = "plane.DotNormal(value)" }
+cna_plane_intersects_box = { value = "plane.Intersects(box)" }
+cna_plane_intersects_sphere = { value = "plane.Intersects(sphere)" }
+cna_plane_intersects_frustum = { value = "plane.Intersects(frustum)" }
+cna_plane_equals = { value = "left.Equals(right)" }
+cna_plane_not_equals = { value = "left != right" }
+cna_plane_get_hash_code = { value = "value.GetHashCode()" }
+cna_plane_get_string_size = { size = "value.ToString()" }
+cna_plane_copy_string = { copy = "value.ToString()" }
+cna_plane_normalize = { value = "Plane::Normalize(value)" }
+cna_plane_transform_matrix = { value = "Plane::Transform(value, matrix)" }
+cna_plane_transform_quaternion = { value = "Plane::Transform(value, rotation)" }
+
+[vector4]
+[vector4.routes]
+cna_plane_init_vector4 = { value = "Plane(value)" }
+
+[vector3]
+[vector3.routes]
+cna_plane_init_normal_d = { value = "Plane(normal, d)" }
+cna_plane_init_points = { value = "Plane(a, b, c)" }
+cna_ray_init_position_direction = { value = "Ray(position, direction)" }
+cna_bounding_box_init_min_max = { value = "BoundingBox(min, max)" }
+cna_bounding_sphere_init_center_radius = { value = "BoundingSphere(center, radius)" }
+
+[ray]
+[ray.routes]
+cna_ray_init = { value = "Ray()" }
+cna_ray_equals = { value = "left.Equals(right)" }
+cna_ray_not_equals = { value = "left != right" }
+cna_ray_get_hash_code = { value = "value.GetHashCode()" }
+cna_ray_get_string_size = { size = "value.ToString()" }
+cna_ray_copy_string = { copy = "value.ToString()" }
+
+[bounding_box]
+[bounding_box.routes]
+cna_bounding_box_init = { value = "BoundingBox()" }
+cna_bounding_box_contains_box = { value = "value.Contains(box)" }
+cna_bounding_box_contains_sphere = { value = "value.Contains(sphere)" }
+cna_bounding_box_contains_point = { value = "value.Contains(point)" }
+cna_bounding_box_contains_frustum = { value = "value.Contains(frustum)" }
+cna_bounding_box_intersects_frustum = { value = "value.Intersects(frustum)" }
+cna_bounding_box_intersects_sphere = { value = "value.Intersects(sphere)" }
+cna_bounding_box_intersects_box = { value = "value.Intersects(box)" }
+cna_bounding_box_intersects_plane = { value = "value.Intersects(plane)" }
+cna_bounding_box_equals = { value = "left.Equals(right)" }
+cna_bounding_box_not_equals = { value = "left != right" }
+cna_bounding_box_get_hash_code = { value = "value.GetHashCode()" }
+cna_bounding_box_get_string_size = { size = "value.ToString()" }
+cna_bounding_box_copy_string = { copy = "value.ToString()" }
+cna_bounding_box_create_merged = { value = "BoundingBox::CreateMerged(original, additional)" }
+cna_bounding_sphere_create_from_box = { value = "BoundingSphere::CreateFromBoundingBox(box)" }
+
+[bounding_sphere]
+[bounding_sphere.routes]
+cna_bounding_box_create_from_sphere = { value = "BoundingBox::CreateFromSphere(sphere)" }
+cna_bounding_sphere_init = { value = "BoundingSphere()" }
+cna_bounding_sphere_transform = { value = "value.Transform(matrix)" }
+cna_bounding_sphere_contains_box = { value = "value.Contains(box)" }
+cna_bounding_sphere_contains_frustum = { value = "value.Contains(frustum)" }
+cna_bounding_sphere_contains_sphere = { value = "value.Contains(sphere)" }
+cna_bounding_sphere_contains_point = { value = "value.Contains(point)" }
+cna_bounding_sphere_equals = { value = "left.Equals(right)" }
+cna_bounding_sphere_not_equals = { value = "left != right" }
+cna_bounding_sphere_create_merged = { value = "BoundingSphere::CreateMerged(original, additional)" }
+cna_bounding_sphere_intersects_box = { value = "value.Intersects(box)" }
+cna_bounding_sphere_intersects_frustum = { value = "value.Intersects(frustum)" }
+cna_bounding_sphere_intersects_sphere = { value = "value.Intersects(sphere)" }
+cna_bounding_sphere_intersects_plane = { value = "value.Intersects(plane)" }
+cna_bounding_sphere_get_hash_code = { value = "value.GetHashCode()" }
+cna_bounding_sphere_get_string_size = { size = "value.ToString()" }
+cna_bounding_sphere_copy_string = { copy = "value.ToString()" }
+
+[bounding_frustum]
+[bounding_frustum.routes]
+cna_bounding_sphere_create_from_frustum = { value = "BoundingSphere::CreateFromFrustum(frustum)" }
+cna_bounding_frustum_get_near = { value = "value.getNearProperty()" }
+cna_bounding_frustum_get_far = { value = "value.getFarProperty()" }
+cna_bounding_frustum_get_left = { value = "value.getLeftProperty()" }
+cna_bounding_frustum_get_right = { value = "value.getRightProperty()" }
+cna_bounding_frustum_get_top = { value = "value.getTopProperty()" }
+cna_bounding_frustum_get_bottom = { value = "value.getBottomProperty()" }
+cna_bounding_frustum_contains_box = { value = "value.Contains(box)" }
+cna_bounding_frustum_contains_sphere = { value = "value.Contains(sphere)" }
+cna_bounding_frustum_contains_point = { value = "value.Contains(point)" }
+cna_bounding_frustum_intersects_frustum = { value = "value.Intersects(frustum)" }
+cna_bounding_frustum_intersects_box = { value = "value.Intersects(box)" }
+cna_bounding_frustum_intersects_sphere = { value = "value.Intersects(sphere)" }
+cna_bounding_frustum_intersects_plane = { value = "value.Intersects(plane)" }
+cna_bounding_frustum_equals = { value = "left.Equals(right)" }
+cna_bounding_frustum_not_equals = { value = "left != right" }
+cna_bounding_frustum_get_hash_code = { value = "value.GetHashCode()" }
+cna_bounding_frustum_get_string_size = { size = "value.ToString()" }
+cna_bounding_frustum_copy_string = { copy = "value.ToString()" }
+
+[matrix]
+[matrix.routes]
+cna_bounding_frustum_init_matrix = { value = "BoundingFrustum(matrix)" }

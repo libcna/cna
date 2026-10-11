@@ -1,0 +1,61 @@
+# Matrix value routes, generated into src/generated/Matrix.inc,
+# which src/CnaCApiMatrix.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[matrix]
+[matrix.routes]
+cna_matrix_init = { value = "Matrix()" }
+cna_matrix_init_values = { value = "Matrix(m11, m12, m13, m14, m21, m22, m23, m24, m31, m32, m33, m34, m41, m42, m43, m44)" }
+cna_matrix_get_identity = { value = "Matrix::getIdentityProperty()" }
+cna_matrix_get_backward = { value = "value.getBackwardProperty()" }
+cna_matrix_get_down = { value = "value.getDownProperty()" }
+cna_matrix_get_forward = { value = "value.getForwardProperty()" }
+cna_matrix_get_left = { value = "value.getLeftProperty()" }
+cna_matrix_get_right = { value = "value.getRightProperty()" }
+cna_matrix_get_translation = { value = "value.getTranslationProperty()" }
+cna_matrix_get_up = { value = "value.getUpProperty()" }
+cna_matrix_determinant = { value = "value.Determinant()" }
+cna_matrix_equals = { value = "left.Equals(right)" }
+cna_matrix_not_equals = { value = "left != right" }
+cna_matrix_get_hash_code = { value = "value.GetHashCode()" }
+cna_matrix_get_string_size = { size = "value.ToString()" }
+cna_matrix_copy_string = { copy = "value.ToString()" }
+cna_matrix_add = { value = "Matrix::Add(left, right)" }
+cna_matrix_create_from_yaw_pitch_roll = { value = "Matrix::CreateFromYawPitchRoll(yaw, pitch, roll)" }
+cna_matrix_create_orthographic = { value = "Matrix::CreateOrthographic(width, height, near_plane, far_plane)" }
+cna_matrix_create_orthographic_off_center = { value = "Matrix::CreateOrthographicOffCenter(left, right, bottom, top, near_plane, far_plane)" }
+cna_matrix_create_perspective = { value = "Matrix::CreatePerspective(width, height, near_plane, far_plane)" }
+cna_matrix_create_perspective_field_of_view = { value = "Matrix::CreatePerspectiveFieldOfView(field_of_view, aspect_ratio, near_plane, far_plane)" }
+cna_matrix_create_perspective_off_center = { value = "Matrix::CreatePerspectiveOffCenter(left, right, bottom, top, near_plane, far_plane)" }
+cna_matrix_create_rotation_x = { value = "Matrix::CreateRotationX(radians)" }
+cna_matrix_create_rotation_y = { value = "Matrix::CreateRotationY(radians)" }
+cna_matrix_create_rotation_z = { value = "Matrix::CreateRotationZ(radians)" }
+cna_matrix_create_scale_scalar = { value = "Matrix::CreateScale(scale)" }
+cna_matrix_create_scale_xyz = { value = "Matrix::CreateScale(x_scale, y_scale, z_scale)" }
+cna_matrix_create_translation_xyz = { value = "Matrix::CreateTranslation(x, y, z)" }
+cna_matrix_divide = { value = "Matrix::Divide(left, right)" }
+cna_matrix_divide_scalar = { value = "Matrix::Divide(value, divider)" }
+cna_matrix_invert = { value = "Matrix::Invert(value)" }
+cna_matrix_lerp = { value = "Matrix::Lerp(value1, value2, amount)" }
+cna_matrix_multiply = { value = "Matrix::Multiply(left, right)" }
+cna_matrix_multiply_scalar = { value = "Matrix::Multiply(value, scale)" }
+cna_matrix_negate = { value = "Matrix::Negate(value)" }
+cna_matrix_subtract = { value = "Matrix::Subtract(left, right)" }
+cna_matrix_transpose = { value = "Matrix::Transpose(value)" }
+cna_matrix_transform = { value = "Matrix::Transform(value, rotation)" }
+
+[vector3]
+[vector3.routes]
+cna_matrix_create_from_axis_angle = { value = "Matrix::CreateFromAxisAngle(axis, angle)" }
+cna_matrix_create_look_at = { value = "Matrix::CreateLookAt(camera_position, camera_target, camera_up)" }
+cna_matrix_create_scale_vector3 = { value = "Matrix::CreateScale(scales)" }
+cna_matrix_create_shadow = { value = "Matrix::CreateShadow(light_direction, plane)" }
+cna_matrix_create_translation_vector3 = { value = "Matrix::CreateTranslation(position)" }
+cna_matrix_create_world = { value = "Matrix::CreateWorld(position, forward, up)" }
+
+[quaternion]
+[quaternion.routes]
+cna_matrix_create_from_quaternion = { value = "Matrix::CreateFromQuaternion(quaternion)" }
+
+[plane]
+[plane.routes]
+cna_matrix_create_reflection = { value = "Matrix::CreateReflection(plane)" }

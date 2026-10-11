@@ -19,11 +19,9 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::MathHelper;
 using Microsoft::Xna::Framework::Point;
 using Microsoft::Xna::Framework::Rectangle;
@@ -75,156 +73,6 @@ using Microsoft::Xna::Framework::Rectangle;
 
 } // namespace
 
-CNA_Result cna_math_barycentric(
-    const float value1,
-    const float value2,
-    const float value3,
-    const float amount1,
-    const float amount2,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Barycentric(value1, value2, value3, amount1, amount2);
-    });
-}
-
-CNA_Result cna_math_catmull_rom(
-    const float value1,
-    const float value2,
-    const float value3,
-    const float value4,
-    const float amount,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::CatmullRom(value1, value2, value3, value4, amount);
-    });
-}
-
-CNA_Result cna_math_clamp_float(
-    const float value,
-    const float minimum,
-    const float maximum,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Clamp(value, minimum, maximum);
-    });
-}
-
-CNA_Result cna_math_distance(
-    const float value1,
-    const float value2,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Distance(value1, value2);
-    });
-}
-
-CNA_Result cna_math_hermite(
-    const float value1,
-    const float tangent1,
-    const float value2,
-    const float tangent2,
-    const float amount,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Hermite(value1, tangent1, value2, tangent2, amount);
-    });
-}
-
-CNA_Result cna_math_lerp(
-    const float value1,
-    const float value2,
-    const float amount,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Lerp(value1, value2, amount);
-    });
-}
-
-CNA_Result cna_math_max(
-    const float value1,
-    const float value2,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Max(value1, value2);
-    });
-}
-
-CNA_Result cna_math_min(
-    const float value1,
-    const float value2,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::Min(value1, value2);
-    });
-}
-
-CNA_Result cna_math_smooth_step(
-    const float value1,
-    const float value2,
-    const float amount,
-    float* const outValue)
-{
-    return StoreOutput(outValue, "The float output is null.", [=] {
-        return MathHelper::SmoothStep(value1, value2, amount);
-    });
-}
-
-CNA_Result cna_math_to_degrees(
-    const float radians,
-    float* const outDegrees)
-{
-    return StoreOutput(outDegrees, "The float output is null.", [=] {
-        return MathHelper::ToDegrees(radians);
-    });
-}
-
-CNA_Result cna_math_to_radians(
-    const float degrees,
-    float* const outRadians)
-{
-    return StoreOutput(outRadians, "The float output is null.", [=] {
-        return MathHelper::ToRadians(degrees);
-    });
-}
-
-CNA_Result cna_math_wrap_angle(
-    const float angle,
-    float* const outAngle)
-{
-    return StoreOutput(outAngle, "The float output is null.", [=] {
-        return MathHelper::WrapAngle(angle);
-    });
-}
-
-CNA_Result cna_math_clamp_int32(
-    const int32_t value,
-    const int32_t minimum,
-    const int32_t maximum,
-    int32_t* const outValue)
-{
-    return StoreOutput(outValue, "The integer output is null.", [=] {
-        return MathHelper::Clamp(value, minimum, maximum);
-    });
-}
-
-CNA_Result cna_math_within_epsilon(
-    const float value1,
-    const float value2,
-    CNA_Bool* const outWithinEpsilon)
-{
-    return StoreOutput(outWithinEpsilon, "The Boolean output is null.", [=] {
-        return ToCBool(MathHelper::WithinEpsilon(value1, value2));
-    });
-}
-
 CNA_Result cna_math_closest_msaa_power(
     const int32_t value,
     int32_t* const outValue)
@@ -271,55 +119,6 @@ CNA_Result cna_point_init_xy(
 CNA_Result cna_point_get_zero(CNA_Point* const outValue)
 {
     return cna_point_init(outValue);
-}
-
-CNA_Result cna_point_equals(
-    const CNA_Point left,
-    const CNA_Point right,
-    CNA_Bool* const outEqual)
-{
-    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left).Equals(ToNative(right)));
-    });
-}
-
-CNA_Result cna_point_not_equals(
-    const CNA_Point left,
-    const CNA_Point right,
-    CNA_Bool* const outNotEqual)
-{
-    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left) != ToNative(right));
-    });
-}
-
-CNA_Result cna_point_get_hash_code(
-    const CNA_Point value,
-    int32_t* const outHash)
-{
-    return StoreOutput(outHash, "The hash output is null.", [=] {
-        return ToNative(value).GetHashCode();
-    });
-}
-
-CNA_Result cna_point_get_string_size(
-    const CNA_Point value,
-    uint64_t* const outBytes)
-{
-    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
-        return static_cast<uint64_t>(ToNative(value).ToString().size());
-    });
-}
-
-CNA_Result cna_point_copy_string(
-    const CNA_Point value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CopyFormattedText(destination, capacity, outBytes, [=] {
-        return ToNative(value).ToString();
-    });
 }
 
 CNA_Result cna_point_add(
@@ -554,55 +353,6 @@ CNA_Result cna_rectangle_inflate(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_equals(
-    const CNA_Rectangle left,
-    const CNA_Rectangle right,
-    CNA_Bool* const outEqual)
-{
-    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left).Equals(ToNative(right)));
-    });
-}
-
-CNA_Result cna_rectangle_not_equals(
-    const CNA_Rectangle left,
-    const CNA_Rectangle right,
-    CNA_Bool* const outNotEqual)
-{
-    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left) != ToNative(right));
-    });
-}
-
-CNA_Result cna_rectangle_get_hash_code(
-    const CNA_Rectangle value,
-    int32_t* const outHash)
-{
-    return StoreOutput(outHash, "The hash output is null.", [=] {
-        return ToNative(value).GetHashCode();
-    });
-}
-
-CNA_Result cna_rectangle_get_string_size(
-    const CNA_Rectangle value,
-    uint64_t* const outBytes)
-{
-    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
-        return static_cast<uint64_t>(ToNative(value).ToString().size());
-    });
-}
-
-CNA_Result cna_rectangle_copy_string(
-    const CNA_Rectangle value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CopyFormattedText(destination, capacity, outBytes, [=] {
-        return ToNative(value).ToString();
-    });
-}
-
 CNA_Result cna_rectangle_intersects(
     const CNA_Rectangle left,
     const CNA_Rectangle right,
@@ -652,3 +402,6 @@ CNA_Result cna_rectangle_union(
         };
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Math.toml.
+#include "generated/Math.inc"

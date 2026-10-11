@@ -497,6 +497,12 @@ template<typename TCallable>
     return value ? CNA_TRUE : CNA_FALSE;
 }
 
+/** @brief Reads a `CNA_Bool` that `ValidateCanonicalBool` has already accepted. */
+[[nodiscard]] constexpr bool FromCBool(const CNA_Bool value) noexcept
+{
+    return value == CNA_TRUE;
+}
+
 /**
  * @brief Refuses a `CNA_Bool` that is neither `CNA_FALSE` nor `CNA_TRUE`.
  *

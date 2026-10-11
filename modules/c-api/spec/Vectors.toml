@@ -1,0 +1,137 @@
+# Vector2, Vector3 and Vector4 value routes, generated into src/generated/Vectors.inc,
+# which src/CnaCApiVectors.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[vector2]
+[vector2.routes]
+cna_vector2_init = { value = "Vector2()" }
+cna_vector2_init_xy = { value = "Vector2(x, y)" }
+cna_vector2_init_scalar = { value = "Vector2(value)" }
+cna_vector2_get_zero = { value = "Vector2::Zero" }
+cna_vector2_get_one = { value = "Vector2::One" }
+cna_vector2_get_unit_x = { value = "Vector2::UnitX" }
+cna_vector2_get_unit_y = { value = "Vector2::UnitY" }
+cna_vector2_equals = { value = "left.Equals(right)" }
+cna_vector2_not_equals = { value = "left != right" }
+cna_vector2_get_hash_code = { value = "value.GetHashCode()" }
+cna_vector2_length = { value = "value.Length()" }
+cna_vector2_length_squared = { value = "value.LengthSquared()" }
+cna_vector2_get_string_size = { size = "value.ToString()" }
+cna_vector2_copy_string = { copy = "value.ToString()" }
+cna_vector2_add = { value = "Vector2::Add(left, right)" }
+cna_vector2_barycentric = { value = "Vector2::Barycentric(value1, value2, value3, amount1, amount2)" }
+cna_vector2_catmull_rom = { value = "Vector2::CatmullRom(value1, value2, value3, value4, amount)" }
+cna_vector2_clamp = { value = "Vector2::Clamp(value, minimum, maximum)" }
+cna_vector2_distance = { value = "Vector2::Distance(left, right)" }
+cna_vector2_distance_squared = { value = "Vector2::DistanceSquared(left, right)" }
+cna_vector2_divide = { value = "Vector2::Divide(left, right)" }
+cna_vector2_divide_scalar = { value = "Vector2::Divide(value, divider)" }
+cna_vector2_dot = { value = "Vector2::Dot(left, right)" }
+cna_vector2_hermite = { value = "Vector2::Hermite(value1, tangent1, value2, tangent2, amount)" }
+cna_vector2_lerp = { value = "Vector2::Lerp(value1, value2, amount)" }
+cna_vector2_max = { value = "Vector2::Max(left, right)" }
+cna_vector2_min = { value = "Vector2::Min(left, right)" }
+cna_vector2_multiply = { value = "Vector2::Multiply(left, right)" }
+cna_vector2_multiply_scalar = { value = "Vector2::Multiply(value, scale)" }
+cna_vector2_negate = { value = "Vector2::Negate(value)" }
+cna_vector2_normalize = { value = "Vector2::Normalize(value)" }
+cna_vector2_reflect = { value = "Vector2::Reflect(value, normal)" }
+cna_vector2_smooth_step = { value = "Vector2::SmoothStep(value1, value2, amount)" }
+cna_vector2_subtract = { value = "Vector2::Subtract(left, right)" }
+cna_vector2_transform_matrix = { value = "Vector2::Transform(value, matrix)" }
+cna_vector2_transform_quaternion = { value = "Vector2::Transform(value, rotation)" }
+cna_vector2_transform_normal = { value = "Vector2::TransformNormal(value, matrix)" }
+cna_vector3_init_vector2_z = { value = "Vector3(value, z)" }
+cna_vector4_init_vector2_zw = { value = "Vector4(value, z, w)" }
+cna_vector4_transform_vector2_matrix = { value = "Vector4::Transform(value, matrix)" }
+cna_vector4_transform_vector2_quaternion = { value = "Vector4::Transform(value, rotation)" }
+
+[vector3]
+[vector3.routes]
+cna_vector3_init = { value = "Vector3()" }
+cna_vector3_init_xyz = { value = "Vector3(x, y, z)" }
+cna_vector3_init_scalar = { value = "Vector3(value)" }
+cna_vector3_get_zero = { value = "Vector3::Zero" }
+cna_vector3_get_one = { value = "Vector3::One" }
+cna_vector3_get_unit_x = { value = "Vector3::UnitX" }
+cna_vector3_get_unit_y = { value = "Vector3::UnitY" }
+cna_vector3_get_unit_z = { value = "Vector3::UnitZ" }
+cna_vector3_get_up = { value = "Vector3::Up" }
+cna_vector3_get_down = { value = "Vector3::Down" }
+cna_vector3_get_right = { value = "Vector3::Right" }
+cna_vector3_get_left = { value = "Vector3::Left" }
+cna_vector3_get_forward = { value = "Vector3::Forward" }
+cna_vector3_get_backward = { value = "Vector3::Backward" }
+cna_vector3_equals = { value = "left.Equals(right)" }
+cna_vector3_not_equals = { value = "left != right" }
+cna_vector3_get_hash_code = { value = "value.GetHashCode()" }
+cna_vector3_length = { value = "value.Length()" }
+cna_vector3_length_squared = { value = "value.LengthSquared()" }
+cna_vector3_get_string_size = { size = "value.ToString()" }
+cna_vector3_copy_string = { copy = "value.ToString()" }
+cna_vector3_add = { value = "Vector3::Add(left, right)" }
+cna_vector3_barycentric = { value = "Vector3::Barycentric(value1, value2, value3, amount1, amount2)" }
+cna_vector3_catmull_rom = { value = "Vector3::CatmullRom(value1, value2, value3, value4, amount)" }
+cna_vector3_clamp = { value = "Vector3::Clamp(value, minimum, maximum)" }
+cna_vector3_cross = { value = "Vector3::Cross(left, right)" }
+cna_vector3_distance = { value = "Vector3::Distance(left, right)" }
+cna_vector3_distance_squared = { value = "Vector3::DistanceSquared(left, right)" }
+cna_vector3_divide = { value = "Vector3::Divide(left, right)" }
+cna_vector3_divide_scalar = { value = "Vector3::Divide(value, divider)" }
+cna_vector3_dot = { value = "Vector3::Dot(left, right)" }
+cna_vector3_hermite = { value = "Vector3::Hermite(value1, tangent1, value2, tangent2, amount)" }
+cna_vector3_lerp = { value = "Vector3::Lerp(value1, value2, amount)" }
+cna_vector3_max = { value = "Vector3::Max(left, right)" }
+cna_vector3_min = { value = "Vector3::Min(left, right)" }
+cna_vector3_multiply = { value = "Vector3::Multiply(left, right)" }
+cna_vector3_multiply_scalar = { value = "Vector3::Multiply(value, scale)" }
+cna_vector3_negate = { value = "Vector3::Negate(value)" }
+cna_vector3_normalize = { value = "Vector3::Normalize(value)" }
+cna_vector3_reflect = { value = "Vector3::Reflect(value, normal)" }
+cna_vector3_smooth_step = { value = "Vector3::SmoothStep(value1, value2, amount)" }
+cna_vector3_subtract = { value = "Vector3::Subtract(left, right)" }
+cna_vector3_transform_matrix = { value = "Vector3::Transform(value, matrix)" }
+cna_vector3_transform_quaternion = { value = "Vector3::Transform(value, rotation)" }
+cna_vector3_transform_normal = { value = "Vector3::TransformNormal(value, matrix)" }
+cna_vector4_init_vector3_w = { value = "Vector4(value, w)" }
+cna_vector4_transform_vector3_matrix = { value = "Vector4::Transform(value, matrix)" }
+cna_vector4_transform_vector3_quaternion = { value = "Vector4::Transform(value, rotation)" }
+
+[vector4]
+[vector4.routes]
+cna_vector4_init = { value = "Vector4()" }
+cna_vector4_init_xyzw = { value = "Vector4(x, y, z, w)" }
+cna_vector4_init_scalar = { value = "Vector4(value)" }
+cna_vector4_get_zero = { value = "Vector4::Zero" }
+cna_vector4_get_one = { value = "Vector4::One" }
+cna_vector4_get_unit_x = { value = "Vector4::UnitX" }
+cna_vector4_get_unit_y = { value = "Vector4::UnitY" }
+cna_vector4_get_unit_z = { value = "Vector4::UnitZ" }
+cna_vector4_get_unit_w = { value = "Vector4::UnitW" }
+cna_vector4_equals = { value = "left.Equals(right)" }
+cna_vector4_not_equals = { value = "left != right" }
+cna_vector4_get_hash_code = { value = "value.GetHashCode()" }
+cna_vector4_length = { value = "value.Length()" }
+cna_vector4_length_squared = { value = "value.LengthSquared()" }
+cna_vector4_get_string_size = { size = "value.ToString()" }
+cna_vector4_copy_string = { copy = "value.ToString()" }
+cna_vector4_add = { value = "Vector4::Add(left, right)" }
+cna_vector4_barycentric = { value = "Vector4::Barycentric(value1, value2, value3, amount1, amount2)" }
+cna_vector4_catmull_rom = { value = "Vector4::CatmullRom(value1, value2, value3, value4, amount)" }
+cna_vector4_clamp = { value = "Vector4::Clamp(value, minimum, maximum)" }
+cna_vector4_distance = { value = "Vector4::Distance(left, right)" }
+cna_vector4_distance_squared = { value = "Vector4::DistanceSquared(left, right)" }
+cna_vector4_divide = { value = "Vector4::Divide(left, right)" }
+cna_vector4_divide_scalar = { value = "Vector4::Divide(value, divider)" }
+cna_vector4_dot = { value = "Vector4::Dot(left, right)" }
+cna_vector4_hermite = { value = "Vector4::Hermite(value1, tangent1, value2, tangent2, amount)" }
+cna_vector4_lerp = { value = "Vector4::Lerp(value1, value2, amount)" }
+cna_vector4_max = { value = "Vector4::Max(left, right)" }
+cna_vector4_min = { value = "Vector4::Min(left, right)" }
+cna_vector4_multiply = { value = "Vector4::Multiply(left, right)" }
+cna_vector4_multiply_scalar = { value = "Vector4::Multiply(value, scale)" }
+cna_vector4_negate = { value = "Vector4::Negate(value)" }
+cna_vector4_normalize = { value = "Vector4::Normalize(value)" }
+cna_vector4_smooth_step = { value = "Vector4::SmoothStep(value1, value2, amount)" }
+cna_vector4_subtract = { value = "Vector4::Subtract(left, right)" }
+cna_vector4_transform_matrix = { value = "Vector4::Transform(value, matrix)" }
+cna_vector4_transform_quaternion = { value = "Vector4::Transform(value, rotation)" }

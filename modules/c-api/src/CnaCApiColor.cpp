@@ -17,11 +17,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToC;
-using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
@@ -39,102 +36,6 @@ using Microsoft::Xna::Framework::Vector4;
 
 } // namespace
 
-CNA_Result cna_color_init_vector4(
-    const CNA_Vector4 vector,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(ToNative(vector)));
-    });
-}
-
-CNA_Result cna_color_init_vector3(
-    const CNA_Vector3 vector,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(ToNative(vector)));
-    });
-}
-
-CNA_Result cna_color_init_float_rgb(
-    const float r,
-    const float g,
-    const float b,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b));
-    });
-}
-
-CNA_Result cna_color_init_float_rgba(
-    const float r,
-    const float g,
-    const float b,
-    const float a,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b, a));
-    });
-}
-
-CNA_Result cna_color_init_int_rgb(
-    const int32_t r,
-    const int32_t g,
-    const int32_t b,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b));
-    });
-}
-
-CNA_Result cna_color_init_int_rgba(
-    const int32_t r,
-    const int32_t g,
-    const int32_t b,
-    const int32_t a,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b, a));
-    });
-}
-
-CNA_Result cna_color_init_bytes_rgb(
-    const uint8_t r,
-    const uint8_t g,
-    const uint8_t b,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b));
-    });
-}
-
-CNA_Result cna_color_init_bytes_rgba(
-    const uint8_t r,
-    const uint8_t g,
-    const uint8_t b,
-    const uint8_t a,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(r, g, b, a));
-    });
-}
-
-CNA_Result cna_color_get_packed_value(
-    const CNA_Color color,
-    uint32_t* const outPackedValue)
-{
-    return StoreOutput(outPackedValue, "The packed-value output is null.", [=] {
-        return static_cast<uint32_t>(ToNative(color).getPackedValueProperty());
-    });
-}
-
 CNA_Result cna_color_set_packed_value(
     CNA_Color* const color,
     const uint32_t packedValue)
@@ -151,139 +52,6 @@ CNA_Result cna_color_set_packed_value(
         const CNA_Color result = ToC(native);
         *color = result;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_get_debug_string_byte_count(
-    const CNA_Color color,
-    uint64_t* const outByteCount)
-{
-    return StoreOutput(outByteCount, "The byte-count output is null.", [=] {
-        return static_cast<uint64_t>(ToNative(color).getDebugDisplayStringProperty().size());
-    });
-}
-
-CNA_Result cna_color_copy_debug_string(
-    const CNA_Color color,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CopyFormattedText(destination, capacity, outByteCount, [=] {
-        return ToNative(color).getDebugDisplayStringProperty();
-    });
-}
-
-CNA_Result cna_color_equals(
-    const CNA_Color left,
-    const CNA_Color right,
-    CNA_Bool* const outEqual)
-{
-    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left).Equals(ToNative(right)));
-    });
-}
-
-CNA_Result cna_color_not_equals(
-    const CNA_Color left,
-    const CNA_Color right,
-    CNA_Bool* const outNotEqual)
-{
-    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
-        return ToCBool(ToNative(left) != ToNative(right));
-    });
-}
-
-CNA_Result cna_color_to_vector3(
-    const CNA_Color color,
-    CNA_Vector3* const outVector)
-{
-    return StoreOutput(outVector, "The Vector3 output is null.", [=] {
-        return ToC(ToNative(color).ToVector3());
-    });
-}
-
-CNA_Result cna_color_to_vector4(
-    const CNA_Color color,
-    CNA_Vector4* const outVector)
-{
-    return StoreOutput(outVector, "The Vector4 output is null.", [=] {
-        return ToC(ToNative(color).ToVector4());
-    });
-}
-
-CNA_Result cna_color_get_hash_code(
-    const CNA_Color color,
-    int32_t* const outHash)
-{
-    return StoreOutput(outHash, "The hash output is null.", [=] {
-        return static_cast<int32_t>(ToNative(color).GetHashCode());
-    });
-}
-
-CNA_Result cna_color_get_string_byte_count(
-    const CNA_Color color,
-    uint64_t* const outByteCount)
-{
-    return StoreOutput(outByteCount, "The byte-count output is null.", [=] {
-        return static_cast<uint64_t>(ToNative(color).ToString().size());
-    });
-}
-
-CNA_Result cna_color_copy_string(
-    const CNA_Color color,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CopyFormattedText(destination, capacity, outByteCount, [=] {
-        return ToNative(color).ToString();
-    });
-}
-
-CNA_Result cna_color_lerp(
-    const CNA_Color value1,
-    const CNA_Color value2,
-    const float amount,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color::Lerp(ToNative(value1), ToNative(value2), amount));
-    });
-}
-
-CNA_Result cna_color_from_non_premultiplied_vector4(
-    const CNA_Vector4 vector,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color::FromNonPremultiplied(ToNative(vector)));
-    });
-}
-
-CNA_Result cna_color_from_non_premultiplied_int(
-    const int32_t r,
-    const int32_t g,
-    const int32_t b,
-    const int32_t a,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color(
-            PremultiplyUnchecked(r, a),
-            PremultiplyUnchecked(g, a),
-            PremultiplyUnchecked(b, a),
-            a));
-    });
-}
-
-CNA_Result cna_color_multiply(
-    const CNA_Color color,
-    const float scale,
-    CNA_Color* const outColor)
-{
-    return StoreOutput(outColor, "The Color output is null.", [=] {
-        return ToC(Color::Multiply(ToNative(color), scale));
     });
 }
 
@@ -305,3 +73,6 @@ CNA_Result cna_color_pack_from_vector4(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/Color.toml.
+#include "generated/Color.inc"

@@ -32,7 +32,6 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -381,23 +380,5 @@ CNA_Result cna_packed_vector_not_equals(
     });
 }
 
-CNA_Result cna_half_from_single(const float value, uint16_t* const outHalf)
-{
-    return StoreOutput(outHalf, "The half-precision output is null.", [=] {
-        return HalfTypeHelper::Convert(value);
-    });
-}
-
-CNA_Result cna_half_from_single_bits(const int32_t singleBits, uint16_t* const outHalf)
-{
-    return StoreOutput(outHalf, "The half-precision output is null.", [=] {
-        return HalfTypeHelper::Convert(singleBits);
-    });
-}
-
-CNA_Result cna_half_to_single(const uint16_t half, float* const outValue)
-{
-    return StoreOutput(outValue, "The single-precision output is null.", [=] {
-        return HalfTypeHelper::Convert(half);
-    });
-}
+// The mechanically regular routes of this family, generated from modules/c-api/spec/PackedVectors.toml.
+#include "generated/PackedVectors.inc"

@@ -358,6 +358,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_bool_contract_test.py" --check)
 
+        # The generated C routes (modules/c-api/src/generated/*.inc) must match their specs
+        # (modules/c-api/spec/*.toml) and the public headers they read signatures from, so an edit
+        # to either cannot ship with stale glue. Build-free.
+        add_test(NAME CApiGeneratedRoutesCurrent
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_routes.py" --check)
+
         # plans/plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a

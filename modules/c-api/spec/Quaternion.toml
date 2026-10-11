@@ -1,0 +1,37 @@
+# Quaternion value routes, generated into src/generated/Quaternion.inc,
+# which src/CnaCApiQuaternion.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[quaternion]
+[quaternion.routes]
+cna_quaternion_init_xyzw = { value = "Quaternion(x, y, z, w)" }
+cna_quaternion_get_identity = { value = "Quaternion::Identity" }
+cna_quaternion_equals = { value = "left.Equals(right)" }
+cna_quaternion_not_equals = { value = "left != right" }
+cna_quaternion_get_hash_code = { value = "value.GetHashCode()" }
+cna_quaternion_length = { value = "value.Length()" }
+cna_quaternion_length_squared = { value = "value.LengthSquared()" }
+cna_quaternion_get_string_size = { size = "value.ToString()" }
+cna_quaternion_copy_string = { copy = "value.ToString()" }
+cna_quaternion_add = { value = "Quaternion::Add(left, right)" }
+cna_quaternion_concatenate = { value = "Quaternion::Concatenate(first, second)" }
+cna_quaternion_conjugate = { value = "Quaternion::Conjugate(value)" }
+cna_quaternion_create_from_yaw_pitch_roll = { value = "Quaternion::CreateFromYawPitchRoll(yaw, pitch, roll)" }
+cna_quaternion_divide = { value = "Quaternion::Divide(left, right)" }
+cna_quaternion_dot = { value = "Quaternion::Dot(left, right)" }
+cna_quaternion_inverse = { value = "Quaternion::Inverse(value)" }
+cna_quaternion_lerp = { value = "Quaternion::Lerp(value1, value2, amount)" }
+cna_quaternion_slerp = { value = "Quaternion::Slerp(value1, value2, amount)" }
+cna_quaternion_subtract = { value = "Quaternion::Subtract(left, right)" }
+cna_quaternion_multiply = { value = "Quaternion::Multiply(left, right)" }
+cna_quaternion_multiply_scalar = { value = "Quaternion::Multiply(value, scale)" }
+cna_quaternion_negate = { value = "Quaternion::Negate(value)" }
+cna_quaternion_normalize = { value = "Quaternion::Normalize(value)" }
+
+[vector3]
+[vector3.routes]
+cna_quaternion_init_vector3_w = { value = "Quaternion(vector_part, scalar_part)" }
+cna_quaternion_create_from_axis_angle = { value = "Quaternion::CreateFromAxisAngle(axis, angle)" }
+
+[matrix]
+[matrix.routes]
+cna_quaternion_create_from_rotation_matrix = { value = "Quaternion::CreateFromRotationMatrix(matrix)" }

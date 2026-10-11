@@ -1,0 +1,69 @@
+# The generated C API routes must match what tools/c-api/generate_routes.py produces from
+# modules/c-api/spec/*.toml and the public headers. Build-free: it needs Python and the checkout.
+
+name: C API generated routes
+
+on:
+  push:
+    branches: [next, develop, main]
+    paths:
+      - 'modules/c-api/spec/**'
+      - 'modules/c-api/src/generated/**'
+      - 'modules/c-api/src/CnaCApi*.cpp'
+      - 'modules/c-api/src/CnaCApiMarshal.hpp'
+      - 'modules/c-api/include/**'
+      - 'tools/c-api/generate_routes.py'
+      - '.github/workflows/c-api-generated-routes.yml'
+  pull_request:
+    branches: [next, develop, main]
+    paths:
+      - 'modules/c-api/spec/**'
+      - 'modules/c-api/src/generated/**'
+      - 'modules/c-api/src/CnaCApi*.cpp'
+      - 'modules/c-api/src/CnaCApiMarshal.hpp'
+      - 'modules/c-api/include/**'
+      - 'tools/c-api/generate_routes.py'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-generated-routes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generated-routes:
+    name: Generated routes match their specs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the generated files are current
+        run: python3 tools/c-api/generate_routes.py --check
+
+      # A gate that cannot fail is not a gate: change one spec line and require the check to
+      # reject the now-stale output.
+      - name: Prove the check rejects a stale generated file
+        run: |
+          set -euo pipefail
+          spec=modules/c-api/spec/Vectors.toml
+          cp "$spec" /tmp/Vectors.toml.orig
+          sed -i 's/Vector2::Add(left, right)/Vector2::Subtract(left, right)/' "$spec"
+          status=0
+          python3 tools/c-api/generate_routes.py --check || status=$?
+          cp /tmp/Vectors.toml.orig "$spec"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the check accepted a generated file that no longer matches its spec" >&2
+            exit 1
+          fi
+
+      - name: Confirm the tree was restored
+        run: git diff --exit-code
