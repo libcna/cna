@@ -282,24 +282,6 @@ CNA_Result cna_sprite_font_copy_glyphs(
     });
 }
 
-CNA_Result cna_sprite_font_set_spacing(
-    const CNA_Handle spriteFontHandle,
-    const float spacing)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!std::isfinite(spacing)) {
-            return InvalidArgument("The SpriteFont spacing must be finite.");
-        }
-        std::shared_ptr<SpriteFontResource> spriteFont;
-        if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        spriteFont->value->setSpacingProperty(spacing);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sprite_font_measure_utf8(
     const CNA_Handle spriteFontHandle,
     const CNA_StringView text,

@@ -1719,6 +1719,24 @@ CNA_Result cna_alpha_test_effect_set_reference_alpha(
     });
 }
 
+CNA_Result cna_alpha_test_effect_set_alpha_function(
+    const CNA_EffectHandle effect,
+    const CNA_CompareFunction value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_COMPARE_NOT_EQUAL) {
+            return CNA::C::Detail::InvalidArgument("cna_alpha_test_effect_set_alpha_function: invalid because value > CNA_COMPARE_NOT_EQUAL.");
+        }
+        AlphaTestEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<AlphaTestEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setAlphaFunctionProperty(static_cast<CompareFunction>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_dual_texture_effect_get_diffuse_color(
     const CNA_EffectHandle effect,
     CNA_Vector3* const out_value)
@@ -2287,6 +2305,24 @@ CNA_Result cna_skinned_effect_set_vertex_color_enabled(
     });
 }
 
+CNA_Result cna_skinned_effect_set_weights_per_vertex(
+    const CNA_EffectHandle effect,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value != 1 && value != 2 && value != 4) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_effect_set_weights_per_vertex: invalid because value != 1 && value != 2 && value != 4.");
+        }
+        SkinnedEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<SkinnedEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setWeightsPerVertexProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_color_matrix_effect_get_offset(
     const CNA_EffectHandle effect,
     CNA_Vector4* const out_value)
@@ -2583,6 +2619,32 @@ CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
     });
 }
 
+CNA_Result cna_pbr_effect_get_texture(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_texture: invalid because slot > CNA_PBR_TEXTURE_MAXIMUM.");
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture, "The PBR texture outputs are null.");
+    });
+}
+
 CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
     const CNA_EffectHandle effect,
     int32_t* const out_value)
@@ -2597,6 +2659,24 @@ CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
             return routeResult;
         }
         *out_value = static_cast<int32_t>(object->getWeightsPerVertexProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
+    const CNA_EffectHandle effect,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value != 1 && value != 2 && value != 4) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_pbr_effect_set_weights_per_vertex: invalid because value != 1 && value != 2 && value != 4.");
+        }
+        SkinnedPbrEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<SkinnedPbrEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setWeightsPerVertexProperty(static_cast<int>(value));
         return CNA_RESULT_SUCCESS;
     });
 }

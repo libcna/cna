@@ -4467,24 +4467,6 @@ CNA_Result cna_animation_player_get_current_clip_info(
     });
 }
 
-CNA_Result cna_model_mesh_part_set_primitive_type_ext(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_PrimitiveType value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value > CNA_PRIMITIVE_POINT_LIST_EXT) {
-            return InvalidArgument("The primitive type is not a defined identity.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->setPrimitiveTypeEXTProperty(static_cast<PrimitiveType>(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_get_sampler_state_ext(
     const CNA_ModelMeshPartHandle partHandle,
     const CNA_PbrTextureSlot slot,
@@ -4620,25 +4602,6 @@ CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
             destination, capacity, outDeltaCount, ToCVector3,
             "The MorphTargetDataEXT tangent-delta output is invalid.",
             "The destination cannot hold all morph tangent deltas.");
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    const CNA_Bool recompute)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (recompute != CNA_FALSE && recompute != CNA_TRUE) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT flat-normal value is not a canonical C boolean.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data->value->RecomputeFlatNormalsEXT = recompute == CNA_TRUE;
-        return CNA_RESULT_SUCCESS;
     });
 }
 

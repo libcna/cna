@@ -411,6 +411,78 @@ CNA_Result cna_graphics_device_manager_end_draw(
     });
 }
 
+CNA_Result cna_graphics_device_manager_set_graphics_profile(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_GraphicsProfile profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsGraphicsProfile(profile)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_set_graphics_profile: invalid because !IsGraphicsProfile(profile).");
+        }
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setGraphicsProfileProperty(static_cast<GraphicsProfile>(profile));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_format(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_SurfaceFormat format)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_set_preferred_back_buffer_format: invalid because !IsSurfaceFormat(format).");
+        }
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPreferredBackBufferFormatProperty(static_cast<SurfaceFormat>(format));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_manager_set_preferred_depth_stencil_format(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_DepthFormat format)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsDepthFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_set_preferred_depth_stencil_format: invalid because !IsDepthFormat(format).");
+        }
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPreferredDepthStencilFormatProperty(static_cast<DepthFormat>(format));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_PresentationMode mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (mode > CNA_PRESENTATION_MODE_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_set_preferred_presentation_mode_ext: invalid because mode > CNA_PRESENTATION_MODE_MAXIMUM.");
+        }
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPreferredPresentationModeProperty(static_cast<PresentationMode>(mode));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_device_information_get_type_name_size(
     uint64_t* const out_bytes)
 {

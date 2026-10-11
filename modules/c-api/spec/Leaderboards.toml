@@ -33,3 +33,9 @@ object = "Gamer*"
 
 [optional_gamer.routes]
 cna_leaderboard_entry_create_ext = { result = "PublishOwnedEntry(LeaderboardEntry::CreateInternal(object, static_cast<long long>(rating), static_cast<int>(ranking)), out_entry)" }
+
+[calls]
+[calls.routes]
+# Both canonical creation routes are this one: the overload without a game mode is this one
+# with zero.
+cna_leaderboard_identity_init = { result = "WriteCIdentity(LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(game_mode)), out_identity)", invalid_if = "key > CNA_LEADERBOARD_KEY_MAXIMUM" }

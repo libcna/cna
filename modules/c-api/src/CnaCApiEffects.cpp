@@ -3489,25 +3489,6 @@ CNA_Result cna_alpha_test_effect_set_texture(
     });
 }
 
-CNA_Result cna_alpha_test_effect_set_alpha_function(
-    const CNA_EffectHandle effectHandle,
-    const CNA_CompareFunction value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value > CNA_COMPARE_NOT_EQUAL) {
-            return InvalidArgument("The AlphaTestEffect comparison function is invalid.");
-        }
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &alphaTest);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        alphaTest->setAlphaFunctionProperty(static_cast<CompareFunction>(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_dual_texture_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     const uint32_t textureIndex,
@@ -3715,25 +3696,6 @@ CNA_Result cna_skinned_effect_set_texture(
     });
 }
 
-CNA_Result cna_skinned_effect_set_weights_per_vertex(
-    const CNA_EffectHandle effectHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value != 1 && value != 2 && value != 4) {
-            return InvalidArgument("SkinnedEffect weights per vertex must be one, two, or four.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setWeightsPerVertexProperty(static_cast<int>(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_effect_set_bone_transforms(
     const CNA_EffectHandle effectHandle,
     const CNA_Matrix* const transforms,
@@ -3872,29 +3834,6 @@ CNA_Result cna_pbr_effect_set_alpha(
             view.skinned->setAlphaProperty(value);
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_texture(
-    const CNA_EffectHandle effectHandle,
-    const CNA_PbrTextureSlot slot,
-    CNA_Bool* const outHasTexture,
-    CNA_Handle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetRetainedEffectTexture(
-            GetEffectState(view.resource)->lifetime->pbrTextures[slot],
-            outHasTexture,
-            outTexture,
-            "The PBR texture outputs are null.");
     });
 }
 
@@ -4512,26 +4451,6 @@ CNA_Result cna_pbr_effect_set_double_sided_ext(
         } else {
             view.skinned->setDoubleSidedEXTProperty((value == CNA_TRUE));
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
-    const CNA_EffectHandle effectHandle,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value != 1 && value != 2 && value != 4) {
-            return InvalidArgument(
-                "SkinnedPbrEffect weights per vertex must be one, two, or four.");
-        }
-        SkinnedPbrEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skinned->setWeightsPerVertexProperty(static_cast<int>(value));
         return CNA_RESULT_SUCCESS;
     });
 }

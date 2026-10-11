@@ -196,6 +196,7 @@ cna_alpha_test_effect_set_vertex_color_enabled = { call = "object->setVertexColo
 cna_alpha_test_effect_get_alpha_function = { get = "object->getAlphaFunctionProperty()" }
 cna_alpha_test_effect_get_reference_alpha = { get = "object->getReferenceAlphaProperty()" }
 cna_alpha_test_effect_set_reference_alpha = { call = "object->setReferenceAlphaProperty(static_cast<int>(value))" }
+cna_alpha_test_effect_set_alpha_function = { call = "object->setAlphaFunctionProperty(static_cast<CompareFunction>(value))", invalid_if = "value > CNA_COMPARE_NOT_EQUAL" }
 
 [dual_texture_effect]
 lookup = "GetStockEffect<DualTextureEffect>"
@@ -247,6 +248,7 @@ cna_skinned_effect_set_prefer_per_pixel_lighting = { call = "object->setPreferPe
 cna_skinned_effect_get_weights_per_vertex = { get = "object->getWeightsPerVertexProperty()" }
 cna_skinned_effect_get_vertex_color_enabled = { get = "object->VertexColorEnabled" }
 cna_skinned_effect_set_vertex_color_enabled = { call = "object->VertexColorEnabled = value" }
+cna_skinned_effect_set_weights_per_vertex = { call = "object->setWeightsPerVertexProperty(static_cast<int>(value))", invalid_if = "value != 1 && value != 2 && value != 4" }
 
 [color_matrix_effect]
 lookup = "GetStockEffect<ColorMatrixEffect>"
@@ -276,6 +278,7 @@ cna_pbr_effect_get_occlusion_strength_ext = { get = "object.pbr != nullptr ? obj
 cna_pbr_effect_get_alpha_mode_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaModeEXTProperty() : object.skinned->getAlphaModeEXTProperty()" }
 cna_pbr_effect_get_alpha_cutoff_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaCutoffEXTProperty() : object.skinned->getAlphaCutoffEXTProperty()" }
 cna_pbr_effect_get_vertex_color_enabled_ext = { get = "static_cast<bool>(object.pbr != nullptr ? object.pbr->VertexColorEnabledEXT : object.skinned->VertexColorEnabledEXT)" }
+cna_pbr_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture, \"The PBR texture outputs are null.\")", invalid_if = "slot > CNA_PBR_TEXTURE_MAXIMUM" }
 
 [skinned_pbr_effect]
 lookup = "GetStockEffect<SkinnedPbrEffect>"
@@ -283,6 +286,7 @@ object = "SkinnedPbrEffect*"
 
 [skinned_pbr_effect.routes]
 cna_skinned_pbr_effect_get_weights_per_vertex = { get = "object->getWeightsPerVertexProperty()" }
+cna_skinned_pbr_effect_set_weights_per_vertex = { call = "object->setWeightsPerVertexProperty(static_cast<int>(value))", invalid_if = "value != 1 && value != 2 && value != 4" }
 
 [create_native_parameter]
 lookup = "CreateNativeParameter"

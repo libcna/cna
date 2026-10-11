@@ -19,6 +19,7 @@ object = "std::string"
 
 [copy_reader_name.routes]
 cna_content_type_reader_manager_get_is_registered = { get = "ContentTypeReaderManager::IsRegistered(object)" }
+cna_known_unsupported_content_type_reader_create = { result = "CreateTypeReaderHandle(std::make_unique<KnownUnsupportedContentTypeReader>(std::move(object), static_cast<UnsupportedContentReaderReason>(reason)), out_type_reader)", invalid_if = "reason != CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE" }
 
 [type_reader]
 lookup = "GetTypeReader"

@@ -35,6 +35,7 @@ cna_model_mesh_part_get_tag = { get = "object->tag" }
 cna_model_mesh_part_set_effect = { result = "SetPartEffect(object, effect)" }
 cna_model_mesh_part_set_vertex_buffer = { result = "SetPartVertexBuffer(object, vertex_buffer)" }
 cna_model_mesh_part_set_index_buffer = { result = "SetPartIndexBuffer(object, index_buffer)" }
+cna_model_mesh_part_set_primitive_type_ext = { call = "object->value->setPrimitiveTypeEXTProperty(static_cast<PrimitiveType>(value))", invalid_if = "value > CNA_PRIMITIVE_POINT_LIST_EXT" }
 
 [part_collection]
 lookup = "GetPartCollection"
@@ -97,6 +98,7 @@ cna_morph_target_data_ext_get_target_count = { get = "object->value->PositionDel
 cna_morph_target_data_ext_get_recompute_flat_normals_ext = { get = "object->value->RecomputeFlatNormalsEXT" }
 cna_morph_target_data_ext_copy_weights = { result = "CopyOutputValues(object->value->Weights, destination, capacity, out_weight_count, [](const float value) noexcept { return value; }, \"The MorphTargetDataEXT weight output is invalid.\", \"The destination cannot hold all morph weights.\")" }
 cna_morph_target_data_ext_copy_triangle_indices_ext = { result = "CopyOutputValues(object->value->TriangleIndicesEXT, destination, capacity, out_index_count, [](const std::uint32_t value) { return static_cast<uint32_t>(value); }, \"The MorphTargetDataEXT triangle-index output is invalid.\", \"The destination cannot hold all morph triangle indices.\")" }
+cna_morph_target_data_ext_set_recompute_flat_normals_ext = { call = "object->value->RecomputeFlatNormalsEXT = recompute" }
 
 [skinned_model]
 lookup = "GetSkinnedModel"

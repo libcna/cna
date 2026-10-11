@@ -339,6 +339,42 @@ CNA_Result cna_title_location_copy_path(
     });
 }
 
+CNA_Result cna_game_set_target_elapsed_time_ticks(
+    const CNA_Handle game,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (ticks <= INT64_C(0)) {
+            return CNA::C::Detail::InvalidArgument("cna_game_set_target_elapsed_time_ticks: invalid because ticks <= INT64_C(0).");
+        }
+        Game* object{};
+        if (const CNA_Result routeResult = BorrowGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setTargetElapsedTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_set_inactive_sleep_time_ticks(
+    const CNA_Handle game,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (ticks < INT64_C(0)) {
+            return CNA::C::Detail::InvalidArgument("cna_game_set_inactive_sleep_time_ticks: invalid because ticks < INT64_C(0).");
+        }
+        Game* object{};
+        if (const CNA_Result routeResult = BorrowGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setInactiveSleepTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_window_get_allow_user_resizing(
     const CNA_Handle game,
     CNA_Bool* const out_allowed)

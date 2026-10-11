@@ -9,6 +9,7 @@ cna_keyboard_state_get_pressed_key_count = { get = "CountPressedKeys(*state)" }
 cna_keyboard_state_get_hash_code = { get = "NativeKeyboardState(*state).GetHashCode()" }
 cna_keyboard_state_get_string_size = { size = "KeyboardState().ToString()" }
 cna_keyboard_state_copy_string = { copy = "KeyboardState().ToString()" }
+cna_keyboard_state_is_key_down = { get = "IsKeyDown(*state, key)", invalid_if = "key >= KeyboardSlotCount" }
 
 [state]
 lookup = "ValidateState"
@@ -68,6 +69,8 @@ cna_touch_panel_set_touch_device_exists_ext = { call = "TouchPanel::setTouchDevi
 cna_touch_panel_update_ext = { call = "TouchPanel::Update()" }
 cna_touch_panel_reset_for_tests_ext = { call = "TouchPanel::ResetForTests()" }
 cna_keyboard_get_mod_state_ext = { get = "MapKeyModifiers(Keyboard::GetModStateEXT())" }
+cna_touch_panel_set_display_orientation = { call = "TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation))", invalid_if = "(orientation & ~DisplayOrientationAll) != 0U" }
+cna_touch_panel_raise_touch_event_ext = { call = "TouchPanel::INTERNAL_onTouchEvent(finger_id, static_cast<TouchLocationState>(state), x, y, dx, dy)", invalid_if = "!IsValidTouchLocationState(state)" }
 
 [cursor]
 lookup = "GetCursorResource"
@@ -127,3 +130,12 @@ cna_keyboard_state_init = { value = "SnapshotKeyboard(KeyboardState())" }
 cna_mouse_state_init = { value = "SnapshotMouse(MouseState())" }
 cna_gesture_sample_init = { value = "MapGestureSample(GestureSample())" }
 cna_touch_location_init = { value = "MapTouchLocation(TouchLocation())" }
+cna_gamepad_exclude_axis_dead_zone = { value = "GamePad::ExcludeAxisDeadZone(value, dead_zone)", invalid_if = "!std::isfinite(value) || !std::isfinite(dead_zone)" }
+cna_touch_capabilities_init_from_values_ext = { value = "CNA_TouchCapabilities{ sizeof(CNA_TouchCapabilities), StructureVersion, ToCBool(is_connected), {0U, 0U, 0U}, static_cast<uint32_t>(maximum_touch_count) }", invalid_if = "maximum_touch_count < 0" }
+
+[game_pad_state]
+lookup = "ValidateGamePadState"
+
+[game_pad_state.routes]
+cna_gamepad_state_is_button_down = { get = "(state->pressed_buttons & buttons) == buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
+cna_gamepad_state_is_button_up = { get = "(state->pressed_buttons & buttons) != buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }

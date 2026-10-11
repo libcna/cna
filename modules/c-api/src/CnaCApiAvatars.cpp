@@ -159,24 +159,6 @@ CNA_Result cna_avatar_description_create(
     });
 }
 
-CNA_Result cna_avatar_description_create_random_for_body_type(
-    const CNA_AvatarBodyType bodyType,
-    CNA_AvatarDescriptionHandle* const outDescription)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDescription == nullptr) {
-            return InvalidArgument("The AvatarDescription output handle is null.");
-        }
-        *outDescription = CNA_INVALID_HANDLE;
-        if (bodyType > CNA_AVATAR_BODY_TYPE_MAXIMUM) {
-            return InvalidArgument("The avatar body type is not a defined identity.");
-        }
-        return PublishDescription(
-            AvatarDescription::CreateRandom(static_cast<AvatarBodyType>(bodyType)),
-            outDescription);
-    });
-}
-
 CNA_Result cna_avatar_description_get_from_gamer(
     const CNA_GamerHandle gamerHandle,
     const CNA_GamerAsyncCallback callback,
@@ -363,25 +345,6 @@ CNA_Result cna_avatar_animation_get_expression(
             return result;
         }
         *outExpression = ToC(animation->value->getExpressionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_animation_update(
-    const CNA_AvatarAnimationHandle animationHandle,
-    const int64_t elapsedTicks,
-    const CNA_Bool loop)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (loop != CNA_FALSE && loop != CNA_TRUE) {
-            return InvalidArgument("The animation loop flag is invalid.");
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        animation->value->Update(System::TimeSpan(elapsedTicks), loop == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
     });
 }

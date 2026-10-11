@@ -662,59 +662,6 @@ CNA_Result cna_texture_get_info(
     });
 }
 
-CNA_Result cna_texture_get_block_size_squared(
-    const CNA_SurfaceFormat format,
-    int32_t* const outSizeSquared)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSizeSquared == nullptr || !IsSurfaceFormat(format)) {
-            return InvalidArgument("The texture block-size query is invalid.");
-        }
-        *outSizeSquared = Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texture_get_format_size(
-    const CNA_SurfaceFormat format,
-    int32_t* const outSize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSize == nullptr || !IsSurfaceFormat(format)) {
-            return InvalidArgument("The texture format-size query is invalid.");
-        }
-        *outSize = Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texture_get_pixel_store_alignment(
-    const CNA_SurfaceFormat format,
-    int32_t* const outAlignment)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAlignment == nullptr || !IsSurfaceFormat(format)) {
-            return InvalidArgument("The texture pixel-store alignment query is invalid.");
-        }
-        *outAlignment = Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texture_validate_get_data_format(
-    const CNA_SurfaceFormat format,
-    const int32_t elementSizeInBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsSurfaceFormat(format) || elementSizeInBytes <= 0) {
-            return InvalidArgument("The texture data-format validation arguments are invalid.");
-        }
-        Texture::ValidateGetDataFormat(
-            static_cast<SurfaceFormat>(format), elementSizeInBytes);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture_validate_format(const CNA_SurfaceFormat format)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

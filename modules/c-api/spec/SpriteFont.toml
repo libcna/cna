@@ -8,3 +8,4 @@ object = "std::shared_ptr<SpriteFontResource>"
 [sprite_font.routes]
 cna_sprite_font_set_default_character = { call = "object->value->setDefaultCharacterProperty(has_value ? std::optional<SharpRuntime::charcs>(static_cast<SharpRuntime::charcs>(value)) : std::nullopt)" }
 cna_sprite_font_set_line_spacing = { call = "object->value->setLineSpacingProperty(line_spacing)" }
+cna_sprite_font_set_spacing = { call = "object->value->setSpacingProperty(spacing)", invalid_if = "!std::isfinite(spacing)" }

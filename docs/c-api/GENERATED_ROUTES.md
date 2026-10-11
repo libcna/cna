@@ -66,11 +66,21 @@ The generator takes the signature from the header and the conversions from the C
   the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
   decide ownership, so they are a `result`.
 
+An argument the route refuses is written beside the kind, as the condition under which it is
+invalid, over the parameters exactly as the caller passed them:
+
+```toml
+cna_sound_effect_instance_set_pan = { call = "object->value->setPanProperty(pan)", invalid_if = "!std::isfinite(pan) || pan < -1.0F || pan > 1.0F" }
+```
+
+The route then answers `CNA_RESULT_INVALID_ARGUMENT`, with the condition in the message.
+`invalid_if` takes one condition or a list of them.
+
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `result`, every non-const `out_*`
 pointer, and a handle output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
-lookup (and `other`'s), whose own result is returned when it refuses. So a call with two faults
-always reports the null output.
+`invalid_if` conditions, then the lookup (and `other`'s), whose own result is returned when it
+refuses. So a call with two faults always reports the null output.
 
 A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
 a child handle, filling an info structure, copying an array — and the spec line only calls it:
@@ -122,7 +132,8 @@ unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing 
   which `result` routes call (`OWNERSHIP.md` has the ownership rules they implement);
 - routes with more lookups than an object and an `other`, or with several statements of work
   after them;
-- routes that validate one argument against another, or need an output that may be null.
+- routes that check an argument against the object (an index against its count, a state the
+  object is in), or need an output that may be null.
 
 Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments
 refused with `InvalidArgument`, handles resolved through the family's lookups, conversions through

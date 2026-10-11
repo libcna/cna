@@ -388,24 +388,6 @@ CNA_Result cna_keyboard_get_state(
     });
 }
 
-CNA_Result cna_keyboard_state_is_key_down(
-    const CNA_KeyboardState* const state,
-    const CNA_Key key,
-    CNA_Bool* const outIsDown)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outIsDown == nullptr || key >= KeyboardSlotCount) {
-            return InvalidArgument("The keyboard key-down query arguments are invalid.");
-        }
-        if (const CNA_Result result = ValidateKeyboardState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDown = ToCBool(IsKeyDown(*state, key));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_keyboard_state_is_key_up(
     const CNA_KeyboardState* const state,
     const CNA_Key key,
@@ -520,42 +502,6 @@ CNA_Result cna_gamepad_apply_dead_zone(
         static_cast<void>(nativeDeadZone);
         const CNA_GamePadAnalogState processed = ApplyDeadZone(*raw, deadZoneMode);
         *outProcessed = processed;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_is_button_down(
-    const CNA_GamePadState* const state,
-    const CNA_GamePadButtonFlags buttons,
-    CNA_Bool* const outIsDown)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outIsDown == nullptr || (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
-            return InvalidArgument("The gamepad button-down query arguments are invalid.");
-        }
-        if (const CNA_Result result = ValidateGamePadState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsDown = ToCBool((state->pressed_buttons & buttons) == buttons);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_is_button_up(
-    const CNA_GamePadState* const state,
-    const CNA_GamePadButtonFlags buttons,
-    CNA_Bool* const outIsUp)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outIsUp == nullptr || (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
-            return InvalidArgument("The gamepad button-up query arguments are invalid.");
-        }
-        if (const CNA_Result result = ValidateGamePadState(state);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIsUp = ToCBool((state->pressed_buttons & buttons) != buttons);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1452,23 +1398,6 @@ using DeviceTextRoute = std::string (*)(PlayerIndex);
 }
 
 } // namespace
-
-CNA_Result cna_gamepad_exclude_axis_dead_zone(
-    const float value,
-    const float deadZone,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The dead-zone output is null.");
-        }
-        if (!std::isfinite(value) || !std::isfinite(deadZone)) {
-            return InvalidArgument("The dead-zone input is not finite.");
-        }
-        *outValue = GamePad::ExcludeAxisDeadZone(value, deadZone);
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_gamepad_set_vibration(
     const CNA_Handle gameHandle,
@@ -3085,33 +3014,6 @@ CNA_Result cna_touch_capabilities_init(CNA_TouchCapabilities* const outCapabilit
     });
 }
 
-CNA_Result cna_touch_capabilities_init_from_values_ext(
-    const CNA_Bool isConnected,
-    const int32_t maximumTouchCount,
-    CNA_TouchCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCapabilities == nullptr) {
-            return InvalidArgument("The touch-capabilities output is null.");
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(isConnected, "is_connected");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (maximumTouchCount < 0) {
-            return InvalidArgument("The maximum touch count is negative.");
-        }
-        *outCapabilities = CNA_TouchCapabilities{
-            sizeof(CNA_TouchCapabilities),
-            StructureVersion,
-            ToCBool(isConnected != CNA_FALSE),
-            {0U, 0U, 0U},
-            static_cast<uint32_t>(maximumTouchCount)
-        };
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_location_init_from_values(
     const int32_t id,
     const CNA_TouchLocationState state,
@@ -3511,23 +3413,6 @@ CNA_Result cna_touch_state_insert(
     });
 }
 
-CNA_Result cna_touch_panel_set_display_orientation(
-    const CNA_Handle gameHandle,
-    const CNA_DisplayOrientation orientation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if ((orientation & ~DisplayOrientationAll) != 0U) {
-            return InvalidArgument("The display orientation contains an undefined bit.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_touch_panel_set_enabled_gestures(
     const CNA_Handle gameHandle,
     const CNA_GestureType gestures)
@@ -3588,34 +3473,6 @@ CNA_Result cna_touch_panel_enqueue_gesture_ext(
             return result;
         }
         TouchPanel::EnqueueGesture(ToNativeGestureSample(*sample));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_panel_raise_touch_event_ext(
-    const CNA_Handle gameHandle,
-    const int32_t fingerId,
-    const CNA_TouchLocationState state,
-    const float x,
-    const float y,
-    const float dx,
-    const float dy)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsValidTouchLocationState(state)) {
-            return InvalidArgument("The touch location state is undefined.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TouchPanel::INTERNAL_onTouchEvent(
-            fingerId,
-            static_cast<TouchLocationState>(state),
-            x,
-            y,
-            dx,
-            dy);
         return CNA_RESULT_SUCCESS;
     });
 }

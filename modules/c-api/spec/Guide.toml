@@ -36,3 +36,4 @@ cna_gamer_services_dispatcher_set_window_handle = { call = "GamerServicesDispatc
 cna_gamer_services_dispatcher_update = { call = "GamerServicesDispatcher::Update()" }
 cna_gamer_services_dispatcher_update_async = { value = "GamerServicesDispatcher::UpdateAsync()" }
 cna_gamer_services_dispatcher_get_freed_gamer_count_ext = { value = "GamerServicesDispatcher::GetFreedGamerCountForTesting()" }
+cna_guide_set_notification_position = { call = "Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position))", invalid_if = "position > CNA_NOTIFICATION_POSITION_MAXIMUM" }

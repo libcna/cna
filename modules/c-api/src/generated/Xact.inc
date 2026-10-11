@@ -171,6 +171,24 @@ CNA_Result cna_audio_category_get_hash_code(
     });
 }
 
+CNA_Result cna_audio_category_set_volume(
+    const CNA_Handle category,
+    const float volume)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(volume)) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_category_set_volume: invalid because !std::isfinite(volume).");
+        }
+        std::shared_ptr<CategoryResource> object{};
+        if (const CNA_Result routeResult = GetCategory(category, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetVolume(volume);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_wave_bank_get_is_disposed(
     const CNA_Handle wave_bank,
     CNA_Bool* const out_is_disposed)

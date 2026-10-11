@@ -135,3 +135,19 @@ CNA_Result cna_leaderboard_entry_create_ext(
         return PublishOwnedEntry(LeaderboardEntry::CreateInternal(object, static_cast<long long>(rating), static_cast<int>(ranking)), out_entry);
     });
 }
+
+CNA_Result cna_leaderboard_identity_init(
+    const CNA_LeaderboardKey key,
+    const int32_t game_mode,
+    CNA_LeaderboardIdentity* const out_identity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_identity == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_identity_init: out_identity is null.");
+        }
+        if (key > CNA_LEADERBOARD_KEY_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_identity_init: invalid because key > CNA_LEADERBOARD_KEY_MAXIMUM.");
+        }
+        return WriteCIdentity(LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(game_mode)), out_identity);
+    });
+}

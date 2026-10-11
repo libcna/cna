@@ -295,6 +295,24 @@ CNA_Result cna_model_mesh_part_set_index_buffer(
     });
 }
 
+CNA_Result cna_model_mesh_part_set_primitive_type_ext(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_PrimitiveType value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_PRIMITIVE_POINT_LIST_EXT) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_set_primitive_type_ext: invalid because value > CNA_PRIMITIVE_POINT_LIST_EXT.");
+        }
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPrimitiveTypeEXTProperty(static_cast<PrimitiveType>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_model_mesh_part_collection_get_count(
     const CNA_ModelMeshPartCollectionHandle collection,
     uint64_t* const out_count)
@@ -743,6 +761,26 @@ CNA_Result cna_morph_target_data_ext_copy_triangle_indices_ext(
             return routeResult;
         }
         return CopyOutputValues(object->value->TriangleIndicesEXT, destination, capacity, out_index_count, [](const std::uint32_t value) { return static_cast<uint32_t>(value); }, "The MorphTargetDataEXT triangle-index output is invalid.", "The destination cannot hold all morph triangle indices.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
+    const CNA_MorphTargetDataEXTHandle data,
+    const CNA_Bool c_recompute)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_recompute, "recompute");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MorphDataResource> object{};
+        if (const CNA_Result routeResult = GetMorphData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool recompute = CNA::C::Detail::FromCBool(c_recompute);
+        object->value->RecomputeFlatNormalsEXT = recompute;
+        return CNA_RESULT_SUCCESS;
     });
 }
 

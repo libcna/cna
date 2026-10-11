@@ -292,24 +292,6 @@ CNA_Result cna_graphics_device_manager_create(
     });
 }
 
-CNA_Result cna_graphics_device_manager_set_graphics_profile(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_GraphicsProfile profile)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsGraphicsProfile(profile)) {
-            return InvalidArgument("The graphics profile is not a defined identity.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setGraphicsProfileProperty(static_cast<GraphicsProfile>(profile));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_manager_get_graphics_device(
     const CNA_GraphicsDeviceManagerHandle manager,
     CNA_Handle* const outGraphicsDevice)
@@ -328,63 +310,6 @@ CNA_Result cna_graphics_device_manager_get_graphics_device(
             return InvalidState("The manager has no graphics device yet.");
         }
         return CNA::C::Detail::BorrowGameGraphicsDevice(resource->game, outGraphicsDevice);
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_preferred_back_buffer_format(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_SurfaceFormat format)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsSurfaceFormat(format)) {
-            return InvalidArgument("The back-buffer format is not a defined identity.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferredBackBufferFormatProperty(
-            static_cast<SurfaceFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_preferred_depth_stencil_format(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_DepthFormat format)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsDepthFormat(format)) {
-            return InvalidArgument("The depth format is not a defined identity.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferredDepthStencilFormatProperty(
-            static_cast<DepthFormat>(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    const CNA_PresentationMode mode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (mode > CNA_PRESENTATION_MODE_MAXIMUM) {
-            return InvalidArgument("The presentation mode is not a defined identity.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setPreferredPresentationModeProperty(
-            static_cast<PresentationMode>(mode));
-        return CNA_RESULT_SUCCESS;
     });
 }
 

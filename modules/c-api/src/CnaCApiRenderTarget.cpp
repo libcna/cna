@@ -307,20 +307,6 @@ CNA_Result ResolveRenderTargetScopeReference(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_render_target_usage_preserves_contents(
-    const CNA_RenderTargetUsage usage,
-    CNA_Bool* const outPreserves)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outPreserves == nullptr || !IsRenderTargetUsage(usage)) {
-            return InvalidArgument("The render-target usage query is invalid.");
-        }
-        *outPreserves = ToCBool(RenderTargetUsagePreservesContentsEXT(
-            static_cast<RenderTargetUsage>(usage)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_render_target2d_create(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_RenderTarget2DCreateInfo* const createInfo,
@@ -785,3 +771,6 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/RenderTarget.toml.
+#include "generated/RenderTarget.inc"

@@ -24,6 +24,10 @@ cna_sound_effect_instance_resume = { call = "object->value->Resume()" }
 cna_sound_effect_instance_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_sound_effect_instance_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_sound_effect_instance_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_sound_effect_instance_stop = { call = "object->value->Stop(immediate)" }
+cna_sound_effect_instance_set_volume = { call = "object->value->setVolumeProperty(volume)", invalid_if = "!std::isfinite(volume)" }
+cna_sound_effect_instance_set_pitch = { call = "object->value->setPitchProperty(pitch)", invalid_if = "!std::isfinite(pitch)" }
+cna_sound_effect_instance_set_pan = { call = "object->value->setPanProperty(pan)", invalid_if = "!std::isfinite(pan) || pan < -1.0F || pan > 1.0F" }
 
 [game]
 lookup = "ValidateActiveGameHandle"

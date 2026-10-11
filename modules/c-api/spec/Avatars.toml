@@ -15,6 +15,7 @@ object = "std::shared_ptr<AvatarAnimationResource>"
 [animation.routes]
 cna_avatar_animation_destroy = { release = "object->value->Dispose()" }
 cna_avatar_animation_set_current_position = { call = "object->value->setCurrentPositionProperty(System::TimeSpan(position_ticks))" }
+cna_avatar_animation_update = { call = "object->value->Update(System::TimeSpan(elapsed_ticks), loop)" }
 
 [renderer]
 lookup = "BorrowRenderer"
@@ -26,6 +27,7 @@ cna_avatar_renderer_destroy = { release = "object->value->Dispose()" }
 [calls]
 [calls.routes]
 cna_avatar_description_create_random = { result = "PublishDescription(AvatarDescription::CreateRandom(), out_description)" }
+cna_avatar_description_create_random_for_body_type = { result = "PublishDescription(AvatarDescription::CreateRandom(static_cast<AvatarBodyType>(body_type)), out_description)", invalid_if = "body_type > CNA_AVATAR_BODY_TYPE_MAXIMUM" }
 
 [values]
 [values.routes]

@@ -231,17 +231,6 @@ CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
     });
 }
 
-CNA_Result cna_guide_set_notification_position(const CNA_NotificationPosition position)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (position > CNA_NOTIFICATION_POSITION_MAXIMUM) {
-            return InvalidArgument("The notification position is not a defined identity.");
-        }
-        Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_set_simulate_trial_mode(const CNA_Bool simulate)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

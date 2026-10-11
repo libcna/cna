@@ -748,33 +748,6 @@ CNA_Result cna_content_type_reader_manager_create_reader(
     });
 }
 
-CNA_Result cna_known_unsupported_content_type_reader_create(
-    const CNA_StringView targetTypeName,
-    const CNA_UnsupportedContentReaderReason reason,
-    CNA_ContentTypeReaderHandle* const outTypeReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTypeReader == nullptr) {
-            return InvalidArgument("The type-reader output handle is null.");
-        }
-        *outTypeReader = CNA_INVALID_HANDLE;
-        if (reason != CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE) {
-            return InvalidArgument(
-                "The requested reason is not a canonical UnsupportedContentReaderReason identity.");
-        }
-        std::string targetTypeNameCopy;
-        if (const CNA_Result result = CopyReaderName(targetTypeName, &targetTypeNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTypeReaderHandle(
-            std::make_unique<KnownUnsupportedContentTypeReader>(
-                std::move(targetTypeNameCopy),
-                static_cast<UnsupportedContentReaderReason>(reason)),
-            outTypeReader);
-    });
-}
-
 CNA_Result cna_content_type_reader_initialize(const CNA_ContentTypeReaderHandle typeReaderHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

@@ -65,9 +65,14 @@ result is converted back by the output's C type: ToC for a marshaled struct, ToC
 CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
 expression builds it.
 
+A route may add ``invalid_if = "<C++ condition>"`` (or a list of them): an argument the route
+refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(volume)"``. The
+condition reads the parameters as the caller passed them, before any conversion, and is checked
+before the lookup.
+
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output with
-CNA_RESULT_INVALID_ARGUMENT before doing anything else, validates CNA_Bool inputs before the
-lookup, and returns whatever the lookup returns when the handle is refused.
+CNA_RESULT_INVALID_ARGUMENT before doing anything else, then validates CNA_Bool inputs, then its
+``invalid_if`` conditions, and returns whatever the lookup returns when the handle is refused.
 
 Usage::
 
@@ -197,9 +202,14 @@ class Route:
         if not isinstance(entry, dict) or len([k for k in entry if k in KINDS]) != 1:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
-        unknown = set(entry) - set(KINDS)
+        unknown = set(entry) - set(KINDS) - {"invalid_if"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
+        refusals = entry.get("invalid_if", [])
+        self.refusals = [refusals] if isinstance(refusals, str) else refusals
+        if not isinstance(self.refusals, list) or not all(
+                isinstance(r, str) and r for r in self.refusals):
+            raise SpecError(f"{name}: invalid_if takes a C++ condition in quotes, or a list of them")
         self.kind = next(k for k in entry if k in KINDS)
         self.expression = entry[self.kind]
         if self.kind == "release" and self.expression is True:
@@ -212,6 +222,8 @@ class Route:
         self.has_lookup = "lookup" in group
         self.other: Param | None = None
         self._check_shape()
+        if self.refusals and self.kind == "copy" and not self.has_lookup:
+            raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if")
 
     def _fail(self, problem: str) -> SpecError:
         declared = ", ".join(p.declaration() for p in self.params) or "void"
@@ -306,6 +318,22 @@ class Route:
                     f'{DETAIL}ValidateCanonicalBool({self._c_name(param)}, "{param.name}")', indent)
         return lines
 
+    def _refusal_checks(self, indent: str) -> list[str]:
+        """The `invalid_if` conditions, over the parameters exactly as the caller passed them."""
+        lines: list[str] = []
+        for condition in self.refusals:
+            c_condition = condition
+            for param in self.params:
+                if self._converted(param):
+                    c_condition = re.sub(rf"(?<![\w.>:]){param.name}(?!\w)", self._c_name(param),
+                                         c_condition)
+            message = condition.replace("\\", "\\\\").replace('"', '\\"')
+            lines += [f"{indent}if ({c_condition}) {{",
+                      f'{indent}    return {DETAIL}InvalidArgument("{self.name}: invalid because '
+                      f'{message}.");',
+                      f"{indent}}}"]
+        return lines
+
     def _locals(self, indent: str) -> list[str]:
         lines = []
         for param in self.inputs:
@@ -367,6 +395,7 @@ class Route:
                 if self.types.kind_of(output.type) == "handle":
                     lines.append(f"{i}*{output.name} = CNA_INVALID_HANDLE;")
         lines += self._bool_checks(i)
+        lines += self._refusal_checks(i)
         lines += self._lookup(i)
         lines += self._locals(i)
         if self.kind in ("value", "get"):
@@ -499,8 +528,12 @@ def _arguments(route: Route, handle: str | None = None, **overrides: str) -> str
     return ", ".join(out)
 
 
-def _expect(call: str, wanted: str, route: str, contract: str, gated: bool = False) -> str:
-    check = "expect_unless_compiled_out" if gated else "expect"
+def _expect(call: str, wanted: str, route: str, contract: str, gated: bool = False,
+            checks_arguments: bool = False) -> str:
+    if gated and checks_arguments:
+        raise SpecError(f"{route}: a route behind a feature takes no invalid_if yet")
+    check = ("expect_unless_compiled_out" if gated
+             else "expect_unless_arguments_refused" if checks_arguments else "expect")
     return f'    failures += {check}({call}, {wanted}, "{route}", {contract});'
 
 
@@ -550,6 +583,14 @@ def render_contract_test(routes: list[Route]) -> str:
         "    return result == CNA_RESULT_NOT_SUPPORTED ? 0 : expect(result, wanted, route, contract);",
         "}",
         "",
+        "/* A route that checks its arguments first may refuse the zeroed stand-ins, not the handle. */",
+        "static int expect_unless_arguments_refused(const CNA_Result result, const CNA_Result wanted,",
+        "                                           const char* const route,",
+        "                                           const char* const contract)",
+        "{",
+        "    return result == CNA_RESULT_INVALID_ARGUMENT ? 0 : expect(result, wanted, route, contract);",
+        "}",
+        "",
         "/* A refused route leaves a handle output invalid rather than as the caller left it. */",
         "static int expect_cleared(const CNA_Handle output, const char* const route)",
         "{",
@@ -595,7 +636,8 @@ def render_contract_test(routes: list[Route]) -> str:
                        if r.kind == "result" and r.types.kind_of(o.type) == "handle"]
             lines += [f"    {_standin('o', o.type)} = UINT64_C(0xDEAD);" for o in cleared]
             check = [_expect(f"{r.name}({_arguments(r, handle)})",
-                             "CNA_RESULT_INVALID_HANDLE", r.name, "what", "feature" in r.group)]
+                             "CNA_RESULT_INVALID_HANDLE", r.name, "what", "feature" in r.group,
+                             bool(r.refusals))]
             check += [f'    failures += expect_cleared({_standin("o", o.type)}, "{r.name}");'
                       for o in cleared]
             if r.group.get("accepts_null_handle"):
@@ -610,7 +652,7 @@ def render_contract_test(routes: list[Route]) -> str:
               for r in routes if r.kind == "copy" and not r.has_lookup}
     for r in routes:
         pair = copies.get((r.group.get("lookup"), r.expression, tuple(r.inputs)))
-        if r.kind != "size" or r.has_lookup or pair is None:
+        if r.kind != "size" or r.has_lookup or pair is None or r.refusals or pair.refusals:
             continue
         size_args = _arguments(r, **{r.outputs[0].name: "&size"})
         capacity = pair.outputs[1].name
@@ -658,7 +700,7 @@ def render_contract_test(routes: list[Route]) -> str:
               f'    printf("%d failed checks across {len(routes)} generated routes\\n", failures);',
               "    return failures == 0 ? 0 : 1;", "}", ""]
     text = "\n".join(lines)
-    for helper in ("expect_unless_compiled_out", "expect_cleared"):
+    for helper in ("expect_unless_compiled_out", "expect_unless_arguments_refused", "expect_cleared"):
         if text.count(f"{helper}(") == 1:  # only its definition: leave it out
             text = re.sub(r"/\*[^\n]*\*/\nstatic int " + helper + r"\(.*?\n\}\n\n", "", text,
                           flags=re.S)

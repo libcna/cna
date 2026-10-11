@@ -51,6 +51,27 @@ CNA_Result cna_avatar_animation_set_current_position(
     });
 }
 
+CNA_Result cna_avatar_animation_update(
+    const CNA_AvatarAnimationHandle animation,
+    const int64_t elapsed_ticks,
+    const CNA_Bool c_loop)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_loop, "loop");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarAnimationResource> object{};
+        if (const CNA_Result routeResult = BorrowAnimation(animation, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool loop = CNA::C::Detail::FromCBool(c_loop);
+        object->value->Update(System::TimeSpan(elapsed_ticks), loop);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_avatar_renderer_destroy(
     const CNA_AvatarRendererHandle renderer)
 {
@@ -74,6 +95,22 @@ CNA_Result cna_avatar_description_create_random(
         }
         *out_description = CNA_INVALID_HANDLE;
         return PublishDescription(AvatarDescription::CreateRandom(), out_description);
+    });
+}
+
+CNA_Result cna_avatar_description_create_random_for_body_type(
+    const CNA_AvatarBodyType body_type,
+    CNA_AvatarDescriptionHandle* const out_description)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_description == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_create_random_for_body_type: out_description is null.");
+        }
+        *out_description = CNA_INVALID_HANDLE;
+        if (body_type > CNA_AVATAR_BODY_TYPE_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_create_random_for_body_type: invalid because body_type > CNA_AVATAR_BODY_TYPE_MAXIMUM.");
+        }
+        return PublishDescription(AvatarDescription::CreateRandom(static_cast<AvatarBodyType>(body_type)), out_description);
     });
 }
 

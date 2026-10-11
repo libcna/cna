@@ -12,3 +12,10 @@ cna_texture2d_get_type_name_byte_count = { size = "object->value->GetTypeName()"
 [calls.routes]
 cna_texture2d_create_standalone = { result = "CreateStandaloneTexture2D(std::make_shared<Texture2D>(), out_texture)" }
 cna_texture2d_copy_type_name = { result = "CopyTypeName(texture, destination, capacity, out_byte_count)" }
+
+[values]
+[values.routes]
+cna_texture_get_block_size_squared = { value = "Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
+cna_texture_get_format_size = { value = "Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
+cna_texture_get_pixel_store_alignment = { value = "Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
+cna_texture_validate_get_data_format = { call = "Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(format), element_size_in_bytes)", invalid_if = "!IsSurfaceFormat(format) || element_size_in_bytes <= 0" }

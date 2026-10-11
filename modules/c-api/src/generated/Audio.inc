@@ -204,6 +204,80 @@ CNA_Result cna_sound_effect_instance_copy_type_name(
     });
 }
 
+CNA_Result cna_sound_effect_instance_stop(
+    const CNA_Handle instance,
+    const CNA_Bool c_immediate)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_immediate, "immediate");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SoundEffectInstanceResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool immediate = CNA::C::Detail::FromCBool(c_immediate);
+        object->value->Stop(immediate);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_instance_set_volume(
+    const CNA_Handle instance,
+    const float volume)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(volume)) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_instance_set_volume: invalid because !std::isfinite(volume).");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setVolumeProperty(volume);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_instance_set_pitch(
+    const CNA_Handle instance,
+    const float pitch)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(pitch)) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_instance_set_pitch: invalid because !std::isfinite(pitch).");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPitchProperty(pitch);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_instance_set_pan(
+    const CNA_Handle instance,
+    const float pan)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(pan) || pan < -1.0F || pan > 1.0F) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_instance_set_pan: invalid because !std::isfinite(pan) || pan < -1.0F || pan > 1.0F.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffectInstance(instance, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setPanProperty(pan);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sound_effect_get_master_volume(
     const CNA_Handle game,
     float* const out_volume)

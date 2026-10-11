@@ -51,3 +51,64 @@ CNA_Result cna_texture2d_copy_type_name(
         return CopyTypeName(texture, destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_texture_get_block_size_squared(
+    const CNA_SurfaceFormat format,
+    int32_t* const out_size_squared)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_size_squared == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_block_size_squared: out_size_squared is null.");
+        }
+        if (!IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_block_size_squared: invalid because !IsSurfaceFormat(format).");
+        }
+        *out_size_squared = static_cast<int32_t>(Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_get_format_size(
+    const CNA_SurfaceFormat format,
+    int32_t* const out_size)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_size == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_format_size: out_size is null.");
+        }
+        if (!IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_format_size: invalid because !IsSurfaceFormat(format).");
+        }
+        *out_size = static_cast<int32_t>(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_get_pixel_store_alignment(
+    const CNA_SurfaceFormat format,
+    int32_t* const out_alignment)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_alignment == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_pixel_store_alignment: out_alignment is null.");
+        }
+        if (!IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_get_pixel_store_alignment: invalid because !IsSurfaceFormat(format).");
+        }
+        *out_alignment = static_cast<int32_t>(Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_validate_get_data_format(
+    const CNA_SurfaceFormat format,
+    const int32_t element_size_in_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsSurfaceFormat(format) || element_size_in_bytes <= 0) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_validate_get_data_format: invalid because !IsSurfaceFormat(format) || element_size_in_bytes <= 0.");
+        }
+        Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(format), element_size_in_bytes);
+        return CNA_RESULT_SUCCESS;
+    });
+}

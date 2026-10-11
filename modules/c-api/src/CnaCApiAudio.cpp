@@ -352,24 +352,6 @@ CNA_Result cna_sound_effect_destroy(const CNA_Handle soundEffectHandle)
     });
 }
 
-CNA_Result cna_sound_effect_instance_stop(
-    const CNA_Handle instanceHandle,
-    const CNA_Bool immediate)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (immediate != CNA_FALSE && immediate != CNA_TRUE) {
-            return InvalidArgument("The SoundEffectInstance immediate-stop flag is invalid.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->Stop(immediate == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_effect_instance_get_info(
     const CNA_Handle instanceHandle,
     CNA_SoundEffectInstanceInfo* const outInfo)
@@ -396,61 +378,6 @@ CNA_Result cna_sound_effect_instance_get_info(
             0U
         };
         *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sound_effect_instance_set_volume(
-    const CNA_Handle instanceHandle,
-    const float volume)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!std::isfinite(volume)) {
-            return InvalidArgument("The SoundEffectInstance volume must be finite.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->setVolumeProperty(volume);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sound_effect_instance_set_pitch(
-    const CNA_Handle instanceHandle,
-    const float pitch)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!std::isfinite(pitch)) {
-            return InvalidArgument("The SoundEffectInstance pitch must be finite.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->setPitchProperty(pitch);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sound_effect_instance_set_pan(
-    const CNA_Handle instanceHandle,
-    const float pan)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!std::isfinite(pan) || pan < -1.0F || pan > 1.0F) {
-            return InvalidArgument(
-                "The SoundEffectInstance pan must be finite and within [-1, 1].");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->setPanProperty(pan);
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -124,6 +124,28 @@ CNA_Result cna_content_type_reader_manager_get_is_registered(
     });
 }
 
+CNA_Result cna_known_unsupported_content_type_reader_create(
+    const CNA_StringView target_type_name,
+    const CNA_UnsupportedContentReaderReason reason,
+    CNA_ContentTypeReaderHandle* const out_type_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_known_unsupported_content_type_reader_create: out_type_reader is null.");
+        }
+        *out_type_reader = CNA_INVALID_HANDLE;
+        if (reason != CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE) {
+            return CNA::C::Detail::InvalidArgument("cna_known_unsupported_content_type_reader_create: invalid because reason != CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE.");
+        }
+        std::string object{};
+        if (const CNA_Result routeResult = CopyReaderName(target_type_name, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateTypeReaderHandle(std::make_unique<KnownUnsupportedContentTypeReader>(std::move(object), static_cast<UnsupportedContentReaderReason>(reason)), out_type_reader);
+    });
+}
+
 CNA_Result cna_content_type_reader_get_can_deserialize_into_existing_object(
     const CNA_ContentTypeReaderHandle type_reader,
     CNA_Bool* const out_value)

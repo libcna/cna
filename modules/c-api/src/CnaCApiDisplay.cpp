@@ -441,28 +441,6 @@ CNA_Result cna_graphics_adapter_set_device_preferences(
     });
 }
 
-CNA_Result cna_graphics_adapter_is_profile_supported(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    const CNA_GraphicsProfile profile,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outSupported == nullptr || !IsGraphicsProfile(profile)) {
-            return InvalidArgument("The graphics-profile query is invalid.");
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(adapter->IsProfileSupported(static_cast<GraphicsProfile>(profile)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_adapter_get_native_monitor_handle(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,

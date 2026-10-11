@@ -117,3 +117,27 @@ CNA_Result cna_graphics_adapter_query_backbuffer_format(
         return QueryFormat(graphics_device, adapter_index, profile, format, depth_format, multi_sample_count, out_selection, false);
     });
 }
+
+CNA_Result cna_graphics_adapter_is_profile_supported(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_GraphicsProfile profile,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_is_profile_supported: out_supported is null.");
+        }
+        if (!IsGraphicsProfile(profile)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_is_profile_supported: invalid because !IsGraphicsProfile(profile).");
+        }
+        std::shared_ptr<void> owner{};
+        GraphicsAdapter* object{};
+        if (const CNA_Result routeResult = GetAdapter(graphics_device, adapter_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_supported = CNA::C::Detail::ToCBool(object->IsProfileSupported(static_cast<GraphicsProfile>(profile)));
+        return CNA_RESULT_SUCCESS;
+    });
+}

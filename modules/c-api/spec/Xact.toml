@@ -22,6 +22,7 @@ cna_audio_category_copy_name = { copy = "object->value->getNameProperty()" }
 cna_audio_category_pause = { call = "object->value->Pause()" }
 cna_audio_category_resume = { call = "object->value->Resume()" }
 cna_audio_category_get_hash_code = { get = "object->value->GetHashCode()" }
+cna_audio_category_set_volume = { call = "object->value->SetVolume(volume)", invalid_if = "!std::isfinite(volume)" }
 
 [wave_bank]
 lookup = "GetWaveBank"

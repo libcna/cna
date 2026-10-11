@@ -44,3 +44,21 @@ CNA_Result cna_sprite_font_set_line_spacing(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_sprite_font_set_spacing(
+    const CNA_Handle sprite_font,
+    const float spacing)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(spacing)) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_set_spacing: invalid because !std::isfinite(spacing).");
+        }
+        std::shared_ptr<SpriteFontResource> object{};
+        if (const CNA_Result routeResult = GetSpriteFont(sprite_font, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setSpacingProperty(spacing);
+        return CNA_RESULT_SUCCESS;
+    });
+}

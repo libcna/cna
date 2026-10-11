@@ -287,3 +287,15 @@ CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_guide_set_notification_position(
+    const CNA_NotificationPosition position)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (position > CNA_NOTIFICATION_POSITION_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_set_notification_position: invalid because position > CNA_NOTIFICATION_POSITION_MAXIMUM.");
+        }
+        Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position));
+        return CNA_RESULT_SUCCESS;
+    });
+}

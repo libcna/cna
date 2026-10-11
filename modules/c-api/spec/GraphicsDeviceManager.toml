@@ -30,6 +30,10 @@ cna_graphics_device_manager_apply_changes = { result = "RequestDeviceChange([&](
 cna_graphics_device_manager_toggle_full_screen = { result = "RequestDeviceChange([&]() { object->value->ToggleFullScreen(); })" }
 cna_graphics_device_manager_create_device = { result = "RequestDeviceChange([&]() { object->value->CreateDevice(); })" }
 cna_graphics_device_manager_end_draw = { result = "RequestDeviceChange([&]() { object->value->EndDraw(); })" }
+cna_graphics_device_manager_set_graphics_profile = { call = "object->value->setGraphicsProfileProperty(static_cast<GraphicsProfile>(profile))", invalid_if = "!IsGraphicsProfile(profile)" }
+cna_graphics_device_manager_set_preferred_back_buffer_format = { call = "object->value->setPreferredBackBufferFormatProperty(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
+cna_graphics_device_manager_set_preferred_depth_stencil_format = { call = "object->value->setPreferredDepthStencilFormatProperty(static_cast<DepthFormat>(format))", invalid_if = "!IsDepthFormat(format)" }
+cna_graphics_device_manager_set_preferred_presentation_mode_ext = { call = "object->value->setPreferredPresentationModeProperty(static_cast<PresentationMode>(mode))", invalid_if = "mode > CNA_PRESENTATION_MODE_MAXIMUM" }
 
 [values]
 [values.routes]

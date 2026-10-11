@@ -1,0 +1,6 @@
+# RenderTarget routes, generated into src/generated/RenderTarget.inc,
+# which src/CnaCApiRenderTarget.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[values]
+[values.routes]
+cna_render_target_usage_preserves_contents = { value = "RenderTargetUsagePreservesContentsEXT(static_cast<RenderTargetUsage>(usage))", invalid_if = "!IsRenderTargetUsage(usage)" }

@@ -158,26 +158,6 @@ template<typename TBegin>
 
 } // namespace
 
-CNA_Result cna_leaderboard_identity_init(
-    const CNA_LeaderboardKey key,
-    const int32_t gameMode,
-    CNA_LeaderboardIdentity* const outIdentity)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIdentity == nullptr) {
-            return InvalidArgument("The LeaderboardIdentity output is null.");
-        }
-        if (key > CNA_LEADERBOARD_KEY_MAXIMUM) {
-            return InvalidArgument("The leaderboard key is not a defined identity.");
-        }
-        // Both canonical creation routes are this one: the overload without a game mode is this one
-        // with zero.
-        return WriteCIdentity(
-            LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(gameMode)),
-            outIdentity);
-    });
-}
-
 CNA_Result cna_leaderboard_reader_read_from_pivot(
     const CNA_LeaderboardIdentity* const identity,
     const CNA_GamerHandle pivotGamerHandle,

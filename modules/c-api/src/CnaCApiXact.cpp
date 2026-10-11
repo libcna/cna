@@ -482,22 +482,6 @@ CNA_Result cna_audio_category_destroy(const CNA_Handle categoryHandle)
     });
 }
 
-CNA_Result cna_audio_category_set_volume(const CNA_Handle categoryHandle, const float volume)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(volume)) {
-            return InvalidArgument("The category volume must be finite.");
-        }
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        category->value->SetVolume(volume);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_audio_category_stop(
     const CNA_Handle categoryHandle,
     const CNA_AudioStopOptions options)

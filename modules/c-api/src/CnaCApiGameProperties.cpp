@@ -168,44 +168,6 @@ void ResetGameEventRegistrationState() noexcept
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_game_set_target_elapsed_time_ticks(
-    const CNA_Handle gameHandle,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (ticks <= INT64_C(0)) {
-            return InvalidArgument("The target step must be positive.");
-        }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        game->setTargetElapsedTimeProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_set_inactive_sleep_time_ticks(
-    const CNA_Handle gameHandle,
-    const int64_t ticks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (ticks < INT64_C(0)) {
-            return InvalidArgument("The inactive sleep duration must not be negative.");
-        }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        game->setInactiveSleepTimeProperty(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_subscribe(
     const CNA_Handle gameHandle,
     const CNA_GameEvent event,

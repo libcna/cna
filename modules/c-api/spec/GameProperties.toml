@@ -26,6 +26,8 @@ cna_framework_dispatcher_update = { call = "FrameworkDispatcher::Update()" }
 cna_title_location_get_path_size = { size = "TitleLocation::getPathProperty()" }
 # The canonical alias returns the same string as the property; C needs only one route.
 cna_title_location_copy_path = { copy = "TitleLocation::Path()" }
+cna_game_set_target_elapsed_time_ticks = { call = "object->setTargetElapsedTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", invalid_if = "ticks <= INT64_C(0)" }
+cna_game_set_inactive_sleep_time_ticks = { call = "object->setInactiveSleepTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", invalid_if = "ticks < INT64_C(0)" }
 
 [window]
 lookup = "CNA::C::Detail::GetGameWindow"
