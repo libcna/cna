@@ -69,6 +69,7 @@ static CNA_PlayerIndex o_CNA_PlayerIndex;
 static CNA_PowerState o_CNA_PowerState;
 static CNA_PresentationMode o_CNA_PresentationMode;
 static CNA_PrimitiveType o_CNA_PrimitiveType;
+static CNA_Quaternion o_CNA_Quaternion;
 static CNA_Rectangle o_CNA_Rectangle;
 static CNA_SensorState o_CNA_SensorState;
 static CNA_ShaderDialect o_CNA_ShaderDialect;
@@ -1237,6 +1238,12 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_packet_reader_get_position(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_get_position", "a null out_position");
     failures += expect(cna_packet_reader_read_single(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_single", "a null out_value");
     failures += expect(cna_packet_reader_read_double(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_double", "a null out_value");
+    failures += expect(cna_packet_reader_read_color(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_color", "a null out_value");
+    failures += expect(cna_packet_reader_read_matrix(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_matrix", "a null out_value");
+    failures += expect(cna_packet_reader_read_quaternion(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_quaternion", "a null out_value");
+    failures += expect(cna_packet_reader_read_vector2(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_vector2", "a null out_value");
+    failures += expect(cna_packet_reader_read_vector3(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_vector3", "a null out_value");
+    failures += expect(cna_packet_reader_read_vector4(v_CNA_PacketReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_read_vector4", "a null out_value");
     failures += expect(cna_packet_writer_get_length(v_CNA_PacketWriterHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_writer_get_length", "a null out_length");
     failures += expect(cna_packet_writer_get_position(v_CNA_PacketWriterHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_writer_get_position", "a null out_position");
     failures += expect(cna_quality_of_service_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_quality_of_service_init", "a null out_value");
@@ -2535,12 +2542,23 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_packet_reader_get_position(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_get_position", what);
     failures += expect(cna_packet_reader_read_single(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_single", what);
     failures += expect(cna_packet_reader_read_double(handle, &o_double), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_double", what);
+    failures += expect(cna_packet_reader_read_color(handle, &o_CNA_Color), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_color", what);
+    failures += expect(cna_packet_reader_read_matrix(handle, &o_CNA_Matrix), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_matrix", what);
+    failures += expect(cna_packet_reader_read_quaternion(handle, &o_CNA_Quaternion), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_quaternion", what);
+    failures += expect(cna_packet_reader_read_vector2(handle, &o_CNA_Vector2), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_vector2", what);
+    failures += expect(cna_packet_reader_read_vector3(handle, &o_CNA_Vector3), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_vector3", what);
+    failures += expect(cna_packet_reader_read_vector4(handle, &o_CNA_Vector4), CNA_RESULT_INVALID_HANDLE, "cna_packet_reader_read_vector4", what);
     failures += expect(cna_packet_writer_get_length(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_get_length", what);
     failures += expect(cna_packet_writer_get_position(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_get_position", what);
     failures += expect(cna_packet_writer_set_position(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_set_position", what);
     failures += expect(cna_packet_writer_write_matrix(handle, v_CNA_Matrix), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_matrix", what);
     failures += expect(cna_packet_writer_write_single(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_single", what);
     failures += expect(cna_packet_writer_write_double(handle, v_double), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_double", what);
+    failures += expect(cna_packet_writer_write_color(handle, v_CNA_Color), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_color", what);
+    failures += expect(cna_packet_writer_write_quaternion(handle, v_CNA_Quaternion), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_quaternion", what);
+    failures += expect(cna_packet_writer_write_vector2(handle, v_CNA_Vector2), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_vector2", what);
+    failures += expect(cna_packet_writer_write_vector3(handle, v_CNA_Vector3), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_vector3", what);
+    failures += expect(cna_packet_writer_write_vector4(handle, v_CNA_Vector4), CNA_RESULT_INVALID_HANDLE, "cna_packet_writer_write_vector4", what);
     failures += expect(cna_network_gamer_get_has_left_session(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_get_has_left_session", what);
     failures += expect(cna_network_gamer_set_has_left_session_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_set_has_left_session_ext", what);
     failures += expect(cna_network_gamer_get_has_voice(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_get_has_voice", what);
@@ -2953,6 +2971,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1790 generated routes\n", failures);
+    printf("%d failed checks across 1801 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

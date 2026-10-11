@@ -161,6 +161,114 @@ CNA_Result cna_packet_reader_read_double(
     });
 }
 
+CNA_Result cna_packet_reader_read_color(
+    const CNA_PacketReaderHandle reader,
+    CNA_Color* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_color: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadColor());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_reader_read_matrix(
+    const CNA_PacketReaderHandle reader,
+    CNA_Matrix* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_matrix: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadMatrix());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_reader_read_quaternion(
+    const CNA_PacketReaderHandle reader,
+    CNA_Quaternion* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_quaternion: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadQuaternion());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_reader_read_vector2(
+    const CNA_PacketReaderHandle reader,
+    CNA_Vector2* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_vector2: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadVector2());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_reader_read_vector3(
+    const CNA_PacketReaderHandle reader,
+    CNA_Vector3* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_vector3: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadVector3());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_reader_read_vector4(
+    const CNA_PacketReaderHandle reader,
+    CNA_Vector4* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_read_vector4: out_value is null.");
+        }
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->value->ReadVector4());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_packet_writer_get_length(
     const CNA_PacketWriterHandle writer,
     int32_t* const out_length)
@@ -253,6 +361,86 @@ CNA_Result cna_packet_writer_write_double(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        object->value->Write(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_writer_write_color(
+    const CNA_PacketWriterHandle writer,
+    const CNA_Color c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->value->Write(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_writer_write_quaternion(
+    const CNA_PacketWriterHandle writer,
+    const CNA_Quaternion c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->value->Write(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_writer_write_vector2(
+    const CNA_PacketWriterHandle writer,
+    const CNA_Vector2 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->value->Write(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_writer_write_vector3(
+    const CNA_PacketWriterHandle writer,
+    const CNA_Vector3 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->value->Write(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packet_writer_write_vector4(
+    const CNA_PacketWriterHandle writer,
+    const CNA_Vector4 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
         object->value->Write(value);
         return CNA_RESULT_SUCCESS;
     });

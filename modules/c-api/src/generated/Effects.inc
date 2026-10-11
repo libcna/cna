@@ -196,7 +196,7 @@ CNA_Result cna_effect_annotation_get_name_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_byte_count);
     });
 }
 
@@ -213,7 +213,7 @@ CNA_Result cna_effect_annotation_get_semantic_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getSemanticProperty(), out_byte_count);
     });
 }
 
@@ -230,7 +230,7 @@ CNA_Result cna_effect_annotation_get_value_string_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); });
+        return CNA::C::Detail::ReportTextSize(object->value->GetValueString(), out_byte_count);
     });
 }
 
@@ -313,7 +313,7 @@ CNA_Result cna_effect_parameter_get_name_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_byte_count);
     });
 }
 
@@ -330,7 +330,7 @@ CNA_Result cna_effect_parameter_get_semantic_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getSemanticProperty(), out_byte_count);
     });
 }
 
@@ -347,7 +347,7 @@ CNA_Result cna_effect_parameter_get_value_string_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); });
+        return CNA::C::Detail::ReportTextSize(object->value->GetValueString(), out_byte_count);
     });
 }
 
@@ -430,7 +430,7 @@ CNA_Result cna_effect_pass_get_name_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_byte_count);
     });
 }
 
@@ -535,7 +535,7 @@ CNA_Result cna_effect_technique_get_name_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); });
+        return CNA::C::Detail::ReportTextSize(object->value->getNameProperty(), out_byte_count);
     });
 }
 

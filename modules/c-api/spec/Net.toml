@@ -21,6 +21,12 @@ cna_packet_reader_get_length = { get = "object->value->getLengthProperty()" }
 cna_packet_reader_get_position = { get = "object->value->getPositionProperty()" }
 cna_packet_reader_read_single = { get = "object->value->ReadSingle()" }
 cna_packet_reader_read_double = { get = "object->value->ReadDouble()" }
+cna_packet_reader_read_color = { get = "object->value->ReadColor()" }
+cna_packet_reader_read_matrix = { get = "object->value->ReadMatrix()" }
+cna_packet_reader_read_quaternion = { get = "object->value->ReadQuaternion()" }
+cna_packet_reader_read_vector2 = { get = "object->value->ReadVector2()" }
+cna_packet_reader_read_vector3 = { get = "object->value->ReadVector3()" }
+cna_packet_reader_read_vector4 = { get = "object->value->ReadVector4()" }
 
 [writer]
 lookup = "GetWriter"
@@ -33,6 +39,11 @@ cna_packet_writer_set_position = { call = "object->value->setPositionProperty(st
 cna_packet_writer_write_matrix = { call = "object->value->Write(value)" }
 cna_packet_writer_write_single = { call = "object->value->Write(value)" }
 cna_packet_writer_write_double = { call = "object->value->Write(value)" }
+cna_packet_writer_write_color = { call = "object->value->Write(value)" }
+cna_packet_writer_write_quaternion = { call = "object->value->Write(value)" }
+cna_packet_writer_write_vector2 = { call = "object->value->Write(value)" }
+cna_packet_writer_write_vector3 = { call = "object->value->Write(value)" }
+cna_packet_writer_write_vector4 = { call = "object->value->Write(value)" }
 
 [calls]
 [calls.routes]

@@ -16,9 +16,9 @@ cna_effect_annotation_get_value_vector2 = { get = "object->value->GetValueVector
 cna_effect_annotation_get_value_vector3 = { get = "object->value->GetValueVector3()" }
 cna_effect_annotation_get_value_vector4 = { get = "object->value->GetValueVector4()" }
 cna_effect_annotation_get_value_matrix = { get = "object->value->GetValueMatrix()" }
-cna_effect_annotation_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
-cna_effect_annotation_get_semantic_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); })" }
-cna_effect_annotation_get_value_string_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); })" }
+cna_effect_annotation_get_name_byte_count = { size = "object->value->getNameProperty()" }
+cna_effect_annotation_get_semantic_byte_count = { size = "object->value->getSemanticProperty()" }
+cna_effect_annotation_get_value_string_byte_count = { size = "object->value->GetValueString()" }
 
 [collection]
 lookup = "GetCollection"
@@ -35,9 +35,9 @@ object = "std::shared_ptr<ParameterResource>"
 cna_effect_parameter_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_parameter_copy_semantic = { copy = "object->value->getSemanticProperty()" }
 cna_effect_parameter_copy_value_string = { copy = "object->value->GetValueString()" }
-cna_effect_parameter_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
-cna_effect_parameter_get_semantic_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); })" }
-cna_effect_parameter_get_value_string_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); })" }
+cna_effect_parameter_get_name_byte_count = { size = "object->value->getNameProperty()" }
+cna_effect_parameter_get_semantic_byte_count = { size = "object->value->getSemanticProperty()" }
+cna_effect_parameter_get_value_string_byte_count = { size = "object->value->GetValueString()" }
 
 [parameter_collection]
 lookup = "GetParameterCollection"
@@ -54,7 +54,7 @@ object = "std::shared_ptr<PassResource>"
 cna_effect_pass_get_index_ext = { get = "object->value->getIndexInternal()" }
 cna_effect_pass_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_pass_apply = { call = "object->value->Apply()" }
-cna_effect_pass_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_pass_get_name_byte_count = { size = "object->value->getNameProperty()" }
 cna_effect_pass_get_annotations = { result = "CreateAnnotationCollectionAlias(object->value, &object->value->getAnnotationsProperty(), out_collection)" }
 
 [pass_collection]
@@ -72,7 +72,7 @@ object = "std::shared_ptr<TechniqueResource>"
 cna_effect_technique_get_index_ext = { get = "object->value->getIndexInternal()" }
 cna_effect_technique_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_technique_get_identity = { get = "object->value->getIdInternal()" }
-cna_effect_technique_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_technique_get_name_byte_count = { size = "object->value->getNameProperty()" }
 cna_effect_technique_get_annotations = { result = "CreateAnnotationCollectionAlias(object->value, &object->value->getAnnotationsProperty(), out_collection)" }
 
 [technique_collection]

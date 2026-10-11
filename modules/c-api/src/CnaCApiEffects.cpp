@@ -343,19 +343,6 @@ struct EffectState final {
         "The owned EffectAnnotation handle could not be created.");
 }
 
-template<typename TCallable>
-[[nodiscard]] CNA_Result GetStringByteCount(
-    uint64_t* const outByteCount,
-    TCallable&& callable)
-{
-    if (outByteCount == nullptr) {
-        return InvalidArgument("The EffectAnnotation string byte-count output is null.");
-    }
-    const std::string value = std::forward<TCallable>(callable)();
-    *outByteCount = static_cast<uint64_t>(value.size());
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] CNA_Result GetParameter(
     const CNA_EffectParameterHandle handle,
     std::shared_ptr<ParameterResource>* const outParameter)
