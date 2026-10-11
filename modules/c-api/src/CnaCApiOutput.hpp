@@ -45,20 +45,30 @@ template<typename TValue, typename TCompute>
     });
 }
 
+/** @brief The `struct_version` of every version 1 ABI structure, which is all of them today. */
+inline constexpr uint32_t StructureVersion = UINT32_C(1);
+
 /**
- * @brief Refuses a caller's versioned structure unless it is there, large enough and current.
- *
- * A structure passes when it is non-null, its `struct_size` covers this build's layout and its
- * `struct_version` is `version`.
+ * @brief Whether a caller's versioned structure is there, large enough and current: non-null, its
+ * `struct_size` covering this build's layout and its `struct_version` equal to `version`.
  */
+template<typename TStructure>
+[[nodiscard]] constexpr bool IsVersionedStructure(
+    const TStructure* const structure,
+    const uint32_t version = StructureVersion) noexcept
+{
+    return structure != nullptr && structure->struct_size >= sizeof(TStructure) &&
+        structure->struct_version == version;
+}
+
+/** @brief Refuses, with `message`, a versioned structure IsVersionedStructure does not accept. */
 template<typename TStructure>
 [[nodiscard]] CNA_Result ValidateVersionedStructure(
     const TStructure* const structure,
     const std::string_view message,
-    const uint32_t version = 1U) noexcept
+    const uint32_t version = StructureVersion) noexcept
 {
-    if (structure == nullptr || structure->struct_size < sizeof(TStructure) ||
-        structure->struct_version != version) {
+    if (!IsVersionedStructure(structure, version)) {
         return InvalidArgument(message);
     }
     return CNA_RESULT_SUCCESS;

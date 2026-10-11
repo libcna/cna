@@ -48,10 +48,12 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseStorageStream;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Color;
@@ -66,8 +68,6 @@ using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Content::KnownUnsupportedContentTypeReader;
 using Microsoft::Xna::Framework::Content::UnsupportedContentReaderReason;
 using CNA::Content::ForeignContentObjectEXT;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 static_assert(
     static_cast<uint32_t>(
@@ -179,9 +179,7 @@ CNA_Result cna_content_reader_create(
             return InvalidArgument("The ContentReader output handle is null.");
         }
         *outReader = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_ContentReaderCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->reserved[0] != 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U) {
             return InvalidArgument("The ContentReader creation configuration is invalid.");
         }
@@ -645,9 +643,7 @@ CNA_Result cna_content_type_reader_manager_register(
             return InvalidArgument("The reader registration output handle is null.");
         }
         *outRegistration = CNA_INVALID_HANDLE;
-        if (callbacks == nullptr ||
-            callbacks->struct_size < sizeof(CNA_ContentTypeReaderCallbacks) ||
-            callbacks->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(callbacks) ||
             callbacks->reserved[0] != 0U || callbacks->reserved[1] != 0U ||
             callbacks->reserved[2] != 0U ||
             callbacks->create == nullptr || callbacks->read == nullptr ||

@@ -4,6 +4,7 @@
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -46,8 +47,10 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
@@ -63,8 +66,6 @@ using Microsoft::Xna::Framework::Net::PacketReader;
 using Microsoft::Xna::Framework::Net::PacketWriter;
 using Microsoft::Xna::Framework::Net::QualityOfService;
 using Microsoft::Xna::Framework::Net::SendDataOptions;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 static_assert(NativeOrdinal(NetworkSessionEndReason::ClientSignedOut) ==
     CNA_NETWORK_SESSION_END_REASON_CLIENT_SIGNED_OUT);
@@ -199,9 +200,10 @@ void StoreOptional(const std::optional<int>& value, CNA_OptionalInt32* const out
     const QualityOfService& value,
     CNA_QualityOfService* const outValue)
 {
-    if (outValue == nullptr || outValue->struct_size < sizeof(CNA_QualityOfService) ||
-        outValue->struct_version != StructureVersion) {
-        return InvalidArgument("The quality-of-service output structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(outValue, "The quality-of-service output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     outValue->is_available = ToCBool(value.getIsAvailableProperty());
     std::memset(outValue->reserved, 0, sizeof(outValue->reserved));

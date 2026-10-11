@@ -68,6 +68,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryMapPlayerIndex;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -97,15 +98,15 @@ using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
 using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 using Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities;
 
-constexpr uint32_t StructureVersion = UINT32_C(1);
 constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
 
 [[nodiscard]] CNA_Result ValidateKeyboardState(
     const CNA_KeyboardState* const state) noexcept
 {
-    if (state == nullptr || state->struct_size < sizeof(CNA_KeyboardState) ||
-        state->struct_version != StructureVersion) {
-        return InvalidArgument("The keyboard-state snapshot structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(state, "The keyboard-state snapshot structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -360,9 +361,10 @@ CNA_Result cna_keyboard_get_state(
     CNA_KeyboardState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outState == nullptr || outState->struct_size < sizeof(CNA_KeyboardState) ||
-            outState->struct_version != StructureVersion) {
-            return InvalidArgument("The keyboard-state output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outState, "The keyboard-state output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {

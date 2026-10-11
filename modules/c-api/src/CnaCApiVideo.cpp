@@ -25,20 +25,20 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::MediaState;
 using Microsoft::Xna::Framework::Media::Video;
 using Microsoft::Xna::Framework::Media::VideoPlayer;
 using Microsoft::Xna::Framework::Media::VideoSoundtrackType;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct VideoResource final {
     std::unique_ptr<Video> value;
@@ -272,9 +272,10 @@ CNA_Result cna_video_create_from_uri_ext(
 CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_VideoInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The video metadata structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The video metadata structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         return ReadVideo(video, [&](const Video& value) {
             outInfo->width = static_cast<int32_t>(value.getWidthProperty());
@@ -337,9 +338,10 @@ CNA_Result cna_video_player_get_frame_ext(
     CNA_VideoFrameEXT* const outFrame)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFrame == nullptr || outFrame->struct_size < sizeof(CNA_VideoFrameEXT) ||
-            outFrame->struct_version != CNA_VIDEO_FRAME_EXT_STRUCT_VERSION) {
-            return InvalidArgument("The video frame descriptor is null or malformed.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outFrame, "The video frame descriptor is null or malformed.", CNA_VIDEO_FRAME_EXT_STRUCT_VERSION);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         outFrame->texture = CNA_INVALID_HANDLE;
         outFrame->generation = 0U;

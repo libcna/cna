@@ -32,16 +32,16 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::GamerServices::GameDefaults;
 using Microsoft::Xna::Framework::GamerServices::LeaderboardOutcome;
 using Microsoft::Xna::Framework::GamerServices::PropertyDictionary;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result BorrowDictionary(
     const CNA_Handle handle,
@@ -194,9 +194,10 @@ CNA_Result cna_signed_in_gamer_get_game_defaults(
     CNA_GameDefaults* const outDefaults)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDefaults == nullptr || outDefaults->struct_size < sizeof(CNA_GameDefaults) ||
-            outDefaults->struct_version != StructureVersion) {
-            return InvalidArgument("The GameDefaults output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outDefaults, "The GameDefaults output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);

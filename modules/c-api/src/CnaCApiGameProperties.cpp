@@ -38,6 +38,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::FrameworkDispatcher;
 using Microsoft::Xna::Framework::Game;
@@ -527,10 +528,10 @@ CNA_Result cna_game_window_get_native_window_ext(
     CNA_NativeWindowHandle* const handle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (handle == nullptr ||
-            handle->struct_size < sizeof(CNA_NativeWindowHandle) ||
-            handle->struct_version != NativeWindowHandleVersion) {
-            return InvalidArgument("The native-window-handle structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(handle, "The native-window-handle structure is invalid.", NativeWindowHandleVersion);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         Microsoft::Xna::Framework::GameWindow* window = nullptr;
         if (const CNA_Result result = GetGameWindow(gameHandle, &window);

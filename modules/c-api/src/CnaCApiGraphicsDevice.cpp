@@ -53,6 +53,7 @@ using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
@@ -93,10 +94,12 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -122,8 +125,6 @@ using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::Viewport;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 template<typename TValue, typename TCallable>
 [[nodiscard]] CNA_Result DeviceQuery(
@@ -480,8 +481,7 @@ struct UserPrimitiveRequest final {
     const bool indexed,
     UserPrimitiveRequest* const outRequest)
 {
-    if (primitives == nullptr || primitives->struct_size < sizeof(CNA_UserPrimitives) ||
-        primitives->struct_version != StructureVersion || primitives->reserved != 0U ||
+    if (!IsVersionedStructure(primitives) || primitives->reserved != 0U ||
         primitives->vertex_data == nullptr || primitives->vertex_offset < 0 ||
         primitives->primitive_count <= 0 ||
         primitives->vertex_source > CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE ||
@@ -1015,9 +1015,10 @@ CNA_Result cna_graphics_device_get_texture(
     CNA_TextureSlotInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_TextureSlotInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The texture-slot output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The texture-slot output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (const CNA_Result result = ValidateTextureSlot(stage, slot);
             result != CNA_RESULT_SUCCESS) {
@@ -1142,8 +1143,7 @@ CNA_Result cna_graphics_device_get_backbuffer_data_window(
     const uint64_t capacity)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (readback == nullptr || readback->struct_size < sizeof(CNA_BackBufferReadback) ||
-            readback->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(readback) ||
             (readback->has_source_rectangle != CNA_TRUE &&
              readback->has_source_rectangle != CNA_FALSE) ||
             readback->reserved[0] != 0U || readback->reserved[1] != 0U ||
@@ -1482,8 +1482,7 @@ CNA_Result cna_graphics_device_draw_user_indexed_primitives(
     const CNA_UserIndices* const indices)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (indices == nullptr || indices->struct_size < sizeof(CNA_UserIndices) ||
-            indices->struct_version != StructureVersion || indices->index_data == nullptr ||
+        if (!IsVersionedStructure(indices) || indices->index_data == nullptr ||
             indices->index_offset < 0 ||
             (indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS &&
              indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS)) {

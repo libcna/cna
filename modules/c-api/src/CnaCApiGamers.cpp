@@ -48,10 +48,12 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadTextBytes;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::TryMapPlayerIndex;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -65,8 +67,6 @@ using Microsoft::Xna::Framework::GamerServices::SignedInEventArgs;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
 using Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // A gamer that is not the local signed-in gamer. The friend pointer is non-null exactly when the
 // canonical object is a friend, which is what lets the friend-only routes refuse an ordinary gamer
@@ -556,9 +556,10 @@ CNA_Result cna_signed_in_gamer_get_presence(
     CNA_GamerPresence* const outPresence)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPresence == nullptr || outPresence->struct_size < sizeof(CNA_GamerPresence) ||
-            outPresence->struct_version != StructureVersion) {
-            return InvalidArgument("The GamerPresence output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outPresence, "The GamerPresence output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -582,9 +583,10 @@ CNA_Result cna_signed_in_gamer_set_presence(
     const CNA_GamerPresence* const presence)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (presence == nullptr || presence->struct_size < sizeof(CNA_GamerPresence) ||
-            presence->struct_version != StructureVersion) {
-            return InvalidArgument("The GamerPresence structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(presence, "The GamerPresence structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (presence->presence_mode > CNA_GAMER_PRESENCE_MODE_MAXIMUM) {
             return InvalidArgument("The gamer presence mode is not a defined identity.");
@@ -628,10 +630,10 @@ CNA_Result cna_signed_in_gamer_get_privileges(
     CNA_GamerPrivileges* const outPrivileges)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPrivileges == nullptr ||
-            outPrivileges->struct_size < sizeof(CNA_GamerPrivileges) ||
-            outPrivileges->struct_version != StructureVersion) {
-            return InvalidArgument("The GamerPrivileges output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outPrivileges, "The GamerPrivileges output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         SignedInGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
@@ -806,9 +808,10 @@ CNA_Result cna_gamer_profile_get_info(
     CNA_GamerProfileInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_GamerProfileInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The GamerProfile info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The GamerProfile info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<GamerProfileResource> profile;
         if (const CNA_Result result = BorrowProfile(profileHandle, &profile);
@@ -972,9 +975,10 @@ CNA_Result cna_friend_gamer_get_info(
     CNA_FriendGamerInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_FriendGamerInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The FriendGamer info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The FriendGamer info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<GamerResource> gamer;
         FriendGamer* friendGamer = nullptr;

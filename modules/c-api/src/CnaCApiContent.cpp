@@ -45,14 +45,17 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
 using CNA::C::Detail::SpriteFontResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -63,8 +66,6 @@ using Microsoft::Xna::Framework::Content::ResourceContentManager;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct ContentManagerResource final {
     std::shared_ptr<ContentManager> value;
@@ -186,9 +187,7 @@ CNA_Result cna_content_manager_create(
             return InvalidArgument("The ContentManager output handle is null.");
         }
         *outContentManager = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_ContentManagerCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U) {
+        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
             return InvalidArgument("The ContentManager creation configuration is invalid.");
         }
 
@@ -360,9 +359,7 @@ CNA_Result cna_content_manager_create_resource(
             return InvalidArgument("The ContentManager output handle is null.");
         }
         *outContentManager = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_ContentManagerCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U) {
+        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
             return InvalidArgument("The ContentManager creation configuration is invalid.");
         }
 
@@ -880,9 +877,10 @@ CNA_Result cna_content_manager_get_manifest_entry(
     CNA_ContentManifestEntryInfo* const outEntry)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEntry == nullptr || outEntry->struct_size < sizeof(CNA_ContentManifestEntryInfo) ||
-            outEntry->struct_version != StructureVersion) {
-            return InvalidArgument("The manifest entry output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outEntry, "The manifest entry output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<ContentManagerResource> contentManager;
         const ContentManifestEntry* entry = nullptr;
@@ -975,9 +973,10 @@ CNA_Result cna_content_manager_get_xnb_reader_usage(
     CNA_ContentReaderUsageInfo* const outUsage)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outUsage == nullptr || outUsage->struct_size < sizeof(CNA_ContentReaderUsageInfo) ||
-            outUsage->struct_version != StructureVersion) {
-            return InvalidArgument("The reader-usage output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outUsage, "The reader-usage output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<ContentManagerResource> contentManager;
         if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);

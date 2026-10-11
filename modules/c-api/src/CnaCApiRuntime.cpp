@@ -5,6 +5,7 @@
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiPlatformOverride.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -32,16 +33,16 @@ using CNA::C::Detail::HandleRegistry;
 using CNA::C::Detail::HasOwnedGraphicsResources;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateStringView;
 using Microsoft::Xna::Framework::Game;
 using Microsoft::Xna::Framework::GameTime;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct RuntimeState final {
     std::mutex mutex;
@@ -62,15 +63,12 @@ struct RuntimeState final {
 [[nodiscard]] bool IsSupportedGameCallbacks(const CNA_GameCallbacks* const callbacks) noexcept
 {
     return callbacks == nullptr ||
-        (callbacks->struct_size >= sizeof(CNA_GameCallbacks) &&
-         callbacks->struct_version == StructureVersion);
+        (IsVersionedStructure(callbacks));
 }
 
 [[nodiscard]] bool IsSupportedGameCreateInfo(const CNA_GameCreateInfo* const createInfo) noexcept
 {
-    return createInfo != nullptr &&
-        createInfo->struct_size >= sizeof(CNA_GameCreateInfo) &&
-        createInfo->struct_version == StructureVersion;
+    return IsVersionedStructure(createInfo);
 }
 
 [[nodiscard]] CNA_GameTime MakeCGameTime(const GameTime& value) noexcept
@@ -799,8 +797,7 @@ CNA_Result cna_game_set_frame_hooks_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (hooks != nullptr &&
-            (hooks->struct_size < sizeof(CNA_GameFrameHooks) ||
-             hooks->struct_version != StructureVersion)) {
+            (!IsVersionedStructure(hooks))) {
             return InvalidArgument("The game frame hook table is not a valid structure.");
         }
         std::shared_ptr<CGame> game;

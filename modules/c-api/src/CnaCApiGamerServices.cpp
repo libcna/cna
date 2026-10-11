@@ -3,6 +3,7 @@
 #include "CNA/C/gamer_services.h"
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
@@ -30,6 +31,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
@@ -137,9 +139,10 @@ CNA_Result cna_invite_accepted_event_info_init(
     CNA_InviteAcceptedEventInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_InviteAcceptedEventInfo) ||
-            outInfo->struct_version != UINT32_C(1)) {
-            return InvalidArgument("The event description structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The event description structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         // CBIND-065: the flag is validated before it is stored, unlike a plain setter, because
         // this structure is what an invite-accepted *subscriber* reads. A byte outside

@@ -5,6 +5,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
@@ -50,10 +51,13 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -62,8 +66,6 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 namespace PackedVector = Microsoft::Xna::Framework::Graphics::PackedVector;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct TransferView final {
     int level;
@@ -181,9 +183,7 @@ struct TransferView final {
     const CNA_Texture2DTransfer* const transfer,
     TransferView* const outView)
 {
-    if (outView == nullptr || transfer == nullptr ||
-        transfer->struct_size < sizeof(CNA_Texture2DTransfer) ||
-        transfer->struct_version != StructureVersion || !IsDataType(dataType) ||
+    if (outView == nullptr || !IsVersionedStructure(transfer) || !IsDataType(dataType) ||
         (transfer->has_rectangle != CNA_FALSE && transfer->has_rectangle != CNA_TRUE) ||
         transfer->reserved[0] != 0U || transfer->reserved[1] != 0U ||
         transfer->reserved[2] != 0U || transfer->level < 0 ||
@@ -644,9 +644,10 @@ CNA_Result cna_texture_get_info(
     CNA_TextureInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_TextureInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The texture info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The texture info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         TextureResourceView texture;
         if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
@@ -831,9 +832,10 @@ CNA_Result cna_texture2d_get_storage_info(
     CNA_Texture2DStorageInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_Texture2DStorageInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The Texture2D storage-info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The Texture2D storage-info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<Texture2DResource> texture;
         if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
@@ -943,8 +945,7 @@ CNA_Result cna_texture2d_create_from_encoded_memory(
             return InvalidArgument("The encoded Texture2D source buffer is invalid.");
         }
         if (decodeInfo != nullptr &&
-            (decodeInfo->struct_size < sizeof(CNA_Texture2DDecodeInfo) ||
-             decodeInfo->struct_version != StructureVersion || decodeInfo->width == 0U ||
+            (!IsVersionedStructure(decodeInfo) || decodeInfo->width == 0U ||
              decodeInfo->height == 0U ||
              decodeInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
              decodeInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||

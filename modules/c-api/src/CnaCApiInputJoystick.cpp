@@ -25,6 +25,7 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
@@ -45,8 +46,6 @@ using CNA::Input::Joysticks;
 using CNA::Input::JoystickStateEXT;
 using CNA::Input::JoystickTypeEXT;
 using CNA::Input::PowerStateEXT;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result ToJoystickType(const CNA_JoystickType type, JoystickTypeEXT* const outType)
 {

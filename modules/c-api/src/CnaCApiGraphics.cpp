@@ -4,6 +4,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
@@ -56,18 +57,21 @@ using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNativeBlendState;
 using CNA::C::Detail::ToNativeDepthStencilState;
 using CNA::C::Detail::ToNativeRasterizerState;
 using CNA::C::Detail::ToNativeSamplerState;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -80,8 +84,6 @@ using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // The C alias carries the native mirroring bits verbatim, so a C caller's own bitwise operators
 // replace the native operator overloads without a conversion step.
@@ -609,9 +611,10 @@ CNA_Result cna_graphics_device_get_renderer_info(
     CNA_RendererInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_RendererInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The renderer-info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The renderer-info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
 
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -815,9 +818,10 @@ CNA_Result cna_graphics_device_get_backbuffer_info(
     CNA_BackBufferInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_BackBufferInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The backbuffer-info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The backbuffer-info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -930,8 +934,7 @@ CNA_Result cna_texture2d_create(
             return InvalidArgument("The Texture2D output handle is null.");
         }
         *outTexture = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr || createInfo->struct_size < sizeof(CNA_Texture2DCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->width == 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->width == 0U ||
             createInfo->height == 0U ||
             (createInfo->mip_map != CNA_FALSE && createInfo->mip_map != CNA_TRUE) ||
             createInfo->reserved[0] != 0U || createInfo->reserved[1] != 0U ||
@@ -1002,9 +1005,10 @@ CNA_Result cna_texture2d_get_info(
     CNA_Texture2DInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_Texture2DInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The Texture2D info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The Texture2D info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<Texture2DResource> texture;
         if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
@@ -1182,9 +1186,7 @@ CNA_Result cna_sprite_batch_begin(
 {
     return CallWithExceptionBarrier([&]() {
         SpriteSortMode nativeSortMode{};
-        if (beginInfo == nullptr ||
-            beginInfo->struct_size < sizeof(CNA_SpriteBatchBeginInfo) ||
-            beginInfo->struct_version != StructureVersion || beginInfo->reserved != 0U ||
+        if (!IsVersionedStructure(beginInfo) || beginInfo->reserved != 0U ||
             !TryMapSpriteSortMode(beginInfo->sort_mode, &nativeSortMode)) {
             return InvalidArgument("The SpriteBatch begin configuration is invalid.");
         }
@@ -1663,8 +1665,7 @@ CNA_Result cna_sprite_batch_draw_string(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
-        if (command == nullptr || command->struct_size < sizeof(CNA_SpriteTextCommand) ||
-            command->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(command) ||
             (command->effects & ~(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
                                   CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U) {
             return InvalidArgument("The SpriteBatch text command is invalid.");

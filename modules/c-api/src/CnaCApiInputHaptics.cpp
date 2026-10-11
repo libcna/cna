@@ -24,6 +24,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
@@ -43,8 +44,6 @@ using CNA::Input::HapticEffectTypeEXT;
 using CNA::Input::HapticFeatureEXT;
 using CNA::Input::HapticInfoEXT;
 using CNA::Input::Haptics;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result ValidateSampleBuffer(
     const uint16_t* const data,

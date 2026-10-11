@@ -36,14 +36,17 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsFinite;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::ReadTextBytes;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -53,8 +56,6 @@ using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::WaveBank;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // An engine owns banks and categories; a sound bank owns the cues it hands out. Each parent counts
 // its live C children so a release cannot leave a handle pointing at a destroyed owner -- the same
@@ -179,13 +180,11 @@ template<typename TResource>
     AudioListener* const outListener,
     AudioEmitter* const outEmitter)
 {
-    if (listener == nullptr || listener->struct_size < sizeof(CNA_AudioListener) ||
-        listener->struct_version != StructureVersion || !IsFinite(listener->forward) ||
+    if (!IsVersionedStructure(listener) || !IsFinite(listener->forward) ||
         !IsFinite(listener->position) || !IsFinite(listener->up) || !IsFinite(listener->velocity)) {
         return InvalidArgument("The AudioListener structure is invalid.");
     }
-    if (emitter == nullptr || emitter->struct_size < sizeof(CNA_AudioEmitter) ||
-        emitter->struct_version != StructureVersion || !std::isfinite(emitter->doppler_scale) ||
+    if (!IsVersionedStructure(emitter) || !std::isfinite(emitter->doppler_scale) ||
         !IsFinite(emitter->forward) || !IsFinite(emitter->position) || !IsFinite(emitter->up) ||
         !IsFinite(emitter->velocity)) {
         return InvalidArgument("The AudioEmitter structure is invalid.");
@@ -810,9 +809,10 @@ CNA_Result cna_cue_destroy(const CNA_Handle cueHandle)
 CNA_Result cna_cue_get_info(const CNA_Handle cueHandle, CNA_CueInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_CueInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The Cue info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The Cue info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<CueResource> cue;
         if (const CNA_Result result = GetCue(cueHandle, &cue);

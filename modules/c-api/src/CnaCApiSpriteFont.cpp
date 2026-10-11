@@ -3,6 +3,7 @@
 #include "CNA/C/sprite_font.h"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -31,19 +32,20 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result GetSpriteFont(
     const CNA_Handle handle,
@@ -63,9 +65,7 @@ CNA_Result cna_sprite_font_create(
             return InvalidArgument("The SpriteFont output handle is null.");
         }
         *outSpriteFont = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_SpriteFontCreateInfo) ||
-            createInfo->struct_version != StructureVersion || !std::isfinite(createInfo->spacing) ||
+        if (!IsVersionedStructure(createInfo) || !std::isfinite(createInfo->spacing) ||
             !IsCanonicalBool(createInfo->has_default_character) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
             createInfo->reserved[3] != 0U || createInfo->reserved[4] != 0U) {
@@ -166,9 +166,10 @@ CNA_Result cna_sprite_font_get_info(
     CNA_SpriteFontInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_SpriteFontInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The SpriteFont output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The SpriteFont output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<SpriteFontResource> spriteFont;
         if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);

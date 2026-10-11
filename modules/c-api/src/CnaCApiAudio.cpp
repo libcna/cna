@@ -43,23 +43,24 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsFinite;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundState;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct SoundEffectResource final {
     std::shared_ptr<SoundEffect> value;
@@ -129,9 +130,10 @@ struct SoundEffectInstanceResource final {
     const CNA_AudioListener* const value,
     Microsoft::Xna::Framework::Audio::AudioListener* const outListener)
 {
-    if (value == nullptr || value->struct_size < sizeof(CNA_AudioListener) ||
-        value->struct_version != StructureVersion) {
-        return InvalidArgument("The AudioListener structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(value, "The AudioListener structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (!IsFinite(value->forward) || !IsFinite(value->position) || !IsFinite(value->up) ||
         !IsFinite(value->velocity)) {
@@ -148,9 +150,10 @@ struct SoundEffectInstanceResource final {
     const CNA_AudioEmitter* const value,
     Microsoft::Xna::Framework::Audio::AudioEmitter* const outEmitter)
 {
-    if (value == nullptr || value->struct_size < sizeof(CNA_AudioEmitter) ||
-        value->struct_version != StructureVersion) {
-        return InvalidArgument("The AudioEmitter structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(value, "The AudioEmitter structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (!std::isfinite(value->doppler_scale)) {
         return InvalidArgument("The AudioEmitter Doppler scale must be finite.");
@@ -198,10 +201,10 @@ CNA_Result cna_audio_get_capabilities(
     CNA_AudioCapabilities* const outCapabilities)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outCapabilities == nullptr ||
-            outCapabilities->struct_size < sizeof(CNA_AudioCapabilities) ||
-            outCapabilities->struct_version != StructureVersion) {
-            return InvalidArgument("The audio-capabilities output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outCapabilities, "The audio-capabilities output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -241,9 +244,7 @@ CNA_Result cna_sound_effect_create_pcm16(
         *outSoundEffect = CNA_INVALID_HANDLE;
 
         AudioChannels nativeChannels = AudioChannels::Mono;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_SoundEffectCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
             createInfo->sample_rate == 0U ||
             createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
             !TryMapChannels(createInfo->channels, &nativeChannels)) {
@@ -357,9 +358,10 @@ CNA_Result cna_sound_effect_instance_get_info(
     CNA_SoundEffectInstanceInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_SoundEffectInstanceInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The SoundEffectInstance info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The SoundEffectInstance info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<SoundEffectInstanceResource> instance;
         if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
@@ -466,9 +468,7 @@ CNA_Result cna_sound_effect_create_pcm16_range_ext(
         }
         *outSoundEffect = CNA_INVALID_HANDLE;
         AudioChannels nativeChannels = AudioChannels::Mono;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_SoundEffectCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
             createInfo->sample_rate == 0U ||
             createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
             !TryMapChannels(createInfo->channels, &nativeChannels)) {

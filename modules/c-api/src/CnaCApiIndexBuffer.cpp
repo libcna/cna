@@ -33,20 +33,21 @@ using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result GetBuffer(
     const CNA_IndexBufferHandle handle,
@@ -217,9 +218,7 @@ CNA_Result cna_index_buffer_create(
             return InvalidArgument("The IndexBuffer output handle is null.");
         }
         *outIndexBuffer = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_IndexBufferCreateInfo) ||
-            createInfo->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(createInfo) ||
             createInfo->index_count <= 0 ||
             createInfo->index_element_size > CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
@@ -298,10 +297,10 @@ CNA_Result cna_index_buffer_get_info(
     CNA_IndexBufferInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr ||
-            outInfo->struct_size < sizeof(CNA_IndexBufferInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The IndexBuffer info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The IndexBuffer info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<IndexBufferResource> buffer;
         if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
@@ -470,9 +469,7 @@ CNA_Result cna_index_buffer_get_data(
         if (const CNA_Result result = ValidateTransfer(
                 transfer, capacity, destination, true, &view);
             result != CNA_RESULT_SUCCESS) {
-            if (transfer != nullptr &&
-                transfer->struct_size >= sizeof(CNA_IndexBufferTransfer) &&
-                transfer->struct_version == StructureVersion) {
+            if (IsVersionedStructure(transfer)) {
                 *outElementCount = transfer->element_count;
             }
             return result;

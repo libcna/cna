@@ -21,6 +21,7 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
@@ -34,8 +35,6 @@ using Microsoft::Xna::Framework::Media::MediaSource;
 using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::SongCollection;
 using Microsoft::Xna::Framework::Media::VisualizationData;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // The canonical enumeration hands back raw `new`-ed sources its caller must delete. This owns that
 // list for the length of one call so no ownership — and no leak — crosses the ABI.

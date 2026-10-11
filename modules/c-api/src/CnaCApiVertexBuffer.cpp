@@ -43,15 +43,18 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector2;
@@ -70,8 +73,6 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTangentTextureSki
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTextureSkinned;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result GetBuffer(
     const CNA_VertexBufferHandle handle,
@@ -332,9 +333,7 @@ CNA_Result cna_vertex_buffer_create(
             return InvalidArgument("The VertexBuffer output handle is null.");
         }
         *outVertexBuffer = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_VertexBufferCreateInfo) ||
-            createInfo->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(createInfo) ||
             createInfo->vertex_count <= 0 ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
             !IsCanonicalBool(createInfo->dynamic) ||
@@ -420,10 +419,10 @@ CNA_Result cna_vertex_buffer_get_info(
     CNA_VertexBufferInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr ||
-            outInfo->struct_size < sizeof(CNA_VertexBufferInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The VertexBuffer info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The VertexBuffer info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<VertexBufferResource> buffer;
         if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
@@ -539,9 +538,7 @@ CNA_Result cna_vertex_buffer_get_data(
         if (const CNA_Result result = ValidateTransfer(
                 transfer, capacity, destination, true, &view);
             result != CNA_RESULT_SUCCESS) {
-            if (transfer != nullptr &&
-                transfer->struct_size >= sizeof(CNA_VertexBufferTransfer) &&
-                transfer->struct_version == StructureVersion) {
+            if (IsVersionedStructure(transfer)) {
                 *outElementCount = transfer->element_count;
             }
             return result;

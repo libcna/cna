@@ -27,6 +27,7 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
@@ -36,6 +37,7 @@ using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::DrawableGameComponent;
@@ -46,8 +48,6 @@ using Microsoft::Xna::Framework::GameComponentCollectionEventArgs;
 using Microsoft::Xna::Framework::GameServiceContainer;
 using Microsoft::Xna::Framework::GameTime;
 using Microsoft::Xna::Framework::IGameComponent;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] CNA_Result NotDrawable()
 {
@@ -316,8 +316,7 @@ private:
 
 [[nodiscard]] bool ValidCallbacks(const CNA_GameComponentCallbacks* const callbacks) noexcept
 {
-    return callbacks != nullptr && callbacks->struct_size >= sizeof(CNA_GameComponentCallbacks) &&
-        callbacks->struct_version == StructureVersion;
+    return IsVersionedStructure(callbacks);
 }
 
 template<typename TComponent>

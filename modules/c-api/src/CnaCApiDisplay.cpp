@@ -4,6 +4,7 @@
 #include "CNA/C/graphics_device.h"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -39,12 +40,15 @@ using CNA::C::Detail::IsGraphicsProfile;
 using CNA::C::Detail::IsPresentInterval;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCPresentationParameters;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
@@ -56,15 +60,6 @@ using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::PresentInterval;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
-
-template<typename T>
-[[nodiscard]] bool HasOutputHeader(const T* const value) noexcept
-{
-    return value != nullptr && value->struct_size >= sizeof(T) &&
-        value->struct_version == StructureVersion;
-}
 
 void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destination) noexcept
 {
@@ -79,8 +74,7 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
 
 [[nodiscard]] bool IsDisplayMode(const CNA_DisplayMode* const mode) noexcept
 {
-    return mode != nullptr && mode->struct_size >= sizeof(CNA_DisplayMode) &&
-        mode->struct_version == StructureVersion && IsSurfaceFormat(mode->format);
+    return IsVersionedStructure(mode) && IsSurfaceFormat(mode->format);
 }
 
 [[nodiscard]] CNA_Result GetAdapterContext(
@@ -187,9 +181,7 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
 [[nodiscard]] bool IsPresentationParameters(
     const CNA_PresentationParameters* const parameters) noexcept
 {
-    return parameters != nullptr &&
-        parameters->struct_size >= sizeof(CNA_PresentationParameters) &&
-        parameters->struct_version == StructureVersion &&
+    return IsVersionedStructure(parameters) &&
         IsSurfaceFormat(parameters->back_buffer_format) &&
         IsDepthFormat(parameters->depth_stencil_format) &&
         parameters->multi_sample_count >= 0 &&
@@ -210,7 +202,7 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     CNA_GraphicsFormatSelection* const outSelection,
     const bool renderTarget)
 {
-    if (!HasOutputHeader(outSelection) || !IsGraphicsProfile(profile) || !IsSurfaceFormat(format) ||
+    if (!IsVersionedStructure(outSelection) || !IsGraphicsProfile(profile) || !IsSurfaceFormat(format) ||
         !IsDepthFormat(depthFormat) || multiSampleCount < 0) {
         return InvalidArgument("The graphics-format query is invalid.");
     }
@@ -292,8 +284,10 @@ CNA_Result cna_graphics_adapter_get_info(
     CNA_GraphicsAdapterInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasOutputHeader(outInfo)) {
-            return InvalidArgument("The graphics-adapter output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The graphics-adapter output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
@@ -326,8 +320,10 @@ CNA_Result cna_graphics_adapter_get_current_display_mode(
     CNA_DisplayMode* const outMode)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasOutputHeader(outMode)) {
-            return InvalidArgument("The DisplayMode output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outMode, "The DisplayMode output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
@@ -512,8 +508,10 @@ CNA_Result cna_graphics_device_get_presentation_parameters(
     CNA_PresentationParameters* const outParameters)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasOutputHeader(outParameters)) {
-            return InvalidArgument("The PresentationParameters output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outParameters, "The PresentationParameters output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -558,8 +556,10 @@ CNA_Result cna_graphics_device_get_display_mode(
     CNA_DisplayMode* const outMode)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasOutputHeader(outMode)) {
-            return InvalidArgument("The DisplayMode output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outMode, "The DisplayMode output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(

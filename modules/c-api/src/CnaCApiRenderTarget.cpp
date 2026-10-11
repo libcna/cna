@@ -6,6 +6,7 @@
 #include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -43,14 +44,17 @@ using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsDepthFormat;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::RenderTargetCubeResource;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -59,8 +63,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> activeBindings;
 
@@ -317,9 +319,7 @@ CNA_Result cna_render_target2d_create(
             return InvalidArgument("The RenderTarget2D output handle is null.");
         }
         *outRenderTarget = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_RenderTarget2DCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->width == 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->width == 0U ||
             createInfo->height == 0U ||
             createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
@@ -363,9 +363,7 @@ CNA_Result cna_render_target_cube_create(
             return InvalidArgument("The RenderTargetCube output handle is null.");
         }
         *outRenderTarget = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_RenderTargetCubeCreateInfo) ||
-            createInfo->struct_version != StructureVersion || createInfo->size == 0U ||
+        if (!IsVersionedStructure(createInfo) || createInfo->size == 0U ||
             createInfo->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
@@ -398,9 +396,10 @@ CNA_Result cna_render_target_get_info(
     CNA_RenderTargetInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_RenderTargetInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The render-target output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The render-target output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ObjectKind kind = ObjectKind::Unknown;
         if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);

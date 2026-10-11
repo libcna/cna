@@ -2,6 +2,7 @@
 
 #include "CNA/C/core.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include <cstring>
 
@@ -9,9 +10,7 @@ namespace {
 
 [[nodiscard]] bool IsSupportedErrorInfo(const CNA_ErrorInfo* const errorInfo)
 {
-    return errorInfo != nullptr &&
-        errorInfo->struct_size >= sizeof(CNA_ErrorInfo) &&
-        errorInfo->struct_version == UINT32_C(1);
+    return CNA::C::Detail::IsVersionedStructure(errorInfo);
 }
 
 } // namespace

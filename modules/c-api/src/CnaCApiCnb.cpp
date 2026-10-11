@@ -49,6 +49,7 @@ using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateBuffer;
@@ -256,8 +257,7 @@ struct CnbWriterResource final {
         *outLimits = Cnb::DefaultCnbReadLimits();
         return CNA_RESULT_SUCCESS;
     }
-    if (limits->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbReadLimits)) ||
-        limits->struct_version != CNA_CNB_READ_LIMITS_STRUCT_VERSION) {
+    if (!IsVersionedStructure(limits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
         return InvalidArgument("The read-limits structure is not a known size and version.");
     }
     outLimits->maxFileSize = limits->max_file_size;
@@ -387,8 +387,7 @@ template<typename TStruct>
     if (value == nullptr) {
         return InvalidArgument(what);
     }
-    if (value->struct_size < static_cast<uint32_t>(sizeof(TStruct)) ||
-        value->struct_version != version) {
+    if (!IsVersionedStructure(value, version)) {
         return InvalidArgument(what);
     }
     return CNA_RESULT_SUCCESS;
@@ -860,8 +859,7 @@ CNA_Result cna_cnb_read_limits_init(CNA_CnbReadLimits* const outLimits)
         if (outLimits == nullptr) {
             return InvalidArgument("The read-limits output is null.");
         }
-        if (outLimits->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbReadLimits)) ||
-            outLimits->struct_version != CNA_CNB_READ_LIMITS_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
             return InvalidArgument("The read-limits structure is not a known size and version.");
         }
         const Cnb::CnbReadLimits& limits = Cnb::DefaultCnbReadLimits();
@@ -1112,8 +1110,7 @@ CNA_Result cna_cnb_chunk_entry_is_mandatory(
         if (entry == nullptr || outMandatory == nullptr) {
             return InvalidArgument("The chunk-entry input or output is null.");
         }
-        if (entry->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbChunkEntry)) ||
-            entry->struct_version != CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION) {
+        if (!IsVersionedStructure(entry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
             return InvalidArgument("The chunk entry is not a known size and version.");
         }
         Cnb::CnbChunkEntry native;
@@ -1227,8 +1224,7 @@ CNA_Result cna_cnb_document_get_chunk(
         if (outEntry == nullptr) {
             return InvalidArgument("The chunk-entry output is null.");
         }
-        if (outEntry->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbChunkEntry)) ||
-            outEntry->struct_version != CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outEntry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
             return InvalidArgument("The chunk entry is not a known size and version.");
         }
         if (const CNA_Result result = RequireIndex(
@@ -1422,8 +1418,7 @@ CNA_Result cna_cnb_document_get_metadata(
         if (outMetadata == nullptr) {
             return InvalidArgument("The metadata output is null.");
         }
-        if (outMetadata->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbMetadata)) ||
-            outMetadata->struct_version != CNA_CNB_METADATA_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outMetadata, CNA_CNB_METADATA_STRUCT_VERSION)) {
             return InvalidArgument("The metadata structure is not a known size and version.");
         }
         const Cnb::CnbMetadata& metadata = document->value->Metadata();
@@ -1540,8 +1535,7 @@ CNA_Result cna_cnb_document_get_limits(
         if (outLimits == nullptr) {
             return InvalidArgument("The read-limits output is null.");
         }
-        if (outLimits->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbReadLimits)) ||
-            outLimits->struct_version != CNA_CNB_READ_LIMITS_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
             return InvalidArgument("The read-limits structure is not a known size and version.");
         }
         WriteLimits(document->value->Limits(), outLimits);
@@ -1949,8 +1943,7 @@ CNA_Result cna_cnb_writer_add_external_reference(
         if (reference == nullptr) {
             return InvalidArgument("The external-reference input is null.");
         }
-        if (reference->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbExternalReference)) ||
-            reference->struct_version != CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION) {
+        if (!IsVersionedStructure(reference, CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION)) {
             return InvalidArgument(
                 "The external-reference structure is not a known size and version.");
         }
@@ -2077,8 +2070,7 @@ CNA_Result cna_cnb_writer_get_limits(
         if (outLimits == nullptr) {
             return InvalidArgument("The read-limits output is null.");
         }
-        if (outLimits->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbReadLimits)) ||
-            outLimits->struct_version != CNA_CNB_READ_LIMITS_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
             return InvalidArgument("The read-limits structure is not a known size and version.");
         }
         WriteLimits(writer->value->Limits(), outLimits);
@@ -2199,8 +2191,7 @@ CNA_Result cna_cnb_texture_data_get_info(
         if (outInfo == nullptr) {
             return InvalidArgument("The texture-info output is null.");
         }
-        if (outInfo->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbTextureInfo)) ||
-            outInfo->struct_version != CNA_CNB_TEXTURE_INFO_STRUCT_VERSION) {
+        if (!IsVersionedStructure(outInfo, CNA_CNB_TEXTURE_INFO_STRUCT_VERSION)) {
             return InvalidArgument("The texture-info structure is not a known size and version.");
         }
         const Cnb::CnbTextureData& data = *texture->value;

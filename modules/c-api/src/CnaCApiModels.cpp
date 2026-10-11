@@ -61,6 +61,7 @@ using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
@@ -70,6 +71,7 @@ using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Matrix;
@@ -2768,9 +2770,10 @@ CNA_Result cna_model_get_gltf_import_report_ext(
     CNA_GltfImportReportEXT* const outReport)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReport == nullptr || outReport->struct_size < sizeof(CNA_GltfImportReportEXT) ||
-            outReport->struct_version != ReportStructureVersion) {
-            return InvalidArgument("The glTF import report output is null or malformed.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outReport, "The glTF import report output is null or malformed.", ReportStructureVersion);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<ModelResource> model;
         if (const CNA_Result result = GetModel(modelHandle, &model);
@@ -2808,9 +2811,10 @@ CNA_Result cna_model_set_gltf_import_report_ext(
     const CNA_GltfImportReportEXT* const report)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (report == nullptr || report->struct_size < sizeof(CNA_GltfImportReportEXT) ||
-            report->struct_version != ReportStructureVersion) {
-            return InvalidArgument("The glTF import report is null or malformed.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(report, "The glTF import report is null or malformed.", ReportStructureVersion);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         // The derived values are answers the report computes from its diagnostics, not state a
         // caller owns. Refusing a non-zero one is deliberate: silently dropping it would let a
@@ -2924,10 +2928,10 @@ CNA_Result cna_model_get_gltf_import_diagnostic_ext(
     CNA_GltfImportDiagnosticEXT* const outDiagnostic)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDiagnostic == nullptr ||
-            outDiagnostic->struct_size < sizeof(CNA_GltfImportDiagnosticEXT) ||
-            outDiagnostic->struct_version != ReportStructureVersion) {
-            return InvalidArgument("The glTF import diagnostic output is null or malformed.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outDiagnostic, "The glTF import diagnostic output is null or malformed.", ReportStructureVersion);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<ModelResource> model;
         const GltfImportDiagnosticEXT* diagnostic = nullptr;
@@ -4696,8 +4700,7 @@ namespace {
 
 [[nodiscard]] bool IsModelCamera(const CNA_ModelCameraEXT* const value) noexcept
 {
-    return value != nullptr && value->struct_size >= sizeof(CNA_ModelCameraEXT) &&
-        value->struct_version == ReportStructureVersion;
+    return IsVersionedStructure(value, ReportStructureVersion);
 }
 
 [[nodiscard]] CNA_Result GetModelCamera(

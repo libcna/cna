@@ -26,14 +26,14 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::GamerServices::Achievement;
 using Microsoft::Xna::Framework::GamerServices::AchievementCollection;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // An achievement is a value: the collection stores copies and equality compares every field, so a
 // handle never has to be the same object the collection holds -- only equal to it.
@@ -133,9 +133,10 @@ CNA_Result cna_achievement_get_info(
     CNA_AchievementInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AchievementInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The Achievement info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The Achievement info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AchievementResource> achievement;
         if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);

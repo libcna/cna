@@ -26,6 +26,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Media::Detail::BorrowMediaChild;
 using CNA::C::Media::Detail::MediaChildResource;
@@ -38,6 +39,7 @@ namespace {
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::MediaQueue;
@@ -45,8 +47,6 @@ using Microsoft::Xna::Framework::Media::MediaState;
 using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::SongCollection;
 using Microsoft::Xna::Framework::Media::VisualizationData;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // The queue is one process-lifetime object owned by the player, so a handle to it is a view: the
 // resource points at the singleton and owns nothing.
@@ -174,9 +174,10 @@ CNA_Result cna_media_player_get_visualization_data(
     CNA_VisualizationData* const data)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (data == nullptr || data->struct_size < sizeof(CNA_VisualizationData) ||
-            data->struct_version != StructureVersion) {
-            return InvalidArgument("The visualization data structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(data, "The visualization data structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         return WithGame(gameHandle, [&]() -> CNA_Result {
             VisualizationData native;

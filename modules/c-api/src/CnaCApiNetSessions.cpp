@@ -52,10 +52,13 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Net::AvailableNetworkSession;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
@@ -72,8 +75,6 @@ using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
 using Microsoft::Xna::Framework::Net::NetworkSessionState;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
 using Microsoft::Xna::Framework::Net::QualityOfService;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct AvailableSessionResource final {
     std::shared_ptr<AvailableNetworkSession> value;
@@ -156,10 +157,10 @@ CNA_Result cna_available_network_session_create_ext(
             return InvalidArgument("The AvailableNetworkSession output handle is null.");
         }
         *outSession = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_AvailableNetworkSessionCreateInfo) ||
-            createInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The discovered-session creation configuration is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(createInfo, "The discovered-session creation configuration is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         for (std::size_t index = 0U; index < sizeof(createInfo->reserved); ++index) {
             if (createInfo->reserved[index] != 0U) {
@@ -172,8 +173,7 @@ CNA_Result cna_available_network_session_create_ext(
                 "The requested session type is not a canonical NetworkSessionType identity.");
         }
         if (qualityOfService != nullptr &&
-            (qualityOfService->struct_size < sizeof(CNA_QualityOfService) ||
-             qualityOfService->struct_version != StructureVersion)) {
+            (!IsVersionedStructure(qualityOfService))) {
             return InvalidArgument("The quality-of-service description is invalid.");
         }
 
@@ -234,9 +234,10 @@ CNA_Result cna_available_network_session_get_quality_of_service(
     CNA_QualityOfService* const outValue)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr || outValue->struct_size < sizeof(CNA_QualityOfService) ||
-            outValue->struct_version != StructureVersion) {
-            return InvalidArgument("The quality-of-service output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outValue, "The quality-of-service output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AvailableSessionResource> session;
         if (const CNA_Result result = GetSession(sessionHandle, &session);
@@ -719,9 +720,10 @@ CNA_Result cna_network_session_send_network_event_ext(
     const CNA_NetworkEventInfo* const eventInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (eventInfo == nullptr || eventInfo->struct_size < sizeof(CNA_NetworkEventInfo) ||
-            eventInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The network event description is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
             eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
@@ -2153,9 +2155,10 @@ CNA_Result cna_local_network_gamer_enqueue_packet_ext(
     const CNA_NetworkEventInfo* const eventInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (eventInfo == nullptr || eventInfo->struct_size < sizeof(CNA_NetworkEventInfo) ||
-            eventInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The network event description is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
             eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||

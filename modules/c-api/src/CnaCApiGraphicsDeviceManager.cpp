@@ -23,6 +23,7 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
@@ -40,6 +41,7 @@ using CNA::C::Detail::IsPresentInterval;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCPresentationParameters;
 
 using Microsoft::Xna::Framework::DisplayOrientation;
@@ -55,8 +57,6 @@ using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::PresentInterval;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 // A display orientation is a bit set rather than a single identity, so it is validated as one.
 
@@ -117,9 +117,7 @@ void ToCDeviceInformation(
 [[nodiscard]] bool IsDeviceInformation(
     const CNA_GraphicsDeviceInformation* const information) noexcept
 {
-    return information != nullptr &&
-        information->struct_size >= sizeof(CNA_GraphicsDeviceInformation) &&
-        information->struct_version == StructureVersion &&
+    return IsVersionedStructure(information) &&
         IsGraphicsProfile(information->graphics_profile) &&
         IsPresentationParameters(information->presentation_parameters);
 }

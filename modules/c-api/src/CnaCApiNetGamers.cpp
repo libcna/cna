@@ -3,6 +3,7 @@
 #include "CNA/C/net_gamers.h"
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Net/GameEndedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
@@ -35,6 +36,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
@@ -47,8 +49,6 @@ using Microsoft::Xna::Framework::Net::NetworkMachine;
 using Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs;
 using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
 using Microsoft::Xna::Framework::Net::WriteLeaderboardsEventArgs;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct NetworkMachineResource final {
     std::shared_ptr<NetworkMachine> value;

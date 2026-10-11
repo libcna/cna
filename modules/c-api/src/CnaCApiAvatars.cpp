@@ -5,6 +5,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
@@ -35,9 +36,11 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -52,8 +55,6 @@ using Microsoft::Xna::Framework::GamerServices::AvatarEyebrow;
 using Microsoft::Xna::Framework::GamerServices::AvatarMouth;
 using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct AvatarDescriptionResource final {
     std::shared_ptr<AvatarDescription> value;
@@ -109,9 +110,10 @@ struct AvatarRendererResource final {
     const CNA_AvatarExpression* const expression,
     AvatarExpression* const outExpression)
 {
-    if (expression == nullptr || expression->struct_size < sizeof(CNA_AvatarExpression) ||
-        expression->struct_version != StructureVersion) {
-        return InvalidArgument("The AvatarExpression structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(expression, "The AvatarExpression structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (expression->mouth > CNA_AVATAR_MOUTH_MAXIMUM ||
         expression->left_eye > CNA_AVATAR_EYE_MAXIMUM ||
@@ -196,9 +198,10 @@ CNA_Result cna_avatar_description_get_info(
     CNA_AvatarDescriptionInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarDescriptionInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The AvatarDescription info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The AvatarDescription info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AvatarDescriptionResource> description;
         if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
@@ -306,9 +309,10 @@ CNA_Result cna_avatar_animation_get_info(
     CNA_AvatarAnimationInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarAnimationInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The AvatarAnimation info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The AvatarAnimation info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -334,10 +338,10 @@ CNA_Result cna_avatar_animation_get_expression(
     CNA_AvatarExpression* const outExpression)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outExpression == nullptr ||
-            outExpression->struct_size < sizeof(CNA_AvatarExpression) ||
-            outExpression->struct_version != StructureVersion) {
-            return InvalidArgument("The AvatarExpression output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outExpression, "The AvatarExpression output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AvatarAnimationResource> animation;
         if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
@@ -404,9 +408,10 @@ CNA_Result cna_avatar_renderer_get_info(
     CNA_AvatarRendererInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_AvatarRendererInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The AvatarRenderer info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The AvatarRenderer info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AvatarRendererResource> renderer;
         if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);

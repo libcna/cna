@@ -3,6 +3,7 @@
 #include "CNA/C/gamer_services.h"
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
@@ -28,7 +29,9 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::LeaderboardEntry;
@@ -36,8 +39,6 @@ using Microsoft::Xna::Framework::GamerServices::LeaderboardIdentity;
 using Microsoft::Xna::Framework::GamerServices::LeaderboardKey;
 using Microsoft::Xna::Framework::GamerServices::LeaderboardReader;
 using Microsoft::Xna::Framework::GamerServices::PropertyDictionary;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct LeaderboardReaderResource final {
     std::shared_ptr<LeaderboardReader> value;
@@ -70,9 +71,10 @@ struct LeaderboardEntryResource final {
     const CNA_LeaderboardIdentity* const identity,
     LeaderboardIdentity* const outIdentity)
 {
-    if (identity == nullptr || identity->struct_size < sizeof(CNA_LeaderboardIdentity) ||
-        identity->struct_version != StructureVersion) {
-        return InvalidArgument("The LeaderboardIdentity structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(identity, "The LeaderboardIdentity structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     // The inline key is NUL-padded, so a key that fills the buffer with no terminator would have no
     // end; refusing it is what keeps the field a string rather than a fixed blob.
@@ -117,9 +119,10 @@ struct LeaderboardEntryResource final {
     const LeaderboardIdentity& identity,
     CNA_LeaderboardIdentity* const outIdentity)
 {
-    if (outIdentity == nullptr || outIdentity->struct_size < sizeof(CNA_LeaderboardIdentity) ||
-        outIdentity->struct_version != StructureVersion) {
-        return InvalidArgument("The LeaderboardIdentity output structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(outIdentity, "The LeaderboardIdentity output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     return WriteCIdentity(identity, outIdentity);
 }
@@ -320,9 +323,10 @@ CNA_Result cna_leaderboard_reader_get_info(
     CNA_LeaderboardReaderInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_LeaderboardReaderInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The LeaderboardReader info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The LeaderboardReader info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<LeaderboardReaderResource> reader;
         if (const CNA_Result result = BorrowReader(readerHandle, &reader);
@@ -409,9 +413,10 @@ CNA_Result cna_leaderboard_entry_get_info(
     CNA_LeaderboardEntryInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_LeaderboardEntryInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The LeaderboardEntry info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The LeaderboardEntry info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<LeaderboardEntryResource> entry;
         if (const CNA_Result result = BorrowEntry(entryHandle, &entry);

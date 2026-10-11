@@ -37,6 +37,7 @@ using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReportTextSize;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 [[nodiscard]] CNA_Result MapLogLevel(const CNA_LogLevel level, CNA::LogLevel* const outLevel)
 {
@@ -722,10 +723,10 @@ CNA_Result cna_graphics_renderer_get_fallback_at_ext(
     CNA_GraphicsRendererFallbackRecord* const outRecord)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRecord == nullptr ||
-            outRecord->struct_size < sizeof(CNA_GraphicsRendererFallbackRecord) ||
-            outRecord->struct_version != UINT32_C(1)) {
-            return InvalidArgument("The fallback record structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outRecord, "The fallback record structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         const CNA::GraphicsRendererFallbackRecord* record = nullptr;
         if (const CNA_Result result = BorrowFallbackRecord(index, &record);

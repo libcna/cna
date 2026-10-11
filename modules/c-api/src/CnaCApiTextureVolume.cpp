@@ -5,6 +5,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -161,23 +162,24 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
 using CNA::C::Detail::TextureCubeResourceView;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 struct Texture3DTransferView final {
     int level;
@@ -442,9 +444,7 @@ CNA_Result cna_texture3d_create(
             return InvalidArgument("The Texture3D output handle is null.");
         }
         *outTexture = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_Texture3DCreateInfo) ||
-            createInfo->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(createInfo) ||
             !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
             createInfo->reserved1 != 0U || !IsSurfaceFormat(createInfo->format)) {
             return InvalidArgument("The Texture3D creation configuration is invalid.");
@@ -501,9 +501,10 @@ CNA_Result cna_texture3d_get_info(
     CNA_Texture3DInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_Texture3DInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The Texture3D info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The Texture3D info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<Texture3DResource> texture;
         if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
@@ -646,9 +647,7 @@ CNA_Result cna_texturecube_create(
             return InvalidArgument("The TextureCube output handle is null.");
         }
         *outTexture = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_TextureCubeCreateInfo) ||
-            createInfo->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(createInfo) ||
             !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
             !IsSurfaceFormat(createInfo->format) || createInfo->reserved1 != 0U) {
             return InvalidArgument("The TextureCube creation configuration is invalid.");
@@ -733,9 +732,10 @@ CNA_Result cna_texturecube_get_info(
     CNA_TextureCubeInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_TextureCubeInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The TextureCube info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The TextureCube info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         TextureCubeResourceView texture;
         if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);

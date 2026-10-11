@@ -3,6 +3,7 @@
 #include "CNA/C/graphics_state.h"
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -31,6 +32,8 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsVersionedStructure;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBlendState;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCDepthStencilState;
@@ -40,6 +43,7 @@ using CNA::C::Detail::ToNativeBlendState;
 using CNA::C::Detail::ToNativeDepthStencilState;
 using CNA::C::Detail::ToNativeRasterizerState;
 using CNA::C::Detail::ToNativeSamplerState;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendFunction;
@@ -55,8 +59,6 @@ using Microsoft::Xna::Framework::Graphics::SamplerState;
 using Microsoft::Xna::Framework::Graphics::StencilOperation;
 using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
 using Microsoft::Xna::Framework::Graphics::TextureFilter;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] bool IsBlend(const CNA_Blend value) noexcept
 {
@@ -116,13 +118,6 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 [[nodiscard]] bool IsTextureFilter(const CNA_TextureFilter value) noexcept
 {
     return value <= CNA_TEXTURE_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
-}
-
-template<typename T>
-[[nodiscard]] bool HasSupportedOutputHeader(const T* const value) noexcept
-{
-    return value != nullptr && value->struct_size >= sizeof(T) &&
-        value->struct_version == StructureVersion;
 }
 
 } // namespace
@@ -498,8 +493,10 @@ CNA_Result cna_graphics_device_get_blend_state(
     CNA_BlendState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasSupportedOutputHeader(outState)) {
-            return InvalidArgument("The BlendState output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outState, "The BlendState output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -538,8 +535,10 @@ CNA_Result cna_graphics_device_get_depth_stencil_state(
     CNA_DepthStencilState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasSupportedOutputHeader(outState)) {
-            return InvalidArgument("The DepthStencilState output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outState, "The DepthStencilState output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -578,8 +577,10 @@ CNA_Result cna_graphics_device_get_rasterizer_state(
     CNA_RasterizerState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasSupportedOutputHeader(outState)) {
-            return InvalidArgument("The RasterizerState output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outState, "The RasterizerState output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -620,7 +621,7 @@ CNA_Result cna_graphics_device_get_sampler_state(
     CNA_SamplerState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (!HasSupportedOutputHeader(outState) ||
+        if (!IsVersionedStructure(outState) ||
             (stage != CNA_SHADER_STAGE_PIXEL && stage != CNA_SHADER_STAGE_VERTEX) ||
             slot >= CNA_MAX_SAMPLERS) {
             return InvalidArgument("The sampler-state query is invalid.");

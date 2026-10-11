@@ -76,15 +76,18 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::TextureCubeResourceView;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
@@ -124,8 +127,6 @@ using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 /// CABI-13: the owner is captured at construction because the count has to be undone against the
 /// same owner it was taken against -- an effect on a caller-created device never counted, and must
@@ -1058,9 +1059,7 @@ CNA_Result cna_effect_annotation_create(
             return InvalidArgument("The EffectAnnotation output handle is null.");
         }
         *outAnnotation = CNA_INVALID_HANDLE;
-        if (createInfo == nullptr ||
-            createInfo->struct_size < sizeof(CNA_EffectAnnotationCreateInfo) ||
-            createInfo->struct_version != StructureVersion ||
+        if (!IsVersionedStructure(createInfo) ||
             createInfo->parameter_class > CNA_EFFECT_PARAMETER_CLASS_STRUCT ||
             createInfo->parameter_type > CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE) {
             return InvalidArgument("The EffectAnnotation creation configuration is invalid.");
@@ -1146,10 +1145,10 @@ CNA_Result cna_effect_annotation_get_info(
     CNA_EffectAnnotationInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr ||
-            outInfo->struct_size < sizeof(CNA_EffectAnnotationInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The EffectAnnotation info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The EffectAnnotation info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<AnnotationResource> annotation;
         if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
@@ -1304,10 +1303,10 @@ CNA_Result cna_effect_parameter_get_info(
     CNA_EffectParameterInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr ||
-            outInfo->struct_size < sizeof(CNA_EffectParameterInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return InvalidArgument("The EffectParameter info output structure is invalid.");
+        if (const CNA_Result result =
+                ValidateVersionedStructure(outInfo, "The EffectParameter info output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         std::shared_ptr<ParameterResource> parameter;
         if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
@@ -3961,8 +3960,7 @@ namespace {
 
 [[nodiscard]] bool IsTextureTransform(const CNA_TextureTransformEXT* const value) noexcept
 {
-    return value != nullptr && value->struct_size >= sizeof(CNA_TextureTransformEXT) &&
-        value->struct_version == StructureVersion;
+    return IsVersionedStructure(value);
 }
 
 } // namespace

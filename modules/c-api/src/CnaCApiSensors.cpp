@@ -43,6 +43,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -68,8 +69,6 @@ using Microsoft::Devices::Sensors::MotionReading;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] System::DateTimeOffset ToTimestamp(const CNA_DateTimeOffset value)
 {

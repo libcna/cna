@@ -54,6 +54,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetGameWindow;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -69,8 +70,6 @@ using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Devices::VibrateController;
-
-constexpr uint32_t StructureVersion = UINT32_C(1);
 
 static_assert(
     static_cast<std::underlying_type_t<Microsoft::Devices::DeviceType>>(
