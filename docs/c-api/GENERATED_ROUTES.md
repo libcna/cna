@@ -16,7 +16,7 @@ hand-written, and generation exists so that this code stands out.
 | Hand-written routes and the family's lookups | `modules/c-api/src/CnaCApi<Family>.cpp`, which ends with `#include "generated/<Family>.inc"` |
 | Exception barrier, error recording, `CNA_Bool` rules, text input (`ReadText`), the handle registry with `LookupHandle`, `CreateHandle` and `ReleaseHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
 | Output pointers, versioned structures, text and array size-then-copy | `modules/c-api/src/CnaCApiOutput.hpp` |
-| C ↔ C++ value conversions (`ToNative`, `ToC`) and C enum range checks | `modules/c-api/src/CnaCApiMarshal.hpp` |
+| C ↔ C++ value conversions (`ToNative`, `ToC`), C enum range checks and value checks (`IsFinite`, reserved bytes) | `modules/c-api/src/CnaCApiMarshal.hpp` |
 | The generator | `tools/c-api/generate_routes.py` |
 | Generated contract test — never edit | `modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c` |
 
@@ -69,8 +69,8 @@ The generator takes the signature from the header and the conversions from the C
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `result`, every non-const `out_*`
 pointer, and a handle output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
-lookup, whose own result is returned when it refuses. So a call with two faults always reports the
-null output.
+lookup (and `other`'s), whose own result is returned when it refuses. So a call with two faults
+always reports the null output.
 
 A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
 a child handle, filling an info structure, copying an array — and the spec line only calls it:
@@ -104,10 +104,11 @@ other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementRes
 
 A lookup that only validates (`ValidateActiveGameHandle`) is written without `object`, and a group
 without `lookup` holds the routes that need no object: value computations, static queries,
-commands such as `CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's first two parameters (a
-handle and an index), and `accepts_null_handle = true` records that the lookup reads the null
-handle as "none" (the contract test then refuses only real handles). A group whose routes exist
-only in builds with an optional module says so, and what the routes answer without it:
+commands such as `CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's
+first two parameters (a handle and an index), and `accepts_null_handle = true` records that the
+lookup reads the null handle as "none" (the contract test then refuses only real handles). A group
+whose routes exist only in builds with an optional module says so, and what the routes answer
+without it:
 
 ```toml
 feature = "CNA_DEVICES"                 # the real routes compile under #if defined(CNA_DEVICES)
@@ -142,7 +143,8 @@ python3 tools/c-api/generate_routes.py --list   # every generated route and its 
 The same run writes `GeneratedRoutesSmoke.c` (CTest `CApi_GeneratedRoutesSmoke`), which holds every
 generated route to the contracts above: a null output is refused, a null, wrong-kind or destroyed
 handle answers `CNA_RESULT_INVALID_HANDLE` and leaves handle outputs invalid, and each value text
-pair keeps the size-then-copy protocol. What a route computes is tested by the family's own hand-written smoke test.
+pair keeps the size-then-copy protocol. What a route computes is tested by the family's own
+hand-written smoke test.
 
 ## Changing the generator
 

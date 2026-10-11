@@ -33,14 +33,16 @@ A lookup receives the route's first parameter -- usually a handle, sometimes a s
 it validates -- unconverted; ``arguments = 2`` in the group passes it the first two (an index,
 say). A lookup that hands back a pointer into a resource it must keep alive names that resource's
 type as ``owner``: it is then called as ``Lookup(<first>, &owner, &object)`` and expressions may
-use ``owner`` too. A route over two objects -- equals, contains, index_of -- takes a second
-handle right after the lookup's parameters; its group says how to reach that one with
-``other = { lookup = "...", object = "..." }``, looked up after the first into ``other``. A group
-without ``lookup`` holds routes that take no handle. A group whose
-lookup only validates (``ValidateActiveGameHandle``) omits ``object``. A group whose lookup reads
-the null handle as "none" says ``accepts_null_handle = true``. A group whose routes exist only
-when a macro is defined says ``feature = "CNA_DEVICES"`` and ``unavailable = "<C++ result>"``, what
-they return without it; a handle output is cleared there too. Each route is ``name = { <kind> = "<C++>" }``:
+use ``owner`` too. A route over two objects -- equals, contains, index_of -- takes a second handle
+right after the lookup's parameters; its group says how to reach that one with
+``other = { lookup = "...", object = "..." }``, looked up after the first into ``other``.
+A group without ``lookup`` holds routes that take no handle. A group whose lookup only validates
+(``ValidateActiveGameHandle``) omits ``object``. A group whose lookup reads the null handle as
+"none" says ``accepts_null_handle = true``. A group whose routes exist only when a macro is
+defined says ``feature = "CNA_DEVICES"`` and ``unavailable = "<C++ result>"``, what they return
+without it; a handle output is cleared there too.
+
+Each route is ``name = { <kind> = "<C++>" }``:
 
 ``value``  (args..., T* out)          ``*out`` = the expression; no handle.
 ``get``    (handle, args..., T* out)   ``*out`` = the expression, after the lookup.
