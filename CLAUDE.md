@@ -580,7 +580,7 @@ boundary are in **`docs/cnaext-engine-layer.md`**.
 
 The larger engine layer that used to live here (HDR, shadows, sky, image-based lighting, materials,
 instancing/LOD, compute; the `MOD-*` tasks) was removed in the 2026-09 scope reduction.
-`misc/CNAEXT.md`, `plans/plan_modern.md`, `NEXT_modern.md` and `docs/cnaext-perf.md` are its
+`misc/CNAEXT.md`, `plans/plan_modern.md` and `docs/cnaext-perf.md` are its
 historical record, not current state. Do not restore it.
 
 House rules for this module, because there is no XNA name to preserve here: verbs are

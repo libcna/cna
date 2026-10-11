@@ -176,7 +176,7 @@ TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
 }
 
 // plans/plan_media.md MEDIA-102: Duration -- library-scanned songs stay TimeSpan.Zero until actually
-// played (§4 D9, deliberate design choice recorded in NEXTmedia.md), so a freshly-scanned Album's
+// played (a deliberate design choice), so a freshly-scanned Album's
 // Duration is zero too; this asserts that documented behavior rather than leaving it untested.
 // plans/plan_media.md MEDIA-65 (corrected -- found by external code review): Duration is now a real,
 // eagerly-probed sum of member Song.Duration (CNA::Internal::Media::AudioDurationProbe, decode-

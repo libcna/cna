@@ -16,8 +16,8 @@ namespace CNA::Internal::Audio
     /// Returns the shared native mixer engine, creating it on first call.
     ///
     /// AUD-04-005: the requested spec is always the fixed reference S16 stereo 44100 Hz --
-    /// deliberately never native-device or platform-specific. See NEXTaudio.md's "Mixer
-    /// output-format policy" for the full rationale.
+    /// deliberately never native-device or platform-specific (rationale: plans/plan_audio.md,
+    /// AUD-04-005).
     ///
     /// PLAT-95: the mixer is memory-backed (`MIX_CreateMixer`); the selected `IAudioDevice` owns
     /// native acquisition and requests whole buffers, which `MIX_Generate` fills. The mixer keeps

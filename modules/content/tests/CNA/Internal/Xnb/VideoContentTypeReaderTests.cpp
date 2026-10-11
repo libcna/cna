@@ -5,7 +5,7 @@
 // structure. Unlike Song, no full ContentManager::Load<Video>() round-trip against a real,
 // externally-produced .xnb exists here -- that needs a real MonoGame-built Video .xnb fixture,
 // which requires MonoGame/dotnet content-pipeline tooling not available in this environment (no
-// dotnet/mgcb installed). Documented as a real, honest gap (see NEXTmedia.md), not silently
+// dotnet/mgcb installed). Documented as a real, honest gap (see plans/plan_media.md), not silently
 // skipped -- these reader-level tests still exercise VideoReader::Read()'s real logic (field
 // parsing, path normalization/fallback, GraphicsDevice wiring) via a hand-constructed in-memory
 // buffer matching FNA's exact real binary layout, the same technique

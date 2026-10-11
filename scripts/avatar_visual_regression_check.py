@@ -29,7 +29,7 @@ Requires: a built cna_demo_avatar in --build-dir, Pillow, and headless xvfb-run.
 Exit 0 = all checks at or better than their recorded floor. Exit 1 = a regression.
 
 IMPORTANT: passing does NOT mean the avatar looks correct. It means it has not regressed below
-the state recorded when these thresholds were last updated. See NEXTnet.md's avatar section for
+the state recorded when these thresholds were last updated. See docs/gamer-services-known-limitations.md for
 the list of defects still known to be open.
 """
 import argparse
@@ -212,7 +212,7 @@ def main():
             print(f"  - {f}")
         return 1
     print("\nAll global and per-region checks at or better than their recorded floor. This does "
-          "NOT mean the avatar looks fully correct - see NEXTnet.md's avatar section for the "
+          "NOT mean the avatar looks fully correct - see docs/gamer-services-known-limitations.md for the "
           "defects still known to be open.")
     return 0
 

@@ -3,8 +3,8 @@
 CNA has real, substantial CMake scaffolding for building against the Emscripten toolchain, targeting
 the browser via the `EasyGL` renderer running over WebGL 2 (= OpenGL ES 3.0). This document is the
 Task 459 status write-up for that path, scoped to the **graphics renderer specifically** — audio,
-input, and device support under Emscripten are already covered elsewhere (`NEXTdevices.md`,
-`noxna_devices.md`) and are out of scope here.
+input, and device support under Emscripten are already covered elsewhere (`noxna_devices.md`)
+and are out of scope here.
 
 **This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
 activated the native `wgpu-native` renderer on 2026-07-12. A browser/Emscripten WebGPU path (the
