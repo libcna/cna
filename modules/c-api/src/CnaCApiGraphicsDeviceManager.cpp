@@ -4,6 +4,7 @@
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceInformation.hpp"
@@ -30,7 +31,14 @@ namespace {
 
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsDepthFormat;
+using CNA::C::Detail::IsPresentInterval;
+using CNA::C::Detail::IsDisplayOrientation;
+using CNA::C::Detail::IsRenderTargetUsage;
+using CNA::C::Detail::IsGraphicsProfile;
+using CNA::C::Detail::ToCPresentationParameters;
+using CNA::C::Detail::ApplyPresentationParameters;
 
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Game;
@@ -48,38 +56,7 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
-[[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
-{
-    return value <= CNA_SURFACE_FORMAT_USHORT_EXT;
-}
-
-[[nodiscard]] bool IsDepthFormat(const CNA_DepthFormat value) noexcept
-{
-    return value <= CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
-}
-
-[[nodiscard]] bool IsProfile(const CNA_GraphicsProfile value) noexcept
-{
-    return value <= CNA_GRAPHICS_PROFILE_HI_DEF;
-}
-
-[[nodiscard]] bool IsPresentInterval(const CNA_PresentInterval value) noexcept
-{
-    return value <= CNA_PRESENT_INTERVAL_IMMEDIATE;
-}
-
-[[nodiscard]] bool IsRenderTargetUsage(const CNA_RenderTargetUsage value) noexcept
-{
-    return value <= CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS;
-}
-
 // A display orientation is a bit set rather than a single identity, so it is validated as one.
-[[nodiscard]] bool IsDisplayOrientation(const CNA_DisplayOrientation value) noexcept
-{
-    constexpr CNA_DisplayOrientation Valid = CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT |
-        CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT | CNA_DISPLAY_ORIENTATION_PORTRAIT;
-    return (value & ~Valid) == UINT32_C(0);
-}
 
 [[nodiscard]] bool IsPresentationParameters(
     const CNA_PresentationParameters& parameters) noexcept
@@ -91,51 +68,6 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
         IsPresentInterval(parameters.presentation_interval) &&
         IsDisplayOrientation(parameters.display_orientation) &&
         IsRenderTargetUsage(parameters.render_target_usage);
-}
-
-void ToCPresentationParameters(
-    const PresentationParameters& source,
-    CNA_PresentationParameters* const destination) noexcept
-{
-    CNA_PresentationParameters mapped = {};
-    mapped.struct_size = sizeof(CNA_PresentationParameters);
-    mapped.struct_version = StructureVersion;
-    mapped.back_buffer_format = static_cast<CNA_SurfaceFormat>(source.getBackBufferFormatProperty());
-    mapped.back_buffer_width = source.getBackBufferWidthProperty();
-    mapped.back_buffer_height = source.getBackBufferHeightProperty();
-    mapped.depth_stencil_format =
-        static_cast<CNA_DepthFormat>(source.getDepthStencilFormatProperty());
-    mapped.multi_sample_count = source.getMultiSampleCountProperty();
-    mapped.presentation_interval =
-        static_cast<CNA_PresentInterval>(source.getPresentationIntervalProperty());
-    mapped.display_orientation =
-        static_cast<CNA_DisplayOrientation>(source.getDisplayOrientationProperty());
-    mapped.render_target_usage =
-        static_cast<CNA_RenderTargetUsage>(source.getRenderTargetUsageProperty());
-    mapped.is_full_screen = ToCBool(source.getIsFullScreenProperty());
-    mapped.headless_ext = ToCBool(source.getHeadlessEXTProperty());
-    *destination = mapped;
-}
-
-void ApplyPresentationParameters(
-    const CNA_PresentationParameters& source,
-    PresentationParameters* const destination)
-{
-    destination->setBackBufferFormatProperty(
-        static_cast<SurfaceFormat>(source.back_buffer_format));
-    destination->setBackBufferWidthProperty(source.back_buffer_width);
-    destination->setBackBufferHeightProperty(source.back_buffer_height);
-    destination->setDepthStencilFormatProperty(
-        static_cast<DepthFormat>(source.depth_stencil_format));
-    destination->setMultiSampleCountProperty(source.multi_sample_count);
-    destination->setPresentationIntervalProperty(
-        static_cast<PresentInterval>(source.presentation_interval));
-    destination->setDisplayOrientationProperty(
-        static_cast<DisplayOrientation>(source.display_orientation));
-    destination->setRenderTargetUsageProperty(
-        static_cast<RenderTargetUsage>(source.render_target_usage));
-    destination->setIsFullScreenProperty(source.is_full_screen == CNA_TRUE);
-    destination->setHeadlessEXTProperty(source.headless_ext == CNA_TRUE);
 }
 
 // The canonical configuration names an adapter by pointer; C names it by the index every adapter
@@ -186,7 +118,7 @@ void ToCDeviceInformation(
     return information != nullptr &&
         information->struct_size >= sizeof(CNA_GraphicsDeviceInformation) &&
         information->struct_version == StructureVersion &&
-        IsProfile(information->graphics_profile) &&
+        IsGraphicsProfile(information->graphics_profile) &&
         IsPresentationParameters(information->presentation_parameters);
 }
 
@@ -387,7 +319,7 @@ CNA_Result cna_graphics_device_manager_set_graphics_profile(
     const CNA_GraphicsProfile profile)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsProfile(profile)) {
+        if (!IsGraphicsProfile(profile)) {
             return InvalidArgument("The graphics profile is not a defined identity.");
         }
         std::shared_ptr<ManagerResource> resource;

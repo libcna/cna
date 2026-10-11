@@ -29,6 +29,7 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ReadText;
 
 using Microsoft::Xna::Framework::Media::MediaSource;
 using Microsoft::Xna::Framework::Media::Song;
@@ -294,18 +295,6 @@ CNA_Result cna_media_source_copy_type_name_at(
 
 namespace {
 
-[[nodiscard]] CNA_Result CopyBorrowedText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(result, CNA::C::Detail::ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_song_create(
@@ -325,7 +314,7 @@ CNA_Result cna_song_create(
         }
         std::string nativeFileName;
         std::string nativeName;
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 fileName,
                 "The song file name is not valid UTF-8.",
                 &nativeFileName);
@@ -333,7 +322,7 @@ CNA_Result cna_song_create(
             return result;
         }
         if (const CNA_Result result =
-                CopyBorrowedText(name, "The song name is not valid UTF-8.", &nativeName);
+                ReadText(name, "The song name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -362,14 +351,14 @@ CNA_Result cna_song_create_with_duration(
         }
         std::string nativeFileName;
         std::string nativeAssetName;
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 fileName,
                 "The song file name is not valid UTF-8.",
                 &nativeFileName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 assetName,
                 "The song asset name is not valid UTF-8.",
                 &nativeAssetName);
@@ -404,12 +393,12 @@ CNA_Result cna_song_create_from_uri(
         std::string nativeName;
         std::string nativeUri;
         if (const CNA_Result result =
-                CopyBorrowedText(name, "The song name is not valid UTF-8.", &nativeName);
+                ReadText(name, "The song name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                CopyBorrowedText(uri, "The song URI is not valid UTF-8.", &nativeUri);
+                ReadText(uri, "The song URI is not valid UTF-8.", &nativeUri);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

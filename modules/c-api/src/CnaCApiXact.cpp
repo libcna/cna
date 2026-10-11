@@ -39,6 +39,8 @@ using CNA::C::Detail::RemoveOwnedAudioResource;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::IsFinite;
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -150,18 +152,6 @@ template<typename TResource>
         outCue);
 }
 
-[[nodiscard]] CNA_Result ToNativeText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outText->assign(view.data == nullptr ? "" : view.data, static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] bool TryMapStopOptions(
     const CNA_AudioStopOptions options,
     AudioStopOptions* const outOptions) noexcept
@@ -176,11 +166,6 @@ template<typename TResource>
         default:
             return false;
     }
-}
-
-[[nodiscard]] bool IsFinite(const CNA_Vector3 value) noexcept
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 // The emitter and the listener are values the caller fills in, so every XACT route that positions
@@ -246,14 +231,14 @@ template<typename TResource>
     *outEngine = CNA_INVALID_HANDLE;
     std::string nativeSettingsFile;
     if (const CNA_Result result =
-            ToNativeText(settingsFile, "The settings-file path is invalid.", &nativeSettingsFile);
+            ReadTextBytes(settingsFile, "The settings-file path is invalid.", &nativeSettingsFile);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     std::string nativeRendererId;
     if (withRenderer) {
         if (const CNA_Result result =
-                ToNativeText(rendererId, "The renderer identifier is invalid.", &nativeRendererId);
+                ReadTextBytes(rendererId, "The renderer identifier is invalid.", &nativeRendererId);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -536,7 +521,7 @@ CNA_Result cna_audio_engine_get_global_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(name, "The global-variable name is invalid.", &nativeName);
+                ReadTextBytes(name, "The global-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -561,7 +546,7 @@ CNA_Result cna_audio_engine_set_global_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(name, "The global-variable name is invalid.", &nativeName);
+                ReadTextBytes(name, "The global-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -615,7 +600,7 @@ CNA_Result cna_audio_engine_get_category(
         *outCategory = CNA_INVALID_HANDLE;
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(name, "The category name is invalid.", &nativeName);
+                ReadTextBytes(name, "The category name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -736,7 +721,7 @@ CNA_Result cna_wave_bank_create(
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ToNativeText(filename, "The wave-bank path is invalid.", &nativeFilename);
+                ReadTextBytes(filename, "The wave-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -778,7 +763,7 @@ CNA_Result cna_wave_bank_create_streaming(
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ToNativeText(filename, "The wave-bank path is invalid.", &nativeFilename);
+                ReadTextBytes(filename, "The wave-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -867,7 +852,7 @@ CNA_Result cna_sound_bank_create(
         *outSoundBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ToNativeText(filename, "The sound-bank path is invalid.", &nativeFilename);
+                ReadTextBytes(filename, "The sound-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -934,7 +919,7 @@ CNA_Result cna_sound_bank_get_cue(
         }
         *outCue = CNA_INVALID_HANDLE;
         std::string nativeName;
-        if (const CNA_Result result = ToNativeText(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -965,7 +950,7 @@ CNA_Result cna_sound_bank_play_cue(const CNA_Handle soundBankHandle, const CNA_S
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
-        if (const CNA_Result result = ToNativeText(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -987,7 +972,7 @@ CNA_Result cna_sound_bank_play_cue_3d(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
-        if (const CNA_Result result = ToNativeText(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1120,7 +1105,7 @@ CNA_Result cna_cue_get_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(name, "The cue-variable name is invalid.", &nativeName);
+                ReadTextBytes(name, "The cue-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1145,7 +1130,7 @@ CNA_Result cna_cue_set_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(name, "The cue-variable name is invalid.", &nativeName);
+                ReadTextBytes(name, "The cue-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

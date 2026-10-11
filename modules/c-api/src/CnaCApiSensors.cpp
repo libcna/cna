@@ -52,6 +52,7 @@ using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerReading;
@@ -66,18 +67,6 @@ using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-template<typename T>
-[[nodiscard]] CNA_Result ValidateVersionedStructure(
-    const T* const structure,
-    const char* const message) noexcept
-{
-    if (structure == nullptr || structure->struct_size < sizeof(T) ||
-        structure->struct_version != StructureVersion) {
-        return InvalidArgument(message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 [[nodiscard]] System::DateTimeOffset ToTimestamp(const CNA_DateTimeOffset value)
 {

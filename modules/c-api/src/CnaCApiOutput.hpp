@@ -46,6 +46,25 @@ template<typename TValue, typename TCompute>
 }
 
 /**
+ * @brief Refuses a caller's versioned structure unless it is there, large enough and current.
+ *
+ * A structure passes when it is non-null, its `struct_size` covers this build's layout and its
+ * `struct_version` is `version`.
+ */
+template<typename TStructure>
+[[nodiscard]] CNA_Result ValidateVersionedStructure(
+    const TStructure* const structure,
+    const std::string_view message,
+    const uint32_t version = 1U) noexcept
+{
+    if (structure == nullptr || structure->struct_size < sizeof(TStructure) ||
+        structure->struct_version != version) {
+        return InvalidArgument(message);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/**
  * @brief The count half of the text protocol: the UTF-8 byte count, with no terminator counted.
  *
  * @param text The text whose size is reported.

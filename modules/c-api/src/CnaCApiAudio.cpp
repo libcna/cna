@@ -48,6 +48,7 @@ using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
+using CNA::C::Detail::IsFinite;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
@@ -118,11 +119,6 @@ struct SoundEffectInstanceResource final {
 [[nodiscard]] CNA_SoundState MapSoundState(const SoundState state) noexcept
 {
     return static_cast<CNA_SoundState>(state);
-}
-
-[[nodiscard]] bool IsFinite(const CNA_Vector3 value) noexcept
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 [[nodiscard]] CNA_Result ToNativeListener(

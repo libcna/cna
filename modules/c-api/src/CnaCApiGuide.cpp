@@ -6,6 +6,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
@@ -49,6 +50,8 @@ using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::TryMapPlayerIndex;
+using CNA::C::Detail::ReadTextBytes;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -128,31 +131,6 @@ private:
     Source* source_;
     Token token_;
 };
-
-[[nodiscard]] CNA_Result ToNativeText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outText->assign(
-        view.data == nullptr ? "" : view.data,
-        static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] bool TryMapPlayerIndex(
-    const CNA_PlayerIndex index,
-    PlayerIndex* const outIndex) noexcept
-{
-    if (index > CNA_PLAYER_INDEX_FOUR) {
-        return false;
-    }
-    *outIndex = static_cast<PlayerIndex>(index);
-    return true;
-}
 
 [[nodiscard]] CNA_Result ValidateBoolean(const CNA_Bool value, const char* const message)
 {
@@ -373,17 +351,17 @@ CNA_Result cna_guide_begin_show_keyboard_input(
         std::string nativeTitle;
         std::string nativeDescription;
         std::string nativeDefaultText;
-        if (const CNA_Result result = ToNativeText(title, "The title is invalid.", &nativeTitle);
+        if (const CNA_Result result = ReadTextBytes(title, "The title is invalid.", &nativeTitle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(description, "The description is invalid.", &nativeDescription);
+                ReadTextBytes(description, "The description is invalid.", &nativeDescription);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(defaultText, "The default text is invalid.", &nativeDefaultText);
+                ReadTextBytes(defaultText, "The default text is invalid.", &nativeDefaultText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -610,11 +588,11 @@ CNA_Result cna_guide_begin_show_message_box(
         }
         std::string nativeTitle;
         std::string nativeText;
-        if (const CNA_Result result = ToNativeText(title, "The title is invalid.", &nativeTitle);
+        if (const CNA_Result result = ReadTextBytes(title, "The title is invalid.", &nativeTitle);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeText(text, "The body text is invalid.", &nativeText);
+        if (const CNA_Result result = ReadTextBytes(text, "The body text is invalid.", &nativeText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -623,7 +601,7 @@ CNA_Result cna_guide_begin_show_message_box(
         for (uint64_t index = UINT64_C(0); index < buttonCount; ++index) {
             std::string caption;
             if (const CNA_Result result =
-                    ToNativeText(buttons[index], "A button caption is invalid.", &caption);
+                    ReadTextBytes(buttons[index], "A button caption is invalid.", &caption);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -761,7 +739,7 @@ CNA_Result cna_guide_show_compose_message(
             return result;
         }
         std::string nativeText;
-        if (const CNA_Result result = ToNativeText(text, "The message text is invalid.", &nativeText);
+        if (const CNA_Result result = ReadTextBytes(text, "The message text is invalid.", &nativeText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -836,7 +814,7 @@ CNA_Result cna_guide_show_game_invite_for_session(const CNA_StringView sessionId
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeSessionId;
         if (const CNA_Result result =
-                ToNativeText(sessionId, "The session identifier is invalid.", &nativeSessionId);
+                ReadTextBytes(sessionId, "The session identifier is invalid.", &nativeSessionId);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

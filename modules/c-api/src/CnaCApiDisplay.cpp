@@ -3,6 +3,7 @@
 #include "CNA/C/display.h"
 #include "CNA/C/graphics_device.h"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -34,6 +35,14 @@ using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsDepthFormat;
+using CNA::C::Detail::IsPresentInterval;
+using CNA::C::Detail::IsDisplayOrientation;
+using CNA::C::Detail::IsRenderTargetUsage;
+using CNA::C::Detail::IsGraphicsProfile;
+using CNA::C::Detail::ToCPresentationParameters;
+using CNA::C::Detail::ApplyPresentationParameters;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
@@ -47,40 +56,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-[[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
-{
-    return value <= CNA_SURFACE_FORMAT_USHORT_EXT;
-}
-
-[[nodiscard]] bool IsDepthFormat(const CNA_DepthFormat value) noexcept
-{
-    return value <= CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
-}
-
-[[nodiscard]] bool IsUsage(const CNA_RenderTargetUsage value) noexcept
-{
-    return value <= CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS;
-}
-
-[[nodiscard]] bool IsProfile(const CNA_GraphicsProfile value) noexcept
-{
-    return value <= CNA_GRAPHICS_PROFILE_HI_DEF;
-}
-
-[[nodiscard]] bool IsPresentInterval(const CNA_PresentInterval value) noexcept
-{
-    return value <= CNA_PRESENT_INTERVAL_IMMEDIATE;
-}
-
-[[nodiscard]] bool IsDisplayOrientation(const CNA_DisplayOrientation value) noexcept
-{
-    constexpr CNA_DisplayOrientation Valid =
-        CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT |
-        CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT |
-        CNA_DISPLAY_ORIENTATION_PORTRAIT;
-    return (value & ~Valid) == 0U;
-}
 
 template<typename T>
 [[nodiscard]] bool HasOutputHeader(const T* const value) noexcept
@@ -218,55 +193,9 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
         parameters->multi_sample_count >= 0 &&
         IsPresentInterval(parameters->presentation_interval) &&
         IsDisplayOrientation(parameters->display_orientation) &&
-        IsUsage(parameters->render_target_usage) && IsCanonicalBool(parameters->is_full_screen) &&
+        IsRenderTargetUsage(parameters->render_target_usage) && IsCanonicalBool(parameters->is_full_screen) &&
         IsCanonicalBool(parameters->headless_ext) && parameters->reserved[0] == 0U &&
         parameters->reserved[1] == 0U;
-}
-
-void ApplyPresentationParameters(
-    const CNA_PresentationParameters& source,
-    PresentationParameters* const destination)
-{
-    destination->setBackBufferFormatProperty(
-        static_cast<SurfaceFormat>(source.back_buffer_format));
-    destination->setBackBufferWidthProperty(source.back_buffer_width);
-    destination->setBackBufferHeightProperty(source.back_buffer_height);
-    destination->setDepthStencilFormatProperty(
-        static_cast<DepthFormat>(source.depth_stencil_format));
-    destination->setMultiSampleCountProperty(source.multi_sample_count);
-    destination->setPresentationIntervalProperty(
-        static_cast<PresentInterval>(source.presentation_interval));
-    destination->setDisplayOrientationProperty(
-        static_cast<DisplayOrientation>(source.display_orientation));
-    destination->setRenderTargetUsageProperty(
-        static_cast<RenderTargetUsage>(source.render_target_usage));
-    destination->setIsFullScreenProperty(source.is_full_screen == CNA_TRUE);
-    destination->setHeadlessEXTProperty(source.headless_ext == CNA_TRUE);
-}
-
-void ToCPresentationParameters(
-    const PresentationParameters& source,
-    CNA_PresentationParameters* const destination) noexcept
-{
-    *destination = CNA_PresentationParameters{
-        .struct_size = sizeof(CNA_PresentationParameters),
-        .struct_version = StructureVersion,
-        .back_buffer_format = static_cast<CNA_SurfaceFormat>(
-            source.getBackBufferFormatProperty()),
-        .back_buffer_width = source.getBackBufferWidthProperty(),
-        .back_buffer_height = source.getBackBufferHeightProperty(),
-        .depth_stencil_format = static_cast<CNA_DepthFormat>(
-            source.getDepthStencilFormatProperty()),
-        .multi_sample_count = source.getMultiSampleCountProperty(),
-        .presentation_interval = static_cast<CNA_PresentInterval>(
-            source.getPresentationIntervalProperty()),
-        .display_orientation = static_cast<CNA_DisplayOrientation>(
-            source.getDisplayOrientationProperty()),
-        .render_target_usage = static_cast<CNA_RenderTargetUsage>(
-            source.getRenderTargetUsageProperty()),
-        .is_full_screen = ToCBool(source.getIsFullScreenProperty()),
-        .headless_ext = ToCBool(source.getHeadlessEXTProperty()),
-        .reserved = {0U, 0U}};
 }
 
 [[nodiscard]] CNA_Result QueryFormat(
@@ -279,7 +208,7 @@ void ToCPresentationParameters(
     CNA_GraphicsFormatSelection* const outSelection,
     const bool renderTarget)
 {
-    if (!HasOutputHeader(outSelection) || !IsProfile(profile) || !IsSurfaceFormat(format) ||
+    if (!HasOutputHeader(outSelection) || !IsGraphicsProfile(profile) || !IsSurfaceFormat(format) ||
         !IsDepthFormat(depthFormat) || multiSampleCount < 0) {
         return InvalidArgument("The graphics-format query is invalid.");
     }
@@ -561,7 +490,7 @@ CNA_Result cna_graphics_adapter_is_profile_supported(
     CNA_Bool* const outSupported)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outSupported == nullptr || !IsProfile(profile)) {
+        if (outSupported == nullptr || !IsGraphicsProfile(profile)) {
             return InvalidArgument("The graphics-profile query is invalid.");
         }
         std::shared_ptr<void> context;

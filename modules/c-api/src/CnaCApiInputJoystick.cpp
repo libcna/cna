@@ -34,6 +34,8 @@ using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
+using CNA::C::Detail::ReadText;
 
 using CNA::Input::JoystickCapabilitiesEXT;
 using CNA::Input::JoystickHatPositionEXT;
@@ -44,18 +46,6 @@ using CNA::Input::JoystickTypeEXT;
 using CNA::Input::PowerStateEXT;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-template<typename T>
-[[nodiscard]] CNA_Result ValidateVersionedStructure(
-    const T* const structure,
-    const char* const message) noexcept
-{
-    if (structure == nullptr || structure->struct_size < sizeof(T) ||
-        structure->struct_version != StructureVersion) {
-        return InvalidArgument(message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 [[nodiscard]] CNA_Result ToJoystickType(const CNA_JoystickType type, JoystickTypeEXT* const outType)
 {
@@ -107,18 +97,6 @@ template<typename T>
     mapped.power_percent = static_cast<int32_t>(capabilities.powerPercent);
     mapped.is_connected = ToCBool(capabilities.isConnected);
     return mapped;
-}
-
-[[nodiscard]] CNA_Result CopyBorrowedText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 // One capture is one snapshot: every array in it came from the same instant, which is exactly what
@@ -319,14 +297,14 @@ CNA_Result cna_joystick_info_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 leftName,
                 "The first joystick name is not valid UTF-8.",
                 &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 rightName,
                 "The second joystick name is not valid UTF-8.",
                 &nativeRight.name);
@@ -394,28 +372,28 @@ CNA_Result cna_joystick_capabilities_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 leftName,
                 "The first joystick name is not valid UTF-8.",
                 &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 rightName,
                 "The second joystick name is not valid UTF-8.",
                 &nativeRight.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 leftGuid,
                 "The first joystick GUID is not valid UTF-8.",
                 &nativeLeft.guid);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 rightGuid,
                 "The second joystick GUID is not valid UTF-8.",
                 &nativeRight.guid);

@@ -28,6 +28,8 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::TryMapVertexElementFormat;
+using CNA::C::Detail::TryMapVertexElementUsage;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
@@ -201,28 +203,6 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
         default:
             return VertexPositionTexture::getVertexDeclarationStatic();
     }
-}
-
-[[nodiscard]] bool TryMapVertexElementFormat(
-    const CNA_VertexElementFormat format,
-    VertexElementFormat* const outFormat) noexcept
-{
-    if (outFormat == nullptr || format > CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4) {
-        return false;
-    }
-    *outFormat = static_cast<VertexElementFormat>(format);
-    return true;
-}
-
-[[nodiscard]] bool TryMapVertexElementUsage(
-    const CNA_VertexElementUsage usage,
-    VertexElementUsage* const outUsage) noexcept
-{
-    if (outUsage == nullptr || usage > CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR) {
-        return false;
-    }
-    *outUsage = static_cast<VertexElementUsage>(usage);
-    return true;
 }
 
 [[nodiscard]] bool TryToNative(

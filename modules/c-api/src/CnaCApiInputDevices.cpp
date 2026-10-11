@@ -30,6 +30,8 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ValidateVersionedStructure;
+using CNA::C::Detail::ReadText;
 
 using CNA::Input::Clipboard;
 using CNA::Input::InputDeviceInfoEXT;
@@ -41,18 +43,6 @@ using CNA::Input::Sensors;
 using CNA::Input::SensorTypeEXT;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-template<typename T>
-[[nodiscard]] CNA_Result ValidateVersionedStructure(
-    const T* const structure,
-    const char* const message) noexcept
-{
-    if (structure == nullptr || structure->struct_size < sizeof(T) ||
-        structure->struct_version != StructureVersion) {
-        return InvalidArgument(message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
 
 [[nodiscard]] CNA_Result ToSensorType(const CNA_SensorType type, SensorTypeEXT* const outType)
 {
@@ -80,18 +70,6 @@ template<typename T>
     mapped.struct_version = StructureVersion;
     mapped.id = info.id;
     return mapped;
-}
-
-[[nodiscard]] CNA_Result CopyBorrowedText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 // Each enumeration is a point-in-time snapshot taken by the call, exactly like the haptic and
@@ -371,14 +349,14 @@ CNA_Result cna_sensor_info_equals(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 leftName,
                 "The first sensor name is not valid UTF-8.",
                 &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 rightName,
                 "The second sensor name is not valid UTF-8.",
                 &nativeRight.name);
@@ -538,14 +516,14 @@ CNA_Result cna_input_device_info_equals(
         }
         InputDeviceInfoEXT nativeLeft;
         InputDeviceInfoEXT nativeRight;
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 leftName,
                 "The first input-device name is not valid UTF-8.",
                 &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 rightName,
                 "The second input-device name is not valid UTF-8.",
                 &nativeRight.name);
@@ -882,7 +860,7 @@ CNA_Result cna_clipboard_set_text(const CNA_Handle gameHandle, const CNA_StringV
             return result;
         }
         std::string value;
-        if (const CNA_Result result = CopyBorrowedText(
+        if (const CNA_Result result = ReadText(
                 text,
                 "The clipboard text is not valid UTF-8.",
                 &value);

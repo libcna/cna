@@ -5,6 +5,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -43,6 +44,9 @@ using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::IsDepthFormat;
+using CNA::C::Detail::IsRenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -55,21 +59,6 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
 std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> activeBindings;
-
-[[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
-{
-    return value <= CNA_SURFACE_FORMAT_USHORT_EXT;
-}
-
-[[nodiscard]] bool IsDepthFormat(const CNA_DepthFormat value) noexcept
-{
-    return value <= CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
-}
-
-[[nodiscard]] bool IsUsage(const CNA_RenderTargetUsage value) noexcept
-{
-    return value <= CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS;
-}
 
 [[nodiscard]] bool IsCubeFace(const CNA_CubeMapFace value) noexcept
 {
@@ -331,7 +320,7 @@ CNA_Result cna_render_target_usage_preserves_contents(
     CNA_Bool* const outPreserves)
 {
     return CallWithExceptionBarrier([&]() {
-        if (outPreserves == nullptr || !IsUsage(usage)) {
+        if (outPreserves == nullptr || !IsRenderTargetUsage(usage)) {
             return InvalidArgument("The render-target usage query is invalid.");
         }
         *outPreserves = ToCBool(RenderTargetUsagePreservesContentsEXT(
@@ -359,7 +348,7 @@ CNA_Result cna_render_target2d_create(
             !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved0[0] != 0U ||
             createInfo->reserved0[1] != 0U || createInfo->reserved0[2] != 0U ||
             !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
-            createInfo->multi_sample_count < 0 || !IsUsage(createInfo->usage) ||
+            createInfo->multi_sample_count < 0 || !IsRenderTargetUsage(createInfo->usage) ||
             createInfo->reserved1 != 0U) {
             return InvalidArgument("The RenderTarget2D creation configuration is invalid.");
         }
@@ -403,7 +392,7 @@ CNA_Result cna_render_target_cube_create(
             !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved[0] != 0U ||
             createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
             !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
-            createInfo->multi_sample_count < 0 || !IsUsage(createInfo->usage)) {
+            createInfo->multi_sample_count < 0 || !IsRenderTargetUsage(createInfo->usage)) {
             return InvalidArgument("The RenderTargetCube creation configuration is invalid.");
         }
 

@@ -10,6 +10,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -68,6 +69,9 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateVersionedStructure;
+using CNA::C::Detail::TryMapPlayerIndex;
+using CNA::C::Detail::IsFinite;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Input::ButtonState;
@@ -124,29 +128,6 @@ constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
         count += static_cast<uint32_t>(std::popcount(word));
     }
     return count;
-}
-
-template<typename T>
-[[nodiscard]] CNA_Result ValidateVersionedStructure(
-    const T* const structure,
-    const char* const message) noexcept
-{
-    if (structure == nullptr || structure->struct_size < sizeof(T) ||
-        structure->struct_version != StructureVersion) {
-        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] bool TryMapPlayerIndex(
-    const CNA_PlayerIndex playerIndex,
-    PlayerIndex* const outPlayerIndex) noexcept
-{
-    if (outPlayerIndex == nullptr || playerIndex > CNA_PLAYER_INDEX_FOUR) {
-        return false;
-    }
-    *outPlayerIndex = static_cast<PlayerIndex>(playerIndex);
-    return true;
 }
 
 [[nodiscard]] bool TryMapDeadZone(

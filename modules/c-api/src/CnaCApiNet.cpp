@@ -46,6 +46,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::NativeOrdinal;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
@@ -63,12 +64,6 @@ using Microsoft::Xna::Framework::Net::QualityOfService;
 using Microsoft::Xna::Framework::Net::SendDataOptions;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-template<typename TEnum>
-[[nodiscard]] constexpr uint32_t NativeOrdinal(const TEnum value) noexcept
-{
-    return static_cast<uint32_t>(static_cast<std::underlying_type_t<TEnum>>(value));
-}
 
 static_assert(NativeOrdinal(NetworkSessionEndReason::ClientSignedOut) ==
     CNA_NETWORK_SESSION_END_REASON_CLIENT_SIGNED_OUT);

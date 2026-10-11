@@ -6,6 +6,7 @@
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
@@ -46,6 +47,9 @@ using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::TryMapPlayerIndex;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::BorrowSignedIn;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -147,18 +151,6 @@ struct GamerEnumeratorResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result BorrowSignedIn(const CNA_Handle handle, SignedInGamer** const outGamer)
-{
-    if (const CNA_Result result = TryBorrowSignedInGamerQuietly(handle, outGamer);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SignedInGamer handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] CNA_Result BorrowProfile(
     const CNA_Handle handle,
     std::shared_ptr<GamerProfileResource>* const outProfile)
@@ -178,31 +170,6 @@ struct GamerEnumeratorResource final {
     std::shared_ptr<GamerEnumeratorResource>* const outEnumerator)
 {
     return LookupHandle(handle, ObjectKind::GamerEnumerator, outEnumerator);
-}
-
-[[nodiscard]] CNA_Result ToNativeText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outText->assign(
-        view.data == nullptr ? "" : view.data,
-        static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] bool TryMapPlayerIndex(
-    const CNA_PlayerIndex index,
-    PlayerIndex* const outIndex) noexcept
-{
-    if (index > CNA_PLAYER_INDEX_FOUR) {
-        return false;
-    }
-    *outIndex = static_cast<PlayerIndex>(index);
-    return true;
 }
 
 [[nodiscard]] CNA_Result PublishGamer(
@@ -365,7 +332,7 @@ CNA_Result cna_gamer_set_display_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
         if (const CNA_Result result =
-                ToNativeText(displayName, "The display name is invalid.", &nativeName);
+                ReadTextBytes(displayName, "The display name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -447,7 +414,7 @@ CNA_Result cna_gamer_get_from_gamertag(
         *outGamer = CNA_INVALID_HANDLE;
         std::string nativeGamertag;
         if (const CNA_Result result =
-                ToNativeText(gamertag, "The gamertag is invalid.", &nativeGamertag);
+                ReadTextBytes(gamertag, "The gamertag is invalid.", &nativeGamertag);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -488,7 +455,7 @@ CNA_Result cna_gamer_get_partner_token_size(
         }
         std::string nativeAudienceUri;
         if (const CNA_Result result =
-                ToNativeText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
+                ReadTextBytes(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -506,7 +473,7 @@ CNA_Result cna_gamer_copy_partner_token(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeAudienceUri;
         if (const CNA_Result result =
-                ToNativeText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
+                ReadTextBytes(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -696,7 +663,7 @@ CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeMode;
-        if (const CNA_Result result = ToNativeText(mode, "The presence mode is invalid.", &nativeMode);
+        if (const CNA_Result result = ReadTextBytes(mode, "The presence mode is invalid.", &nativeMode);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -827,7 +794,7 @@ CNA_Result cna_signed_in_gamer_award_achievement(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeKey;
         if (const CNA_Result result =
-                ToNativeText(achievementKey, "The achievement key is invalid.", &nativeKey);
+                ReadTextBytes(achievementKey, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1057,12 +1024,12 @@ CNA_Result cna_friend_gamer_create_ext(
         std::string nativeGamertag;
         std::string nativeDisplayName;
         if (const CNA_Result result =
-                ToNativeText(gamertag, "The gamertag is invalid.", &nativeGamertag);
+                ReadTextBytes(gamertag, "The gamertag is invalid.", &nativeGamertag);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(displayName, "The display name is invalid.", &nativeDisplayName);
+                ReadTextBytes(displayName, "The display name is invalid.", &nativeDisplayName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

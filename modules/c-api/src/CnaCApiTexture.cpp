@@ -4,6 +4,7 @@
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
@@ -51,6 +52,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::IsSurfaceFormat;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -70,11 +72,6 @@ struct TransferView final {
     int elementCount;
     uint64_t requiredElements;
 };
-
-[[nodiscard]] bool IsSurfaceFormat(const uint32_t format) noexcept
-{
-    return format <= CNA_SURFACE_FORMAT_USHORT_EXT;
-}
 
 [[nodiscard]] bool IsDataType(const CNA_TextureDataType dataType) noexcept
 {

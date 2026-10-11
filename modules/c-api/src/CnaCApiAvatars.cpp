@@ -38,6 +38,7 @@ using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
+using CNA::C::Detail::IsFinite;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -89,11 +90,6 @@ struct AvatarRendererResource final {
     std::shared_ptr<AvatarRendererResource>* const outRenderer)
 {
     return LookupHandle(handle, ObjectKind::AvatarRenderer, outRenderer);
-}
-
-[[nodiscard]] bool IsFinite(const CNA_Vector3 value) noexcept
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 [[nodiscard]] CNA_AvatarExpression ToC(const AvatarExpression& value) noexcept

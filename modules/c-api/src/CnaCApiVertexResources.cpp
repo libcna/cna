@@ -27,34 +27,14 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToC;
+using CNA::C::Detail::TryMapVertexElementFormat;
+using CNA::C::Detail::TryMapVertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 static_assert(sizeof(int) == sizeof(int32_t));
-
-[[nodiscard]] bool TryMapVertexElementFormat(
-    const CNA_VertexElementFormat format,
-    VertexElementFormat* const outFormat) noexcept
-{
-    if (outFormat == nullptr || format > CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4) {
-        return false;
-    }
-    *outFormat = static_cast<VertexElementFormat>(format);
-    return true;
-}
-
-[[nodiscard]] bool TryMapVertexElementUsage(
-    const CNA_VertexElementUsage usage,
-    VertexElementUsage* const outUsage) noexcept
-{
-    if (outUsage == nullptr || usage > CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR) {
-        return false;
-    }
-    *outUsage = static_cast<VertexElementUsage>(usage);
-    return true;
-}
 
 [[nodiscard]] int32_t FormatByteSize(const CNA_VertexElementFormat format) noexcept
 {

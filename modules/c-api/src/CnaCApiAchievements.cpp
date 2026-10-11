@@ -26,8 +26,9 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::BorrowSignedIn;
 
 using Microsoft::Xna::Framework::GamerServices::Achievement;
 using Microsoft::Xna::Framework::GamerServices::AchievementCollection;
@@ -57,20 +58,6 @@ struct AchievementCollectionResource final {
     std::shared_ptr<AchievementCollectionResource>* const outCollection)
 {
     return LookupHandle(handle, ObjectKind::AchievementCollection, outCollection);
-}
-
-[[nodiscard]] CNA_Result ToNativeText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outText->assign(
-        view.data == nullptr ? "" : view.data,
-        static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result PublishAchievement(Achievement value, CNA_Handle* const outAchievement)
@@ -105,18 +92,6 @@ struct AchievementCollectionResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result BorrowSignedIn(const CNA_Handle handle, SignedInGamer** const outGamer)
-{
-    if (const CNA_Result result = TryBorrowSignedInGamerQuietly(handle, outGamer);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SignedInGamer handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_achievement_create_ext(
@@ -144,17 +119,17 @@ CNA_Result cna_achievement_create_ext(
         std::string nativeKey;
         std::string nativeName;
         std::string nativeDescription;
-        if (const CNA_Result result = ToNativeText(key, "The achievement key is invalid.", &nativeKey);
+        if (const CNA_Result result = ReadTextBytes(key, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(name, "The achievement name is invalid.", &nativeName);
+                ReadTextBytes(name, "The achievement name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(description, "The achievement description is invalid.", &nativeDescription);
+                ReadTextBytes(description, "The achievement description is invalid.", &nativeDescription);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -357,7 +332,7 @@ CNA_Result cna_achievement_collection_get_by_key(
         }
         *outAchievement = CNA_INVALID_HANDLE;
         std::string nativeKey;
-        if (const CNA_Result result = ToNativeText(key, "The achievement key is invalid.", &nativeKey);
+        if (const CNA_Result result = ReadTextBytes(key, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

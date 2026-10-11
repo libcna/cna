@@ -40,15 +40,10 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::NativeOrdinal;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Storage::StorageContainer;
 using Microsoft::Xna::Framework::Storage::StorageDevice;
-
-template<typename TEnum>
-[[nodiscard]] constexpr uint32_t NativeOrdinal(const TEnum value) noexcept
-{
-    return static_cast<uint32_t>(static_cast<std::underlying_type_t<TEnum>>(value));
-}
 
 static_assert(NativeOrdinal(System::IO::FileMode::CreateNew) == CNA_FILE_MODE_CREATE_NEW);
 static_assert(NativeOrdinal(System::IO::FileMode::Create) == CNA_FILE_MODE_CREATE);

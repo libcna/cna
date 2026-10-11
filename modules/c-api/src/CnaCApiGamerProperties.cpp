@@ -34,7 +34,8 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::BorrowSignedIn;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::GamerServices::GameDefaults;
@@ -49,20 +50,6 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary)
 {
     return LookupHandle(handle, ObjectKind::PropertyDictionary, outDictionary);
-}
-
-[[nodiscard]] CNA_Result ToNativeText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (view.data == nullptr && view.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outText->assign(
-        view.data == nullptr ? "" : view.data,
-        static_cast<std::size_t>(view.byte_length));
-    return CNA_RESULT_SUCCESS;
 }
 
 // The canonical dictionary stores a boxed value; this is what turns the box back into something a C
@@ -123,7 +110,7 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary,
     std::string* const outKey)
 {
-    if (const CNA_Result result = ToNativeText(key, "The property key is invalid.", outKey);
+    if (const CNA_Result result = ReadTextBytes(key, "The property key is invalid.", outKey);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -140,23 +127,11 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary,
     std::string* const outKey)
 {
-    if (const CNA_Result result = ToNativeText(key, "The property key is invalid.", outKey);
+    if (const CNA_Result result = ReadTextBytes(key, "The property key is invalid.", outKey);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     return BorrowDictionary(handle, outDictionary);
-}
-
-[[nodiscard]] CNA_Result BorrowSignedIn(const CNA_Handle handle, SignedInGamer** const outGamer)
-{
-    if (const CNA_Result result = TryBorrowSignedInGamerQuietly(handle, outGamer);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SignedInGamer handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_GameDefaults ToC(const GameDefaults& defaults) noexcept
@@ -765,7 +740,7 @@ CNA_Result cna_property_dictionary_set_string(
             return result;
         }
         if (const CNA_Result result =
-                ToNativeText(value, "The property text is invalid.", &nativeValue);
+                ReadTextBytes(value, "The property text is invalid.", &nativeValue);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

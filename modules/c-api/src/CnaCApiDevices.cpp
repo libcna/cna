@@ -61,6 +61,7 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ReadText;
 
 using Microsoft::Devices::VibrateController;
 
@@ -89,18 +90,6 @@ static_assert(
         CNA_RESULT_INVALID_STATE,
         CNA_ERROR_CATEGORY_STATE,
         "No test backend is installed for this device.");
-}
-
-[[nodiscard]] CNA_Result BorrowText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 // The canonical vibration hook takes a caller-implemented backend object; C cannot write one, so
@@ -552,11 +541,11 @@ struct SystemTrayResource final {
         }
         FileDialogFilter mapped;
         if (const CNA_Result result =
-                BorrowText(filter.name, "A file dialog filter name is not valid UTF-8.", &mapped.Name);
+                ReadText(filter.name, "A file dialog filter name is not valid UTF-8.", &mapped.Name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = BorrowText(
+        if (const CNA_Result result = ReadText(
                 filter.pattern,
                 "A file dialog filter pattern is not valid UTF-8.",
                 &mapped.Pattern);
@@ -812,7 +801,7 @@ CNA_Result cna_vibrate_controller_set_test_backend_ext(
         }
         auto state = std::make_shared<VibrationTestState>();
         state->supported = (supported != CNA_FALSE);
-        if (const CNA_Result result = BorrowText(
+        if (const CNA_Result result = ReadText(
                 deviceName,
                 "The vibration device name is not valid UTF-8.",
                 &state->deviceName);
@@ -1111,7 +1100,7 @@ CNA_Result cna_devices_clipboard_set_text_ext(
         }
         std::string value;
         if (const CNA_Result result =
-                BorrowText(text, "The clipboard text is not valid UTF-8.", &value);
+                ReadText(text, "The clipboard text is not valid UTF-8.", &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1134,7 +1123,7 @@ CNA_Result cna_url_launcher_open_ext(
             return result;
         }
         std::string value;
-        if (const CNA_Result result = BorrowText(url, "The URL is not valid UTF-8.", &value);
+        if (const CNA_Result result = ReadText(url, "The URL is not valid UTF-8.", &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1182,12 +1171,12 @@ CNA_Result cna_message_box_show_simple_ext(
         std::string titleText;
         std::string messageText;
         if (const CNA_Result result =
-                BorrowText(title, "The message box title is not valid UTF-8.", &titleText);
+                ReadText(title, "The message box title is not valid UTF-8.", &titleText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                BorrowText(message, "The message box body is not valid UTF-8.", &messageText);
+                ReadText(message, "The message box body is not valid UTF-8.", &messageText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1224,12 +1213,12 @@ CNA_Result cna_message_box_show_ext(
         std::string titleText;
         std::string messageText;
         if (const CNA_Result result =
-                BorrowText(title, "The message box title is not valid UTF-8.", &titleText);
+                ReadText(title, "The message box title is not valid UTF-8.", &titleText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                BorrowText(message, "The message box body is not valid UTF-8.", &messageText);
+                ReadText(message, "The message box body is not valid UTF-8.", &messageText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1237,7 +1226,7 @@ CNA_Result cna_message_box_show_ext(
         labels.reserve(static_cast<std::size_t>(buttonCount));
         for (uint64_t index = UINT64_C(0); index < buttonCount; ++index) {
             std::string label;
-            if (const CNA_Result result = BorrowText(
+            if (const CNA_Result result = ReadText(
                     buttonLabels[index],
                     "A message box button label is not valid UTF-8.",
                     &label);
@@ -1361,7 +1350,7 @@ CNA_Result cna_file_dialog_show_open_file_ext(
             return result;
         }
         std::string location;
-        if (const CNA_Result result = BorrowText(
+        if (const CNA_Result result = ReadText(
                 defaultLocation,
                 "The file dialog default location is not valid UTF-8.",
                 &location);
@@ -1401,7 +1390,7 @@ CNA_Result cna_file_dialog_show_save_file_ext(
             return result;
         }
         std::string location;
-        if (const CNA_Result result = BorrowText(
+        if (const CNA_Result result = ReadText(
                 defaultLocation,
                 "The file dialog default location is not valid UTF-8.",
                 &location);
@@ -1438,7 +1427,7 @@ CNA_Result cna_file_dialog_show_open_folder_ext(
             return result;
         }
         std::string location;
-        if (const CNA_Result result = BorrowText(
+        if (const CNA_Result result = ReadText(
                 defaultLocation,
                 "The file dialog default location is not valid UTF-8.",
                 &location);
@@ -1484,7 +1473,7 @@ CNA_Result cna_file_dialog_set_test_backend_ext(
         for (uint64_t index = UINT64_C(0); index < resultCount; ++index) {
             std::string path;
             if (const CNA_Result result =
-                    BorrowText(results[index], "A file dialog result is not valid UTF-8.", &path);
+                    ReadText(results[index], "A file dialog result is not valid UTF-8.", &path);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -1531,7 +1520,7 @@ CNA_Result cna_system_tray_create(
         }
         std::string tooltipText;
         if (const CNA_Result result =
-                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+                ReadText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1567,7 +1556,7 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
         }
         std::string tooltipText;
         if (const CNA_Result result =
-                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+                ReadText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1605,7 +1594,7 @@ CNA_Result cna_system_tray_set_tooltip(
         }
         std::string tooltipText;
         if (const CNA_Result result =
-                BorrowText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
+                ReadText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1647,7 +1636,7 @@ CNA_Result cna_system_tray_add_entry(
         }
         std::string labelText;
         if (const CNA_Result result =
-                BorrowText(label, "The tray entry label is not valid UTF-8.", &labelText);
+                ReadText(label, "The tray entry label is not valid UTF-8.", &labelText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1678,7 +1667,7 @@ CNA_Result cna_system_tray_set_entry_label(
         }
         std::string labelText;
         if (const CNA_Result result =
-                BorrowText(label, "The tray entry label is not valid UTF-8.", &labelText);
+                ReadText(label, "The tray entry label is not valid UTF-8.", &labelText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

@@ -37,6 +37,7 @@ namespace {
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ReadText;
 
 using Microsoft::Xna::Framework::FrameworkDispatcher;
 using Microsoft::Xna::Framework::Game;
@@ -72,18 +73,6 @@ constexpr uint32_t NativeWindowHandleVersion = UINT32_C(1);
             break;
     }
     return CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
-}
-
-[[nodiscard]] CNA_Result BorrowText(
-    const CNA_StringView view,
-    const char* const message,
-    std::string* const outText)
-{
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(view, false, outText);
-        result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result BorrowGame(const CNA_Handle handle, Game** const outGame)
@@ -323,7 +312,7 @@ CNA_Result cna_game_launch_parameters_contains_key(
         }
         std::string name;
         if (const CNA_Result result =
-                BorrowText(key, "The launch parameter name is not valid UTF-8.", &name);
+                ReadText(key, "The launch parameter name is not valid UTF-8.", &name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -346,7 +335,7 @@ namespace {
     }
     std::string name;
     if (const CNA_Result result =
-            BorrowText(key, "The launch parameter name is not valid UTF-8.", &name);
+            ReadText(key, "The launch parameter name is not valid UTF-8.", &name);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -495,12 +484,12 @@ CNA_Result cna_game_launch_parameters_add(
         std::string name;
         std::string text;
         if (const CNA_Result result =
-                BorrowText(key, "The launch parameter name is not valid UTF-8.", &name);
+                ReadText(key, "The launch parameter name is not valid UTF-8.", &name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                BorrowText(value, "The launch parameter value is not valid UTF-8.", &text);
+                ReadText(value, "The launch parameter value is not valid UTF-8.", &text);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -528,7 +517,7 @@ CNA_Result cna_game_launch_parameters_parse_ext(
         for (uint64_t index = UINT64_C(0); index < argumentCount; ++index) {
             std::string argument;
             if (const CNA_Result result =
-                    BorrowText(arguments[index], "A launch argument is not valid UTF-8.", &argument);
+                    ReadText(arguments[index], "A launch argument is not valid UTF-8.", &argument);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -549,7 +538,7 @@ CNA_Result cna_title_location_set_path_ext(const CNA_Handle gameHandle, const CN
         }
         std::string value;
         if (const CNA_Result result =
-                BorrowText(path, "The title path is not valid UTF-8.", &value);
+                ReadText(path, "The title path is not valid UTF-8.", &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -576,7 +565,7 @@ CNA_Result cna_title_container_read_ext(
         }
         std::string path;
         if (const CNA_Result result =
-                BorrowText(name, "The title file name is not valid UTF-8.", &path);
+                ReadText(name, "The title file name is not valid UTF-8.", &path);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -782,7 +771,7 @@ CNA_Result cna_game_window_end_screen_device_change(
         }
         std::string name;
         if (const CNA_Result result =
-                BorrowText(screenDeviceName, "The display name is not valid UTF-8.", &name);
+                ReadText(screenDeviceName, "The display name is not valid UTF-8.", &name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

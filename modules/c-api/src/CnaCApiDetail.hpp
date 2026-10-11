@@ -51,6 +51,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 namespace CNA::C::Detail {
@@ -497,6 +498,13 @@ template<typename TCallable>
     return value ? CNA_TRUE : CNA_FALSE;
 }
 
+/** @brief A native enumeration's value as the C ABI's 32-bit ordinal. */
+template<typename TEnum>
+[[nodiscard]] constexpr uint32_t NativeOrdinal(const TEnum value) noexcept
+{
+    return static_cast<uint32_t>(static_cast<std::underlying_type_t<TEnum>>(value));
+}
+
 /** @brief Reads a `CNA_Bool` that `ValidateCanonicalBool` has already accepted. */
 [[nodiscard]] constexpr bool FromCBool(const CNA_Bool value) noexcept
 {
@@ -525,6 +533,29 @@ template<typename TCallable>
     CNA_StringView value,
     bool rejectEmbeddedNul,
     std::string* outValue) noexcept;
+
+/**
+ * @brief Copies a caller's UTF-8 text, recording `message` when it is refused.
+ *
+ * The contract docs/c-api/STRINGS_AND_BUFFERS.md sets for text input: null data only with a zero
+ * length, well-formed UTF-8 (CNA_RESULT_ENCODING otherwise). Embedded NUL is accepted.
+ */
+[[nodiscard]] CNA_Result ReadText(
+    CNA_StringView value,
+    std::string_view message,
+    std::string* outValue) noexcept;
+
+/**
+ * @brief Copies a caller's text bytes without validating them as UTF-8.
+ *
+ * Only a null pointer with a nonzero length is refused. The achievement, gamer, gamer-property,
+ * guide and XACT routes have always read their text this way; new routes use ReadText, which
+ * enforces the UTF-8 contract.
+ */
+[[nodiscard]] CNA_Result ReadTextBytes(
+    CNA_StringView value,
+    std::string_view message,
+    std::string* outValue);
 
 [[nodiscard]] CNA_Result ValidateBuffer(
     const void* data,

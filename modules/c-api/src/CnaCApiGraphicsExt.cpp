@@ -68,16 +68,11 @@ using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::NativeOrdinal;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace Ext = CNA::Graphics;
-
-template<typename TEnum>
-[[nodiscard]] constexpr uint32_t NativeOrdinal(const TEnum value) noexcept
-{
-    return static_cast<uint32_t>(static_cast<std::underlying_type_t<TEnum>>(value));
-}
 
 static_assert(
     NativeOrdinal(Ext::AsciiQuantizeMode::BlackWhite) == CNA_ASCII_QUANTIZE_MODE_BLACK_WHITE &&

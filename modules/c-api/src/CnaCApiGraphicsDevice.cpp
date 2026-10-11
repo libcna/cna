@@ -49,11 +49,7 @@
 
 namespace {
 
-template<typename TEnum>
-[[nodiscard]] constexpr uint32_t NativeOrdinal(const TEnum value) noexcept
-{
-    return static_cast<uint32_t>(static_cast<std::underlying_type_t<TEnum>>(value));
-}
+using CNA::C::Detail::NativeOrdinal;
 
 namespace NativeGraphics = Microsoft::Xna::Framework::Graphics;
 

@@ -101,6 +101,21 @@ private:
     CNA_Handle handle,
     Microsoft::Xna::Framework::GamerServices::SignedInGamer** outGamer) noexcept;
 
+/** @brief TryBorrowSignedInGamerQuietly that records the diagnostic when the handle is refused. */
+[[nodiscard]] inline CNA_Result BorrowSignedIn(
+    const CNA_Handle handle,
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer** const outGamer)
+{
+    if (const CNA_Result result = TryBorrowSignedInGamerQuietly(handle, outGamer);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned SignedInGamer handle is invalid for this call.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 } // namespace CNA::C::Detail
 
 #endif

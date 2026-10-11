@@ -570,6 +570,32 @@ CNA_Result CopyStringView(
     return CNA_RESULT_SUCCESS;
 }
 
+CNA_Result ReadText(
+    const CNA_StringView value,
+    const std::string_view message,
+    std::string* const outValue) noexcept
+{
+    if (const CNA_Result result = CopyStringView(value, false, outValue);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), message);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ReadTextBytes(
+    const CNA_StringView value,
+    const std::string_view message,
+    std::string* const outValue)
+{
+    if (value.data == nullptr && value.byte_length != UINT64_C(0)) {
+        return InvalidArgument(message);
+    }
+    outValue->assign(
+        value.data == nullptr ? "" : value.data,
+        static_cast<std::size_t>(value.byte_length));
+    return CNA_RESULT_SUCCESS;
+}
+
 CNA_Result ValidateBuffer(const void* const data, const uint64_t count) noexcept
 {
     return data == nullptr && count != 0U ? CNA_RESULT_INVALID_ARGUMENT : CNA_RESULT_SUCCESS;

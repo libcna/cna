@@ -4,6 +4,7 @@
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiMarshal.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -169,6 +170,7 @@ using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
 using CNA::C::Detail::TextureCubeResourceView;
+using CNA::C::Detail::IsSurfaceFormat;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
@@ -200,11 +202,6 @@ struct TextureCubeTransferView final {
     int elementCount;
     uint64_t requiredElements;
 };
-
-[[nodiscard]] bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
-{
-    return value <= CNA_SURFACE_FORMAT_USHORT_EXT;
-}
 
 [[nodiscard]] bool IsZero(const uint8_t* const bytes, const std::size_t count) noexcept
 {

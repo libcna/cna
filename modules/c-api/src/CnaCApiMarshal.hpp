@@ -7,10 +7,13 @@
 // `ToNative` reads a C value; `ToC` writes one. Every conversion is field by field: no C struct is
 // ever reinterpreted as a C++ type, so the C layout and the C++ layout are free to differ.
 
+#include "CnaCApiDetail.hpp"
+
 #include "CNA/C/core.h"
 #include "CNA/C/curve.h"
 #include "CNA/C/graphics3d.h"
 #include "CNA/C/graphics_device.h"
+#include "CNA/C/input.h"
 #include "CNA/C/math_values.h"
 #include "CNA/C/vertex_values.h"
 
@@ -20,7 +23,9 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Point.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -29,7 +34,14 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentInterval.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
@@ -40,6 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 namespace CNA::C::Detail {
@@ -211,7 +224,130 @@ namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
         static_cast<CNA_CurveContinuity>(value.getContinuityProperty())};
 }
 
+/** @brief Whether every component of a C vector is finite. */
+[[nodiscard]] inline bool IsFinite(const CNA_Vector3& value) noexcept
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+/** @brief Maps a C player index to the canonical one; false for a value outside One..Four. */
+[[nodiscard]] inline bool TryMapPlayerIndex(
+    const CNA_PlayerIndex index,
+    Xna::PlayerIndex* const outIndex) noexcept
+{
+    if (outIndex == nullptr || index > CNA_PLAYER_INDEX_FOUR) {
+        return false;
+    }
+    *outIndex = static_cast<Xna::PlayerIndex>(index);
+    return true;
+}
+
 // ---- Graphics values -----------------------------------------------------------------------
+
+// Range checks for the graphics enumerations the C ABI carries as 32-bit values.
+
+[[nodiscard]] inline bool IsSurfaceFormat(const CNA_SurfaceFormat value) noexcept
+{
+    return value <= CNA_SURFACE_FORMAT_USHORT_EXT;
+}
+
+[[nodiscard]] inline bool IsDepthFormat(const CNA_DepthFormat value) noexcept
+{
+    return value <= CNA_DEPTH_FORMAT_DEPTH24_STENCIL8;
+}
+
+[[nodiscard]] inline bool IsRenderTargetUsage(const CNA_RenderTargetUsage value) noexcept
+{
+    return value <= CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS;
+}
+
+[[nodiscard]] inline bool IsGraphicsProfile(const CNA_GraphicsProfile value) noexcept
+{
+    return value <= CNA_GRAPHICS_PROFILE_HI_DEF;
+}
+
+[[nodiscard]] inline bool IsPresentInterval(const CNA_PresentInterval value) noexcept
+{
+    return value <= CNA_PRESENT_INTERVAL_IMMEDIATE;
+}
+
+[[nodiscard]] inline bool IsDisplayOrientation(const CNA_DisplayOrientation value) noexcept
+{
+    constexpr CNA_DisplayOrientation Valid = CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT |
+        CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT | CNA_DISPLAY_ORIENTATION_PORTRAIT;
+    return (value & ~Valid) == 0U;
+}
+
+[[nodiscard]] inline bool TryMapVertexElementFormat(
+    const CNA_VertexElementFormat format,
+    XnaGraphics::VertexElementFormat* const outFormat) noexcept
+{
+    if (outFormat == nullptr || format > CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4) {
+        return false;
+    }
+    *outFormat = static_cast<XnaGraphics::VertexElementFormat>(format);
+    return true;
+}
+
+[[nodiscard]] inline bool TryMapVertexElementUsage(
+    const CNA_VertexElementUsage usage,
+    XnaGraphics::VertexElementUsage* const outUsage) noexcept
+{
+    if (outUsage == nullptr || usage > CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR) {
+        return false;
+    }
+    *outUsage = static_cast<XnaGraphics::VertexElementUsage>(usage);
+    return true;
+}
+
+/** @brief Writes canonical presentation parameters as the C structure, version 1. */
+inline void ToCPresentationParameters(
+    const XnaGraphics::PresentationParameters& source,
+    CNA_PresentationParameters* const destination) noexcept
+{
+    *destination = CNA_PresentationParameters{
+        .struct_size = sizeof(CNA_PresentationParameters),
+        .struct_version = 1U,
+        .back_buffer_format = static_cast<CNA_SurfaceFormat>(
+            source.getBackBufferFormatProperty()),
+        .back_buffer_width = source.getBackBufferWidthProperty(),
+        .back_buffer_height = source.getBackBufferHeightProperty(),
+        .depth_stencil_format = static_cast<CNA_DepthFormat>(
+            source.getDepthStencilFormatProperty()),
+        .multi_sample_count = source.getMultiSampleCountProperty(),
+        .presentation_interval = static_cast<CNA_PresentInterval>(
+            source.getPresentationIntervalProperty()),
+        .display_orientation = static_cast<CNA_DisplayOrientation>(
+            source.getDisplayOrientationProperty()),
+        .render_target_usage = static_cast<CNA_RenderTargetUsage>(
+            source.getRenderTargetUsageProperty()),
+        .is_full_screen = ToCBool(source.getIsFullScreenProperty()),
+        .headless_ext = ToCBool(source.getHeadlessEXTProperty()),
+        .reserved = {0U, 0U}};
+}
+
+/** @brief Copies validated C presentation parameters into canonical ones. */
+inline void ApplyPresentationParameters(
+    const CNA_PresentationParameters& source,
+    XnaGraphics::PresentationParameters* const destination)
+{
+    destination->setBackBufferFormatProperty(
+        static_cast<XnaGraphics::SurfaceFormat>(source.back_buffer_format));
+    destination->setBackBufferWidthProperty(source.back_buffer_width);
+    destination->setBackBufferHeightProperty(source.back_buffer_height);
+    destination->setDepthStencilFormatProperty(
+        static_cast<XnaGraphics::DepthFormat>(source.depth_stencil_format));
+    destination->setMultiSampleCountProperty(source.multi_sample_count);
+    destination->setPresentationIntervalProperty(
+        static_cast<XnaGraphics::PresentInterval>(source.presentation_interval));
+    destination->setDisplayOrientationProperty(
+        static_cast<Xna::DisplayOrientation>(source.display_orientation));
+    destination->setRenderTargetUsageProperty(
+        static_cast<XnaGraphics::RenderTargetUsage>(source.render_target_usage));
+    destination->setIsFullScreenProperty(source.is_full_screen == CNA_TRUE);
+    destination->setHeadlessEXTProperty(source.headless_ext == CNA_TRUE);
+}
+
 
 [[nodiscard]] inline XnaGraphics::Viewport ToNative(const CNA_Viewport value)
 {
