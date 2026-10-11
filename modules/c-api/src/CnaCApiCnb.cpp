@@ -889,27 +889,6 @@ CNA_Result cna_cnb_make_chunk_id(
     });
 }
 
-CNA_Result cna_cnb_get_chunk_id_string_size(
-    const CNA_CnbChunkId id,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_copy_chunk_id_string(
-    const CNA_CnbChunkId id,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}),
-                        destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_cnb_is_well_formed_chunk_id(
     const CNA_CnbChunkId id,
     CNA_Bool* const outWellFormed)
@@ -956,26 +935,6 @@ CNA_Result cna_cnb_is_custom_asset_type_id(
         }
         *outCustom = ToCBool(Cnb::IsCustomAssetTypeId(assetTypeId));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_get_asset_type_name_size(
-    const uint32_t assetTypeId,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(Cnb::AssetTypeIdToString(assetTypeId), outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_copy_asset_type_name(
-    const uint32_t assetTypeId,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(Cnb::AssetTypeIdToString(assetTypeId), destination, capacity, outByteCount);
     });
 }
 
@@ -1052,25 +1011,6 @@ CNA_Result cna_cnb_checked_multiply(const uint64_t a, const uint64_t b, uint64_t
     });
 }
 
-CNA_Result cna_cnb_crc32c(
-    const uint8_t* const data,
-    const uint64_t byteCount,
-    uint32_t* const outChecksum)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outChecksum == nullptr) {
-            return InvalidArgument("The checksum output is null.");
-        }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(data, byteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outChecksum = Cnb::Crc32c(bytes);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_crc32c_continue(
     const uint32_t previous,
     const uint8_t* const data,
@@ -1102,25 +1042,6 @@ CNA_Result cna_cnb_crc32c_uses_hardware(CNA_Bool* const outUsesHardware)
     });
 }
 
-CNA_Result cna_cnb_crc32c_portable(
-    const uint8_t* const data,
-    const uint64_t byteCount,
-    uint32_t* const outChecksum)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outChecksum == nullptr) {
-            return InvalidArgument("The checksum output is null.");
-        }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(data, byteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outChecksum = Cnb::Crc32cPortableEXT(bytes);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_is_compression_supported(
     const CNA_CnbCompression codec,
     CNA_Bool* const outSupported)
@@ -1131,27 +1052,6 @@ CNA_Result cna_cnb_is_compression_supported(
         }
         *outSupported = ToCBool(Cnb::IsCnbCompressionSupported(ToCodec(codec)));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_get_compression_name_size(
-    const CNA_CnbCompression codec,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(Cnb::CnbCompressionToString(ToCodec(codec)), outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_copy_compression_name(
-    const CNA_CnbCompression codec,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Cnb::CnbCompressionToString(ToCodec(codec)), destination, capacity, outByteCount);
     });
 }
 
@@ -1272,25 +1172,6 @@ CNA_Result cna_cnb_chunk_entry_is_mandatory(
     });
 }
 
-CNA_Result cna_cnb_has_magic(
-    const uint8_t* const bytes,
-    const uint64_t byteCount,
-    CNA_Bool* const outHasMagic)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasMagic == nullptr) {
-            return InvalidArgument("The magic-check output is null.");
-        }
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasMagic = ToCBool(Cnb::CnbDocument::HasMagic(span));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace {
 
 [[nodiscard]] CNA_Result CreateDocument(
@@ -1378,110 +1259,6 @@ CNA_Result cna_cnb_document_destroy(const CNA_CnbDocumentHandle documentHandle)
                 "Every reader opened from this CNB document must be destroyed before it.");
         }
         return ReleaseHandle(documentHandle);
-    });
-}
-
-CNA_Result cna_cnb_document_get_origin_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(document->value->Origin(), outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_get_container_major(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint16_t* const outMajor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outMajor == nullptr) {
-            return InvalidArgument("The container-version output is null.");
-        }
-        *outMajor = document->value->ContainerMajor();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_document_get_container_minor(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint16_t* const outMinor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outMinor == nullptr) {
-            return InvalidArgument("The container-version output is null.");
-        }
-        *outMinor = document->value->ContainerMinor();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_document_get_asset_type_id(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint32_t* const outAssetTypeId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outAssetTypeId == nullptr) {
-            return InvalidArgument("The asset-type-identifier output is null.");
-        }
-        *outAssetTypeId = document->value->AssetTypeId();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_document_get_asset_schema_version(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint32_t* const outSchemaVersion)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSchemaVersion == nullptr) {
-            return InvalidArgument("The schema-version output is null.");
-        }
-        *outSchemaVersion = document->value->AssetSchemaVersion();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_document_get_chunk_count(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The chunk-count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(document->value->ChunkCount());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1651,25 +1428,6 @@ CNA_Result cna_cnb_document_find_single(
     });
 }
 
-CNA_Result cna_cnb_document_require_single(
-    const CNA_CnbDocumentHandle documentHandle,
-    const CNA_CnbChunkId type,
-    uint64_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outIndex == nullptr) {
-            return InvalidArgument("The chunk-index output is null.");
-        }
-        *outIndex = static_cast<uint64_t>(document->value->RequireSingle(Cnb::CnbChunkId{type}));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_document_require_mandatory_chunks_understood(
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_CnbChunkId* const knownTypes,
@@ -1723,52 +1481,6 @@ CNA_Result cna_cnb_document_get_metadata(
         outMetadata->reserved[1] = 0U;
         outMetadata->reserved[2] = 0U;
         outMetadata->flags = metadata.flags;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_document_get_metadata_asset_type_name_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(document->value->Metadata().assetTypeName, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_get_metadata_content_name_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(document->value->Metadata().contentName, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_get_external_reference_count(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The external-reference count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(document->value->ExternalReferences().size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1924,74 +1636,6 @@ CNA_Result cna_cnb_reader_create(
         resource->value = std::make_shared<Cnb::CnbByteReader>(
             std::span<const uint8_t>(*resource->ownedBytes), std::move(contextText), nativeLimits);
         return CreateHandle(ObjectKind::CnbReader, resource, outReader);
-    });
-}
-
-CNA_Result cna_cnb_reader_get_remaining(
-    const CNA_CnbReaderHandle readerHandle,
-    uint64_t* const outRemaining)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outRemaining == nullptr) {
-            return InvalidArgument("The remaining-bytes output is null.");
-        }
-        *outRemaining = static_cast<uint64_t>(reader->value->Remaining());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_get_position(
-    const CNA_CnbReaderHandle readerHandle,
-    uint64_t* const outPosition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outPosition == nullptr) {
-            return InvalidArgument("The position output is null.");
-        }
-        *outPosition = static_cast<uint64_t>(reader->value->Position());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_get_size(
-    const CNA_CnbReaderHandle readerHandle,
-    uint64_t* const outSize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSize == nullptr) {
-            return InvalidArgument("The region-size output is null.");
-        }
-        *outSize = static_cast<uint64_t>(reader->value->Size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_get_context_size(
-    const CNA_CnbReaderHandle readerHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(reader->value->Context(), outByteCount);
     });
 }
 
@@ -2291,24 +1935,6 @@ CNA_Result cna_cnb_byte_writer_write_zeros(
     });
 }
 
-CNA_Result cna_cnb_byte_writer_get_size(
-    const CNA_CnbByteWriterHandle writerHandle,
-    uint64_t* const outSize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSize == nullptr) {
-            return InvalidArgument("The written-size output is null.");
-        }
-        *outSize = static_cast<uint64_t>(writer->value->Size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_byte_writer_copy_bytes(
     const CNA_CnbByteWriterHandle writerHandle,
     uint8_t* const destination,
@@ -2494,24 +2120,6 @@ CNA_Result cna_cnb_writer_add_chunk(
     });
 }
 
-CNA_Result cna_cnb_writer_get_schema_chunk_count(
-    const CNA_CnbWriterHandle writerHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The schema-chunk count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(writer->value->SchemaChunkCount());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_writer_set_compression(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbCompression codec,
@@ -2637,28 +2245,6 @@ CNA_Result cna_cnb_is_known_texture_format(const uint32_t value, CNA_Bool* const
         }
         *outKnown = ToCBool(Cnb::IsKnownCnbTextureFormat(value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_get_texture_format_name_size(
-    const CNA_CnbTextureFormat format,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_copy_texture_format_name(
-    const CNA_CnbTextureFormat format,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Cnb::CnbTextureFormatToString(ToTextureFormat(format)),
-            destination, capacity, outByteCount);
     });
 }
 
@@ -2861,24 +2447,6 @@ CNA_Result cna_cnb_texture_data_add_representation(
             static_cast<std::size_t>(data.faceCount) * static_cast<std::size_t>(data.mipCount));
         data.representations.push_back(std::move(representation));
         *outIndex = static_cast<uint64_t>(data.representations.size() - 1U);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_texture_data_get_representation_count(
-    const CNA_CnbTextureDataHandle textureHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The representation-count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(texture->value->representations.size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3092,73 +2660,6 @@ using TextureDecoder = Cnb::CnbTextureData (*)(const Cnb::CnbDocument&);
 
 } // namespace
 
-CNA_Result cna_cnb_encode_texture2d(
-    const CNA_CnbTextureDataHandle texture,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return EncodeTexture(
-            texture, contentName, &Cnb::EncodeTexture2DToCnb, destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_encode_texture_cube(
-    const CNA_CnbTextureDataHandle texture,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return EncodeTexture(
-            texture, contentName, &Cnb::EncodeTextureCubeToCnb, destination, capacity,
-            outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_encode_texture3d(
-    const CNA_CnbTextureDataHandle texture,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return EncodeTexture(
-            texture, contentName, &Cnb::EncodeTexture3DToCnb, destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_decode_texture2d(
-    const CNA_CnbDocumentHandle document,
-    CNA_CnbTextureDataHandle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return DecodeTexture(document, &Cnb::DecodeTexture2DFromCnb, outTexture);
-    });
-}
-
-CNA_Result cna_cnb_decode_texture_cube(
-    const CNA_CnbDocumentHandle document,
-    CNA_CnbTextureDataHandle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return DecodeTexture(document, &Cnb::DecodeTextureCubeFromCnb, outTexture);
-    });
-}
-
-CNA_Result cna_cnb_decode_texture3d(
-    const CNA_CnbDocumentHandle document,
-    CNA_CnbTextureDataHandle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return DecodeTexture(document, &Cnb::DecodeTexture3DFromCnb, outTexture);
-    });
-}
-
 CNA_Result cna_cnb_writer_append_embedded_texture2d(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbTextureDataHandle textureHandle,
@@ -3211,17 +2712,6 @@ CNA_Result cna_cnb_document_read_embedded_texture2d(
 }
 
 /* --- CBIND-109: the model schema ---------------------------------------------------------------- */
-
-CNA_Result cna_cnb_model_create(CNA_CnbModelDataHandle* const outModel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The CNB model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        return CreateModel(Cnb::CnbModelData{}, outModel);
-    });
-}
 
 CNA_Result cna_cnb_model_get_info(
     const CNA_CnbModelDataHandle modelHandle,
@@ -5135,24 +4625,6 @@ CNA_Result cna_cnb_model_from_cnj_take_model(
     });
 }
 
-CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_count(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The absorbed-file count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(compiled->value->absorbedFiles.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_size(
     const CNA_CnbModelFromCnjHandle resultHandle,
     const uint64_t index,
@@ -5197,24 +4669,6 @@ CNA_Result cna_cnb_model_from_cnj_copy_absorbed_file(
         return CopyText(
             compiled->value->absorbedFiles[static_cast<std::size_t>(index)],
             destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_from_cnj_get_external_reference_count(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The external-reference count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(compiled->value->externalReferences.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -5326,17 +4780,6 @@ void ResizeGlyphArrays(Cnb::CnbSpriteFontData* const font, const std::size_t cou
 }
 
 } // namespace
-
-CNA_Result cna_cnb_sprite_font_data_create(CNA_CnbSpriteFontDataHandle* const outFont)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFont == nullptr) {
-            return InvalidArgument("The CNB font output handle is null.");
-        }
-        *outFont = CNA_INVALID_HANDLE;
-        return CreateSpriteFont(Cnb::CnbSpriteFontData{}, outFont);
-    });
-}
 
 CNA_Result cna_cnb_sprite_font_data_get_info(
     const CNA_CnbSpriteFontDataHandle fontHandle,
@@ -5584,29 +5027,6 @@ CNA_Result cna_cnb_audio_frame_bytes(
     });
 }
 
-CNA_Result cna_cnb_get_audio_format_name_size(
-    const CNA_CnbAudioFormat format,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(
-            Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), outBytes);
-    });
-}
-
-CNA_Result cna_cnb_copy_audio_format_name(
-    const CNA_CnbAudioFormat format,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)),
-            destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_sound_effect_data_create(
     const CNA_CnbSoundEffectInfo* const info,
     const uint8_t* const samples,
@@ -5764,52 +5184,6 @@ CNA_Result cna_cnb_encode_song(
     });
 }
 
-CNA_Result cna_cnb_decode_song_duration_milliseconds(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint32_t* const outDuration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outDuration == nullptr) {
-            return InvalidArgument("The duration output is null.");
-        }
-        *outDuration = Cnb::DecodeSongFromCnb(*document->value).durationMs;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_decode_song_stream_reference_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(Cnb::DecodeSongFromCnb(*document->value).streamReference, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_decode_song_name_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(Cnb::DecodeSongFromCnb(*document->value).name, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_encode_video(
     const CNA_StringView streamReference,
     const CNA_CnbVideoInfo* const info,
@@ -5872,20 +5246,6 @@ CNA_Result cna_cnb_decode_video(
         outInfo->soundtrack_type = static_cast<CNA_VideoSoundtrackType>(data.soundtrackType);
         outInfo->reserved = 0U;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_decode_video_stream_reference_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(Cnb::DecodeVideoFromCnb(*document->value).streamReference, outBytes);
     });
 }
 
@@ -6030,23 +5390,6 @@ CNA_Result cna_cnb_animation_clip_get_track(
             *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_animation_clip_copy_keyframes(
-    const CNA_CnbAnimationClipHandle clipHandle,
-    const uint64_t track,
-    CNA_KeyframeEXT* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbAnimationClipResource> clip;
-        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyClipKeyframes(*clip->value, track, destination, capacity, outCount);
     });
 }
 
@@ -6213,29 +5556,6 @@ CNA_Result cna_cnb_loader_registry_find(
     });
 }
 
-CNA_Result cna_cnb_loader_registry_get_registered_type_name_size(
-    const uint32_t assetTypeId,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(
-            CNA::Content::CnbLoaderRegistry::RegisteredTypeName(assetTypeId), outBytes);
-    });
-}
-
-CNA_Result cna_cnb_loader_registry_copy_registered_type_name(
-    const uint32_t assetTypeId,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            CNA::Content::CnbLoaderRegistry::RegisteredTypeName(assetTypeId),
-            destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_loader_registry_resolve_for_document(
     const CNA_CnbDocumentHandle documentHandle,
     CNA_CnbLoaderHandle* const outLoader)
@@ -6362,24 +5682,6 @@ CNA_Result cna_cnb_import_image_as_texture2d(
     });
 }
 
-CNA_Result cna_cnb_import_dds_as_texture_cube(
-    const CNA_StringView ddsPath,
-    CNA_CnbTextureDataHandle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::string pathText;
-        if (const CNA_Result result = BorrowText(ddsPath, &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(pathText), outTexture);
-    });
-}
-
 CNA_Result cna_cnb_decode_dds_as_texture_cube(
     const uint8_t* const bytes,
     const uint64_t byteCount,
@@ -6432,24 +5734,6 @@ CNA_Result cna_cnb_decode_wav_as_sound_effect(
     });
 }
 
-CNA_Result cna_cnb_import_wav_as_sound_effect(
-    const CNA_StringView wavPath,
-    CNA_CnbSoundEffectDataHandle* const outSound)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSound == nullptr) {
-            return InvalidArgument("The CNB sound output handle is null.");
-        }
-        *outSound = CNA_INVALID_HANDLE;
-        std::string pathText;
-        if (const CNA_Result result = BorrowText(wavPath, &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(pathText), outSound);
-    });
-}
-
 CNA_Result cna_cnb_compile_cnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,
@@ -6481,38 +5765,6 @@ CNA_Result cna_cnb_compile_cnj(
     });
 }
 
-CNA_Result cna_cnb_cnj_result_get_asset_type_id(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    uint32_t* const outAssetTypeId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outAssetTypeId == nullptr) {
-            return InvalidArgument("The asset-type output is null.");
-        }
-        *outAssetTypeId = compiled->value->assetTypeId;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(compiled->value->assetTypeName, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_cnj_result_copy_bytes(
     const CNA_CnjToCnbResultHandle resultHandle,
     uint8_t* const destination,
@@ -6529,24 +5781,6 @@ CNA_Result cna_cnb_cnj_result_copy_bytes(
             return InvalidArgument("The compiled-byte output is invalid.");
         }
         return CopyBytes(compiled->value->bytes, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_get_absorbed_file_count(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The absorbed-file count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(compiled->value->absorbedFiles.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -6594,24 +5828,6 @@ CNA_Result cna_cnb_cnj_result_copy_absorbed_file(
         return CopyText(
             compiled->value->absorbedFiles[static_cast<std::size_t>(index)],
             destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_get_external_reference_count(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The external-reference count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(compiled->value->externalReferences.size());
-        return CNA_RESULT_SUCCESS;
     });
 }
 

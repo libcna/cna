@@ -178,35 +178,6 @@ CNA_Result cna_leaderboard_identity_init(
     });
 }
 
-CNA_Result cna_leaderboard_reader_read(
-    const CNA_LeaderboardIdentity* const identity,
-    const int32_t pageStart,
-    const int32_t pageSize,
-    CNA_LeaderboardReaderHandle* const outReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The LeaderboardReader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        LeaderboardIdentity nativeIdentity;
-        if (const CNA_Result result = ToNativeIdentity(identity, &nativeIdentity);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReadThroughOperation(
-            [&]() {
-                return LeaderboardReader::BeginRead(
-                    nativeIdentity,
-                    static_cast<int>(pageStart),
-                    static_cast<int>(pageSize),
-                    System::AsyncCallback{},
-                    std::any{});
-            },
-            outReader);
-    });
-}
-
 CNA_Result cna_leaderboard_reader_read_from_pivot(
     const CNA_LeaderboardIdentity* const identity,
     const CNA_GamerHandle pivotGamerHandle,
@@ -394,20 +365,6 @@ CNA_Result cna_leaderboard_reader_get_info(
     });
 }
 
-CNA_Result cna_leaderboard_reader_get_identity(
-    const CNA_LeaderboardReaderHandle readerHandle,
-    CNA_LeaderboardIdentity* const outIdentity)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ToCIdentity(reader->value->getLeaderboardIdentityProperty(), outIdentity);
-    });
-}
-
 CNA_Result cna_leaderboard_reader_get_entry_at(
     const CNA_LeaderboardReaderHandle readerHandle,
     const int32_t index,
@@ -464,31 +421,6 @@ CNA_Result cna_leaderboard_reader_begin_page_up(
             callback(context);
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_entry_create_ext(
-    const CNA_GamerHandle gamerHandle,
-    const int64_t rating,
-    const int32_t ranking,
-    CNA_LeaderboardEntryHandle* const outEntry)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEntry == nullptr) {
-            return InvalidArgument("The LeaderboardEntry output handle is null.");
-        }
-        *outEntry = CNA_INVALID_HANDLE;
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishOwnedEntry(
-            LeaderboardEntry::CreateInternal(
-                gamer,
-                static_cast<long long>(rating),
-                static_cast<int>(ranking)),
-            outEntry);
     });
 }
 

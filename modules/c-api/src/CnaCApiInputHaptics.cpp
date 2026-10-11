@@ -405,44 +405,6 @@ CNA_Result cna_haptic_capabilities_equals(
     });
 }
 
-CNA_Result cna_haptics_get_id_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    uint32_t* const outId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outId == nullptr) {
-            return InvalidArgument("The haptic device identifier output is null.");
-        }
-        HapticInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedHaptic(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outId = info.id;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptics_get_name_size_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The haptic device name byte-count output is null.");
-        }
-        HapticInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedHaptic(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = info.name.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptics_copy_name_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -460,59 +422,6 @@ CNA_Result cna_haptics_copy_name_at(
             return result;
         }
         return CopyText(info.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_haptics_open(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    CNA_HapticDeviceHandle* const outDevice)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDevice == nullptr) {
-            return InvalidArgument("The haptic device output is null.");
-        }
-        *outDevice = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishDevice(Haptics::OpenEXT(id), outDevice);
-    });
-}
-
-CNA_Result cna_haptics_open_from_joystick(
-    const CNA_Handle gameHandle,
-    const uint32_t joystickId,
-    CNA_HapticDeviceHandle* const outDevice)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDevice == nullptr) {
-            return InvalidArgument("The haptic device output is null.");
-        }
-        *outDevice = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishDevice(Haptics::OpenFromJoystickEXT(joystickId), outDevice);
-    });
-}
-
-CNA_Result cna_haptics_open_from_mouse(
-    const CNA_Handle gameHandle,
-    CNA_HapticDeviceHandle* const outDevice)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDevice == nullptr) {
-            return InvalidArgument("The haptic device output is null.");
-        }
-        *outDevice = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishDevice(Haptics::OpenFromMouseEXT(), outDevice);
     });
 }
 
@@ -583,32 +492,6 @@ CNA_Result cna_haptic_device_get_is_effect_supported(
     });
 }
 
-CNA_Result cna_haptic_device_init_rumble(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ApplyDeviceAction(
-            deviceHandle,
-            &HapticDevice::InitRumbleEXT,
-            outApplied,
-            "The rumble initialization output is null.");
-    });
-}
-
-CNA_Result cna_haptic_device_stop_rumble(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ApplyDeviceAction(
-            deviceHandle,
-            &HapticDevice::StopRumbleEXT,
-            outApplied,
-            "The rumble stop output is null.");
-    });
-}
-
 CNA_Result cna_haptic_device_create_effect(
     const CNA_HapticDeviceHandle deviceHandle,
     const CNA_HapticEffect* const effect,
@@ -661,45 +544,6 @@ CNA_Result cna_haptic_device_update_effect(
         }
         *outApplied = ToCBool(device->UpdateEffectEXT(effectId, nativeEffect));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_device_stop_all_effects(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ApplyDeviceAction(
-            deviceHandle,
-            &HapticDevice::StopAllEffectsEXT,
-            outApplied,
-            "The stop-all-effects output is null.");
-    });
-}
-
-CNA_Result cna_haptic_device_pause(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ApplyDeviceAction(
-            deviceHandle,
-            &HapticDevice::PauseEXT,
-            outApplied,
-            "The pause output is null.");
-    });
-}
-
-CNA_Result cna_haptic_device_resume(
-    const CNA_HapticDeviceHandle deviceHandle,
-    CNA_Bool* const outApplied)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ApplyDeviceAction(
-            deviceHandle,
-            &HapticDevice::ResumeEXT,
-            outApplied,
-            "The resume output is null.");
     });
 }
 

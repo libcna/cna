@@ -25,3 +25,29 @@ CNA_Result cna_texture2d_get_type_name_byte_count(
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_byte_count);
     });
 }
+
+CNA_Result cna_texture2d_create_standalone(
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_standalone: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CreateStandaloneTexture2D(std::make_shared<Texture2D>(), out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_copy_type_name(
+    const CNA_Handle texture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_copy_type_name: out_byte_count is null.");
+        }
+        return CopyTypeName(texture, destination, capacity, out_byte_count);
+    });
+}

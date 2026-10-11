@@ -16,3 +16,33 @@ object = "std::shared_ptr<JoystickStateEXT>"
 
 [state.routes]
 cna_joystick_state_destroy = { release = true }
+cna_joystick_state_copy_axes = { result = "CopyElements(object->axes, destination, capacity, out_count, [](const std::int16_t value) { return static_cast<int16_t>(value); })" }
+cna_joystick_state_copy_buttons = { result = "CopyElements(object->buttons, destination, capacity, out_count, [](const bool value) { return ToCBool(value); })" }
+cna_joystick_state_copy_hats = { result = "CopyElements(object->hats, destination, capacity, out_count, [](const JoystickHatPositionEXT value) { return static_cast<CNA_JoystickHatPosition>(value); })" }
+cna_joystick_state_copy_balls = { result = "CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { CNA_Point point = {}; point.x = static_cast<int32_t>(value.X); point.y = static_cast<int32_t>(value.Y); return point; })" }
+
+[enumerated_joystick]
+lookup = "BorrowEnumeratedJoystick"
+object = "JoystickInfoEXT"
+arguments = 2
+
+[enumerated_joystick.routes]
+cna_joysticks_get_name_size_at = { get = "object.name.size()" }
+
+[capabilities]
+lookup = "BorrowCapabilities"
+object = "JoystickCapabilitiesEXT"
+arguments = 2
+
+[capabilities.routes]
+cna_joysticks_get_capabilities_name_size = { size = "object.name" }
+cna_joysticks_get_capabilities_guid_size = { size = "object.guid" }
+
+[calls]
+[calls.routes]
+cna_joystick_state_get_axis_count = { result = "CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.axes.size(); })" }
+cna_joystick_state_get_button_count = { result = "CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.buttons.size(); })" }
+cna_joystick_state_get_hat_count = { result = "CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.hats.size(); })" }
+cna_joystick_state_get_ball_count = { result = "CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.balls.size(); })" }
+cna_joysticks_subscribe_connected_ext = { result = "SubscribeHotplug(Joysticks::ConnectedEXT, JoystickEventKind::Connected, callback, context, out_registration)" }
+cna_joysticks_subscribe_disconnected_ext = { result = "SubscribeHotplug(Joysticks::DisconnectedEXT, JoystickEventKind::Disconnected, callback, context, out_registration)" }

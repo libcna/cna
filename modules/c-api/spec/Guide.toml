@@ -7,3 +7,10 @@ object = "Microsoft::Xna::Framework::Game*"
 
 [game_object.routes]
 cna_gamer_services_dispatcher_initialize = { call = "GamerServicesDispatcher::Initialize(object->getServicesProperty())" }
+cna_gamer_services_component_create = { result = "CreateOwnedCanonicalGameComponent(game, std::make_unique<GamerServicesComponent>(*object), out_component)" }
+
+[calls]
+[calls.routes]
+cna_guide_copy_pending_keyboard_input_title_ext = { result = "CopyText(Guide::GetPendingKeyboardInputTitleForTestingEXT(), destination, capacity, out_bytes)" }
+cna_guide_copy_pending_keyboard_input_description_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), destination, capacity, out_bytes)" }
+cna_guide_copy_pending_keyboard_input_display_text_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes)" }

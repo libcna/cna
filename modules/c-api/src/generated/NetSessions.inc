@@ -165,6 +165,42 @@ CNA_Result cna_available_network_session_get_session_type_ext(
     });
 }
 
+CNA_Result cna_available_network_session_copy_session_properties(
+    const CNA_AvailableNetworkSessionHandle session,
+    CNA_NetworkSessionPropertiesHandle* const out_properties)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_properties == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_copy_session_properties: out_properties is null.");
+        }
+        *out_properties = CNA_INVALID_HANDLE;
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateOwnedNetworkSessionProperties(object->value->getSessionPropertiesProperty(), out_properties);
+    });
+}
+
+CNA_Result cna_network_session_join(
+    const CNA_AvailableNetworkSessionHandle available_session,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(available_session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSessionResourceHandle(NetworkSession::Join(object->value.get()), out_session);
+    });
+}
+
 CNA_Result cna_available_network_session_collection_get_count(
     const CNA_AvailableNetworkSessionCollectionHandle collection,
     int32_t* const out_count)
@@ -670,6 +706,24 @@ CNA_Result cna_network_session_dispose(
     });
 }
 
+CNA_Result cna_network_session_copy_session_properties(
+    const CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionPropertiesHandle* const out_properties)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_properties == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_copy_session_properties: out_properties is null.");
+        }
+        *out_properties = CNA_INVALID_HANDLE;
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateOwnedNetworkSessionProperties(object->value->getSessionPropertiesProperty(), out_properties);
+    });
+}
+
 CNA_Result cna_local_network_gamer_get_is_data_available(
     const CNA_NetworkGamerHandle gamer,
     CNA_Bool* const out_value)
@@ -713,5 +767,74 @@ CNA_Result cna_local_network_gamer_clear_packet_queue_ext(
         }
         object->ClearPacketQueue();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_get_signed_in_gamer(
+    const CNA_NetworkGamerHandle gamer,
+    CNA_SignedInGamerHandle* const out_signed_in_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_signed_in_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_get_signed_in_gamer: out_signed_in_gamer is null.");
+        }
+        *out_signed_in_gamer = CNA_INVALID_HANDLE;
+        LocalNetworkGamer* object{};
+        if (const CNA_Result routeResult = BorrowLocalGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CreateBorrowedSignedInGamer(object->getSignedInGamerProperty(), out_signed_in_gamer);
+    });
+}
+
+CNA_Result cna_network_session_create(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const int32_t max_gamers,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateSessionType(session_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSessionResourceHandle(NetworkSession::Create(static_cast<NetworkSessionType>(session_type), static_cast<int>(max_local_gamers), static_cast<int>(max_gamers)), out_session);
+    });
+}
+
+CNA_Result cna_network_session_join_invited(
+    const int32_t max_local_gamers,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join_invited: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return CreateSessionResourceHandle(NetworkSession::JoinInvited(static_cast<int>(max_local_gamers)), out_session);
+    });
+}
+
+CNA_Result cna_network_session_join_invited_with_local_gamers(
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join_invited_with_local_gamers: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        SignedInGamerList object{};
+        if (const CNA_Result routeResult = BorrowSignedInGamers(local_gamers, count, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSessionResourceHandle(NetworkSession::JoinInvited(object), out_session);
     });
 }

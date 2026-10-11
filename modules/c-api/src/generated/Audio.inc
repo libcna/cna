@@ -396,3 +396,201 @@ CNA_Result cna_sound_effect_play_with_settings(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_microphone_get_name_size_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_name_size_at: out_bytes is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object->Name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_copy_name_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->Name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_microphone_get_buffer_duration_ticks_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_buffer_duration_ticks_at: out_ticks is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->getBufferDurationProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_set_buffer_duration_ticks_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setBufferDurationProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_is_headset_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_Bool* const out_headset)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_headset == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_is_headset_at: out_headset is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_headset = CNA::C::Detail::ToCBool(object->getIsHeadsetProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_rate_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    int32_t* const out_sample_rate)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sample_rate == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_sample_rate_at: out_sample_rate is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_sample_rate = static_cast<int32_t>(object->getSampleRateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_state_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_MicrophoneState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_state_at: out_state is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = static_cast<CNA_MicrophoneState>(object->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_start_at(
+    const CNA_Handle game,
+    const uint64_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Start();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_stop_at(
+    const CNA_Handle game,
+    const uint64_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_duration_ticks_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    const int32_t size_in_bytes,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_sample_duration_ticks_at: out_ticks is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->GetSampleDuration(static_cast<SharpRuntime::intcs>(size_in_bytes)) .getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_size_in_bytes_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    const int64_t duration_ticks,
+    int32_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_sample_size_in_bytes_at: out_bytes is null.");
+        }
+        Microphone* object{};
+        if (const CNA_Result routeResult = BorrowMicrophone(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<int32_t>(object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks))));
+        return CNA_RESULT_SUCCESS;
+    });
+}

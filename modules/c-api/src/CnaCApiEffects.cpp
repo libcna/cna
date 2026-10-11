@@ -1182,54 +1182,6 @@ CNA_Result cna_effect_annotation_get_info(
     });
 }
 
-CNA_Result cna_effect_annotation_get_name_byte_count(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return annotation->value->getNameProperty();
-        });
-    });
-}
-
-CNA_Result cna_effect_annotation_get_semantic_byte_count(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return annotation->value->getSemanticProperty();
-        });
-    });
-}
-
-CNA_Result cna_effect_annotation_get_value_string_byte_count(
-    const CNA_EffectAnnotationHandle annotationHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return annotation->value->GetValueString();
-        });
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_create(
     CNA_EffectAnnotationCollectionHandle* const outCollection)
 {
@@ -1361,27 +1313,6 @@ CNA_Result cna_effect_annotation_collection_find(
     });
 }
 
-CNA_Result cna_effect_parameter_create(
-    const CNA_EffectParameterCreateInfo* const createInfo,
-    CNA_EffectParameterHandle* const outParameter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outParameter == nullptr) {
-            return InvalidArgument("The EffectParameter output handle is null.");
-        }
-        *outParameter = CNA_INVALID_HANDLE;
-        std::unique_ptr<EffectParameter> parameter;
-        if (const CNA_Result result = CreateNativeParameter(createInfo, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateParameterHandle(
-            std::shared_ptr<EffectParameter>(std::move(parameter)),
-            std::make_shared<ParameterState>(),
-            outParameter);
-    });
-}
-
 CNA_Result cna_effect_parameter_destroy(const CNA_EffectParameterHandle parameterHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1426,38 +1357,6 @@ CNA_Result cna_effect_parameter_get_info(
             static_cast<CNA_EffectParameterType>(
                 parameter->value->getParameterTypeProperty())};
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_parameter_get_name_byte_count(
-    const CNA_EffectParameterHandle parameterHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return parameter->value->getNameProperty();
-        });
-    });
-}
-
-CNA_Result cna_effect_parameter_get_semantic_byte_count(
-    const CNA_EffectParameterHandle parameterHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return parameter->value->getSemanticProperty();
-        });
     });
 }
 
@@ -1914,22 +1813,6 @@ CNA_Result cna_effect_parameter_set_values(
     });
 }
 
-CNA_Result cna_effect_parameter_get_value_string_byte_count(
-    const CNA_EffectParameterHandle parameterHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return parameter->value->GetValueString();
-        });
-    });
-}
-
 CNA_Result cna_effect_parameter_set_value_string(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_StringView value)
@@ -2359,41 +2242,6 @@ CNA_Result cna_effect_pass_destroy(const CNA_EffectPassHandle passHandle)
     });
 }
 
-CNA_Result cna_effect_pass_get_name_byte_count(
-    const CNA_EffectPassHandle passHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return pass->value->getNameProperty();
-        });
-    });
-}
-
-CNA_Result cna_effect_pass_get_annotations(
-    const CNA_EffectPassHandle passHandle,
-    CNA_EffectAnnotationCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectPass annotations output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateAnnotationCollectionAlias(
-            pass->value, &pass->value->getAnnotationsProperty(), outCollection);
-    });
-}
-
 CNA_Result cna_effect_pass_collection_create(
     CNA_EffectPassCollectionHandle* const outCollection)
 {
@@ -2526,21 +2374,6 @@ CNA_Result cna_effect_pass_collection_find(
     });
 }
 
-CNA_Result cna_effect_technique_create_default(
-    CNA_EffectTechniqueHandle* const outTechnique)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        return CreateTechniqueHandle(
-            std::make_shared<EffectTechnique>(),
-            std::make_shared<TechniqueState>(),
-            outTechnique);
-    });
-}
-
 CNA_Result cna_effect_technique_create_named(
     const CNA_StringView name,
     CNA_EffectTechniqueHandle* const outTechnique)
@@ -2608,22 +2441,6 @@ CNA_Result cna_effect_technique_destroy(
     });
 }
 
-CNA_Result cna_effect_technique_get_name_byte_count(
-    const CNA_EffectTechniqueHandle techniqueHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetStringByteCount(outByteCount, [&]() {
-            return technique->value->getNameProperty();
-        });
-    });
-}
-
 CNA_Result cna_effect_technique_get_passes(
     const CNA_EffectTechniqueHandle techniqueHandle,
     CNA_EffectPassCollectionHandle* const outCollection)
@@ -2647,27 +2464,6 @@ CNA_Result cna_effect_technique_get_passes(
             technique->state->passes = std::move(state);
         }
         return CreatePassCollectionHandle(technique->state->passes, outCollection);
-    });
-}
-
-CNA_Result cna_effect_technique_get_annotations(
-    const CNA_EffectTechniqueHandle techniqueHandle,
-    CNA_EffectAnnotationCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectTechnique annotations output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateAnnotationCollectionAlias(
-            technique->value,
-            &technique->value->getAnnotationsProperty(),
-            outCollection);
     });
 }
 
@@ -2823,28 +2619,6 @@ CNA_Result cna_effect_technique_collection_find(
     });
 }
 
-CNA_Result cna_effect_create_empty(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The Effect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<CApiEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_effect_create_compiled(
     const CNA_Handle graphicsDeviceHandle,
     const uint8_t* const effectCode,
@@ -2978,49 +2752,6 @@ CNA_Result cna_shader_effect_create(
     });
 }
 
-CNA_Result cna_effect_material_create(
-    const CNA_EffectHandle cloneSourceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The EffectMaterial output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> source;
-        if (const CNA_Result result = GetEffect(cloneSourceHandle, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<EffectMaterial>(*source->value),
-            source->parentGame,
-            outEffect);
-    });
-}
-
-CNA_Result cna_sprite_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The SpriteEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<SpriteEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -3119,44 +2850,6 @@ CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
     });
 }
 
-CNA_Result cna_effect_get_parameters(
-    const CNA_EffectHandle effectHandle,
-    CNA_EffectParameterCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The Effect parameter-collection output is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateParameterCollectionHandle(
-            GetEffectState(effect)->parameters, outCollection);
-    });
-}
-
-CNA_Result cna_effect_get_techniques(
-    const CNA_EffectHandle effectHandle,
-    CNA_EffectTechniqueCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The Effect technique-collection output is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTechniqueCollectionHandle(
-            GetEffectState(effect)->techniques, outCollection);
-    });
-}
-
 CNA_Result cna_effect_get_current_technique(
     const CNA_EffectHandle effectHandle,
     CNA_EffectTechniqueHandle* const outTechnique)
@@ -3241,78 +2934,6 @@ CNA_Result cna_effect_get_graphics_device(
         }
         *outGraphicsDevice = borrowed;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_get_type_name_byte_count(
-    const CNA_EffectHandle effectHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetEffectStringByteCount(
-            effectHandle, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetTypeName(); });
-    });
-}
-
-CNA_Result cna_effect_copy_type_name(
-    const CNA_EffectHandle effectHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyEffectString(
-            effectHandle, destination, capacity, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetTypeName(); });
-    });
-}
-
-CNA_Result cna_effect_get_vertex_source_byte_count(
-    const CNA_EffectHandle effectHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetEffectStringByteCount(
-            effectHandle, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); });
-    });
-}
-
-CNA_Result cna_effect_copy_vertex_source(
-    const CNA_EffectHandle effectHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyEffectString(
-            effectHandle, destination, capacity, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); });
-    });
-}
-
-CNA_Result cna_effect_get_fragment_source_byte_count(
-    const CNA_EffectHandle effectHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetEffectStringByteCount(
-            effectHandle, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); });
-    });
-}
-
-CNA_Result cna_effect_copy_fragment_source(
-    const CNA_EffectHandle effectHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyEffectString(
-            effectHandle, destination, capacity, outByteCount,
-            [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); });
     });
 }
 
@@ -3696,19 +3317,6 @@ CNA_Result cna_shader_effect_set_texture3d(
     });
 }
 
-CNA_Result cna_directional_light_create(
-    CNA_DirectionalLightHandle* const outLight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLight == nullptr) {
-            return InvalidArgument("The DirectionalLight output handle is null.");
-        }
-        *outLight = CNA_INVALID_HANDLE;
-        return CreateDirectionalLightHandle(
-            std::make_shared<DirectionalLight>(), nullptr, outLight);
-    });
-}
-
 CNA_Result cna_directional_light_destroy(
     const CNA_DirectionalLightHandle lightHandle)
 {
@@ -3724,28 +3332,6 @@ CNA_Result cna_directional_light_destroy(
             : Fail(
                 result, ErrorCategoryForResult(result),
                 "The owned DirectionalLight handle could not be released.");
-    });
-}
-
-CNA_Result cna_basic_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The BasicEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<BasicEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
     });
 }
 
@@ -3876,28 +3462,6 @@ CNA_Result cna_basic_effect_set_texture(
     });
 }
 
-CNA_Result cna_alpha_test_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The AlphaTestEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<AlphaTestEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_alpha_test_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
@@ -3964,28 +3528,6 @@ CNA_Result cna_alpha_test_effect_set_alpha_function(
     });
 }
 
-CNA_Result cna_dual_texture_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The DualTextureEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<DualTextureEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_dual_texture_effect_get_texture(
     const CNA_EffectHandle effectHandle,
     const uint32_t textureIndex,
@@ -4049,28 +3591,6 @@ CNA_Result cna_dual_texture_effect_set_texture(
                     dualTexture->SetOwnedTexture2(std::move(texture));
                 }
             });
-    });
-}
-
-CNA_Result cna_environment_map_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<EnvironmentMapEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
     });
 }
 
@@ -4165,28 +3685,6 @@ CNA_Result cna_environment_map_effect_set_environment_map(
             [environmentMap](std::shared_ptr<TextureCube> texture) {
                 environmentMap->SetOwnedEnvironmentMap(std::move(texture));
             });
-    });
-}
-
-CNA_Result cna_skinned_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The SkinnedEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<SkinnedEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
     });
 }
 
@@ -4321,28 +3819,6 @@ CNA_Result cna_skinned_effect_copy_bone_transforms(
     });
 }
 
-CNA_Result cna_color_matrix_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The ColorMatrixEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<ColorMatrixEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
 CNA_Result cna_color_matrix_effect_get_matrix(
     const CNA_EffectHandle effectHandle,
     CNA_ColorMatrix4x4* const outValue)
@@ -4378,50 +3854,6 @@ CNA_Result cna_color_matrix_effect_set_matrix(
         std::copy(std::begin(value.values), std::end(value.values), native.begin());
         colorMatrix->SetColorMatrix(native);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The PbrEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<PbrEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
-}
-
-CNA_Result cna_skinned_pbr_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_EffectHandle* const outEffect)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The SkinnedPbrEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<SkinnedPbrEffect>(*graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outEffect);
     });
 }
 

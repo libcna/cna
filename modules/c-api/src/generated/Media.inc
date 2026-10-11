@@ -340,3 +340,42 @@ CNA_Result cna_song_collection_destroy(
         return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
+
+CNA_Result cna_media_source_get_type_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_MediaSourceType* const out_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_get_type_at: out_type is null.");
+        }
+        return ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_type = static_cast<CNA_MediaSourceType>(source.getMediaSourceTypeProperty()); return CNA_RESULT_SUCCESS; });
+    });
+}
+
+CNA_Result cna_media_source_get_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_get_name_size_at: out_bytes is null.");
+        }
+        return ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_bytes = source.getNameProperty().size(); return CNA_RESULT_SUCCESS; });
+    });
+}
+
+CNA_Result cna_media_source_get_type_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_get_type_name_size_at: out_bytes is null.");
+        }
+        return ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_bytes = source.GetTypeName().size(); return CNA_RESULT_SUCCESS; });
+    });
+}

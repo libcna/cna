@@ -294,3 +294,61 @@ CNA_Result cna_game_components_copy_type_name(
         return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_game_component_create(
+    const CNA_Handle game,
+    const CNA_GameComponentCallbacks* const callbacks,
+    CNA_GameComponentHandle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_create: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        return CreateComponent<CGameComponent>(game, callbacks, out_component);
+    });
+}
+
+CNA_Result cna_drawable_game_component_create(
+    const CNA_Handle game,
+    const CNA_GameComponentCallbacks* const callbacks,
+    CNA_GameComponentHandle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_drawable_game_component_create: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        return CreateComponent<CDrawableGameComponent>(game, callbacks, out_component);
+    });
+}
+
+CNA_Result cna_game_components_subscribe_added(
+    const CNA_Handle game,
+    const CNA_GameComponentCollectionCallback callback,
+    void* const context,
+    CNA_GameComponentEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_subscribe_added: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeCollection(game, true, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_game_components_subscribe_removed(
+    const CNA_Handle game,
+    const CNA_GameComponentCollectionCallback callback,
+    void* const context,
+    CNA_GameComponentEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_subscribe_removed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeCollection(game, false, callback, context, out_registration);
+    });
+}

@@ -841,3 +841,250 @@ CNA_Result cna_gamepad_buttons_init_from_mask(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_gamepad_get_state(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_GamePadState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_state: out_state is null.");
+        }
+        return CaptureGamePadState(game, player_index, CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES, out_state);
+    });
+}
+
+CNA_Result cna_gamepad_get_state_with_dead_zone(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const CNA_GamePadDeadZone dead_zone_mode,
+    CNA_GamePadState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_state_with_dead_zone: out_state is null.");
+        }
+        return CaptureGamePadState(game, player_index, dead_zone_mode, out_state);
+    });
+}
+
+CNA_Result cna_gamepad_get_guid_size_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_guid_size_ext: out_bytes is null.");
+        }
+        return ReportDeviceTextSize(&GamePad::GetGUIDEXT, game, player_index, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_copy_guid_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_copy_guid_ext: out_bytes is null.");
+        }
+        return CopyDeviceTextValue(&GamePad::GetGUIDEXT, game, player_index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_get_name_size_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_name_size_ext: out_bytes is null.");
+        }
+        return ReportDeviceTextSize(&GamePad::GetNameEXT, game, player_index, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_copy_name_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_copy_name_ext: out_bytes is null.");
+        }
+        return CopyDeviceTextValue(&GamePad::GetNameEXT, game, player_index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_get_path_size_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_path_size_ext: out_bytes is null.");
+        }
+        return ReportDeviceTextSize(&GamePad::GetPathEXT, game, player_index, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_copy_path_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_copy_path_ext: out_bytes is null.");
+        }
+        return CopyDeviceTextValue(&GamePad::GetPathEXT, game, player_index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_get_serial_size_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_serial_size_ext: out_bytes is null.");
+        }
+        return ReportDeviceTextSize(&GamePad::GetSerialEXT, game, player_index, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_copy_serial_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_copy_serial_ext: out_bytes is null.");
+        }
+        return CopyDeviceTextValue(&GamePad::GetSerialEXT, game, player_index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_scancode_name_size_ext(
+    const CNA_Handle game,
+    const CNA_Key key,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_scancode_name_size_ext: out_bytes is null.");
+        }
+        return ReportKeyTextSize(&Keyboard::GetScancodeNameEXT, game, key, out_bytes);
+    });
+}
+
+CNA_Result cna_keyboard_copy_scancode_name_ext(
+    const CNA_Handle game,
+    const CNA_Key key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_copy_scancode_name_ext: out_bytes is null.");
+        }
+        return CopyKeyTextValue(&Keyboard::GetScancodeNameEXT, game, key, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_scancode_from_name_ext(
+    const CNA_Handle game,
+    const CNA_StringView name,
+    CNA_Key* const out_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_key == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_scancode_from_name_ext: out_key is null.");
+        }
+        return LookUpKey(&Keyboard::GetScancodeFromNameEXT, game, name, out_key);
+    });
+}
+
+CNA_Result cna_keyboard_get_key_name_size_ext(
+    const CNA_Handle game,
+    const CNA_Key key,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_key_name_size_ext: out_bytes is null.");
+        }
+        return ReportKeyTextSize(&Keyboard::GetKeyNameEXT, game, key, out_bytes);
+    });
+}
+
+CNA_Result cna_keyboard_copy_key_name_ext(
+    const CNA_Handle game,
+    const CNA_Key key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_copy_key_name_ext: out_bytes is null.");
+        }
+        return CopyKeyTextValue(&Keyboard::GetKeyNameEXT, game, key, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_key_from_name_ext(
+    const CNA_Handle game,
+    const CNA_StringView name,
+    CNA_Key* const out_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_key == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_key_from_name_ext: out_key is null.");
+        }
+        return LookUpKey(&Keyboard::GetKeyFromNameEXT, game, name, out_key);
+    });
+}
+
+CNA_Result cna_touch_location_get_string_size(
+    const CNA_TouchLocation* const location,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_location_get_string_size: out_bytes is null.");
+        }
+        return ReportTouchLocationString(location, nullptr, UINT64_C(0), out_bytes, false);
+    });
+}
+
+CNA_Result cna_touch_location_copy_string(
+    const CNA_TouchLocation* const location,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_location_copy_string: out_bytes is null.");
+        }
+        return ReportTouchLocationString(location, destination, capacity, out_bytes, true);
+    });
+}

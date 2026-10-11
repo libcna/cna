@@ -529,3 +529,137 @@ CNA_Result cna_game_window_copy_type_name(
         return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_game_window_set_allow_user_resizing(
+    const CNA_Handle game,
+    const CNA_Bool c_allowed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_allowed, "allowed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool allowed = CNA::C::Detail::FromCBool(c_allowed);
+        return RequestWindowChange([&]() { object->setAllowUserResizingProperty(allowed); });
+    });
+}
+
+CNA_Result cna_game_window_set_is_borderless_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_borderless)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_borderless, "borderless");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool borderless = CNA::C::Detail::FromCBool(c_borderless);
+        return RequestWindowChange([&]() { object->setIsBorderlessEXTProperty(borderless); });
+    });
+}
+
+CNA_Result cna_game_window_minimize_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestWindowChange([&]() { object->MinimizeEXT(); });
+    });
+}
+
+CNA_Result cna_game_window_restore_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = BorrowWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestWindowChange([&]() { object->RestoreEXT(); });
+    });
+}
+
+CNA_Result cna_game_launch_parameters_get_value_size(
+    const CNA_Handle game,
+    const CNA_StringView key,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_launch_parameters_get_value_size: out_bytes is null.");
+        }
+        std::string object{};
+        if (const CNA_Result routeResult = FindLaunchParameter(game, key, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object, out_bytes);
+    });
+}
+
+CNA_Result cna_game_launch_parameters_copy_value(
+    const CNA_Handle game,
+    const CNA_StringView key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string object{};
+        if (const CNA_Result routeResult = FindLaunchParameter(game, key, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_game_launch_parameters_get_key_size(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_launch_parameters_get_key_size: out_bytes is null.");
+        }
+        std::string object{};
+        if (const CNA_Result routeResult = FindLaunchParameterName(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object, out_bytes);
+    });
+}
+
+CNA_Result cna_game_launch_parameters_copy_key(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string object{};
+        if (const CNA_Result routeResult = FindLaunchParameterName(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object, destination, capacity, out_bytes);
+    });
+}

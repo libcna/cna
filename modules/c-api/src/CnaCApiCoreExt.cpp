@@ -378,55 +378,6 @@ CNA_Result cna_logger_log(
     });
 }
 
-CNA_Result cna_logger_fatal(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Fatal, message, category);
-    });
-}
-
-CNA_Result cna_logger_error(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Error, message, category);
-    });
-}
-
-CNA_Result cna_logger_warn(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Warn, message, category);
-    });
-}
-
-CNA_Result cna_logger_info(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Info, message, category);
-    });
-}
-
-CNA_Result cna_logger_debug(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Debug, message, category);
-    });
-}
-
-CNA_Result cna_logger_trace(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Trace, message, category);
-    });
-}
-
-CNA_Result cna_logger_experiment(const CNA_StringView message, const CNA_LogCategory category)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LogWithCategory(&CNA::Logger::Experiment, message, category);
-    });
-}
-
 CNA_Result cna_logger_fatal_if(const CNA_StringView message, const CNA_Bool condition)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -790,16 +741,6 @@ CNA_Result cna_platform_get_current_name_size_ext(uint64_t* const outBytes)
     });
 }
 
-CNA_Result cna_platform_copy_current_name_ext(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(CNA::getCurrentPlatformName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_logger_set_sink_ext(const CNA_LogSinkCallback callback, void* const context)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1145,27 +1086,6 @@ CNA_Result cna_graphics_renderer_get_current_type(CNA_GraphicsRendererType* cons
         }
         *outType = MapRendererTypeToC(CNA::getCurrentGraphicsRendererType());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_get_current_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTextSize(CNA::getCurrentGraphicsRendererName(), outBytes);
-    });
-}
-
-CNA_Result cna_graphics_renderer_copy_current_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            CNA::getCurrentGraphicsRendererName(),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 

@@ -32,3 +32,9 @@ cna_song_collection_get_is_disposed = { get = "object->value->getIsDisposedPrope
 cna_song_collection_dispose = { call = "object->value->Dispose()" }
 cna_song_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_song_collection_destroy = { release = true }
+
+[calls]
+[calls.routes]
+cna_media_source_get_type_at = { result = "ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_type = static_cast<CNA_MediaSourceType>(source.getMediaSourceTypeProperty()); return CNA_RESULT_SUCCESS; })" }
+cna_media_source_get_name_size_at = { result = "ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_bytes = source.getNameProperty().size(); return CNA_RESULT_SUCCESS; })" }
+cna_media_source_get_type_name_size_at = { result = "ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_bytes = source.GetTypeName().size(); return CNA_RESULT_SUCCESS; })" }

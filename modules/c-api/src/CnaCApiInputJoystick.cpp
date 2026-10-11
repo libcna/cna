@@ -429,25 +429,6 @@ CNA_Result cna_joysticks_get_info_at(
     });
 }
 
-CNA_Result cna_joysticks_get_name_size_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The joystick name byte-count output is null.");
-        }
-        JoystickInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = info.name.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joysticks_copy_name_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -487,25 +468,6 @@ CNA_Result cna_joysticks_get_capabilities(
     });
 }
 
-CNA_Result cna_joysticks_get_capabilities_name_size(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The joystick device-name byte-count output is null.");
-        }
-        JoystickCapabilitiesEXT capabilities;
-        if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = capabilities.name.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joysticks_copy_capabilities_name(
     const CNA_Handle gameHandle,
     const uint32_t id,
@@ -523,25 +485,6 @@ CNA_Result cna_joysticks_copy_capabilities_name(
             return result;
         }
         return CopyText(capabilities.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_joysticks_get_capabilities_guid_size(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The joystick GUID byte-count output is null.");
-        }
-        JoystickCapabilitiesEXT capabilities;
-        if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = capabilities.guid.size();
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -586,141 +529,6 @@ CNA_Result cna_joysticks_capture_state(
     });
 }
 
-CNA_Result cna_joystick_state_get_axis_count(
-    const CNA_JoystickStateHandle state,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CountElements(state, outCount, [](const JoystickStateEXT& value) {
-            return value.axes.size();
-        });
-    });
-}
-
-CNA_Result cna_joystick_state_copy_axes(
-    const CNA_JoystickStateHandle state,
-    int16_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickStateEXT> snapshot;
-        if (const CNA_Result result = BorrowState(state, &snapshot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyElements(
-            snapshot->axes,
-            destination,
-            capacity,
-            outCount,
-            [](const std::int16_t value) { return static_cast<int16_t>(value); });
-    });
-}
-
-CNA_Result cna_joystick_state_get_button_count(
-    const CNA_JoystickStateHandle state,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CountElements(state, outCount, [](const JoystickStateEXT& value) {
-            return value.buttons.size();
-        });
-    });
-}
-
-CNA_Result cna_joystick_state_copy_buttons(
-    const CNA_JoystickStateHandle state,
-    CNA_Bool* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickStateEXT> snapshot;
-        if (const CNA_Result result = BorrowState(state, &snapshot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyElements(
-            snapshot->buttons,
-            destination,
-            capacity,
-            outCount,
-            [](const bool value) { return ToCBool(value); });
-    });
-}
-
-CNA_Result cna_joystick_state_get_hat_count(
-    const CNA_JoystickStateHandle state,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CountElements(state, outCount, [](const JoystickStateEXT& value) {
-            return value.hats.size();
-        });
-    });
-}
-
-CNA_Result cna_joystick_state_copy_hats(
-    const CNA_JoystickStateHandle state,
-    CNA_JoystickHatPosition* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickStateEXT> snapshot;
-        if (const CNA_Result result = BorrowState(state, &snapshot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyElements(
-            snapshot->hats,
-            destination,
-            capacity,
-            outCount,
-            [](const JoystickHatPositionEXT value) {
-                return static_cast<CNA_JoystickHatPosition>(value);
-            });
-    });
-}
-
-CNA_Result cna_joystick_state_get_ball_count(
-    const CNA_JoystickStateHandle state,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CountElements(state, outCount, [](const JoystickStateEXT& value) {
-            return value.balls.size();
-        });
-    });
-}
-
-CNA_Result cna_joystick_state_copy_balls(
-    const CNA_JoystickStateHandle state,
-    CNA_Point* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickStateEXT> snapshot;
-        if (const CNA_Result result = BorrowState(state, &snapshot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyElements(
-            snapshot->balls,
-            destination,
-            capacity,
-            outCount,
-            [](const Microsoft::Xna::Framework::Point& value) {
-                CNA_Point point = {};
-                point.x = static_cast<int32_t>(value.X);
-                point.y = static_cast<int32_t>(value.Y);
-                return point;
-            });
-    });
-}
-
 CNA_Result cna_joystick_state_equals(
     const CNA_JoystickStateHandle left,
     const CNA_JoystickStateHandle right,
@@ -742,36 +550,6 @@ CNA_Result cna_joystick_state_equals(
         }
         *outEqual = ToCBool(*nativeLeft == *nativeRight);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_joysticks_subscribe_connected_ext(
-    const CNA_JoystickHotplugCallback callback,
-    void* const context,
-    CNA_JoystickEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeHotplug(
-            Joysticks::ConnectedEXT,
-            JoystickEventKind::Connected,
-            callback,
-            context,
-            outRegistration);
-    });
-}
-
-CNA_Result cna_joysticks_subscribe_disconnected_ext(
-    const CNA_JoystickHotplugCallback callback,
-    void* const context,
-    CNA_JoystickEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeHotplug(
-            Joysticks::DisconnectedEXT,
-            JoystickEventKind::Disconnected,
-            callback,
-            context,
-            outRegistration);
     });
 }
 

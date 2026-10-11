@@ -434,3 +434,19 @@ CNA_Result cna_cue_copy_type_name(
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_audio_engine_create_with_renderer(
+    const CNA_Handle game,
+    const CNA_StringView settings_file,
+    const int64_t look_ahead_ticks,
+    const CNA_StringView renderer_id,
+    CNA_Handle* const out_engine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_engine == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_create_with_renderer: out_engine is null.");
+        }
+        *out_engine = CNA_INVALID_HANDLE;
+        return CreateEngine(game, settings_file, true, look_ahead_ticks, renderer_id, out_engine);
+    });
+}

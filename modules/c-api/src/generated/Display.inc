@@ -40,3 +40,80 @@ CNA_Result cna_graphics_device_reset(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_graphics_adapters_refresh(
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return NotSupported("The active C GraphicsDevice retains its adapter; refreshing the global native " "adapter cache would invalidate that reference.");
+    });
+}
+
+CNA_Result cna_graphics_adapter_copy_description(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_copy_description: out_bytes is null.");
+        }
+        return CopyAdapterString(graphics_device, adapter_index, true, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_graphics_adapter_copy_device_name(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_copy_device_name: out_bytes is null.");
+        }
+        return CopyAdapterString(graphics_device, adapter_index, false, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_graphics_adapter_query_render_target_format(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    const CNA_DepthFormat depth_format,
+    const int32_t multi_sample_count,
+    CNA_GraphicsFormatSelection* const out_selection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_selection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_query_render_target_format: out_selection is null.");
+        }
+        return QueryFormat(graphics_device, adapter_index, profile, format, depth_format, multi_sample_count, out_selection, true);
+    });
+}
+
+CNA_Result cna_graphics_adapter_query_backbuffer_format(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    const CNA_DepthFormat depth_format,
+    const int32_t multi_sample_count,
+    CNA_GraphicsFormatSelection* const out_selection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_selection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_query_backbuffer_format: out_selection is null.");
+        }
+        return QueryFormat(graphics_device, adapter_index, profile, format, depth_format, multi_sample_count, out_selection, false);
+    });
+}

@@ -506,31 +506,6 @@ CNA_Result cna_mouse_get_state(
     });
 }
 
-CNA_Result cna_gamepad_get_state(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    CNA_GamePadState* const outState)
-{
-    return CallWithExceptionBarrier([&]() {
-        return CaptureGamePadState(
-            gameHandle,
-            playerIndex,
-            CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES,
-            outState);
-    });
-}
-
-CNA_Result cna_gamepad_get_state_with_dead_zone(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const CNA_GamePadDeadZone deadZoneMode,
-    CNA_GamePadState* const outState)
-{
-    return CallWithExceptionBarrier([&]() {
-        return CaptureGamePadState(gameHandle, playerIndex, deadZoneMode, outState);
-    });
-}
-
 CNA_Result cna_gamepad_apply_dead_zone(
     const CNA_GamePadDeadZone deadZoneMode,
     const CNA_GamePadAnalogState* const raw,
@@ -1830,118 +1805,6 @@ CNA_Result cna_gamepad_get_button_label_ext(
     });
 }
 
-CNA_Result cna_gamepad_get_guid_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportDeviceTextSize(&GamePad::GetGUIDEXT, gameHandle, playerIndex, outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_copy_guid_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyDeviceTextValue(
-            &GamePad::GetGUIDEXT,
-            gameHandle,
-            playerIndex,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_get_name_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportDeviceTextSize(&GamePad::GetNameEXT, gameHandle, playerIndex, outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_copy_name_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyDeviceTextValue(
-            &GamePad::GetNameEXT,
-            gameHandle,
-            playerIndex,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_get_path_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportDeviceTextSize(&GamePad::GetPathEXT, gameHandle, playerIndex, outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_copy_path_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyDeviceTextValue(
-            &GamePad::GetPathEXT,
-            gameHandle,
-            playerIndex,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_get_serial_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportDeviceTextSize(&GamePad::GetSerialEXT, gameHandle, playerIndex, outBytes);
-    });
-}
-
-CNA_Result cna_gamepad_copy_serial_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyDeviceTextValue(
-            &GamePad::GetSerialEXT,
-            gameHandle,
-            playerIndex,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_gamepad_get_firmware_version_ext(
     const CNA_Handle gameHandle,
     const CNA_PlayerIndex playerIndex,
@@ -2341,82 +2204,6 @@ CNA_Result cna_keyboard_get_key_from_scancode_ext(
         *outKey = static_cast<CNA_Key>(
             Keyboard::GetKeyFromScancodeEXT(static_cast<Keys>(scancode)));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_keyboard_get_scancode_name_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Key key,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportKeyTextSize(&Keyboard::GetScancodeNameEXT, gameHandle, key, outBytes);
-    });
-}
-
-CNA_Result cna_keyboard_copy_scancode_name_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Key key,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyKeyTextValue(
-            &Keyboard::GetScancodeNameEXT,
-            gameHandle,
-            key,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_keyboard_get_scancode_from_name_ext(
-    const CNA_Handle gameHandle,
-    const CNA_StringView name,
-    CNA_Key* const outKey)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LookUpKey(&Keyboard::GetScancodeFromNameEXT, gameHandle, name, outKey);
-    });
-}
-
-CNA_Result cna_keyboard_get_key_name_size_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Key key,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportKeyTextSize(&Keyboard::GetKeyNameEXT, gameHandle, key, outBytes);
-    });
-}
-
-CNA_Result cna_keyboard_copy_key_name_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Key key,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyKeyTextValue(
-            &Keyboard::GetKeyNameEXT,
-            gameHandle,
-            key,
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
-CNA_Result cna_keyboard_get_key_from_name_ext(
-    const CNA_Handle gameHandle,
-    const CNA_StringView name,
-    CNA_Key* const outKey)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LookUpKey(&Keyboard::GetKeyFromNameEXT, gameHandle, name, outKey);
     });
 }
 
@@ -3612,26 +3399,6 @@ CNA_Result cna_touch_location_get_hash_code(
         }
         *outHash = static_cast<int32_t>(ToNativeTouchLocation(*location).GetHashCode());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_location_get_string_size(
-    const CNA_TouchLocation* const location,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTouchLocationString(location, nullptr, UINT64_C(0), outBytes, false);
-    });
-}
-
-CNA_Result cna_touch_location_copy_string(
-    const CNA_TouchLocation* const location,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReportTouchLocationString(location, destination, capacity, outBytes, true);
     });
 }
 

@@ -557,6 +557,38 @@ CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
     });
 }
 
+CNA_Result cna_graphics_device_copy_type_name(
+    const CNA_Handle graphics_device,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_copy_type_name: out_bytes is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyFormattedText(destination, capacity, out_bytes, [&] { return object->value->GetTypeName(); });
+    });
+}
+
+CNA_Result cna_graphics_device_dispose(
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return NotSupported("The active game owns this graphics device; destroy the game to dispose it.");
+    });
+}
+
 CNA_Result cna_occlusion_query_begin(
     const CNA_OcclusionQueryHandle occlusion_query)
 {

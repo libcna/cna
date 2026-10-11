@@ -320,32 +320,6 @@ CNA_Result cna_graphics_adapter_get_info(
     });
 }
 
-CNA_Result cna_graphics_adapter_copy_description(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        return CopyAdapterString(
-            graphicsDeviceHandle, adapterIndex, true, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_graphics_adapter_copy_device_name(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        return CopyAdapterString(
-            graphicsDeviceHandle, adapterIndex, false, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_graphics_adapter_get_current_display_mode(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
@@ -489,50 +463,6 @@ CNA_Result cna_graphics_adapter_is_profile_supported(
     });
 }
 
-CNA_Result cna_graphics_adapter_query_render_target_format(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    const CNA_GraphicsProfile profile,
-    const CNA_SurfaceFormat format,
-    const CNA_DepthFormat depthFormat,
-    const int32_t multiSampleCount,
-    CNA_GraphicsFormatSelection* const outSelection)
-{
-    return CallWithExceptionBarrier([&]() {
-        return QueryFormat(
-            graphicsDeviceHandle,
-            adapterIndex,
-            profile,
-            format,
-            depthFormat,
-            multiSampleCount,
-            outSelection,
-            true);
-    });
-}
-
-CNA_Result cna_graphics_adapter_query_backbuffer_format(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    const CNA_GraphicsProfile profile,
-    const CNA_SurfaceFormat format,
-    const CNA_DepthFormat depthFormat,
-    const int32_t multiSampleCount,
-    CNA_GraphicsFormatSelection* const outSelection)
-{
-    return CallWithExceptionBarrier([&]() {
-        return QueryFormat(
-            graphicsDeviceHandle,
-            adapterIndex,
-            profile,
-            format,
-            depthFormat,
-            multiSampleCount,
-            outSelection,
-            false);
-    });
-}
-
 CNA_Result cna_graphics_adapter_get_native_monitor_handle(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
@@ -552,21 +482,6 @@ CNA_Result cna_graphics_adapter_get_native_monitor_handle(
         }
         static_cast<void>(adapter);
         return NotSupported("Native monitor handles do not cross the stable CNA C ABI.");
-    });
-}
-
-CNA_Result cna_graphics_adapters_refresh(const CNA_Handle graphicsDeviceHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NotSupported(
-            "The active C GraphicsDevice retains its adapter; refreshing the global native "
-            "adapter cache would invalidate that reference.");
     });
 }
 

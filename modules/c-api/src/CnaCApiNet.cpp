@@ -362,24 +362,6 @@ CNA_Result BorrowPacketWriter(const CNA_Handle handle, PacketWriter** const outW
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_quality_of_service_init(CNA_QualityOfService* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StoreQualityOfService(QualityOfService::CreateInternal(), outValue);
-    });
-}
-
-CNA_Result cna_quality_of_service_init_measured(
-    const int64_t roundtripTicks,
-    CNA_QualityOfService* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return StoreQualityOfService(
-            QualityOfService::CreateInternal(System::TimeSpan(roundtripTicks)),
-            outValue);
-    });
-}
-
 CNA_Result cna_net_get_last_join_error(
     CNA_NetworkSessionJoinError* const outJoinError,
     CNA_Bool* const outHasJoinError)

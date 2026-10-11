@@ -881,18 +881,5 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
     });
 }
 
-CNA_Result cna_game_get_graphics_device(
-    const CNA_Handle gameHandle,
-    CNA_Handle* const outGraphicsDevice)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<CGame> game;
-        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return game->BorrowGraphicsDevice(outGraphicsDevice);
-    });
-}
-
 // The mechanically regular routes of this family, generated from modules/c-api/spec/Runtime.toml.
 #include "generated/Runtime.inc"

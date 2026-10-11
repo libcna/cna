@@ -257,3 +257,26 @@ CNA_Result cna_packet_writer_write_double(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_quality_of_service_init(
+    CNA_QualityOfService* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_quality_of_service_init: out_value is null.");
+        }
+        return StoreQualityOfService(QualityOfService::CreateInternal(), out_value);
+    });
+}
+
+CNA_Result cna_quality_of_service_init_measured(
+    const int64_t roundtrip_ticks,
+    CNA_QualityOfService* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_quality_of_service_init_measured: out_value is null.");
+        }
+        return StoreQualityOfService(QualityOfService::CreateInternal(System::TimeSpan(roundtrip_ticks)), out_value);
+    });
+}

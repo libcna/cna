@@ -57,6 +57,24 @@ CNA_Result cna_game_request_exit(
     });
 }
 
+CNA_Result cna_game_get_graphics_device(
+    const CNA_Handle game,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        std::shared_ptr<CGame> object{};
+        if (const CNA_Result routeResult = GetGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return object->BorrowGraphicsDevice(out_graphics_device);
+    });
+}
+
 CNA_Result cna_game_tick(
     const CNA_Handle game)
 {

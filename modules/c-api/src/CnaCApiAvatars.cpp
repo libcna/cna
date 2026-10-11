@@ -170,17 +170,6 @@ CNA_Result cna_avatar_description_create(
     });
 }
 
-CNA_Result cna_avatar_description_create_random(CNA_AvatarDescriptionHandle* const outDescription)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDescription == nullptr) {
-            return InvalidArgument("The AvatarDescription output handle is null.");
-        }
-        *outDescription = CNA_INVALID_HANDLE;
-        return PublishDescription(AvatarDescription::CreateRandom(), outDescription);
-    });
-}
-
 CNA_Result cna_avatar_description_create_random_for_body_type(
     const CNA_AvatarBodyType bodyType,
     CNA_AvatarDescriptionHandle* const outDescription)

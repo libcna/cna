@@ -35,3 +35,10 @@ cna_game_components_get_count = { get = "object->getCountProperty()" }
 cna_game_components_clear = { call = "object->Clear()" }
 cna_game_components_get_type_name_size = { size = "object->GetTypeName()" }
 cna_game_components_copy_type_name = { copy = "object->GetTypeName()" }
+
+[calls]
+[calls.routes]
+cna_game_component_create = { result = "CreateComponent<CGameComponent>(game, callbacks, out_component)" }
+cna_drawable_game_component_create = { result = "CreateComponent<CDrawableGameComponent>(game, callbacks, out_component)" }
+cna_game_components_subscribe_added = { result = "SubscribeCollection(game, true, callback, context, out_registration)" }
+cna_game_components_subscribe_removed = { result = "SubscribeCollection(game, false, callback, context, out_registration)" }

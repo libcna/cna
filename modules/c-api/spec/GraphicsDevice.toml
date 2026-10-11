@@ -48,6 +48,8 @@ cna_graphics_device_supports_image_based_lighting_ext = { get = "object->value->
 cna_graphics_device_get_display_color_space_ext = { get = "static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT())" }
 cna_graphics_device_get_max_compute_work_group_size_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis)))" }
 cna_graphics_device_get_max_compute_work_group_invocations_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupInvocationsEXT())" }
+cna_graphics_device_copy_type_name = { result = "CopyFormattedText(destination, capacity, out_bytes, [&] { return object->value->GetTypeName(); })" }
+cna_graphics_device_dispose = { result = "NotSupported(\"The active game owns this graphics device; destroy the game to dispose it.\")" }
 
 [occlusion_query]
 lookup = "GetOcclusionQuery"

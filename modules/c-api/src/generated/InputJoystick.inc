@@ -79,3 +79,210 @@ CNA_Result cna_joystick_state_destroy(
         return CNA::C::Detail::ReleaseHandle(state);
     });
 }
+
+CNA_Result cna_joystick_state_copy_axes(
+    const CNA_JoystickStateHandle state,
+    int16_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_copy_axes: out_count is null.");
+        }
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(state, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyElements(object->axes, destination, capacity, out_count, [](const std::int16_t value) { return static_cast<int16_t>(value); });
+    });
+}
+
+CNA_Result cna_joystick_state_copy_buttons(
+    const CNA_JoystickStateHandle state,
+    CNA_Bool* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_copy_buttons: out_count is null.");
+        }
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(state, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyElements(object->buttons, destination, capacity, out_count, [](const bool value) { return ToCBool(value); });
+    });
+}
+
+CNA_Result cna_joystick_state_copy_hats(
+    const CNA_JoystickStateHandle state,
+    CNA_JoystickHatPosition* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_copy_hats: out_count is null.");
+        }
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(state, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyElements(object->hats, destination, capacity, out_count, [](const JoystickHatPositionEXT value) { return static_cast<CNA_JoystickHatPosition>(value); });
+    });
+}
+
+CNA_Result cna_joystick_state_copy_balls(
+    const CNA_JoystickStateHandle state,
+    CNA_Point* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_copy_balls: out_count is null.");
+        }
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(state, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { CNA_Point point = {}; point.x = static_cast<int32_t>(value.X); point.y = static_cast<int32_t>(value.Y); return point; });
+    });
+}
+
+CNA_Result cna_joysticks_get_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_get_name_size_at: out_bytes is null.");
+        }
+        JoystickInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedJoystick(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object.name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_joysticks_get_capabilities_name_size(
+    const CNA_Handle game,
+    const uint32_t id,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_get_capabilities_name_size: out_bytes is null.");
+        }
+        JoystickCapabilitiesEXT object{};
+        if (const CNA_Result routeResult = BorrowCapabilities(game, id, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object.name, out_bytes);
+    });
+}
+
+CNA_Result cna_joysticks_get_capabilities_guid_size(
+    const CNA_Handle game,
+    const uint32_t id,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_get_capabilities_guid_size: out_bytes is null.");
+        }
+        JoystickCapabilitiesEXT object{};
+        if (const CNA_Result routeResult = BorrowCapabilities(game, id, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object.guid, out_bytes);
+    });
+}
+
+CNA_Result cna_joystick_state_get_axis_count(
+    const CNA_JoystickStateHandle state,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_get_axis_count: out_count is null.");
+        }
+        return CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.axes.size(); });
+    });
+}
+
+CNA_Result cna_joystick_state_get_button_count(
+    const CNA_JoystickStateHandle state,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_get_button_count: out_count is null.");
+        }
+        return CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.buttons.size(); });
+    });
+}
+
+CNA_Result cna_joystick_state_get_hat_count(
+    const CNA_JoystickStateHandle state,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_get_hat_count: out_count is null.");
+        }
+        return CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.hats.size(); });
+    });
+}
+
+CNA_Result cna_joystick_state_get_ball_count(
+    const CNA_JoystickStateHandle state,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_get_ball_count: out_count is null.");
+        }
+        return CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.balls.size(); });
+    });
+}
+
+CNA_Result cna_joysticks_subscribe_connected_ext(
+    const CNA_JoystickHotplugCallback callback,
+    void* const context,
+    CNA_JoystickEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_subscribe_connected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(Joysticks::ConnectedEXT, JoystickEventKind::Connected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_joysticks_subscribe_disconnected_ext(
+    const CNA_JoystickHotplugCallback callback,
+    void* const context,
+    CNA_JoystickEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_subscribe_disconnected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(Joysticks::DisconnectedEXT, JoystickEventKind::Disconnected, callback, context, out_registration);
+    });
+}

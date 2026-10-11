@@ -13,6 +13,20 @@ cna_cnb_document_require_asset = { call = "object->value->RequireAsset(expected_
 cna_cnb_decode_song_stream_reference = { copy = "Cnb::DecodeSongFromCnb(*object->value).streamReference" }
 cna_cnb_decode_song_name = { copy = "Cnb::DecodeSongFromCnb(*object->value).name" }
 cna_cnb_decode_video_stream_reference = { copy = "Cnb::DecodeVideoFromCnb(*object->value).streamReference" }
+cna_cnb_document_get_origin_size = { result = "ReportTextSize(object->value->Origin(), out_byte_count)" }
+cna_cnb_document_get_container_major = { get = "object->value->ContainerMajor()" }
+cna_cnb_document_get_container_minor = { get = "object->value->ContainerMinor()" }
+cna_cnb_document_get_asset_type_id = { get = "object->value->AssetTypeId()" }
+cna_cnb_document_get_asset_schema_version = { get = "object->value->AssetSchemaVersion()" }
+cna_cnb_document_get_chunk_count = { get = "object->value->ChunkCount()" }
+cna_cnb_document_require_single = { get = "object->value->RequireSingle(Cnb::CnbChunkId{type})" }
+cna_cnb_document_get_metadata_asset_type_name_size = { result = "ReportTextSize(object->value->Metadata().assetTypeName, out_byte_count)" }
+cna_cnb_document_get_metadata_content_name_size = { result = "ReportTextSize(object->value->Metadata().contentName, out_byte_count)" }
+cna_cnb_document_get_external_reference_count = { get = "object->value->ExternalReferences().size()" }
+cna_cnb_decode_song_duration_milliseconds = { get = "Cnb::DecodeSongFromCnb(*object->value).durationMs" }
+cna_cnb_decode_song_stream_reference_size = { result = "ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).streamReference, out_byte_count)" }
+cna_cnb_decode_song_name_size = { result = "ReportTextSize(Cnb::DecodeSongFromCnb(*object->value).name, out_byte_count)" }
+cna_cnb_decode_video_stream_reference_size = { result = "ReportTextSize(Cnb::DecodeVideoFromCnb(*object->value).streamReference, out_byte_count)" }
 
 [reader]
 lookup = "GetReader"
@@ -23,6 +37,10 @@ cna_cnb_reader_copy_context = { copy = "object->value->Context()" }
 cna_cnb_reader_skip = { call = "object->value->Skip(byte_count)" }
 cna_cnb_reader_require_exhausted = { call = "object->value->RequireExhausted()" }
 cna_cnb_reader_destroy = { release = true }
+cna_cnb_reader_get_remaining = { get = "object->value->Remaining()" }
+cna_cnb_reader_get_position = { get = "object->value->Position()" }
+cna_cnb_reader_get_size = { get = "object->value->Size()" }
+cna_cnb_reader_get_context_size = { result = "ReportTextSize(object->value->Context(), out_byte_count)" }
 
 [model]
 lookup = "GetModel"
@@ -39,6 +57,10 @@ object = "std::shared_ptr<CnjToCnbResultResource>"
 [compiled_cnj.routes]
 cna_cnb_cnj_result_copy_asset_type_name = { copy = "object->value->assetTypeName" }
 cna_cnb_cnj_result_destroy = { release = true }
+cna_cnb_cnj_result_get_asset_type_id = { get = "object->value->assetTypeId" }
+cna_cnb_cnj_result_get_asset_type_name_size = { result = "ReportTextSize(object->value->assetTypeName, out_byte_count)" }
+cna_cnb_cnj_result_get_absorbed_file_count = { get = "object->value->absorbedFiles.size()" }
+cna_cnb_cnj_result_get_external_reference_count = { get = "object->value->externalReferences.size()" }
 
 [byte_writer]
 lookup = "GetByteWriter"
@@ -46,6 +68,7 @@ object = "std::shared_ptr<CnbByteWriterResource>"
 
 [byte_writer.routes]
 cna_cnb_byte_writer_destroy = { release = true }
+cna_cnb_byte_writer_get_size = { get = "object->value->Size()" }
 
 [writer]
 lookup = "GetWriter"
@@ -53,6 +76,7 @@ object = "std::shared_ptr<CnbWriterResource>"
 
 [writer.routes]
 cna_cnb_writer_destroy = { release = true }
+cna_cnb_writer_get_schema_chunk_count = { get = "object->value->SchemaChunkCount()" }
 
 [texture_data]
 lookup = "GetTextureData"
@@ -60,6 +84,7 @@ object = "std::shared_ptr<CnbTextureDataResource>"
 
 [texture_data.routes]
 cna_cnb_texture_data_destroy = { release = true }
+cna_cnb_texture_data_get_representation_count = { get = "object->value->representations.size()" }
 
 [compile_result]
 lookup = "GetCompileResult"
@@ -67,6 +92,8 @@ object = "std::shared_ptr<CnbModelFromCnjResource>"
 
 [compile_result.routes]
 cna_cnb_model_from_cnj_destroy = { release = true }
+cna_cnb_model_from_cnj_get_absorbed_file_count = { get = "object->value->absorbedFiles.size()" }
+cna_cnb_model_from_cnj_get_external_reference_count = { get = "object->value->externalReferences.size()" }
 
 [sprite_font]
 lookup = "GetSpriteFont"
@@ -88,6 +115,7 @@ object = "std::shared_ptr<CnbAnimationClipResource>"
 
 [animation_clip.routes]
 cna_cnb_animation_clip_destroy = { release = true }
+cna_cnb_animation_clip_copy_keyframes = { result = "CopyClipKeyframes(*object->value, track, destination, capacity, out_keyframe_count)" }
 
 [loader]
 lookup = "GetLoader"
@@ -95,3 +123,44 @@ object = "std::shared_ptr<CnbLoaderResource>"
 
 [loader.routes]
 cna_cnb_loader_destroy = { release = true }
+
+[calls]
+[calls.routes]
+cna_cnb_get_chunk_id_string_size = { result = "ReportTextSize(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), out_byte_count)" }
+cna_cnb_copy_chunk_id_string = { result = "CopyText(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), destination, capacity, out_byte_count)" }
+cna_cnb_get_asset_type_name_size = { result = "ReportTextSize(Cnb::AssetTypeIdToString(asset_type_id), out_byte_count)" }
+cna_cnb_copy_asset_type_name = { result = "CopyText(Cnb::AssetTypeIdToString(asset_type_id), destination, capacity, out_byte_count)" }
+cna_cnb_get_compression_name_size = { result = "ReportTextSize(Cnb::CnbCompressionToString(ToCodec(codec)), out_byte_count)" }
+cna_cnb_copy_compression_name = { result = "CopyText(Cnb::CnbCompressionToString(ToCodec(codec)), destination, capacity, out_byte_count)" }
+cna_cnb_get_texture_format_name_size = { result = "ReportTextSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), out_byte_count)" }
+cna_cnb_copy_texture_format_name = { result = "CopyText(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), destination, capacity, out_byte_count)" }
+cna_cnb_encode_texture2d = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTexture2DToCnb, destination, capacity, out_byte_count)" }
+cna_cnb_encode_texture_cube = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTextureCubeToCnb, destination, capacity, out_byte_count)" }
+cna_cnb_encode_texture3d = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTexture3DToCnb, destination, capacity, out_byte_count)" }
+cna_cnb_decode_texture2d = { result = "DecodeTexture(document, &Cnb::DecodeTexture2DFromCnb, out_texture)" }
+cna_cnb_decode_texture_cube = { result = "DecodeTexture(document, &Cnb::DecodeTextureCubeFromCnb, out_texture)" }
+cna_cnb_decode_texture3d = { result = "DecodeTexture(document, &Cnb::DecodeTexture3DFromCnb, out_texture)" }
+cna_cnb_model_create = { result = "CreateModel(Cnb::CnbModelData{}, out_model)" }
+cna_cnb_sprite_font_data_create = { result = "CreateSpriteFont(Cnb::CnbSpriteFontData{}, out_font)" }
+cna_cnb_get_audio_format_name_size = { result = "ReportTextSize(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), out_byte_count)" }
+cna_cnb_copy_audio_format_name = { result = "CopyText(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), destination, capacity, out_byte_count)" }
+cna_cnb_loader_registry_get_registered_type_name_size = { result = "ReportTextSize(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), out_byte_count)" }
+cna_cnb_loader_registry_copy_registered_type_name = { result = "CopyText(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), destination, capacity, out_byte_count)" }
+
+[bytes]
+lookup = "BorrowBytes"
+object = "std::span<const uint8_t>"
+arguments = 2
+
+[bytes.routes]
+cna_cnb_crc32c = { get = "Cnb::Crc32c(object)" }
+cna_cnb_crc32c_portable = { get = "Cnb::Crc32cPortableEXT(object)" }
+cna_cnb_has_magic = { get = "Cnb::CnbDocument::HasMagic(object)" }
+
+[text]
+lookup = "BorrowText"
+object = "std::string"
+
+[text.routes]
+cna_cnb_import_dds_as_texture_cube = { result = "CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(object), out_texture)" }
+cna_cnb_import_wav_as_sound_effect = { result = "CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound)" }

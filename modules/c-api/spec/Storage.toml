@@ -33,3 +33,18 @@ cna_storage_stream_get_length = { get = "object->value->getLengthProperty()" }
 cna_storage_stream_get_can_read = { get = "object->value->getCanReadProperty()" }
 cna_storage_stream_get_can_write = { get = "object->value->getCanWriteProperty()" }
 cna_storage_stream_get_can_seek = { get = "object->value->getCanSeekProperty()" }
+
+[calls]
+[calls.routes]
+cna_storage_copy_root_ext = { result = "CopyText(StorageDevice::GetStorageRootEXT(), destination, capacity, out_bytes)" }
+cna_storage_device_show_selector = { result = "ShowSelector(false, 0U, false, 0, 0, callback, context, out_device)" }
+cna_storage_device_show_selector_for_player = { result = "ShowSelector(true, player, false, 0, 0, callback, context, out_device)" }
+cna_storage_device_show_selector_with_space = { result = "ShowSelector(false, 0U, true, size_in_bytes, directory_count, callback, context, out_device)" }
+cna_storage_device_show_selector_for_player_with_space = { result = "ShowSelector(true, player, true, size_in_bytes, directory_count, callback, context, out_device)" }
+cna_storage_container_get_directory_name_count = { result = "CountNames(container, search_pattern, true, out_count)" }
+cna_storage_container_copy_directory_name = { result = "CopyName(container, search_pattern, index, true, destination, capacity, out_bytes)" }
+cna_storage_container_get_file_name_count = { result = "CountNames(container, search_pattern, false, out_count)" }
+cna_storage_container_copy_file_name = { result = "CopyName(container, search_pattern, index, false, destination, capacity, out_bytes)" }
+cna_storage_container_open_file = { result = "OpenFileHandle(container, file, file_mode, CNA_FILE_ACCESS_READ_WRITE, CNA_FILE_SHARE_READ_WRITE, 1, out_stream)" }
+cna_storage_container_open_file_access = { result = "OpenFileHandle(container, file, file_mode, file_access, CNA_FILE_SHARE_READ_WRITE, 2, out_stream)" }
+cna_storage_container_open_file_share = { result = "OpenFileHandle(container, file, file_mode, file_access, file_share, 3, out_stream)" }

@@ -150,3 +150,10 @@ cna_motion_set_time_between_updates_ticks = { call = "object->value->setTimeBetw
 cna_motion_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_motion_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_motion_destroy = { release = true }
+
+[calls]
+[calls.routes]
+cna_accelerometer_reading_event_info_copy_type_name = { result = "CopyText(AccelerometerReadingEventArgs().GetTypeName(), destination, capacity, out_bytes)" }
+cna_calibration_event_info_copy_type_name = { result = "CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, out_bytes)" }
+cna_compass_subscribe_calibrate = { result = "SubscribeCalibrate<Compass>(sensor, callback, context, out_registration)" }
+cna_motion_subscribe_calibrate = { result = "SubscribeCalibrate<Motion>(sensor, callback, context, out_registration)" }

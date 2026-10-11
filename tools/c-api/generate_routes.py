@@ -30,8 +30,9 @@ Spec format. Each top-level table is one group of routes sharing how they reach 
     cna_basic_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
 
 A lookup receives the route's first parameter -- usually a handle, sometimes a struct or a string
-it validates -- unconverted. A group without ``lookup`` holds routes that take no handle. A group
-whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. Each route is ``name = { <kind> = "<C++>" }``:
+it validates -- unconverted; ``arguments = 2`` in the group passes it the first two (an index, say). A group without ``lookup`` holds routes that take no handle. A group
+whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. A group whose lookup
+reads the null handle as "none" says ``accepts_null_handle = true``. Each route is ``name = { <kind> = "<C++>" }``:
 
 ``value``  (args..., T* out)          ``*out`` = the expression; no handle.
 ``get``    (handle, args..., T* out)   ``*out`` = the expression, after the lookup.
@@ -42,6 +43,10 @@ whose lookup only validates (``ValidateActiveGameHandle``) omits ``object``. Eac
                                        the size-then-copy text protocol for the expression.
 ``release`` (handle)                   a destroy with no bookkeeping: after the lookup, run the
                                        statement (``true`` for none) and release the handle.
+``result`` (anything)                  return what the expression returns, a CNA_Result -- the
+                                       route is a call into a hand-written helper. Every non-const
+                                       ``out_*`` pointer is refused when null before anything else,
+                                       and a handle output is first set to CNA_INVALID_HANDLE.
 
 Inside an expression every route parameter is available under its header name, already converted
 to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, and a CNA_Bool is
@@ -78,7 +83,7 @@ HEADER_DIR = C_API_DIR / "include" / "CNA" / "C"
 MARSHAL_HEADER = SOURCE_DIR / "CnaCApiMarshal.hpp"
 
 DETAIL = "CNA::C::Detail::"
-KINDS = ("value", "get", "call", "size", "copy", "release")
+KINDS = ("value", "get", "call", "size", "copy", "release", "result")
 NUMBERS = {"float", "double", "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t",
            "int64_t", "uint64_t", "size_t"}
 
@@ -203,14 +208,21 @@ class Route:
     def _check_shape(self) -> None:
         params = list(self.params)
         if self.has_lookup:
-            if not params:
-                raise self._fail("a route in a group with a lookup passes it its first parameter")
-            self.handle, params = params[0], params[1:]
+            count = self.group.get("arguments", 1)
+            if len(params) < count:
+                raise self._fail(f"a route in this group passes its lookup {count} parameter(s)")
+            self.handle, self.lookup_params, params = params[0], params[:count], params[count:]
         elif self.kind in ("get", "call", "release"):
             raise self._fail(f"'{self.kind}' needs a group with a lookup")
         else:
             self.handle = None
         self.outputs: list[Param] = []
+        if self.kind == "result":
+            self.outputs = [p for p in params if p.pointer and not p.const
+                            and p.name.startswith("out_")]
+            self.inputs = [p for p in params if not p.pointer]
+            self._check_names()
+            return
         if self.kind in ("value", "get"):
             if not params or not params[-1].pointer or params[-1].const:
                 raise self._fail(f"'{self.kind}' needs a final output pointer")
@@ -243,6 +255,9 @@ class Route:
                 raise self._fail(f"input '{param.name}' has type {param.type}, which this "
                                  "generator does not convert; write the route by hand")
         self.inputs = params
+        self._check_names()
+
+    def _check_names(self) -> None:
         names = {p.name for p in self.params}
         locals_ = {"object", "routeResult"} | {f"c_{p.name}" for p in self.inputs}
         if names & locals_:
@@ -288,10 +303,11 @@ class Route:
         if not self.has_lookup:
             return []
         lookup = self.group["lookup"]
+        arguments = ", ".join(p.name for p in self.lookup_params)
         if "object" not in self.group:
-            return returns_on_failure(f"{lookup}({self.handle.name})", indent)
+            return returns_on_failure(f"{lookup}({arguments})", indent)
         return ([f"{indent}{self.group['object']} object{{}};"]
-                + returns_on_failure(f"{lookup}({self.handle.name}, &object)", indent))
+                + returns_on_failure(f"{lookup}({arguments}, &object)", indent))
 
     def _converted_result(self) -> str:
         output = self.outputs[0]
@@ -313,6 +329,12 @@ class Route:
         lines = [f"    return {DETAIL}CallWithExceptionBarrier([&]() -> CNA_Result {{"]
         if self.kind in ("value", "get", "size"):
             lines += null_check(self.name, self.outputs[0], i)
+        elif self.kind == "result":
+            for output in self.outputs:
+                lines += null_check(self.name, output, i)
+            for output in self.outputs:
+                if self.types.kind_of(output.type) == "handle":
+                    lines.append(f"{i}*{output.name} = CNA_INVALID_HANDLE;")
         lines += self._bool_checks(i)
         lines += self._lookup(i)
         lines += self._locals(i)
@@ -325,6 +347,8 @@ class Route:
             if self.expression:
                 lines.append(f"{i}{self.expression};")
             lines.append(f"{i}return {DETAIL}ReleaseHandle({self.handle.name});")
+        elif self.kind == "result":
+            lines.append(f"{i}return {self.expression};")
         elif self.kind == "size":
             lines += [f"{i}return {DETAIL}ReportTextSize({self.expression}, "
                       f"{self.outputs[0].name});"]
@@ -350,12 +374,14 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
     for group_name, group in data.items():
         if not isinstance(group, dict) or "routes" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] has no [{group_name}.routes] table")
-        unknown = set(group) - {"lookup", "object", "routes"}
+        unknown = set(group) - {"lookup", "object", "arguments", "accepts_null_handle", "routes"}
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
-        if "object" in group and "lookup" not in group:
-            raise SpecError(f"{spec.name}: [{group_name}] names an object but no lookup")
+        if ("object" in group or "arguments" in group) and "lookup" not in group:
+            raise SpecError(f"{spec.name}: [{group_name}] names an object or arguments but no lookup")
+        if "arguments" in group and (not isinstance(group["arguments"], int) or group["arguments"] < 1):
+            raise SpecError(f"{spec.name}: [{group_name}] arguments must be a positive number")
         for name, entry in group["routes"].items():
             try:
                 routes.append(Route(family, group, name, entry, types))
@@ -389,6 +415,11 @@ def render_family(spec: Path, routes: list[Route]) -> str:
 CONTRACT_TEST = C_API_DIR / "tests" / "pure_c" / "GeneratedRoutesSmoke.c"
 
 
+def _standin(kind: str, type_: str) -> str:
+    """The name of the zeroed static standing in for a value or an output of `type_`."""
+    return f"{kind}_{re.sub(r'[^0-9A-Za-z_]', '_', type_)}"
+
+
 def _arguments(route: Route, handle: str | None = None, **overrides: str) -> str:
     """C arguments for one call: zeroed stand-ins and valid outputs unless `overrides` says else.
 
@@ -400,15 +431,17 @@ def _arguments(route: Route, handle: str | None = None, **overrides: str) -> str
             out.append(overrides[param.name])
         elif route.has_lookup and param is route.handle:
             out.append(handle if handle is not None
-                       else "NULL" if param.pointer else f"v_{param.type}")
+                       else "NULL" if param.pointer else _standin("v", param.type))
         elif route.kind == "copy" and param in route.outputs:
             destination, capacity, _ = route.outputs
             out.append("text" if param is destination
                        else "(uint64_t)sizeof(text)" if param is capacity else "&o_uint64_t")
         elif param in route.outputs:
-            out.append(f"&o_{param.type}")
+            out.append("&" + _standin("o", param.type))
+        elif param.pointer:
+            out.append("NULL")
         else:
-            out.append(f"v_{param.type}")
+            out.append(_standin("v", param.type))
     return ", ".join(out)
 
 
@@ -455,12 +488,27 @@ def render_contract_test(routes: list[Route]) -> str:
         "    return 1;",
         "}",
         "",
+        "/* A refused route leaves a handle output invalid rather than as the caller left it. */",
+        "static int expect_cleared(const CNA_Handle output, const char* const route)",
+        "{",
+        "    if (output == CNA_INVALID_HANDLE) {",
+        "        return 0;",
+        "    }",
+        '    printf("%s: a refused call left its handle output set\\n", route);',
+        "    return 1;",
+        "}",
+        "",
         "static int null_outputs_are_refused(void)",
         "{",
         "    int failures = 0;",
     ]
     for r in routes:
-        if r.kind in ("value", "get", "size"):
+        if r.kind == "result":
+            for output in r.outputs:
+                lines.append(_expect(f"{r.name}({_arguments(r, **{output.name: 'NULL'})})",
+                                     "CNA_RESULT_INVALID_ARGUMENT", r.name,
+                                     f'"a null {output.name}"'))
+        elif r.kind in ("value", "get", "size"):
             output = r.outputs[0].name
             lines.append(_expect(f"{r.name}({_arguments(r, **{output: 'NULL'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name, f'"a null {output}"'))
@@ -480,8 +528,18 @@ def render_contract_test(routes: list[Route]) -> str:
     for r in routes:
         if _takes_handle(r):
             handle = "curve_routes_handle" if r.handle.type == "CNA_CurveHandle" else "handle"
-            lines.append(_expect(f"{r.name}({_arguments(r, handle)})",
-                                 "CNA_RESULT_INVALID_HANDLE", r.name, "what"))
+            cleared = [o for o in r.outputs
+                       if r.kind == "result" and r.types.kind_of(o.type) == "handle"]
+            lines += [f"    {_standin('o', o.type)} = UINT64_C(0xDEAD);" for o in cleared]
+            check = [_expect(f"{r.name}({_arguments(r, handle)})",
+                             "CNA_RESULT_INVALID_HANDLE", r.name, "what")]
+            check += [f'    failures += expect_cleared({_standin("o", o.type)}, "{r.name}");'
+                      for o in cleared]
+            if r.group.get("accepts_null_handle"):
+                # The lookup reads the null handle as "none", so only a real handle is refused.
+                check = [f"    if ({handle} != CNA_INVALID_HANDLE) {{"] + [
+                    "    " + line for line in check] + ["    }"]
+            lines += check
     lines += ["    return failures;", "}", "",
               "static int text_protocol_holds(void)", "{",
               "    int failures = 0;", "    uint64_t size = 0U;"]
@@ -536,9 +594,9 @@ def render_contract_test(routes: list[Route]) -> str:
               "",
               f'    printf("%d failed checks across {len(routes)} generated routes\\n", failures);',
               "    return failures == 0 ? 0 : 1;", "}", ""]
-    types = {param.type for route in routes for param in route.params}
+    spelled = {_standin("v", p.type)[2:]: p.type for route in routes for p in route.params}
     used = sorted(set(re.findall(r"\b([vo])_(\w+)", "\n".join(lines))))
-    standins = [f"static {name} {kind}_{name};" for kind, name in used if name in types]
+    standins = [f"static {spelled[name]} {kind}_{name};" for kind, name in used if name in spelled]
     return "\n".join(lines).replace("@STANDINS@", "\n".join(standins))
 
 

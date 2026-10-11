@@ -331,25 +331,6 @@ CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const 
     });
 }
 
-CNA_Result cna_gamer_get_profile(
-    const CNA_GamerHandle gamerHandle,
-    CNA_GamerProfileHandle* const outProfile)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outProfile == nullptr) {
-            return InvalidArgument("The GamerProfile output handle is null.");
-        }
-        *outProfile = CNA_INVALID_HANDLE;
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical accessor hands back a profile the caller owns and must delete.
-        return PublishProfile(std::shared_ptr<GamerProfile>(gamer->GetProfile()), outProfile);
-    });
-}
-
 CNA_Result cna_gamer_begin_get_profile(
     const CNA_GamerHandle gamerHandle,
     const CNA_GamerAsyncCallback callback,

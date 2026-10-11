@@ -426,26 +426,6 @@ CNA_Result cna_game_component_callbacks_init(CNA_GameComponentCallbacks* const o
     });
 }
 
-CNA_Result cna_game_component_create(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentCallbacks* const callbacks,
-    CNA_GameComponentHandle* const outComponent)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CreateComponent<CGameComponent>(gameHandle, callbacks, outComponent);
-    });
-}
-
-CNA_Result cna_drawable_game_component_create(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentCallbacks* const callbacks,
-    CNA_GameComponentHandle* const outComponent)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CreateComponent<CDrawableGameComponent>(gameHandle, callbacks, outComponent);
-    });
-}
-
 CNA_Result cna_game_component_get_game(
     const CNA_GameComponentHandle component,
     CNA_Handle* const outGame)
@@ -848,28 +828,6 @@ namespace {
 }
 
 } // namespace
-
-CNA_Result cna_game_components_subscribe_added(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentCollectionCallback callback,
-    void* const context,
-    CNA_GameComponentEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeCollection(gameHandle, true, callback, context, outRegistration);
-    });
-}
-
-CNA_Result cna_game_components_subscribe_removed(
-    const CNA_Handle gameHandle,
-    const CNA_GameComponentCollectionCallback callback,
-    void* const context,
-    CNA_GameComponentEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeCollection(gameHandle, false, callback, context, outRegistration);
-    });
-}
 
 CNA_Result cna_game_services_contains_ext(
     const CNA_Handle gameHandle,

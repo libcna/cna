@@ -9,6 +9,7 @@ object = "std::shared_ptr<LeaderboardReaderResource>"
 cna_leaderboard_reader_destroy = { release = "object->value->Dispose()" }
 cna_leaderboard_reader_page_down = { call = "object->value->PageDown()" }
 cna_leaderboard_reader_page_up = { call = "object->value->PageUp()" }
+cna_leaderboard_reader_get_identity = { result = "ToCIdentity(object->value->getLeaderboardIdentityProperty(), out_identity)" }
 
 [entry]
 lookup = "BorrowEntry"
@@ -17,3 +18,18 @@ object = "std::shared_ptr<LeaderboardEntryResource>"
 [entry.routes]
 cna_leaderboard_entry_destroy = { release = true }
 cna_leaderboard_entry_set_rating = { call = "object->Value()->setRatingProperty(static_cast<long long>(rating))" }
+
+[to_native_identity]
+lookup = "ToNativeIdentity"
+object = "LeaderboardIdentity"
+
+[to_native_identity.routes]
+cna_leaderboard_reader_read = { result = "ReadThroughOperation([&]() { return LeaderboardReader::BeginRead(object, static_cast<int>(page_start), static_cast<int>(page_size), System::AsyncCallback{}, std::any{}); }, out_reader)" }
+
+[optional_gamer]
+lookup = "BorrowOptionalGamer"
+accepts_null_handle = true
+object = "Gamer*"
+
+[optional_gamer.routes]
+cna_leaderboard_entry_create_ext = { result = "PublishOwnedEntry(LeaderboardEntry::CreateInternal(object, static_cast<long long>(rating), static_cast<int>(ranking)), out_entry)" }

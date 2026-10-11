@@ -443,20 +443,6 @@ CNA_Result cna_guide_get_pending_keyboard_input_title_size_ext(uint64_t* const o
     });
 }
 
-CNA_Result cna_guide_copy_pending_keyboard_input_title_ext(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Guide::GetPendingKeyboardInputTitleForTestingEXT(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -468,20 +454,6 @@ CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(uint64_t* c
     });
 }
 
-CNA_Result cna_guide_copy_pending_keyboard_input_description_ext(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Guide::GetPendingKeyboardInputDescriptionForTestingEXT(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -490,20 +462,6 @@ CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(uint64_t* 
         }
         *outBytes = Guide::GetPendingKeyboardInputDisplayTextForTestingEXT().size();
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 
@@ -1028,27 +986,6 @@ CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(
         return PublishGuideRegistration(
             std::make_shared<GuideRegistration>(source, token),
             outRegistration);
-    });
-}
-
-CNA_Result cna_gamer_services_component_create(
-    const CNA_Handle gameHandle,
-    CNA_Handle* const outComponent)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outComponent == nullptr) {
-            return InvalidArgument("The component output handle is null.");
-        }
-        *outComponent = CNA_INVALID_HANDLE;
-        Microsoft::Xna::Framework::Game* game = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateOwnedCanonicalGameComponent(
-            gameHandle,
-            std::make_unique<GamerServicesComponent>(*game),
-            outComponent);
     });
 }
 

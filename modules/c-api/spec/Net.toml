@@ -33,3 +33,8 @@ cna_packet_writer_set_position = { call = "object->value->setPositionProperty(st
 cna_packet_writer_write_matrix = { call = "object->value->Write(value)" }
 cna_packet_writer_write_single = { call = "object->value->Write(value)" }
 cna_packet_writer_write_double = { call = "object->value->Write(value)" }
+
+[calls]
+[calls.routes]
+cna_quality_of_service_init = { result = "StoreQualityOfService(QualityOfService::CreateInternal(), out_value)" }
+cna_quality_of_service_init_measured = { result = "StoreQualityOfService(QualityOfService::CreateInternal(System::TimeSpan(roundtrip_ticks)), out_value)" }

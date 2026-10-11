@@ -219,20 +219,6 @@ CNA_Result cna_signed_in_gamer_get_game_defaults(
     });
 }
 
-CNA_Result cna_property_dictionary_create_ext(CNA_PropertyDictionaryHandle* const outDictionary)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDictionary == nullptr) {
-            return InvalidArgument("The property dictionary output handle is null.");
-        }
-        // The only constructor is private; the canonical factory with an empty map is how an empty
-        // dictionary is made, and the typed setters fill it from there.
-        return CNA::C::Detail::CreateOwnedPropertyDictionary(
-            std::make_shared<PropertyDictionary>(PropertyDictionary::CreateInternal({})),
-            outDictionary);
-    });
-}
-
 CNA_Result cna_property_dictionary_contains_key(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const CNA_StringView key,

@@ -250,3 +250,40 @@ CNA_Result cna_achievement_collection_destroy(
         return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
+
+CNA_Result cna_achievement_collection_get_at(
+    const CNA_AchievementCollectionHandle collection,
+    const int32_t index,
+    CNA_AchievementHandle* const out_achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_achievement == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_get_at: out_achievement is null.");
+        }
+        *out_achievement = CNA_INVALID_HANDLE;
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishAchievement((*object->value)[static_cast<int>(index)], out_achievement);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_get_achievements(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_AchievementCollectionHandle* const out_achievements)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_achievements == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_get_achievements: out_achievements is null.");
+        }
+        *out_achievements = CNA_INVALID_HANDLE;
+        SignedInGamer* object{};
+        if (const CNA_Result routeResult = BorrowSignedIn(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishCollection(object->GetAchievements(), out_achievements);
+    });
+}

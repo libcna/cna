@@ -11,13 +11,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
-- **The C API's mechanically regular routes are generated.** 1,220 of the 3,210 `cna_*` routes —
-  property reads and writes, commands, value computations, text size/copy pairs, plain destroys —
-  are one spec line each in `modules/c-api/spec/*.toml`, generated into
-  `modules/c-api/src/generated/` by `tools/c-api/generate_routes.py`; the helpers every route
-  shares live in one support layer. See `docs/c-api/GENERATED_ROUTES.md`. No export, signature,
-  struct layout, constant or result code changed; the wording of many diagnostic messages did,
-  which `docs/c-api/ERRORS.md` already declares diagnostic-only.
+- **The C API's mechanically regular routes are generated.** 1,531 of the 3,210 `cna_*` routes —
+  property reads and writes, commands, value computations, text size/copy pairs, plain destroys,
+  and routes that only call a hand-written helper — are one spec line each in
+  `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
+  `tools/c-api/generate_routes.py`; the helpers every route shares live in one support layer. See
+  `docs/c-api/GENERATED_ROUTES.md`. No export, signature, struct layout, constant or result code
+  changed. The wording of many diagnostic messages did (`docs/c-api/ERRORS.md` declares them
+  diagnostic-only), and a generated route given two faults at once now always reports its null
+  output first, where families used to differ.
 
 ### Fixed
 

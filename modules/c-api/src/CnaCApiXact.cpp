@@ -300,18 +300,6 @@ CNA_Result cna_audio_engine_create(
     });
 }
 
-CNA_Result cna_audio_engine_create_with_renderer(
-    const CNA_Handle gameHandle,
-    const CNA_StringView settingsFile,
-    const int64_t lookAheadTicks,
-    const CNA_StringView rendererId,
-    CNA_Handle* const outEngine)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CreateEngine(gameHandle, settingsFile, true, lookAheadTicks, rendererId, outEngine);
-    });
-}
-
 CNA_Result cna_audio_engine_destroy(const CNA_Handle engineHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

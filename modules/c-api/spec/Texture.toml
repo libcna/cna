@@ -7,3 +7,8 @@ object = "std::shared_ptr<Texture2DResource>"
 
 [owned_texture2_d.routes]
 cna_texture2d_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
+
+[calls]
+[calls.routes]
+cna_texture2d_create_standalone = { result = "CreateStandaloneTexture2D(std::make_shared<Texture2D>(), out_texture)" }
+cna_texture2d_copy_type_name = { result = "CopyTypeName(texture, destination, capacity, out_byte_count)" }

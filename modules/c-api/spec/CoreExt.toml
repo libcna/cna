@@ -8,3 +8,16 @@ object = "const CNA::GraphicsRendererFallbackRecord*"
 [fallback_record.routes]
 cna_graphics_renderer_fallback_get_message_size_ext = { size = "object->message" }
 cna_graphics_renderer_fallback_copy_message_ext = { copy = "object->message" }
+
+[calls]
+[calls.routes]
+cna_logger_fatal = { result = "LogWithCategory(&CNA::Logger::Fatal, message, category)" }
+cna_logger_error = { result = "LogWithCategory(&CNA::Logger::Error, message, category)" }
+cna_logger_warn = { result = "LogWithCategory(&CNA::Logger::Warn, message, category)" }
+cna_logger_info = { result = "LogWithCategory(&CNA::Logger::Info, message, category)" }
+cna_logger_debug = { result = "LogWithCategory(&CNA::Logger::Debug, message, category)" }
+cna_logger_trace = { result = "LogWithCategory(&CNA::Logger::Trace, message, category)" }
+cna_logger_experiment = { result = "LogWithCategory(&CNA::Logger::Experiment, message, category)" }
+cna_platform_copy_current_name_ext = { result = "CopyText(CNA::getCurrentPlatformName(), destination, capacity, out_bytes)" }
+cna_graphics_renderer_get_current_name_size = { result = "ReportTextSize(CNA::getCurrentGraphicsRendererName(), out_bytes)" }
+cna_graphics_renderer_copy_current_name = { result = "CopyText(CNA::getCurrentGraphicsRendererName(), destination, capacity, out_bytes)" }

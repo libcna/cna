@@ -11,6 +11,7 @@ cna_model_bone_copy_name = { copy = "object->node->value->getNameProperty()" }
 cna_model_bone_get_index = { get = "object->node->value->getIndexProperty()" }
 cna_model_bone_get_transform = { get = "object->node->value->getTransformProperty()" }
 cna_model_bone_set_transform = { call = "object->node->value->setTransformProperty(transform)" }
+cna_model_bone_get_children = { result = "CreateCollectionHandle(std::make_shared<BoneCollectionResource>(BoneCollectionResource{nullptr, object->node}), out_children)" }
 
 [collection]
 lookup = "GetCollection"
@@ -31,6 +32,9 @@ cna_model_mesh_part_get_vertex_offset = { get = "object->value->getVertexOffsetP
 cna_model_mesh_part_set_tag = { call = "object->tag = tag" }
 cna_model_mesh_part_get_primitive_type_ext = { get = "object->value->getPrimitiveTypeEXTProperty()" }
 cna_model_mesh_part_get_tag = { get = "object->tag" }
+cna_model_mesh_part_set_effect = { result = "SetPartEffect(object, effect)" }
+cna_model_mesh_part_set_vertex_buffer = { result = "SetPartVertexBuffer(object, vertex_buffer)" }
+cna_model_mesh_part_set_index_buffer = { result = "SetPartIndexBuffer(object, index_buffer)" }
 
 [part_collection]
 lookup = "GetPartCollection"
@@ -50,6 +54,7 @@ cna_model_mesh_get_name_byte_count = { size = "object->value->getNameProperty()"
 cna_model_mesh_copy_name = { copy = "object->value->getNameProperty()" }
 cna_model_mesh_set_tag = { call = "object->tag = tag" }
 cna_model_mesh_get_tag = { get = "object->tag" }
+cna_model_mesh_get_effects = { result = "CreateEffectCollectionHandle(std::move(object), out_effects)" }
 
 [mesh_collection]
 lookup = "GetMeshCollection"
@@ -90,6 +95,8 @@ cna_morph_target_data_ext_get_stride = { get = "object->value->Stride" }
 cna_morph_target_data_ext_get_base_vertex_byte_count = { get = "object->value->BaseVertexBytes.size()" }
 cna_morph_target_data_ext_get_target_count = { get = "object->value->PositionDeltas.size()" }
 cna_morph_target_data_ext_get_recompute_flat_normals_ext = { get = "object->value->RecomputeFlatNormalsEXT" }
+cna_morph_target_data_ext_copy_weights = { result = "CopyOutputValues(object->value->Weights, destination, capacity, out_weight_count, [](const float value) noexcept { return value; }, \"The MorphTargetDataEXT weight output is invalid.\", \"The destination cannot hold all morph weights.\")" }
+cna_morph_target_data_ext_copy_triangle_indices_ext = { result = "CopyOutputValues(object->value->TriangleIndicesEXT, destination, capacity, out_index_count, [](const std::uint32_t value) { return static_cast<uint32_t>(value); }, \"The MorphTargetDataEXT triangle-index output is invalid.\", \"The destination cannot hold all morph triangle indices.\")" }
 
 [skinned_model]
 lookup = "GetSkinnedModel"
@@ -99,6 +106,9 @@ object = "std::shared_ptr<SkinnedModelResource>"
 cna_skinned_model_ext_get_bone_count = { get = "object->value->BoneCount" }
 cna_skinned_model_ext_get_clip_count = { get = "object->value->Clips.size()" }
 cna_skinned_model_ext_get_part_count = { get = "object->parts.size()" }
+cna_skinned_model_ext_copy_parent_bone_indices = { result = "CopyOutputValues(object->value->ParentBoneIndices, destination, capacity, out_count, [](const int value) noexcept { return static_cast<int32_t>(value); }, \"The SkinnedModelEXT parent-index output is invalid.\", \"The destination cannot hold all SkinnedModelEXT parent indices.\")" }
+cna_skinned_model_ext_copy_bind_pose_local = { result = "CopyOutputValues(object->value->BindPoseLocal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinnedModelEXT bind-pose output is invalid.\", \"The destination cannot hold all SkinnedModelEXT bind-pose matrices.\")" }
+cna_skinned_model_ext_copy_inverse_bind_pose_global = { result = "CopyOutputValues(object->value->InverseBindPoseGlobal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinnedModelEXT inverse-bind-pose output is invalid.\", \"The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.\")" }
 
 [skinning_data]
 lookup = "GetSkinningData"
@@ -113,6 +123,10 @@ cna_skinning_data_get_skeleton_root_node_index_ext = { get = "object->value->Ske
 cna_skinning_data_set_skeleton_root_node_index_ext = { call = "object->value->SkeletonRootNodeIndexEXT = static_cast<int>(value)" }
 cna_skinning_data_get_skeleton_root_name_byte_count_ext = { size = "object->value->SkeletonRootNameEXT" }
 cna_skinning_data_copy_skeleton_root_name_ext = { copy = "object->value->SkeletonRootNameEXT" }
+cna_skinning_data_copy_skeleton_hierarchy = { result = "CopyOutputValues(object->value->SkeletonHierarchy, destination, capacity, out_count, [](const int value) noexcept { return static_cast<int32_t>(value); }, \"The SkinningData hierarchy output is invalid.\", \"The destination cannot hold the complete SkinningData hierarchy.\")" }
+cna_skinning_data_copy_bind_pose = { result = "CopyOutputValues(object->value->BindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData bind-pose output is invalid.\", \"The destination cannot hold all SkinningData bind-pose matrices.\")" }
+cna_skinning_data_copy_inverse_bind_pose = { result = "CopyOutputValues(object->value->InverseBindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData inverse-bind-pose output is invalid.\", \"The destination cannot hold all SkinningData inverse-bind-pose matrices.\")" }
+cna_skinning_data_copy_skeleton_root_prefix = { result = "CopyOutputValues(object->value->SkeletonRootPrefix, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData root-prefix output is invalid.\", \"The destination cannot hold all SkinningData root-prefix matrices.\")" }
 
 [animation_player]
 lookup = "GetAnimationPlayer"
@@ -122,6 +136,9 @@ object = "std::shared_ptr<AnimationPlayerResource>"
 cna_animation_player_get_current_position = { get = "object->value->getCurrentPositionProperty().getTotalSecondsProperty()" }
 cna_animation_player_get_current_clip_name_byte_count = { size = "object->currentClipName" }
 cna_animation_player_copy_current_clip_name = { copy = "object->currentClipName" }
+cna_animation_player_copy_bone_transforms = { result = "CopyOutputValues(object->value->GetBoneTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The AnimationPlayer bone-transform output is invalid.\", \"The destination cannot hold all AnimationPlayer bone transforms.\")" }
+cna_animation_player_copy_world_transforms = { result = "CopyOutputValues(object->value->GetWorldTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The AnimationPlayer world-transform output is invalid.\", \"The destination cannot hold all AnimationPlayer world transforms.\")" }
+cna_animation_player_copy_skin_transforms = { result = "CopyOutputValues(object->value->GetSkinTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The AnimationPlayer skin-transform output is invalid.\", \"The destination cannot hold all AnimationPlayer skin transforms.\")" }
 
 [model_animations]
 lookup = "GetModelAnimations"
@@ -131,3 +148,15 @@ object = "std::shared_ptr<ModelAnimationsResource>"
 cna_model_animations_ext_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
 cna_model_animations_ext_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_model_animations_ext_get_clip_count = { get = "object->value->Clips.size()" }
+
+[calls]
+[calls.routes]
+cna_model_bone_collection_create = { result = "CreateCollectionHandle(std::make_shared<BoneCollectionResource>(BoneCollectionResource{ std::make_shared<ModelBoneCollection>(), nullptr}), out_collection)" }
+cna_model_mesh_part_create_default = { result = "CreatePartHandle(std::make_shared<PartResource>(), out_part)" }
+cna_model_mesh_create = { result = "CreateMesh(graphics_device, std::string{}, false, parts, part_count, out_mesh)" }
+cna_model_create = { result = "CreateModel(graphics_device, bones, bone_count, meshes, mesh_count, nullptr, 0U, 0U, false, out_model)" }
+cna_model_create_with_parents = { result = "CreateModel(graphics_device, bones, bone_count, meshes, mesh_count, mesh_parents, mesh_parent_count, root_bone_index, true, out_model)" }
+cna_model_get_gltf_import_diagnostic_code_byte_count_ext = { result = "GetDiagnosticStringByteCount(model, index, out_byte_count, SelectCode)" }
+cna_model_get_gltf_import_diagnostic_subject_byte_count_ext = { result = "GetDiagnosticStringByteCount(model, index, out_byte_count, SelectSubject)" }
+cna_model_get_gltf_import_diagnostic_message_byte_count_ext = { result = "GetDiagnosticStringByteCount(model, index, out_byte_count, SelectMessage)" }
+cna_skinned_model_ext_create_default = { result = "CreateSkinnedModelHandle(std::make_shared<SkinnedModelResource>(), out_model)" }

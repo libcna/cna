@@ -26,6 +26,25 @@ CNA_Result cna_texture3d_get_type_name_byte_count(
     });
 }
 
+CNA_Result cna_texture3d_copy_type_name(
+    const CNA_Handle texture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture3d_copy_type_name: out_byte_count is null.");
+        }
+        std::shared_ptr<Texture3DResource> object{};
+        if (const CNA_Result routeResult = GetOwnedTexture3D(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyTypeName(*object->value, destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_texturecube_get_type_name_byte_count(
     const CNA_Handle texture,
     uint64_t* const out_byte_count)
@@ -40,5 +59,24 @@ CNA_Result cna_texturecube_get_type_name_byte_count(
             return routeResult;
         }
         return CNA::C::Detail::ReportTextSize(object.value->GetTypeName(), out_byte_count);
+    });
+}
+
+CNA_Result cna_texturecube_copy_type_name(
+    const CNA_Handle texture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texturecube_copy_type_name: out_byte_count is null.");
+        }
+        TextureCubeResourceView object{};
+        if (const CNA_Result routeResult = GetOwnedTextureCube(texture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyTypeName(*object.value, destination, capacity, out_byte_count);
     });
 }

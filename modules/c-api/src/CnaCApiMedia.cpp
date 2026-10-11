@@ -208,38 +208,6 @@ CNA_Result cna_media_source_get_available_count(
     });
 }
 
-CNA_Result cna_media_source_get_type_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    CNA_MediaSourceType* const outType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outType == nullptr) {
-            return InvalidArgument("The media source kind output is null.");
-        }
-        return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
-            *outType = static_cast<CNA_MediaSourceType>(source.getMediaSourceTypeProperty());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_source_get_name_size_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The media source name byte-count output is null.");
-        }
-        return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
-            *outBytes = source.getNameProperty().size();
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_media_source_copy_name_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -255,22 +223,6 @@ CNA_Result cna_media_source_copy_name_at(
             // The canonical string conversion returns the display name unchanged, so one route
             // serves both members rather than the ABI carrying two spellings of one string.
             return CopyText(source.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_media_source_get_type_name_size_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The media source type-name byte-count output is null.");
-        }
-        return ReadEnumeratedSource(gameHandle, index, [&](const MediaSource& source) {
-            *outBytes = source.GetTypeName().size();
-            return CNA_RESULT_SUCCESS;
         });
     });
 }

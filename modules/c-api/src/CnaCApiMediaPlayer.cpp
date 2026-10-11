@@ -272,36 +272,6 @@ CNA_Result cna_media_player_play_songs_from(
     });
 }
 
-CNA_Result cna_media_player_subscribe_active_song_changed_ext(
-    const CNA_MediaPlayerEventCallback callback,
-    void* const context,
-    CNA_MediaPlayerEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribePlayerEvent(
-            MediaPlayer::ActiveSongChanged,
-            PlayerEventKind::ActiveSongChanged,
-            callback,
-            context,
-            outRegistration);
-    });
-}
-
-CNA_Result cna_media_player_subscribe_media_state_changed_ext(
-    const CNA_MediaPlayerEventCallback callback,
-    void* const context,
-    CNA_MediaPlayerEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribePlayerEvent(
-            MediaPlayer::MediaStateChanged,
-            PlayerEventKind::MediaStateChanged,
-            callback,
-            context,
-            outRegistration);
-    });
-}
-
 CNA_Result cna_media_player_unsubscribe_ext(
     const CNA_MediaPlayerEventRegistrationHandle registration)
 {

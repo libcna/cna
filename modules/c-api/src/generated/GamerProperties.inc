@@ -71,3 +71,15 @@ CNA_Result cna_property_dictionary_clear(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_property_dictionary_create_ext(
+    CNA_PropertyDictionaryHandle* const out_dictionary)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dictionary == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_create_ext: out_dictionary is null.");
+        }
+        *out_dictionary = CNA_INVALID_HANDLE;
+        return CNA::C::Detail::CreateOwnedPropertyDictionary(std::make_shared<PropertyDictionary>(PropertyDictionary::CreateInternal({})), out_dictionary);
+    });
+}

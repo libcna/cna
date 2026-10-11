@@ -54,6 +54,7 @@ using-declarations and helpers. The route kinds are:
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
 | `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol |
 | `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
+| `result` | anything | look up, then return the expression, a `CNA_Result`: the route is a call into a hand-written helper |
 
 The generator takes the signature from the header and the conversions from the C types:
 
@@ -63,26 +64,36 @@ The generator takes the signature from the header and the conversions from the C
 - the result is converted by the output's type: `ToC` for a marshaled struct, `ToCBool` for
   `CNA_Bool`, `static_cast` for an enumeration or a number.
 
-Every generated route runs inside `CallWithExceptionBarrier`, refuses a null output with
-`CNA_RESULT_INVALID_ARGUMENT` before anything else, validates `CNA_Bool` inputs before the lookup,
-and returns the lookup's own result when the lookup refuses.
+Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
+output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `result`, every non-const `out_*`
+pointer, and a handle output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
+lookup, whose own result is returned when it refuses. So a call with two faults always reports the
+null output.
+
+A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
+a child handle, filling an info structure, copying an array — and the spec line only calls it:
+
+```toml
+cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect)" }
+```
 
 A group's `lookup` is an ordinary hand-written function in the family's `.cpp`,
 `CNA_Result Name(<first parameter>, <object>*)`, which receives the route's first parameter
 unconverted — usually a handle, sometimes a struct or string view it validates. Most lookups are
 one line over `LookupHandle`, which records "The <kind> handle is invalid for this call." for a
 null, stale, released or wrong-kind handle. A group without `lookup` holds value routes; a lookup
-that only validates (`ValidateActiveGameHandle`) is written without `object`.
+that only validates (`ValidateActiveGameHandle`) is written without `object`. `arguments = 2` passes
+the lookup the route's first two parameters (a handle and an index), and
+`accepts_null_handle = true` records that the lookup reads the null handle as "none" (the
+contract test then refuses only real handles).
 
 ## What stays hand-written
 
-- creation, any route that returns a handle, and any destroy that does more than release the
-  handle: they decide ownership, parent objects and the game's resource counts (`OWNERSHIP.md`);
-- events, callbacks and subscriptions;
-- bulk transfers, arrays and versioned info structures;
-- routes that combine several objects or validate one argument against another;
-- routes whose order of checks differs from a kind's, for example a lookup before the output
-  check: generating them would change which error a double fault reports.
+- the logic itself: what a creation publishes and counts, what a destroy undoes, how an event is
+  subscribed, how a bulk transfer or info structure is filled. It lives in the family's helpers,
+  which `result` routes call (`OWNERSHIP.md` has the ownership rules they implement);
+- routes with more than one lookup, or with several statements of work after it;
+- routes that validate one argument against another, or need an output that may be null.
 
 Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments
 refused with `InvalidArgument`, handles resolved through the family's lookups, conversions through
@@ -102,8 +113,8 @@ python3 tools/c-api/generate_routes.py --list   # every generated route and its 
 
 The same run writes `GeneratedRoutesSmoke.c` (CTest `CApi_GeneratedRoutesSmoke`), which holds every
 generated route to the contracts above: a null output is refused, a null, wrong-kind or destroyed
-handle answers `CNA_RESULT_INVALID_HANDLE`, and each value text pair keeps the size-then-copy
-protocol. What a route computes is tested by the family's own hand-written smoke test.
+handle answers `CNA_RESULT_INVALID_HANDLE` and leaves handle outputs invalid, and each value text
+pair keeps the size-then-copy protocol. What a route computes is tested by the family's own hand-written smoke test.
 
 ## Changing the generator
 

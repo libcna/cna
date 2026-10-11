@@ -729,17 +729,6 @@ CNA_Result cna_texture_validate_format(const CNA_SurfaceFormat format)
     });
 }
 
-CNA_Result cna_texture2d_create_standalone(CNA_Handle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The standalone Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        return CreateStandaloneTexture2D(std::make_shared<Texture2D>(), outTexture);
-    });
-}
-
 CNA_Result cna_texture2d_create_from_file(
     const CNA_StringView path,
     CNA_Handle* const outTexture)
@@ -887,17 +876,6 @@ CNA_Result cna_texture2d_set_data_rgba8_bytes(
         }
         texture->value->SetDataRGBA(rgbaBytes, static_cast<int>(pixelCount));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texture2d_copy_type_name(
-    const CNA_Handle textureHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyTypeName(textureHandle, destination, capacity, outByteCount);
     });
 }
 

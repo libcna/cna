@@ -54,3 +54,298 @@ CNA_Result cna_clipboard_get_has_text(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_sensors_get_count(
+    const CNA_Handle game,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_count: out_count is null.");
+        }
+        return CountEnumerated(game, out_count, &Sensors::GetSensorsEXT, "The sensor count output is null.");
+    });
+}
+
+CNA_Result cna_sensors_get_accelerometer(
+    const CNA_Handle game,
+    CNA_Vector3* const out_acceleration,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_acceleration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_accelerometer: out_acceleration is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_accelerometer: out_available is null.");
+        }
+        return ReadSensor(game, &Sensors::GetAccelerometerEXT, out_acceleration, out_available);
+    });
+}
+
+CNA_Result cna_sensors_get_gyroscope(
+    const CNA_Handle game,
+    CNA_Vector3* const out_angular_velocity,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_angular_velocity == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_gyroscope: out_angular_velocity is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_gyroscope: out_available is null.");
+        }
+        return ReadSensor(game, &Sensors::GetGyroscopeEXT, out_angular_velocity, out_available);
+    });
+}
+
+CNA_Result cna_input_devices_get_mouse_count(
+    const CNA_Handle game,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_mouse_count: out_count is null.");
+        }
+        return CountEnumerated(game, out_count, &InputDevices::GetMiceEXT, "The mouse count output is null.");
+    });
+}
+
+CNA_Result cna_input_devices_get_mouse_info_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_InputDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_mouse_info_at: out_info is null.");
+        }
+        return GetDeviceInfoAt(game, index, &InputDevices::GetMiceEXT, out_info);
+    });
+}
+
+CNA_Result cna_input_devices_get_mouse_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_mouse_name_size_at: out_bytes is null.");
+        }
+        return GetDeviceNameSizeAt(game, index, &InputDevices::GetMiceEXT, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_copy_mouse_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_copy_mouse_name_at: out_bytes is null.");
+        }
+        return CopyDeviceNameAt(game, index, &InputDevices::GetMiceEXT, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_get_keyboard_count(
+    const CNA_Handle game,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_keyboard_count: out_count is null.");
+        }
+        return CountEnumerated(game, out_count, &InputDevices::GetKeyboardsEXT, "The keyboard count output is null.");
+    });
+}
+
+CNA_Result cna_input_devices_get_keyboard_info_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_InputDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_keyboard_info_at: out_info is null.");
+        }
+        return GetDeviceInfoAt(game, index, &InputDevices::GetKeyboardsEXT, out_info);
+    });
+}
+
+CNA_Result cna_input_devices_get_keyboard_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_keyboard_name_size_at: out_bytes is null.");
+        }
+        return GetDeviceNameSizeAt(game, index, &InputDevices::GetKeyboardsEXT, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_copy_keyboard_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_copy_keyboard_name_at: out_bytes is null.");
+        }
+        return CopyDeviceNameAt(game, index, &InputDevices::GetKeyboardsEXT, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_get_touch_device_count(
+    const CNA_Handle game,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_touch_device_count: out_count is null.");
+        }
+        return CountEnumerated(game, out_count, &InputDevices::GetTouchDevicesEXT, "The touch-device count output is null.");
+    });
+}
+
+CNA_Result cna_input_devices_get_touch_device_info_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_InputDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_touch_device_info_at: out_info is null.");
+        }
+        return GetDeviceInfoAt(game, index, &InputDevices::GetTouchDevicesEXT, out_info);
+    });
+}
+
+CNA_Result cna_input_devices_get_touch_device_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_get_touch_device_name_size_at: out_bytes is null.");
+        }
+        return GetDeviceNameSizeAt(game, index, &InputDevices::GetTouchDevicesEXT, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_copy_touch_device_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_copy_touch_device_name_at: out_bytes is null.");
+        }
+        return CopyDeviceNameAt(game, index, &InputDevices::GetTouchDevicesEXT, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_input_devices_subscribe_mouse_connected_ext(
+    const CNA_InputDeviceHotplugCallback callback,
+    void* const context,
+    CNA_InputDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_subscribe_mouse_connected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(InputDevices::MouseConnectedEXT, DeviceEventKind::MouseConnected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_input_devices_subscribe_mouse_disconnected_ext(
+    const CNA_InputDeviceHotplugCallback callback,
+    void* const context,
+    CNA_InputDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_subscribe_mouse_disconnected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(InputDevices::MouseDisconnectedEXT, DeviceEventKind::MouseDisconnected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_input_devices_subscribe_keyboard_connected_ext(
+    const CNA_InputDeviceHotplugCallback callback,
+    void* const context,
+    CNA_InputDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_subscribe_keyboard_connected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(InputDevices::KeyboardConnectedEXT, DeviceEventKind::KeyboardConnected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_input_devices_subscribe_keyboard_disconnected_ext(
+    const CNA_InputDeviceHotplugCallback callback,
+    void* const context,
+    CNA_InputDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_devices_subscribe_keyboard_disconnected_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeHotplug(InputDevices::KeyboardDisconnectedEXT, DeviceEventKind::KeyboardDisconnected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_input_devices_raise_mouse_connected_ext(
+    const CNA_Handle game,
+    const uint32_t id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RaiseHotplug(game, InputDevices::MouseConnectedEXT, id);
+    });
+}
+
+CNA_Result cna_input_devices_raise_mouse_disconnected_ext(
+    const CNA_Handle game,
+    const uint32_t id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RaiseHotplug(game, InputDevices::MouseDisconnectedEXT, id);
+    });
+}
+
+CNA_Result cna_input_devices_raise_keyboard_connected_ext(
+    const CNA_Handle game,
+    const uint32_t id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RaiseHotplug(game, InputDevices::KeyboardConnectedEXT, id);
+    });
+}
+
+CNA_Result cna_input_devices_raise_keyboard_disconnected_ext(
+    const CNA_Handle game,
+    const uint32_t id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RaiseHotplug(game, InputDevices::KeyboardDisconnectedEXT, id);
+    });
+}

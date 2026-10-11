@@ -16,6 +16,9 @@ cna_effect_annotation_get_value_vector2 = { get = "object->value->GetValueVector
 cna_effect_annotation_get_value_vector3 = { get = "object->value->GetValueVector3()" }
 cna_effect_annotation_get_value_vector4 = { get = "object->value->GetValueVector4()" }
 cna_effect_annotation_get_value_matrix = { get = "object->value->GetValueMatrix()" }
+cna_effect_annotation_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_annotation_get_semantic_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); })" }
+cna_effect_annotation_get_value_string_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); })" }
 
 [collection]
 lookup = "GetCollection"
@@ -32,6 +35,9 @@ object = "std::shared_ptr<ParameterResource>"
 cna_effect_parameter_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_parameter_copy_semantic = { copy = "object->value->getSemanticProperty()" }
 cna_effect_parameter_copy_value_string = { copy = "object->value->GetValueString()" }
+cna_effect_parameter_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_parameter_get_semantic_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getSemanticProperty(); })" }
+cna_effect_parameter_get_value_string_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->GetValueString(); })" }
 
 [parameter_collection]
 lookup = "GetParameterCollection"
@@ -48,6 +54,8 @@ object = "std::shared_ptr<PassResource>"
 cna_effect_pass_get_index_ext = { get = "object->value->getIndexInternal()" }
 cna_effect_pass_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_pass_apply = { call = "object->value->Apply()" }
+cna_effect_pass_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_pass_get_annotations = { result = "CreateAnnotationCollectionAlias(object->value, &object->value->getAnnotationsProperty(), out_collection)" }
 
 [pass_collection]
 lookup = "GetPassCollection"
@@ -64,6 +72,8 @@ object = "std::shared_ptr<TechniqueResource>"
 cna_effect_technique_get_index_ext = { get = "object->value->getIndexInternal()" }
 cna_effect_technique_copy_name = { copy = "object->value->getNameProperty()" }
 cna_effect_technique_get_identity = { get = "object->value->getIdInternal()" }
+cna_effect_technique_get_name_byte_count = { result = "GetStringByteCount(out_byte_count, [&]() { return object->value->getNameProperty(); })" }
+cna_effect_technique_get_annotations = { result = "CreateAnnotationCollectionAlias(object->value, &object->value->getAnnotationsProperty(), out_collection)" }
 
 [technique_collection]
 lookup = "GetTechniqueCollection"
@@ -82,6 +92,9 @@ cna_effect_apply = { call = "object->value->Apply()" }
 cna_effect_get_is_compiled_ext = { get = "object->value->GetCompiledRuntimePtr() != nullptr" }
 cna_effect_has_renderer = { get = "object->value->GetEffectRendererPtr() != nullptr" }
 cna_effect_is_exact_stock_sprite_effect = { get = "object->value->IsExactStockSpriteEffectEXT()" }
+cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect)" }
+cna_effect_get_parameters = { result = "CreateParameterCollectionHandle(GetEffectState(object)->parameters, out_collection)" }
+cna_effect_get_techniques = { result = "CreateTechniqueCollectionHandle(GetEffectState(object)->techniques, out_collection)" }
 
 [shader_effect]
 lookup = "GetStockEffect<ShaderEffect>"
@@ -269,3 +282,37 @@ object = "SkinnedPbrEffect*"
 
 [skinned_pbr_effect.routes]
 cna_skinned_pbr_effect_get_weights_per_vertex = { get = "object->getWeightsPerVertexProperty()" }
+
+[create_native_parameter]
+lookup = "CreateNativeParameter"
+object = "std::unique_ptr<EffectParameter>"
+
+[create_native_parameter.routes]
+cna_effect_parameter_create = { result = "CreateParameterHandle(std::shared_ptr<EffectParameter>(std::move(object)), std::make_shared<ParameterState>(), out_parameter)" }
+
+[calls]
+[calls.routes]
+cna_effect_technique_create_default = { result = "CreateTechniqueHandle(std::make_shared<EffectTechnique>(), std::make_shared<TechniqueState>(), out_technique)" }
+cna_effect_get_type_name_byte_count = { result = "GetEffectStringByteCount(effect, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetTypeName(); })" }
+cna_effect_copy_type_name = { result = "CopyEffectString(effect, destination, capacity, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetTypeName(); })" }
+cna_effect_get_vertex_source_byte_count = { result = "GetEffectStringByteCount(effect, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); })" }
+cna_effect_copy_vertex_source = { result = "CopyEffectString(effect, destination, capacity, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); })" }
+cna_effect_get_fragment_source_byte_count = { result = "GetEffectStringByteCount(effect, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); })" }
+cna_effect_copy_fragment_source = { result = "CopyEffectString(effect, destination, capacity, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); })" }
+cna_directional_light_create = { result = "CreateDirectionalLightHandle(std::make_shared<DirectionalLight>(), nullptr, out_light)" }
+
+[borrowed_graphics_device]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+
+[borrowed_graphics_device.routes]
+cna_effect_create_empty = { result = "CreateEffectHandle(std::make_shared<CApiEffect>(*object->value), object->parentGame, out_effect)" }
+cna_sprite_effect_create = { result = "CreateEffectHandle(std::make_shared<SpriteEffect>(*object->value), object->parentGame, out_effect)" }
+cna_basic_effect_create = { result = "CreateEffectHandle(std::make_shared<BasicEffect>(*object->value), object->parentGame, out_effect)" }
+cna_alpha_test_effect_create = { result = "CreateEffectHandle(std::make_shared<AlphaTestEffect>(*object->value), object->parentGame, out_effect)" }
+cna_dual_texture_effect_create = { result = "CreateEffectHandle(std::make_shared<DualTextureEffect>(*object->value), object->parentGame, out_effect)" }
+cna_environment_map_effect_create = { result = "CreateEffectHandle(std::make_shared<EnvironmentMapEffect>(*object->value), object->parentGame, out_effect)" }
+cna_skinned_effect_create = { result = "CreateEffectHandle(std::make_shared<SkinnedEffect>(*object->value), object->parentGame, out_effect)" }
+cna_color_matrix_effect_create = { result = "CreateEffectHandle(std::make_shared<ColorMatrixEffect>(*object->value), object->parentGame, out_effect)" }
+cna_pbr_effect_create = { result = "CreateEffectHandle(std::make_shared<PbrEffect>(*object->value), object->parentGame, out_effect)" }
+cna_skinned_pbr_effect_create = { result = "CreateEffectHandle(std::make_shared<SkinnedPbrEffect>(*object->value), object->parentGame, out_effect)" }

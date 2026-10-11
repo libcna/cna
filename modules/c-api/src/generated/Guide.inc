@@ -22,3 +22,60 @@ CNA_Result cna_gamer_services_dispatcher_initialize(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_gamer_services_component_create(
+    const CNA_Handle game,
+    CNA_Handle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_component_create: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        Microsoft::Xna::Framework::Game* object{};
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameObject(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateOwnedCanonicalGameComponent(game, std::make_unique<GamerServicesComponent>(*object), out_component);
+    });
+}
+
+CNA_Result cna_guide_copy_pending_keyboard_input_title_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_title_ext: out_bytes is null.");
+        }
+        return CopyText(Guide::GetPendingKeyboardInputTitleForTestingEXT(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_guide_copy_pending_keyboard_input_description_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_description_ext: out_bytes is null.");
+        }
+        return CopyText(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_display_text_ext: out_bytes is null.");
+        }
+        return CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes);
+    });
+}

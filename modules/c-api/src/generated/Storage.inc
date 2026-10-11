@@ -264,3 +264,184 @@ CNA_Result cna_storage_stream_get_can_seek(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_storage_copy_root_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_copy_root_ext: out_bytes is null.");
+        }
+        return CopyText(StorageDevice::GetStorageRootEXT(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_storage_device_show_selector(
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_StorageDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_device_show_selector: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        return ShowSelector(false, 0U, false, 0, 0, callback, context, out_device);
+    });
+}
+
+CNA_Result cna_storage_device_show_selector_for_player(
+    const CNA_PlayerIndex player,
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_StorageDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_device_show_selector_for_player: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        return ShowSelector(true, player, false, 0, 0, callback, context, out_device);
+    });
+}
+
+CNA_Result cna_storage_device_show_selector_with_space(
+    const int32_t size_in_bytes,
+    const int32_t directory_count,
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_StorageDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_device_show_selector_with_space: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        return ShowSelector(false, 0U, true, size_in_bytes, directory_count, callback, context, out_device);
+    });
+}
+
+CNA_Result cna_storage_device_show_selector_for_player_with_space(
+    const CNA_PlayerIndex player,
+    const int32_t size_in_bytes,
+    const int32_t directory_count,
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_StorageDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_device_show_selector_for_player_with_space: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        return ShowSelector(true, player, true, size_in_bytes, directory_count, callback, context, out_device);
+    });
+}
+
+CNA_Result cna_storage_container_get_directory_name_count(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView search_pattern,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_get_directory_name_count: out_count is null.");
+        }
+        return CountNames(container, search_pattern, true, out_count);
+    });
+}
+
+CNA_Result cna_storage_container_copy_directory_name(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView search_pattern,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_copy_directory_name: out_bytes is null.");
+        }
+        return CopyName(container, search_pattern, index, true, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_storage_container_get_file_name_count(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView search_pattern,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_get_file_name_count: out_count is null.");
+        }
+        return CountNames(container, search_pattern, false, out_count);
+    });
+}
+
+CNA_Result cna_storage_container_copy_file_name(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView search_pattern,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_copy_file_name: out_bytes is null.");
+        }
+        return CopyName(container, search_pattern, index, false, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_storage_container_open_file(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file,
+    const CNA_FileMode file_mode,
+    CNA_StorageStreamHandle* const out_stream)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stream == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_open_file: out_stream is null.");
+        }
+        *out_stream = CNA_INVALID_HANDLE;
+        return OpenFileHandle(container, file, file_mode, CNA_FILE_ACCESS_READ_WRITE, CNA_FILE_SHARE_READ_WRITE, 1, out_stream);
+    });
+}
+
+CNA_Result cna_storage_container_open_file_access(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file,
+    const CNA_FileMode file_mode,
+    const CNA_FileAccess file_access,
+    CNA_StorageStreamHandle* const out_stream)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stream == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_open_file_access: out_stream is null.");
+        }
+        *out_stream = CNA_INVALID_HANDLE;
+        return OpenFileHandle(container, file, file_mode, file_access, CNA_FILE_SHARE_READ_WRITE, 2, out_stream);
+    });
+}
+
+CNA_Result cna_storage_container_open_file_share(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file,
+    const CNA_FileMode file_mode,
+    const CNA_FileAccess file_access,
+    const CNA_FileShare file_share,
+    CNA_StorageStreamHandle* const out_stream)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stream == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_open_file_share: out_stream is null.");
+        }
+        *out_stream = CNA_INVALID_HANDLE;
+        return OpenFileHandle(container, file, file_mode, file_access, file_share, 3, out_stream);
+    });
+}

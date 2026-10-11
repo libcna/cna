@@ -56,3 +56,7 @@ cna_cue_pause = { call = "object->value->Pause()" }
 cna_cue_resume = { call = "object->value->Resume()" }
 cna_cue_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_cue_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+[calls]
+[calls.routes]
+cna_audio_engine_create_with_renderer = { result = "CreateEngine(game, settings_file, true, look_ahead_ticks, renderer_id, out_engine)" }

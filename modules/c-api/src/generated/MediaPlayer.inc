@@ -481,3 +481,31 @@ CNA_Result cna_media_player_raise_media_state_changed_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_media_player_subscribe_active_song_changed_ext(
+    const CNA_MediaPlayerEventCallback callback,
+    void* const context,
+    CNA_MediaPlayerEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_subscribe_active_song_changed_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribePlayerEvent(MediaPlayer::ActiveSongChanged, PlayerEventKind::ActiveSongChanged, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_media_player_subscribe_media_state_changed_ext(
+    const CNA_MediaPlayerEventCallback callback,
+    void* const context,
+    CNA_MediaPlayerEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_subscribe_media_state_changed_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribePlayerEvent(MediaPlayer::MediaStateChanged, PlayerEventKind::MediaStateChanged, callback, context, out_registration);
+    });
+}

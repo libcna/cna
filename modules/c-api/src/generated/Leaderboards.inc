@@ -51,6 +51,23 @@ CNA_Result cna_leaderboard_reader_page_up(
     });
 }
 
+CNA_Result cna_leaderboard_reader_get_identity(
+    const CNA_LeaderboardReaderHandle reader,
+    CNA_LeaderboardIdentity* const out_identity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_identity == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_reader_get_identity: out_identity is null.");
+        }
+        std::shared_ptr<LeaderboardReaderResource> object{};
+        if (const CNA_Result routeResult = BorrowReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ToCIdentity(object->value->getLeaderboardIdentityProperty(), out_identity);
+    });
+}
+
 CNA_Result cna_leaderboard_entry_destroy(
     const CNA_LeaderboardEntryHandle entry)
 {
@@ -76,5 +93,45 @@ CNA_Result cna_leaderboard_entry_set_rating(
         }
         object->Value()->setRatingProperty(static_cast<long long>(rating));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_leaderboard_reader_read(
+    const CNA_LeaderboardIdentity* const identity,
+    const int32_t page_start,
+    const int32_t page_size,
+    CNA_LeaderboardReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_reader_read: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        LeaderboardIdentity object{};
+        if (const CNA_Result routeResult = ToNativeIdentity(identity, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ReadThroughOperation([&]() { return LeaderboardReader::BeginRead(object, static_cast<int>(page_start), static_cast<int>(page_size), System::AsyncCallback{}, std::any{}); }, out_reader);
+    });
+}
+
+CNA_Result cna_leaderboard_entry_create_ext(
+    const CNA_GamerHandle gamer,
+    const int64_t rating,
+    const int32_t ranking,
+    CNA_LeaderboardEntryHandle* const out_entry)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_entry == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_entry_create_ext: out_entry is null.");
+        }
+        *out_entry = CNA_INVALID_HANDLE;
+        Gamer* object{};
+        if (const CNA_Result routeResult = BorrowOptionalGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishOwnedEntry(LeaderboardEntry::CreateInternal(object, static_cast<long long>(rating), static_cast<int>(ranking)), out_entry);
     });
 }

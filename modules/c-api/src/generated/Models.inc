@@ -94,6 +94,24 @@ CNA_Result cna_model_bone_set_transform(
     });
 }
 
+CNA_Result cna_model_bone_get_children(
+    const CNA_ModelBoneHandle bone,
+    CNA_ModelBoneCollectionHandle* const out_children)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_children == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_get_children: out_children is null.");
+        }
+        *out_children = CNA_INVALID_HANDLE;
+        std::shared_ptr<BoneResource> object{};
+        if (const CNA_Result routeResult = GetBone(bone, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateCollectionHandle(std::make_shared<BoneCollectionResource>(BoneCollectionResource{nullptr, object->node}), out_children);
+    });
+}
+
 CNA_Result cna_model_bone_collection_get_count(
     const CNA_ModelBoneCollectionHandle collection,
     uint64_t* const out_count)
@@ -235,6 +253,48 @@ CNA_Result cna_model_mesh_part_get_tag(
     });
 }
 
+CNA_Result cna_model_mesh_part_set_effect(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SetPartEffect(object, effect);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_vertex_buffer(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_VertexBufferHandle vertex_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SetPartVertexBuffer(object, vertex_buffer);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_index_buffer(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_IndexBufferHandle index_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SetPartIndexBuffer(object, index_buffer);
+    });
+}
+
 CNA_Result cna_model_mesh_part_collection_get_count(
     const CNA_ModelMeshPartCollectionHandle collection,
     uint64_t* const out_count)
@@ -350,6 +410,24 @@ CNA_Result cna_model_mesh_get_tag(
         }
         *out_tag = static_cast<CNA_ModelMeshTag>(object->tag);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_get_effects(
+    const CNA_ModelMeshHandle mesh,
+    CNA_ModelEffectCollectionHandle* const out_effects)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effects == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_get_effects: out_effects is null.");
+        }
+        *out_effects = CNA_INVALID_HANDLE;
+        std::shared_ptr<MeshResource> object{};
+        if (const CNA_Result routeResult = GetMesh(mesh, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateEffectCollectionHandle(std::move(object), out_effects);
     });
 }
 
@@ -630,6 +708,44 @@ CNA_Result cna_morph_target_data_ext_get_recompute_flat_normals_ext(
     });
 }
 
+CNA_Result cna_morph_target_data_ext_copy_weights(
+    const CNA_MorphTargetDataEXTHandle data,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_weight_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_weight_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_weights: out_weight_count is null.");
+        }
+        std::shared_ptr<MorphDataResource> object{};
+        if (const CNA_Result routeResult = GetMorphData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->Weights, destination, capacity, out_weight_count, [](const float value) noexcept { return value; }, "The MorphTargetDataEXT weight output is invalid.", "The destination cannot hold all morph weights.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_triangle_indices_ext(
+    const CNA_MorphTargetDataEXTHandle data,
+    uint32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_index_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_triangle_indices_ext: out_index_count is null.");
+        }
+        std::shared_ptr<MorphDataResource> object{};
+        if (const CNA_Result routeResult = GetMorphData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->TriangleIndicesEXT, destination, capacity, out_index_count, [](const std::uint32_t value) { return static_cast<uint32_t>(value); }, "The MorphTargetDataEXT triangle-index output is invalid.", "The destination cannot hold all morph triangle indices.");
+    });
+}
+
 CNA_Result cna_skinned_model_ext_get_bone_count(
     const CNA_SkinnedModelEXTHandle model,
     uint64_t* const out_bone_count)
@@ -681,6 +797,63 @@ CNA_Result cna_skinned_model_ext_get_part_count(
         }
         *out_part_count = static_cast<uint64_t>(object->parts.size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_parent_bone_indices(
+    const CNA_SkinnedModelEXTHandle model,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_copy_parent_bone_indices: out_count is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->ParentBoneIndices, destination, capacity, out_count, [](const int value) noexcept { return static_cast<int32_t>(value); }, "The SkinnedModelEXT parent-index output is invalid.", "The destination cannot hold all SkinnedModelEXT parent indices.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_bind_pose_local(
+    const CNA_SkinnedModelEXTHandle model,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_copy_bind_pose_local: out_count is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->BindPoseLocal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinnedModelEXT bind-pose output is invalid.", "The destination cannot hold all SkinnedModelEXT bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_inverse_bind_pose_global(
+    const CNA_SkinnedModelEXTHandle model,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_copy_inverse_bind_pose_global: out_count is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->InverseBindPoseGlobal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinnedModelEXT inverse-bind-pose output is invalid.", "The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.");
     });
 }
 
@@ -819,6 +992,82 @@ CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
     });
 }
 
+CNA_Result cna_skinning_data_copy_skeleton_hierarchy(
+    const CNA_SkinningDataHandle data,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_skeleton_hierarchy: out_count is null.");
+        }
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->SkeletonHierarchy, destination, capacity, out_count, [](const int value) noexcept { return static_cast<int32_t>(value); }, "The SkinningData hierarchy output is invalid.", "The destination cannot hold the complete SkinningData hierarchy.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_bind_pose(
+    const CNA_SkinningDataHandle data,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_bind_pose: out_count is null.");
+        }
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->BindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinningData bind-pose output is invalid.", "The destination cannot hold all SkinningData bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_inverse_bind_pose(
+    const CNA_SkinningDataHandle data,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_inverse_bind_pose: out_count is null.");
+        }
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->InverseBindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinningData inverse-bind-pose output is invalid.", "The destination cannot hold all SkinningData inverse-bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
+    const CNA_SkinningDataHandle data,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_skeleton_root_prefix: out_count is null.");
+        }
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->SkeletonRootPrefix, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinningData root-prefix output is invalid.", "The destination cannot hold all SkinningData root-prefix matrices.");
+    });
+}
+
 CNA_Result cna_animation_player_get_current_position(
     const CNA_AnimationPlayerHandle player,
     double* const out_position_seconds)
@@ -870,6 +1119,63 @@ CNA_Result cna_animation_player_copy_current_clip_name(
     });
 }
 
+CNA_Result cna_animation_player_copy_bone_transforms(
+    const CNA_AnimationPlayerHandle player,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_copy_bone_transforms: out_count is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> object{};
+        if (const CNA_Result routeResult = GetAnimationPlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->GetBoneTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The AnimationPlayer bone-transform output is invalid.", "The destination cannot hold all AnimationPlayer bone transforms.");
+    });
+}
+
+CNA_Result cna_animation_player_copy_world_transforms(
+    const CNA_AnimationPlayerHandle player,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_copy_world_transforms: out_count is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> object{};
+        if (const CNA_Result routeResult = GetAnimationPlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->GetWorldTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The AnimationPlayer world-transform output is invalid.", "The destination cannot hold all AnimationPlayer world transforms.");
+    });
+}
+
+CNA_Result cna_animation_player_copy_skin_transforms(
+    const CNA_AnimationPlayerHandle player,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_copy_skin_transforms: out_count is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> object{};
+        if (const CNA_Result routeResult = GetAnimationPlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyOutputValues(object->value->GetSkinTransforms(), destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The AnimationPlayer skin-transform output is invalid.", "The destination cannot hold all AnimationPlayer skin transforms.");
+    });
+}
+
 CNA_Result cna_model_animations_ext_get_type_name_byte_count(
     const CNA_ModelAnimationsEXTHandle animations,
     uint64_t* const out_byte_count)
@@ -918,5 +1224,132 @@ CNA_Result cna_model_animations_ext_get_clip_count(
         }
         *out_count = static_cast<uint64_t>(object->value->Clips.size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_bone_collection_create(
+    CNA_ModelBoneCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return CreateCollectionHandle(std::make_shared<BoneCollectionResource>(BoneCollectionResource{ std::make_shared<ModelBoneCollection>(), nullptr}), out_collection);
+    });
+}
+
+CNA_Result cna_model_mesh_part_create_default(
+    CNA_ModelMeshPartHandle* const out_part)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_part == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_create_default: out_part is null.");
+        }
+        *out_part = CNA_INVALID_HANDLE;
+        return CreatePartHandle(std::make_shared<PartResource>(), out_part);
+    });
+}
+
+CNA_Result cna_model_mesh_create(
+    const CNA_Handle graphics_device,
+    const CNA_ModelMeshPartHandle* const parts,
+    const uint64_t part_count,
+    CNA_ModelMeshHandle* const out_mesh)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_mesh == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_create: out_mesh is null.");
+        }
+        *out_mesh = CNA_INVALID_HANDLE;
+        return CreateMesh(graphics_device, std::string{}, false, parts, part_count, out_mesh);
+    });
+}
+
+CNA_Result cna_model_create(
+    const CNA_Handle graphics_device,
+    const CNA_ModelBoneHandle* const bones,
+    const uint64_t bone_count,
+    const CNA_ModelMeshHandle* const meshes,
+    const uint64_t mesh_count,
+    CNA_ModelHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_create: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return CreateModel(graphics_device, bones, bone_count, meshes, mesh_count, nullptr, 0U, 0U, false, out_model);
+    });
+}
+
+CNA_Result cna_model_create_with_parents(
+    const CNA_Handle graphics_device,
+    const CNA_ModelBoneHandle* const bones,
+    const uint64_t bone_count,
+    const CNA_ModelMeshHandle* const meshes,
+    const uint64_t mesh_count,
+    const CNA_ModelBoneHandle* const mesh_parents,
+    const uint64_t mesh_parent_count,
+    const uint64_t root_bone_index,
+    CNA_ModelHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_create_with_parents: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return CreateModel(graphics_device, bones, bone_count, meshes, mesh_count, mesh_parents, mesh_parent_count, root_bone_index, true, out_model);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_code_byte_count_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_gltf_import_diagnostic_code_byte_count_ext: out_byte_count is null.");
+        }
+        return GetDiagnosticStringByteCount(model, index, out_byte_count, SelectCode);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_subject_byte_count_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_gltf_import_diagnostic_subject_byte_count_ext: out_byte_count is null.");
+        }
+        return GetDiagnosticStringByteCount(model, index, out_byte_count, SelectSubject);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_message_byte_count_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_gltf_import_diagnostic_message_byte_count_ext: out_byte_count is null.");
+        }
+        return GetDiagnosticStringByteCount(model, index, out_byte_count, SelectMessage);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create_default(
+    CNA_SkinnedModelEXTHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_create_default: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return CreateSkinnedModelHandle(std::make_shared<SkinnedModelResource>(), out_model);
     });
 }

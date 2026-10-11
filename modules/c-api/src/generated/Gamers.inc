@@ -141,6 +141,24 @@ CNA_Result cna_gamer_set_tag(
     });
 }
 
+CNA_Result cna_gamer_get_profile(
+    const CNA_GamerHandle gamer,
+    CNA_GamerProfileHandle* const out_profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_profile == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_profile: out_profile is null.");
+        }
+        *out_profile = CNA_INVALID_HANDLE;
+        Gamer* object{};
+        if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishProfile(std::shared_ptr<GamerProfile>(object->GetProfile()), out_profile);
+    });
+}
+
 CNA_Result cna_signed_in_gamer_get_is_guest(
     const CNA_SignedInGamerHandle gamer,
     CNA_Bool* const out_is_guest)

@@ -358,3 +358,55 @@ CNA_Result cna_graphics_device_manager_copy_type_name(
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_graphics_device_manager_apply_changes(
+    const CNA_GraphicsDeviceManagerHandle manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestDeviceChange([&]() { object->value->ApplyChanges(); });
+    });
+}
+
+CNA_Result cna_graphics_device_manager_toggle_full_screen(
+    const CNA_GraphicsDeviceManagerHandle manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestDeviceChange([&]() { object->value->ToggleFullScreen(); });
+    });
+}
+
+CNA_Result cna_graphics_device_manager_create_device(
+    const CNA_GraphicsDeviceManagerHandle manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestDeviceChange([&]() { object->value->CreateDevice(); });
+    });
+}
+
+CNA_Result cna_graphics_device_manager_end_draw(
+    const CNA_GraphicsDeviceManagerHandle manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return RequestDeviceChange([&]() { object->value->EndDraw(); });
+    });
+}

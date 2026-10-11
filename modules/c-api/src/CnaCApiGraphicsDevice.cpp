@@ -49,6 +49,7 @@
 
 namespace {
 
+using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
@@ -80,7 +81,6 @@ static_assert(
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -913,39 +913,6 @@ CNA_Result cna_graphics_device_set_blend_factor(
     return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
         device.setBlendFactorProperty(
             Color(blendFactor.r, blendFactor.g, blendFactor.b, blendFactor.a));
-    });
-}
-
-CNA_Result cna_graphics_device_copy_type_name(
-    const CNA_Handle graphicsDeviceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyFormattedText(destination, capacity, outBytes, [&] {
-            return graphicsDevice->value->GetTypeName();
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_dispose(const CNA_Handle graphicsDeviceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NotSupported(
-            "The active game owns this graphics device; destroy the game to dispose it.");
     });
 }
 

@@ -38,6 +38,7 @@ object = "std::shared_ptr<ObjectDictionaryResource>"
 [object_dictionary.routes]
 cna_object_dictionary_ext_get_runtime_type_name_size = { size = "object->value->GetTypeName()" }
 cna_object_dictionary_ext_get_count = { get = "object->value->getValuesProperty().size()" }
+cna_object_dictionary_ext_destroy = { result = "GetRuntimeHandles().Release(dictionary)" }
 
 [reflective_builder]
 lookup = "GetReflectiveBuilder"
@@ -45,3 +46,10 @@ object = "std::shared_ptr<ReflectiveBuilderResource>"
 
 [reflective_builder.routes]
 cna_reflective_type_reader_builder_destroy = { release = true }
+
+[calls]
+[calls.routes]
+cna_reflective_type_reader_get_canonical_name_size = { result = "CanonicalNameSize(target_type_name, ReflectiveCanonicalName, out_byte_count)" }
+cna_reflective_type_reader_copy_canonical_name = { result = "CanonicalNameCopy(target_type_name, ReflectiveCanonicalName, destination, capacity, out_byte_count)" }
+cna_enum_type_reader_get_canonical_name_size = { result = "CanonicalNameSize(target_type_name, EnumCanonicalName, out_byte_count)" }
+cna_enum_type_reader_copy_canonical_name = { result = "CanonicalNameCopy(target_type_name, EnumCanonicalName, destination, capacity, out_byte_count)" }

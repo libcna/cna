@@ -1720,27 +1720,6 @@ CNA_Result cna_model_bone_get_parent(
     });
 }
 
-CNA_Result cna_model_bone_get_children(
-    const CNA_ModelBoneHandle boneHandle,
-    CNA_ModelBoneCollectionHandle* const outChildren)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outChildren == nullptr) {
-            return InvalidArgument("The ModelBone children output handle is null.");
-        }
-        *outChildren = CNA_INVALID_HANDLE;
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateCollectionHandle(
-            std::make_shared<BoneCollectionResource>(
-                BoneCollectionResource{nullptr, bone->node}),
-            outChildren);
-    });
-}
-
 CNA_Result cna_model_bone_add_child(
     const CNA_ModelBoneHandle boneHandle,
     const CNA_ModelBoneHandle childHandle)
@@ -1768,21 +1747,6 @@ CNA_Result cna_model_bone_add_child(
         bone->node->children.push_back(child->node);
         child->node->parent = bone->node;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_bone_collection_create(
-    CNA_ModelBoneCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The ModelBoneCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        return CreateCollectionHandle(
-            std::make_shared<BoneCollectionResource>(BoneCollectionResource{
-                std::make_shared<ModelBoneCollection>(), nullptr}),
-            outCollection);
     });
 }
 
@@ -1892,18 +1856,6 @@ CNA_Result cna_model_bone_collection_contains(
             CollectionNodes(*collection).end(),
             bone->node) != CollectionNodes(*collection).end());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_part_create_default(
-    CNA_ModelMeshPartHandle* const outPart)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPart == nullptr) {
-            return InvalidArgument("The ModelMeshPart output handle is null.");
-        }
-        *outPart = CNA_INVALID_HANDLE;
-        return CreatePartHandle(std::make_shared<PartResource>(), outPart);
     });
 }
 
@@ -2066,20 +2018,6 @@ CNA_Result cna_model_mesh_part_get_effect(
     });
 }
 
-CNA_Result cna_model_mesh_part_set_effect(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetPartEffect(part, effectHandle);
-    });
-}
-
 CNA_Result cna_model_mesh_part_get_vertex_buffer(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasBuffer,
@@ -2102,20 +2040,6 @@ CNA_Result cna_model_mesh_part_get_vertex_buffer(
     });
 }
 
-CNA_Result cna_model_mesh_part_set_vertex_buffer(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_VertexBufferHandle vertexBufferHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetPartVertexBuffer(part, vertexBufferHandle);
-    });
-}
-
 CNA_Result cna_model_mesh_part_get_index_buffer(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasBuffer,
@@ -2135,20 +2059,6 @@ CNA_Result cna_model_mesh_part_get_index_buffer(
             : CNA_TRUE;
         *outBuffer = part->indexBuffer.handle;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_part_set_index_buffer(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_IndexBufferHandle indexBufferHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetPartIndexBuffer(part, indexBufferHandle);
     });
 }
 
@@ -2236,22 +2146,6 @@ CNA_Result cna_model_mesh_part_collection_get_at(
     });
 }
 
-CNA_Result cna_model_mesh_create(
-    const CNA_Handle graphicsDevice,
-    const CNA_ModelMeshPartHandle* const parts,
-    const uint64_t partCount,
-    CNA_ModelMeshHandle* const outMesh)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMesh == nullptr) {
-            return InvalidArgument("The ModelMesh output handle is null.");
-        }
-        *outMesh = CNA_INVALID_HANDLE;
-        return CreateMesh(
-            graphicsDevice, std::string{}, false, parts, partCount, outMesh);
-    });
-}
-
 CNA_Result cna_model_mesh_create_named(
     const CNA_Handle graphicsDevice,
     const CNA_StringView name,
@@ -2312,24 +2206,6 @@ CNA_Result cna_model_mesh_get_mesh_parts(
         auto collection = std::make_shared<PartCollectionResource>();
         collection->mesh = std::move(mesh);
         return CreatePartCollectionHandle(std::move(collection), outParts);
-    });
-}
-
-CNA_Result cna_model_mesh_get_effects(
-    const CNA_ModelMeshHandle meshHandle,
-    CNA_ModelEffectCollectionHandle* const outEffects)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffects == nullptr) {
-            return InvalidArgument("The ModelMesh effect-collection output is null.");
-        }
-        *outEffects = CNA_INVALID_HANDLE;
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectCollectionHandle(std::move(mesh), outEffects);
     });
 }
 
@@ -2684,47 +2560,6 @@ CNA_Result cna_model_create_default(CNA_ModelHandle* const outModel)
         auto model = std::make_shared<ModelResource>();
         model->value = std::make_shared<Model>();
         return CreateModelHandle(std::move(model), outModel);
-    });
-}
-
-CNA_Result cna_model_create(
-    const CNA_Handle graphicsDevice,
-    const CNA_ModelBoneHandle* const bones,
-    const uint64_t boneCount,
-    const CNA_ModelMeshHandle* const meshes,
-    const uint64_t meshCount,
-    CNA_ModelHandle* const outModel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The Model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        return CreateModel(
-            graphicsDevice, bones, boneCount, meshes, meshCount,
-            nullptr, 0U, 0U, false, outModel);
-    });
-}
-
-CNA_Result cna_model_create_with_parents(
-    const CNA_Handle graphicsDevice,
-    const CNA_ModelBoneHandle* const bones,
-    const uint64_t boneCount,
-    const CNA_ModelMeshHandle* const meshes,
-    const uint64_t meshCount,
-    const CNA_ModelBoneHandle* const meshParents,
-    const uint64_t meshParentCount,
-    const uint64_t rootBoneIndex,
-    CNA_ModelHandle* const outModel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The Model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        return CreateModel(
-            graphicsDevice, bones, boneCount, meshes, meshCount,
-            meshParents, meshParentCount, rootBoneIndex, true, outModel);
     });
 }
 
@@ -3200,16 +3035,6 @@ CNA_Result cna_model_get_gltf_import_diagnostic_ext(
     });
 }
 
-CNA_Result cna_model_get_gltf_import_diagnostic_code_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectCode);
-    });
-}
-
 CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
@@ -3228,16 +3053,6 @@ CNA_Result cna_model_copy_gltf_import_diagnostic_code_ext(
     });
 }
 
-CNA_Result cna_model_get_gltf_import_diagnostic_subject_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectSubject);
-    });
-}
-
 CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
@@ -3253,16 +3068,6 @@ CNA_Result cna_model_copy_gltf_import_diagnostic_subject_ext(
             return result;
         }
         return CopyText(diagnostic->Subject, destination, capacity, outByteCount);
-    });
-}
-
-CNA_Result cna_model_get_gltf_import_diagnostic_message_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GetDiagnosticStringByteCount(modelHandle, index, outByteCount, SelectMessage);
     });
 }
 
@@ -3507,26 +3312,6 @@ CNA_Result cna_morph_target_data_ext_set_weights(
         }
         data->value->Weights = std::move(copied);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_copy_weights(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    float* const destination,
-    const uint64_t capacity,
-    uint64_t* const outWeightCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->Weights, destination, capacity, outWeightCount,
-            [](const float value) noexcept { return value; },
-            "The MorphTargetDataEXT weight output is invalid.",
-            "The destination cannot hold all morph weights.");
     });
 }
 
@@ -3820,19 +3605,6 @@ CNA_Result cna_model_mesh_part_set_morph_weights_ext(
     });
 }
 
-CNA_Result cna_skinned_model_ext_create_default(
-    CNA_SkinnedModelEXTHandle* const outModel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The SkinnedModelEXT output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        return CreateSkinnedModelHandle(
-            std::make_shared<SkinnedModelResource>(), outModel);
-    });
-}
-
 CNA_Result cna_skinned_model_ext_create(
     const CNA_SkinnedModelEXTDescriptor* const descriptor,
     CNA_SkinnedModelEXTHandle* const outModel)
@@ -4000,66 +3772,6 @@ CNA_Result cna_skinned_model_ext_set_skeleton(
         model->value->BindPoseLocal = std::move(bindPose);
         model->value->InverseBindPoseGlobal = std::move(inverseBindPose);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_model_ext_copy_parent_bone_indices(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    int32_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            model->value->ParentBoneIndices, destination, capacity, outCount,
-            [](const int value) noexcept { return static_cast<int32_t>(value); },
-            "The SkinnedModelEXT parent-index output is invalid.",
-            "The destination cannot hold all SkinnedModelEXT parent indices.");
-    });
-}
-
-CNA_Result cna_skinned_model_ext_copy_bind_pose_local(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            model->value->BindPoseLocal, destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The SkinnedModelEXT bind-pose output is invalid.",
-            "The destination cannot hold all SkinnedModelEXT bind-pose matrices.");
-    });
-}
-
-CNA_Result cna_skinned_model_ext_copy_inverse_bind_pose_global(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            model->value->InverseBindPoseGlobal, destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The SkinnedModelEXT inverse-bind-pose output is invalid.",
-            "The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.");
     });
 }
 
@@ -4644,86 +4356,6 @@ CNA_Result cna_skinning_data_destroy(const CNA_SkinningDataHandle dataHandle)
     });
 }
 
-CNA_Result cna_skinning_data_copy_skeleton_hierarchy(
-    const CNA_SkinningDataHandle dataHandle,
-    int32_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->SkeletonHierarchy, destination, capacity, outCount,
-            [](const int value) noexcept { return static_cast<int32_t>(value); },
-            "The SkinningData hierarchy output is invalid.",
-            "The destination cannot hold the complete SkinningData hierarchy.");
-    });
-}
-
-CNA_Result cna_skinning_data_copy_bind_pose(
-    const CNA_SkinningDataHandle dataHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->BindPose, destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The SkinningData bind-pose output is invalid.",
-            "The destination cannot hold all SkinningData bind-pose matrices.");
-    });
-}
-
-CNA_Result cna_skinning_data_copy_inverse_bind_pose(
-    const CNA_SkinningDataHandle dataHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->InverseBindPose, destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The SkinningData inverse-bind-pose output is invalid.",
-            "The destination cannot hold all SkinningData inverse-bind-pose matrices.");
-    });
-}
-
-CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
-    const CNA_SkinningDataHandle dataHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->SkeletonRootPrefix, destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The SkinningData root-prefix output is invalid.",
-            "The destination cannot hold all SkinningData root-prefix matrices.");
-    });
-}
-
 CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
@@ -4977,66 +4609,6 @@ CNA_Result cna_animation_player_get_current_clip_info(
     });
 }
 
-CNA_Result cna_animation_player_copy_bone_transforms(
-    const CNA_AnimationPlayerHandle playerHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            player->value->GetBoneTransforms(), destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The AnimationPlayer bone-transform output is invalid.",
-            "The destination cannot hold all AnimationPlayer bone transforms.");
-    });
-}
-
-CNA_Result cna_animation_player_copy_world_transforms(
-    const CNA_AnimationPlayerHandle playerHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            player->value->GetWorldTransforms(), destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The AnimationPlayer world-transform output is invalid.",
-            "The destination cannot hold all AnimationPlayer world transforms.");
-    });
-}
-
-CNA_Result cna_animation_player_copy_skin_transforms(
-    const CNA_AnimationPlayerHandle playerHandle,
-    CNA_Matrix* const destination,
-    const uint64_t capacity,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            player->value->GetSkinTransforms(), destination, capacity, outCount,
-            [](const Matrix value) noexcept { return ToC(value); },
-            "The AnimationPlayer skin-transform output is invalid.",
-            "The destination cannot hold all AnimationPlayer skin transforms.");
-    });
-}
-
 CNA_Result cna_model_mesh_part_set_primitive_type_ext(
     const CNA_ModelMeshPartHandle partHandle,
     const CNA_PrimitiveType value)
@@ -5209,27 +4781,6 @@ CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
         }
         data->value->RecomputeFlatNormalsEXT = recompute == CNA_TRUE;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_copy_triangle_indices_ext(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    uint32_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outIndexCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyOutputValues(
-            data->value->TriangleIndicesEXT,
-            destination, capacity, outIndexCount,
-            [](const std::uint32_t value) { return static_cast<uint32_t>(value); },
-            "The MorphTargetDataEXT triangle-index output is invalid.",
-            "The destination cannot hold all morph triangle indices.");
     });
 }
 

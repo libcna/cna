@@ -49,3 +49,8 @@ cna_media_player_update_ext = { call = "MediaPlayer::Update()" }
 cna_media_player_program_exit_ext = { call = "MediaPlayer::ProgramExit()" }
 cna_media_player_raise_active_song_changed_ext = { call = "MediaPlayer::OnActiveSongChanged()" }
 cna_media_player_raise_media_state_changed_ext = { call = "MediaPlayer::OnMediaStateChanged()" }
+
+[calls]
+[calls.routes]
+cna_media_player_subscribe_active_song_changed_ext = { result = "SubscribePlayerEvent(MediaPlayer::ActiveSongChanged, PlayerEventKind::ActiveSongChanged, callback, context, out_registration)" }
+cna_media_player_subscribe_media_state_changed_ext = { result = "SubscribePlayerEvent(MediaPlayer::MediaStateChanged, PlayerEventKind::MediaStateChanged, callback, context, out_registration)" }

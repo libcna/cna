@@ -8,3 +8,29 @@ lookup = "ValidateActiveGameHandle"
 cna_input_devices_reset_for_tests_ext = { call = "InputDevices::ResetForTests()" }
 cna_clipboard_get_text_size = { size = "Clipboard::GetTextEXT()" }
 cna_clipboard_get_has_text = { get = "Clipboard::HasTextEXT()" }
+
+[calls]
+[calls.routes]
+cna_sensors_get_count = { result = "CountEnumerated(game, out_count, &Sensors::GetSensorsEXT, \"The sensor count output is null.\")" }
+cna_sensors_get_accelerometer = { result = "ReadSensor(game, &Sensors::GetAccelerometerEXT, out_acceleration, out_available)" }
+cna_sensors_get_gyroscope = { result = "ReadSensor(game, &Sensors::GetGyroscopeEXT, out_angular_velocity, out_available)" }
+cna_input_devices_get_mouse_count = { result = "CountEnumerated(game, out_count, &InputDevices::GetMiceEXT, \"The mouse count output is null.\")" }
+cna_input_devices_get_mouse_info_at = { result = "GetDeviceInfoAt(game, index, &InputDevices::GetMiceEXT, out_info)" }
+cna_input_devices_get_mouse_name_size_at = { result = "GetDeviceNameSizeAt(game, index, &InputDevices::GetMiceEXT, out_bytes)" }
+cna_input_devices_copy_mouse_name_at = { result = "CopyDeviceNameAt(game, index, &InputDevices::GetMiceEXT, destination, capacity, out_bytes)" }
+cna_input_devices_get_keyboard_count = { result = "CountEnumerated(game, out_count, &InputDevices::GetKeyboardsEXT, \"The keyboard count output is null.\")" }
+cna_input_devices_get_keyboard_info_at = { result = "GetDeviceInfoAt(game, index, &InputDevices::GetKeyboardsEXT, out_info)" }
+cna_input_devices_get_keyboard_name_size_at = { result = "GetDeviceNameSizeAt(game, index, &InputDevices::GetKeyboardsEXT, out_bytes)" }
+cna_input_devices_copy_keyboard_name_at = { result = "CopyDeviceNameAt(game, index, &InputDevices::GetKeyboardsEXT, destination, capacity, out_bytes)" }
+cna_input_devices_get_touch_device_count = { result = "CountEnumerated(game, out_count, &InputDevices::GetTouchDevicesEXT, \"The touch-device count output is null.\")" }
+cna_input_devices_get_touch_device_info_at = { result = "GetDeviceInfoAt(game, index, &InputDevices::GetTouchDevicesEXT, out_info)" }
+cna_input_devices_get_touch_device_name_size_at = { result = "GetDeviceNameSizeAt(game, index, &InputDevices::GetTouchDevicesEXT, out_bytes)" }
+cna_input_devices_copy_touch_device_name_at = { result = "CopyDeviceNameAt(game, index, &InputDevices::GetTouchDevicesEXT, destination, capacity, out_bytes)" }
+cna_input_devices_subscribe_mouse_connected_ext = { result = "SubscribeHotplug(InputDevices::MouseConnectedEXT, DeviceEventKind::MouseConnected, callback, context, out_registration)" }
+cna_input_devices_subscribe_mouse_disconnected_ext = { result = "SubscribeHotplug(InputDevices::MouseDisconnectedEXT, DeviceEventKind::MouseDisconnected, callback, context, out_registration)" }
+cna_input_devices_subscribe_keyboard_connected_ext = { result = "SubscribeHotplug(InputDevices::KeyboardConnectedEXT, DeviceEventKind::KeyboardConnected, callback, context, out_registration)" }
+cna_input_devices_subscribe_keyboard_disconnected_ext = { result = "SubscribeHotplug(InputDevices::KeyboardDisconnectedEXT, DeviceEventKind::KeyboardDisconnected, callback, context, out_registration)" }
+cna_input_devices_raise_mouse_connected_ext = { result = "RaiseHotplug(game, InputDevices::MouseConnectedEXT, id)" }
+cna_input_devices_raise_mouse_disconnected_ext = { result = "RaiseHotplug(game, InputDevices::MouseDisconnectedEXT, id)" }
+cna_input_devices_raise_keyboard_connected_ext = { result = "RaiseHotplug(game, InputDevices::KeyboardConnectedEXT, id)" }
+cna_input_devices_raise_keyboard_disconnected_ext = { result = "RaiseHotplug(game, InputDevices::KeyboardDisconnectedEXT, id)" }

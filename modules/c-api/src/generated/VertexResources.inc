@@ -24,3 +24,15 @@ CNA_Result cna_vertex_declaration_copy_type_name(
         return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_vertex_declaration_create_empty(
+    CNA_VertexDeclarationHandle* const out_declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_declaration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_create_empty: out_declaration is null.");
+        }
+        *out_declaration = CNA_INVALID_HANDLE;
+        return RegisterDeclaration(std::make_shared<VertexDeclaration>(), out_declaration);
+    });
+}

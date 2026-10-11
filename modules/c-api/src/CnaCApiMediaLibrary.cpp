@@ -229,32 +229,6 @@ template<typename TValue>
 
 } // namespace
 
-CNA_Result cna_album_destroy(const CNA_AlbumHandle album)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<Album>(album, "The album handle could not be released.");
-    });
-}
-
-CNA_Result cna_album_get_songs(
-    const CNA_AlbumHandle album,
-    CNA_SongCollectionHandle* const outSongs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSongs == nullptr) {
-            return InvalidArgument("The song collection output is null.");
-        }
-        *outSongs = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<SongCollection, Album>(
-            resource, resource->value->getSongsProperty(), outSongs);
-    });
-}
-
 CNA_Result cna_album_equals(
     const CNA_AlbumHandle left,
     const CNA_AlbumHandle right,
@@ -276,50 +250,6 @@ CNA_Result cna_album_equals(
         }
         *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_album_collection_get_at(
-    const CNA_AlbumCollectionHandle collection,
-    const int32_t index,
-    CNA_AlbumHandle* const outAlbum)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<AlbumCollection, Album>(collection, index, outAlbum);
-    });
-}
-
-CNA_Result cna_album_collection_destroy(const CNA_AlbumCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<AlbumCollection>(
-            collection, "The album collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_artist_destroy(const CNA_ArtistHandle artist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<Artist>(artist, "The artist handle could not be released.");
-    });
-}
-
-CNA_Result cna_artist_get_songs(
-    const CNA_ArtistHandle artist,
-    CNA_SongCollectionHandle* const outSongs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSongs == nullptr) {
-            return InvalidArgument("The song collection output is null.");
-        }
-        *outSongs = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Artist>> resource;
-        if (const CNA_Result result = Borrow<Artist>(artist, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<SongCollection, Artist>(
-            resource, resource->value->getSongsProperty(), outSongs);
     });
 }
 
@@ -347,50 +277,6 @@ CNA_Result cna_artist_equals(
     });
 }
 
-CNA_Result cna_artist_collection_get_at(
-    const CNA_ArtistCollectionHandle collection,
-    const int32_t index,
-    CNA_ArtistHandle* const outArtist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<ArtistCollection, Artist>(collection, index, outArtist);
-    });
-}
-
-CNA_Result cna_artist_collection_destroy(const CNA_ArtistCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<ArtistCollection>(
-            collection, "The artist collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_genre_destroy(const CNA_GenreHandle genre)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<Genre>(genre, "The genre handle could not be released.");
-    });
-}
-
-CNA_Result cna_genre_get_songs(
-    const CNA_GenreHandle genre,
-    CNA_SongCollectionHandle* const outSongs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSongs == nullptr) {
-            return InvalidArgument("The song collection output is null.");
-        }
-        *outSongs = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Genre>> resource;
-        if (const CNA_Result result = Borrow<Genre>(genre, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<SongCollection, Genre>(
-            resource, resource->value->getSongsProperty(), outSongs);
-    });
-}
-
 CNA_Result cna_genre_equals(
     const CNA_GenreHandle left,
     const CNA_GenreHandle right,
@@ -415,50 +301,6 @@ CNA_Result cna_genre_equals(
     });
 }
 
-CNA_Result cna_genre_collection_get_at(
-    const CNA_GenreCollectionHandle collection,
-    const int32_t index,
-    CNA_GenreHandle* const outGenre)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<GenreCollection, Genre>(collection, index, outGenre);
-    });
-}
-
-CNA_Result cna_genre_collection_destroy(const CNA_GenreCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<GenreCollection>(
-            collection, "The genre collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_playlist_destroy(const CNA_PlaylistHandle playlist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<Playlist>(playlist, "The playlist handle could not be released.");
-    });
-}
-
-CNA_Result cna_playlist_get_songs(
-    const CNA_PlaylistHandle playlist,
-    CNA_SongCollectionHandle* const outSongs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSongs == nullptr) {
-            return InvalidArgument("The song collection output is null.");
-        }
-        *outSongs = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Playlist>> resource;
-        if (const CNA_Result result = Borrow<Playlist>(playlist, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<SongCollection, Playlist>(
-            resource, resource->value->getSongsProperty(), outSongs);
-    });
-}
-
 CNA_Result cna_playlist_equals(
     const CNA_PlaylistHandle left,
     const CNA_PlaylistHandle right,
@@ -480,24 +322,6 @@ CNA_Result cna_playlist_equals(
         }
         *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_playlist_collection_get_at(
-    const CNA_PlaylistCollectionHandle collection,
-    const int32_t index,
-    CNA_PlaylistHandle* const outPlaylist)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<PlaylistCollection, Playlist>(collection, index, outPlaylist);
-    });
-}
-
-CNA_Result cna_playlist_collection_destroy(const CNA_PlaylistCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<PlaylistCollection>(
-            collection, "The playlist collection handle could not be released.");
     });
 }
 
@@ -655,71 +479,6 @@ template<typename TCollection, typename TGet>
 
 } // namespace
 
-CNA_Result cna_media_library_get_songs(
-    const CNA_MediaLibraryHandle library,
-    CNA_SongCollectionHandle* const outSongs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<SongCollection>(
-            library,
-            outSongs,
-            [](const MediaLibrary& value) { return value.getSongsProperty(); },
-            "The song collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_albums(
-    const CNA_MediaLibraryHandle library,
-    CNA_AlbumCollectionHandle* const outAlbums)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<AlbumCollection>(
-            library,
-            outAlbums,
-            [](const MediaLibrary& value) { return value.getAlbumsProperty(); },
-            "The album collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_artists(
-    const CNA_MediaLibraryHandle library,
-    CNA_ArtistCollectionHandle* const outArtists)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<ArtistCollection>(
-            library,
-            outArtists,
-            [](const MediaLibrary& value) { return value.getArtistsProperty(); },
-            "The artist collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_genres(
-    const CNA_MediaLibraryHandle library,
-    CNA_GenreCollectionHandle* const outGenres)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<GenreCollection>(
-            library,
-            outGenres,
-            [](const MediaLibrary& value) { return value.getGenresProperty(); },
-            "The genre collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_playlists(
-    const CNA_MediaLibraryHandle library,
-    CNA_PlaylistCollectionHandle* const outPlaylists)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<PlaylistCollection>(
-            library,
-            outPlaylists,
-            [](const MediaLibrary& value) { return value.getPlaylistsProperty(); },
-            "The playlist collection output is null.");
-    });
-}
-
 namespace {
 
 // A canonical getter that may answer null becomes an availability flag plus an untouched output,
@@ -753,34 +512,6 @@ template<typename TOwner, typename TValue, typename TGet>
 }
 
 } // namespace
-
-CNA_Result cna_album_get_artist(
-    const CNA_AlbumHandle album,
-    CNA_ArtistHandle* const outArtist,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Album, Artist>(
-            album,
-            outArtist,
-            outAvailable,
-            [](const Album& value) { return value.getArtistProperty(); });
-    });
-}
-
-CNA_Result cna_album_get_genre(
-    const CNA_AlbumHandle album,
-    CNA_GenreHandle* const outGenre,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Album, Genre>(
-            album,
-            outGenre,
-            outAvailable,
-            [](const Album& value) { return value.getGenreProperty(); });
-    });
-}
 
 CNA_Result cna_album_get_art_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
 {
@@ -866,93 +597,6 @@ CNA_Result cna_album_copy_thumbnail(
     });
 }
 
-CNA_Result cna_artist_get_albums(
-    const CNA_ArtistHandle artist,
-    CNA_AlbumCollectionHandle* const outAlbums)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAlbums == nullptr) {
-            return InvalidArgument("The album collection output is null.");
-        }
-        *outAlbums = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Artist>> resource;
-        if (const CNA_Result result = Borrow<Artist>(artist, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<AlbumCollection, Artist>(
-            resource, resource->value->getAlbumsProperty(), outAlbums);
-    });
-}
-
-CNA_Result cna_genre_get_albums(
-    const CNA_GenreHandle genre,
-    CNA_AlbumCollectionHandle* const outAlbums)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAlbums == nullptr) {
-            return InvalidArgument("The album collection output is null.");
-        }
-        *outAlbums = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<Genre>> resource;
-        if (const CNA_Result result = Borrow<Genre>(genre, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishChildOf<AlbumCollection, Genre>(
-            resource, resource->value->getAlbumsProperty(), outAlbums);
-    });
-}
-
-CNA_Result cna_song_get_album(
-    const CNA_SongHandle song,
-    CNA_AlbumHandle* const outAlbum,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Song, Album>(
-            song,
-            outAlbum,
-            outAvailable,
-            [](const Song& value) { return value.getAlbumProperty(); });
-    });
-}
-
-CNA_Result cna_song_get_artist(
-    const CNA_SongHandle song,
-    CNA_ArtistHandle* const outArtist,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Song, Artist>(
-            song,
-            outArtist,
-            outAvailable,
-            [](const Song& value) { return value.getArtistProperty(); });
-    });
-}
-
-CNA_Result cna_song_get_genre(
-    const CNA_SongHandle song,
-    CNA_GenreHandle* const outGenre,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Song, Genre>(
-            song,
-            outGenre,
-            outAvailable,
-            [](const Song& value) { return value.getGenreProperty(); });
-    });
-}
-
-CNA_Result cna_picture_destroy(const CNA_PictureHandle handle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<Picture>(handle, "The picture handle could not be released.");
-    });
-}
-
 CNA_Result cna_picture_equals(
     const CNA_PictureHandle left,
     const CNA_PictureHandle right,
@@ -977,13 +621,6 @@ CNA_Result cna_picture_equals(
     });
 }
 
-CNA_Result cna_picture_album_destroy(const CNA_PictureAlbumHandle handle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<PictureAlbum>(handle, "The picture album handle could not be released.");
-    });
-}
-
 CNA_Result cna_picture_album_equals(
     const CNA_PictureAlbumHandle left,
     const CNA_PictureAlbumHandle right,
@@ -1005,54 +642,6 @@ CNA_Result cna_picture_album_equals(
         }
         *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_picture_collection_get_at(
-    const CNA_PictureCollectionHandle collection,
-    const int32_t index,
-    CNA_PictureHandle* const outPicture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<PictureCollection, Picture>(collection, index, outPicture);
-    });
-}
-
-CNA_Result cna_picture_collection_destroy(const CNA_PictureCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<PictureCollection>(collection, "The collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_picture_album_collection_get_at(
-    const CNA_PictureAlbumCollectionHandle collection,
-    const int32_t index,
-    CNA_PictureAlbumHandle* const outPictureAlbum)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CollectionElementAt<PictureAlbumCollection, PictureAlbum>(collection, index, outPictureAlbum);
-    });
-}
-
-CNA_Result cna_picture_album_collection_destroy(const CNA_PictureAlbumCollectionHandle collection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReleaseHandle<PictureAlbumCollection>(collection, "The collection handle could not be released.");
-    });
-}
-
-CNA_Result cna_picture_get_album(
-    const CNA_PictureHandle picture,
-    CNA_PictureAlbumHandle* const outAlbum,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<Picture, PictureAlbum>(
-            picture,
-            outAlbum,
-            outAvailable,
-            [](const Picture& value) { return value.getAlbumProperty(); });
     });
 }
 
@@ -1164,20 +753,6 @@ CNA_Result cna_picture_copy_thumbnail(
     });
 }
 
-CNA_Result cna_picture_album_get_parent(
-    const CNA_PictureAlbumHandle album,
-    CNA_PictureAlbumHandle* const outParent,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return OptionalChild<PictureAlbum, PictureAlbum>(
-            album,
-            outParent,
-            outAvailable,
-            [](const PictureAlbum& value) { return value.getParentProperty(); });
-    });
-}
-
 CNA_Result cna_picture_album_get_albums(
     const CNA_PictureAlbumHandle album,
     CNA_PictureAlbumCollectionHandle* const outAlbums)
@@ -1219,32 +794,6 @@ CNA_Result cna_picture_album_get_pictures(
             return InvalidState("The picture album has no picture collection.");
         }
         return PublishChildOf<PictureCollection, PictureAlbum>(resource, pictures, outPictures);
-    });
-}
-
-CNA_Result cna_media_library_get_pictures(
-    const CNA_MediaLibraryHandle library,
-    CNA_PictureCollectionHandle* const outPictures)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<PictureCollection>(
-            library,
-            outPictures,
-            [](const MediaLibrary& value) { return value.getPicturesProperty(); },
-            "The picture collection output is null.");
-    });
-}
-
-CNA_Result cna_media_library_get_saved_pictures(
-    const CNA_MediaLibraryHandle library,
-    CNA_PictureCollectionHandle* const outPictures)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return LibraryCollection<PictureCollection>(
-            library,
-            outPictures,
-            [](const MediaLibrary& value) { return value.getSavedPicturesProperty(); },
-            "The saved picture collection output is null.");
     });
 }
 

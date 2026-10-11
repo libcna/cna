@@ -1282,48 +1282,6 @@ CNA_Result cna_reflective_type_reader_builder_register(
     });
 }
 
-CNA_Result cna_reflective_type_reader_get_canonical_name_size(
-    const CNA_StringView targetTypeName,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CanonicalNameSize(targetTypeName, ReflectiveCanonicalName, outBytes);
-    });
-}
-
-CNA_Result cna_reflective_type_reader_copy_canonical_name(
-    const CNA_StringView targetTypeName,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CanonicalNameCopy(
-            targetTypeName, ReflectiveCanonicalName, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_enum_type_reader_get_canonical_name_size(
-    const CNA_StringView targetTypeName,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CanonicalNameSize(targetTypeName, EnumCanonicalName, outBytes);
-    });
-}
-
-CNA_Result cna_enum_type_reader_copy_canonical_name(
-    const CNA_StringView targetTypeName,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CanonicalNameCopy(
-            targetTypeName, EnumCanonicalName, destination, capacity, outBytes);
-    });
-}
-
 /* --- CBIND-116: the reference-shaped reflective reader, and the dictionary a Model.Tag holds --- */
 
 namespace {
@@ -2144,18 +2102,6 @@ CNA_Result cna_content_manager_load_object_dictionary_ext(
             return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
         }
         return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
-    });
-}
-
-CNA_Result cna_object_dictionary_ext_destroy(const CNA_ObjectDictionaryHandle dictionaryHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return GetRuntimeHandles().Release(dictionaryHandle);
     });
 }
 

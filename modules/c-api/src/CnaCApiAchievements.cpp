@@ -242,28 +242,6 @@ CNA_Result cna_achievement_collection_create_ext(
     });
 }
 
-CNA_Result cna_achievement_collection_get_at(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const int32_t index,
-    CNA_AchievementHandle* const outAchievement)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAchievement == nullptr) {
-            return InvalidArgument("The Achievement output handle is null.");
-        }
-        *outAchievement = CNA_INVALID_HANDLE;
-        std::shared_ptr<AchievementCollectionResource> collection;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical indexer validates the range and throws; letting it do so keeps the rule in
-        // one place. The copy is deliberate: the reference it answers points into storage that a
-        // later insert or remove would invalidate.
-        return PublishAchievement((*collection->value)[static_cast<int>(index)], outAchievement);
-    });
-}
-
 CNA_Result cna_achievement_collection_get_by_key(
     const CNA_AchievementCollectionHandle collectionHandle,
     const CNA_StringView key,
@@ -446,24 +424,6 @@ CNA_Result cna_achievement_collection_copy_to(
             destination[static_cast<uint64_t>(index) + static_cast<uint64_t>(slot)] = published;
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_get_achievements(
-    const CNA_SignedInGamerHandle gamerHandle,
-    CNA_AchievementCollectionHandle* const outAchievements)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAchievements == nullptr) {
-            return InvalidArgument("The achievement collection output handle is null.");
-        }
-        *outAchievements = CNA_INVALID_HANDLE;
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishCollection(gamer->GetAchievements(), outAchievements);
     });
 }
 

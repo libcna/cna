@@ -49,3 +49,21 @@ cna_sound_effect_play = { get = "object->value->Play()" }
 # Pan is range-checked by the canonical route and pitch is clamped; the asymmetry is
 # reported rather than evened out here.
 cna_sound_effect_play_with_settings = { get = "object->value->Play(volume, pitch, pan)" }
+
+[microphone]
+lookup = "BorrowMicrophone"
+object = "Microphone*"
+arguments = 2
+
+[microphone.routes]
+cna_microphone_get_name_size_at = { get = "object->Name.size()" }
+cna_microphone_copy_name_at = { copy = "object->Name" }
+cna_microphone_get_buffer_duration_ticks_at = { get = "object->getBufferDurationProperty().getTicksProperty()" }
+cna_microphone_set_buffer_duration_ticks_at = { call = "object->setBufferDurationProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
+cna_microphone_get_is_headset_at = { get = "object->getIsHeadsetProperty()" }
+cna_microphone_get_sample_rate_at = { get = "object->getSampleRateProperty()" }
+cna_microphone_get_state_at = { get = "object->getStateProperty()" }
+cna_microphone_start_at = { call = "object->Start()" }
+cna_microphone_stop_at = { call = "object->Stop()" }
+cna_microphone_get_sample_duration_ticks_at = { get = "object->GetSampleDuration(static_cast<SharpRuntime::intcs>(size_in_bytes)) .getTicksProperty()" }
+cna_microphone_get_sample_size_in_bytes_at = { get = "object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks)))" }

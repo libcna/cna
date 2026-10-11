@@ -161,6 +161,24 @@ CNA_Result cna_album_get_has_art(
     });
 }
 
+CNA_Result cna_album_get_songs(
+    const CNA_AlbumHandle album,
+    CNA_SongCollectionHandle* const out_songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_songs == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_songs: out_songs is null.");
+        }
+        *out_songs = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(album, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<SongCollection, Album>(object, object->value->getSongsProperty(), out_songs);
+    });
+}
+
 CNA_Result cna_album_collection_dispose(
     const CNA_AlbumCollectionHandle collection)
 {
@@ -360,6 +378,42 @@ CNA_Result cna_artist_copy_type_name(
     });
 }
 
+CNA_Result cna_artist_get_songs(
+    const CNA_ArtistHandle artist,
+    CNA_SongCollectionHandle* const out_songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_songs == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_songs: out_songs is null.");
+        }
+        *out_songs = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<SongCollection, Artist>(object, object->value->getSongsProperty(), out_songs);
+    });
+}
+
+CNA_Result cna_artist_get_albums(
+    const CNA_ArtistHandle artist,
+    CNA_AlbumCollectionHandle* const out_albums)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_albums == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_get_albums: out_albums is null.");
+        }
+        *out_albums = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(artist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<AlbumCollection, Artist>(object, object->value->getAlbumsProperty(), out_albums);
+    });
+}
+
 CNA_Result cna_artist_collection_dispose(
     const CNA_ArtistCollectionHandle collection)
 {
@@ -556,6 +610,42 @@ CNA_Result cna_genre_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_genre_get_songs(
+    const CNA_GenreHandle genre,
+    CNA_SongCollectionHandle* const out_songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_songs == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_songs: out_songs is null.");
+        }
+        *out_songs = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<SongCollection, Genre>(object, object->value->getSongsProperty(), out_songs);
+    });
+}
+
+CNA_Result cna_genre_get_albums(
+    const CNA_GenreHandle genre,
+    CNA_AlbumCollectionHandle* const out_albums)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_albums == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_get_albums: out_albums is null.");
+        }
+        *out_albums = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(genre, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<AlbumCollection, Genre>(object, object->value->getAlbumsProperty(), out_albums);
     });
 }
 
@@ -773,6 +863,24 @@ CNA_Result cna_playlist_get_duration(
         }
         *out_ticks = static_cast<int64_t>(object->value->getDurationProperty().getTicksProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_get_songs(
+    const CNA_PlaylistHandle playlist,
+    CNA_SongCollectionHandle* const out_songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_songs == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_get_songs: out_songs is null.");
+        }
+        *out_songs = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(playlist, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishChildOf<SongCollection, Playlist>(object, object->value->getSongsProperty(), out_songs);
     });
 }
 
@@ -1401,5 +1509,395 @@ CNA_Result cna_picture_album_collection_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_album_destroy(
+    const CNA_AlbumHandle album)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Album>(album, "The album handle could not be released.");
+    });
+}
+
+CNA_Result cna_album_collection_get_at(
+    const CNA_AlbumCollectionHandle collection,
+    const int32_t index,
+    CNA_AlbumHandle* const out_album)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_album == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_collection_get_at: out_album is null.");
+        }
+        *out_album = CNA_INVALID_HANDLE;
+        return CollectionElementAt<AlbumCollection, Album>(collection, index, out_album);
+    });
+}
+
+CNA_Result cna_album_collection_destroy(
+    const CNA_AlbumCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<AlbumCollection>(collection, "The album collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_artist_destroy(
+    const CNA_ArtistHandle artist)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Artist>(artist, "The artist handle could not be released.");
+    });
+}
+
+CNA_Result cna_artist_collection_get_at(
+    const CNA_ArtistCollectionHandle collection,
+    const int32_t index,
+    CNA_ArtistHandle* const out_artist)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_artist == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_collection_get_at: out_artist is null.");
+        }
+        *out_artist = CNA_INVALID_HANDLE;
+        return CollectionElementAt<ArtistCollection, Artist>(collection, index, out_artist);
+    });
+}
+
+CNA_Result cna_artist_collection_destroy(
+    const CNA_ArtistCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<ArtistCollection>(collection, "The artist collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_genre_destroy(
+    const CNA_GenreHandle genre)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Genre>(genre, "The genre handle could not be released.");
+    });
+}
+
+CNA_Result cna_genre_collection_get_at(
+    const CNA_GenreCollectionHandle collection,
+    const int32_t index,
+    CNA_GenreHandle* const out_genre)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_genre == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_collection_get_at: out_genre is null.");
+        }
+        *out_genre = CNA_INVALID_HANDLE;
+        return CollectionElementAt<GenreCollection, Genre>(collection, index, out_genre);
+    });
+}
+
+CNA_Result cna_genre_collection_destroy(
+    const CNA_GenreCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<GenreCollection>(collection, "The genre collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_playlist_destroy(
+    const CNA_PlaylistHandle playlist)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Playlist>(playlist, "The playlist handle could not be released.");
+    });
+}
+
+CNA_Result cna_playlist_collection_get_at(
+    const CNA_PlaylistCollectionHandle collection,
+    const int32_t index,
+    CNA_PlaylistHandle* const out_playlist)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_playlist == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_collection_get_at: out_playlist is null.");
+        }
+        *out_playlist = CNA_INVALID_HANDLE;
+        return CollectionElementAt<PlaylistCollection, Playlist>(collection, index, out_playlist);
+    });
+}
+
+CNA_Result cna_playlist_collection_destroy(
+    const CNA_PlaylistCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PlaylistCollection>(collection, "The playlist collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_media_library_get_songs(
+    const CNA_MediaLibraryHandle library,
+    CNA_SongCollectionHandle* const out_songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_songs == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_songs: out_songs is null.");
+        }
+        *out_songs = CNA_INVALID_HANDLE;
+        return LibraryCollection<SongCollection>(library, out_songs, [](const MediaLibrary& value) { return value.getSongsProperty(); }, "The song collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_albums(
+    const CNA_MediaLibraryHandle library,
+    CNA_AlbumCollectionHandle* const out_albums)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_albums == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_albums: out_albums is null.");
+        }
+        *out_albums = CNA_INVALID_HANDLE;
+        return LibraryCollection<AlbumCollection>(library, out_albums, [](const MediaLibrary& value) { return value.getAlbumsProperty(); }, "The album collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_artists(
+    const CNA_MediaLibraryHandle library,
+    CNA_ArtistCollectionHandle* const out_artists)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_artists == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_artists: out_artists is null.");
+        }
+        *out_artists = CNA_INVALID_HANDLE;
+        return LibraryCollection<ArtistCollection>(library, out_artists, [](const MediaLibrary& value) { return value.getArtistsProperty(); }, "The artist collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_genres(
+    const CNA_MediaLibraryHandle library,
+    CNA_GenreCollectionHandle* const out_genres)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_genres == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_genres: out_genres is null.");
+        }
+        *out_genres = CNA_INVALID_HANDLE;
+        return LibraryCollection<GenreCollection>(library, out_genres, [](const MediaLibrary& value) { return value.getGenresProperty(); }, "The genre collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_playlists(
+    const CNA_MediaLibraryHandle library,
+    CNA_PlaylistCollectionHandle* const out_playlists)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_playlists == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_playlists: out_playlists is null.");
+        }
+        *out_playlists = CNA_INVALID_HANDLE;
+        return LibraryCollection<PlaylistCollection>(library, out_playlists, [](const MediaLibrary& value) { return value.getPlaylistsProperty(); }, "The playlist collection output is null.");
+    });
+}
+
+CNA_Result cna_album_get_artist(
+    const CNA_AlbumHandle album,
+    CNA_ArtistHandle* const out_artist,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_artist == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_artist: out_artist is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_artist: out_available is null.");
+        }
+        *out_artist = CNA_INVALID_HANDLE;
+        return OptionalChild<Album, Artist>(album, out_artist, out_available, [](const Album& value) { return value.getArtistProperty(); });
+    });
+}
+
+CNA_Result cna_album_get_genre(
+    const CNA_AlbumHandle album,
+    CNA_GenreHandle* const out_genre,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_genre == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_genre: out_genre is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_genre: out_available is null.");
+        }
+        *out_genre = CNA_INVALID_HANDLE;
+        return OptionalChild<Album, Genre>(album, out_genre, out_available, [](const Album& value) { return value.getGenreProperty(); });
+    });
+}
+
+CNA_Result cna_song_get_album(
+    const CNA_SongHandle song,
+    CNA_AlbumHandle* const out_album,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_album == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_album: out_album is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_album: out_available is null.");
+        }
+        *out_album = CNA_INVALID_HANDLE;
+        return OptionalChild<Song, Album>(song, out_album, out_available, [](const Song& value) { return value.getAlbumProperty(); });
+    });
+}
+
+CNA_Result cna_song_get_artist(
+    const CNA_SongHandle song,
+    CNA_ArtistHandle* const out_artist,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_artist == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_artist: out_artist is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_artist: out_available is null.");
+        }
+        *out_artist = CNA_INVALID_HANDLE;
+        return OptionalChild<Song, Artist>(song, out_artist, out_available, [](const Song& value) { return value.getArtistProperty(); });
+    });
+}
+
+CNA_Result cna_song_get_genre(
+    const CNA_SongHandle song,
+    CNA_GenreHandle* const out_genre,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_genre == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_genre: out_genre is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_get_genre: out_available is null.");
+        }
+        *out_genre = CNA_INVALID_HANDLE;
+        return OptionalChild<Song, Genre>(song, out_genre, out_available, [](const Song& value) { return value.getGenreProperty(); });
+    });
+}
+
+CNA_Result cna_picture_destroy(
+    const CNA_PictureHandle picture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Picture>(picture, "The picture picture could not be released.");
+    });
+}
+
+CNA_Result cna_picture_album_destroy(
+    const CNA_PictureAlbumHandle album)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureAlbum>(album, "The picture album album could not be released.");
+    });
+}
+
+CNA_Result cna_picture_collection_get_at(
+    const CNA_PictureCollectionHandle collection,
+    const int32_t index,
+    CNA_PictureHandle* const out_picture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_picture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_collection_get_at: out_picture is null.");
+        }
+        *out_picture = CNA_INVALID_HANDLE;
+        return CollectionElementAt<PictureCollection, Picture>(collection, index, out_picture);
+    });
+}
+
+CNA_Result cna_picture_collection_destroy(
+    const CNA_PictureCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureCollection>(collection, "The collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_at(
+    const CNA_PictureAlbumCollectionHandle collection,
+    const int32_t index,
+    CNA_PictureAlbumHandle* const out_album)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_album == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_collection_get_at: out_album is null.");
+        }
+        *out_album = CNA_INVALID_HANDLE;
+        return CollectionElementAt<PictureAlbumCollection, PictureAlbum>(collection, index, out_album);
+    });
+}
+
+CNA_Result cna_picture_album_collection_destroy(
+    const CNA_PictureAlbumCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureAlbumCollection>(collection, "The collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_get_album(
+    const CNA_PictureHandle picture,
+    CNA_PictureAlbumHandle* const out_album,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_album == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_album: out_album is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_album: out_available is null.");
+        }
+        *out_album = CNA_INVALID_HANDLE;
+        return OptionalChild<Picture, PictureAlbum>(picture, out_album, out_available, [](const Picture& value) { return value.getAlbumProperty(); });
+    });
+}
+
+CNA_Result cna_picture_album_get_parent(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumHandle* const out_parent,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_parent: out_parent is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_parent: out_available is null.");
+        }
+        *out_parent = CNA_INVALID_HANDLE;
+        return OptionalChild<PictureAlbum, PictureAlbum>(album, out_parent, out_available, [](const PictureAlbum& value) { return value.getParentProperty(); });
+    });
+}
+
+CNA_Result cna_media_library_get_pictures(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* const out_pictures)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pictures == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_pictures: out_pictures is null.");
+        }
+        *out_pictures = CNA_INVALID_HANDLE;
+        return LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getPicturesProperty(); }, "The picture collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_saved_pictures(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* const out_pictures)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pictures == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_saved_pictures: out_pictures is null.");
+        }
+        *out_pictures = CNA_INVALID_HANDLE;
+        return LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getSavedPicturesProperty(); }, "The saved picture collection output is null.");
     });
 }

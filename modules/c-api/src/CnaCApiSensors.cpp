@@ -1367,20 +1367,6 @@ CNA_Result cna_accelerometer_reading_event_info_get_type_name_size(uint64_t* con
     });
 }
 
-CNA_Result cna_accelerometer_reading_event_info_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(
-            AccelerometerReadingEventArgs().GetTypeName(),
-            destination,
-            capacity,
-            outBytes);
-    });
-}
-
 CNA_Result cna_calibration_event_info_get_type_name_size(uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -1389,16 +1375,6 @@ CNA_Result cna_calibration_event_info_get_type_name_size(uint64_t* const outByte
         }
         *outBytes = CalibrationEventArgs().GetTypeName().size();
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_calibration_event_info_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -1500,17 +1476,6 @@ CNA_Result cna_compass_subscribe_current_value_changed(
             std::make_shared<SensorRegistration<SensorReadingEventArgs<CompassReading>>>(
                 resource, source, token),
             outRegistration);
-    });
-}
-
-CNA_Result cna_compass_subscribe_calibrate(
-    const CNA_CompassHandle sensor,
-    const CNA_SensorEventCallback callback,
-    void* const context,
-    CNA_SensorEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeCalibrate<Compass>(sensor, callback, context, outRegistration);
     });
 }
 
@@ -1651,17 +1616,6 @@ CNA_Result cna_motion_subscribe_current_value_changed(
             std::make_shared<SensorRegistration<SensorReadingEventArgs<MotionReading>>>(
                 resource, source, token),
             outRegistration);
-    });
-}
-
-CNA_Result cna_motion_subscribe_calibrate(
-    const CNA_MotionHandle sensor,
-    const CNA_SensorEventCallback callback,
-    void* const context,
-    CNA_SensorEventRegistrationHandle* const outRegistration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return SubscribeCalibrate<Motion>(sensor, callback, context, outRegistration);
     });
 }
 

@@ -14,6 +14,8 @@ cna_gamer_get_text_size = { size = "object->ToString()" }
 cna_gamer_copy_text = { copy = "object->ToString()" }
 cna_gamer_get_is_disposed = { get = "object->getIsDisposedProperty()" }
 cna_gamer_set_tag = { call = "object->setTagProperty(std::any(tag))" }
+# The canonical accessor hands back a profile the caller owns and must delete.
+cna_gamer_get_profile = { result = "PublishProfile(std::shared_ptr<GamerProfile>(object->GetProfile()), out_profile)" }
 
 [signed_in]
 lookup = "BorrowSignedIn"

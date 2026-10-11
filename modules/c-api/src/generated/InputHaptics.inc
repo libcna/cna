@@ -61,6 +61,59 @@ CNA_Result cna_haptics_get_is_mouse_haptic(
     });
 }
 
+CNA_Result cna_haptics_open(
+    const CNA_Handle game,
+    const uint32_t id,
+    CNA_HapticDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptics_open: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishDevice(Haptics::OpenEXT(id), out_device);
+    });
+}
+
+CNA_Result cna_haptics_open_from_joystick(
+    const CNA_Handle game,
+    const uint32_t joystick_id,
+    CNA_HapticDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptics_open_from_joystick: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishDevice(Haptics::OpenFromJoystickEXT(joystick_id), out_device);
+    });
+}
+
+CNA_Result cna_haptics_open_from_mouse(
+    const CNA_Handle game,
+    CNA_HapticDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptics_open_from_mouse: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PublishDevice(Haptics::OpenFromMouseEXT(), out_device);
+    });
+}
+
 CNA_Result cna_haptic_device_get_is_open(
     const CNA_HapticDeviceHandle device,
     CNA_Bool* const out_open)
@@ -251,5 +304,103 @@ CNA_Result cna_haptic_device_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(device);
+    });
+}
+
+CNA_Result cna_haptics_get_id_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint32_t* const out_id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptics_get_id_at: out_id is null.");
+        }
+        HapticInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedHaptic(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_id = static_cast<uint32_t>(object.id);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_haptics_get_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptics_get_name_size_at: out_bytes is null.");
+        }
+        HapticInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedHaptic(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_bytes = static_cast<uint64_t>(object.name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_haptic_device_init_rumble(
+    const CNA_HapticDeviceHandle device,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_init_rumble: out_applied is null.");
+        }
+        return ApplyDeviceAction(device, &HapticDevice::InitRumbleEXT, out_applied, "The rumble initialization output is null.");
+    });
+}
+
+CNA_Result cna_haptic_device_stop_rumble(
+    const CNA_HapticDeviceHandle device,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_stop_rumble: out_applied is null.");
+        }
+        return ApplyDeviceAction(device, &HapticDevice::StopRumbleEXT, out_applied, "The rumble stop output is null.");
+    });
+}
+
+CNA_Result cna_haptic_device_stop_all_effects(
+    const CNA_HapticDeviceHandle device,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_stop_all_effects: out_applied is null.");
+        }
+        return ApplyDeviceAction(device, &HapticDevice::StopAllEffectsEXT, out_applied, "The stop-all-effects output is null.");
+    });
+}
+
+CNA_Result cna_haptic_device_pause(
+    const CNA_HapticDeviceHandle device,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_pause: out_applied is null.");
+        }
+        return ApplyDeviceAction(device, &HapticDevice::PauseEXT, out_applied, "The pause output is null.");
+    });
+}
+
+CNA_Result cna_haptic_device_resume(
+    const CNA_HapticDeviceHandle device,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_resume: out_applied is null.");
+        }
+        return ApplyDeviceAction(device, &HapticDevice::ResumeEXT, out_applied, "The resume output is null.");
     });
 }

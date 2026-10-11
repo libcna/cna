@@ -26,3 +26,7 @@ cna_graphics_device_manager_begin_draw = { get = "object->value->BeginDraw()" }
 cna_graphics_device_manager_dispose = { call = "object->value->Dispose()" }
 cna_graphics_device_manager_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_graphics_device_manager_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_graphics_device_manager_apply_changes = { result = "RequestDeviceChange([&]() { object->value->ApplyChanges(); })" }
+cna_graphics_device_manager_toggle_full_screen = { result = "RequestDeviceChange([&]() { object->value->ToggleFullScreen(); })" }
+cna_graphics_device_manager_create_device = { result = "RequestDeviceChange([&]() { object->value->CreateDevice(); })" }
+cna_graphics_device_manager_end_draw = { result = "RequestDeviceChange([&]() { object->value->EndDraw(); })" }

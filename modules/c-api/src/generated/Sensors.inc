@@ -1406,3 +1406,59 @@ CNA_Result cna_motion_destroy(
         return CNA::C::Detail::ReleaseHandle(sensor);
     });
 }
+
+CNA_Result cna_accelerometer_reading_event_info_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_copy_type_name: out_bytes is null.");
+        }
+        return CopyText(AccelerometerReadingEventArgs().GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_calibration_event_info_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_calibration_event_info_copy_type_name: out_bytes is null.");
+        }
+        return CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_compass_subscribe_calibrate(
+    const CNA_CompassHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_subscribe_calibrate: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeCalibrate<Compass>(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_motion_subscribe_calibrate(
+    const CNA_MotionHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_subscribe_calibrate: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SubscribeCalibrate<Motion>(sensor, callback, context, out_registration);
+    });
+}

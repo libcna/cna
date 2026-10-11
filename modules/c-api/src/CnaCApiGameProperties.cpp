@@ -29,11 +29,9 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
 
-using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ReadText;
@@ -335,42 +333,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_game_launch_parameters_get_value_size(
-    const CNA_Handle gameHandle,
-    const CNA_StringView key,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The launch parameter size output is null.");
-        }
-        std::string value;
-        if (const CNA_Result result = FindLaunchParameter(gameHandle, key, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = value.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_launch_parameters_copy_value(
-    const CNA_Handle gameHandle,
-    const CNA_StringView key,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string value;
-        if (const CNA_Result result = FindLaunchParameter(gameHandle, key, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(value, destination, capacity, outBytes);
-    });
-}
-
 namespace {
 
 /// The parameter names in the order the ABI publishes: by name, ordinal, ascending.
@@ -415,42 +377,6 @@ namespace {
 }
 
 } // namespace
-
-CNA_Result cna_game_launch_parameters_get_key_size(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The launch parameter name size output is null.");
-        }
-        std::string name;
-        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = name.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_launch_parameters_copy_key(
-    const CNA_Handle gameHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string name;
-        if (const CNA_Result result = FindLaunchParameterName(gameHandle, index, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(name, destination, capacity, outBytes);
-    });
-}
 
 CNA_Result cna_game_launch_parameters_add(
     const CNA_Handle gameHandle,
@@ -616,24 +542,6 @@ template<typename TAction>
 
 } // namespace
 
-CNA_Result cna_game_window_set_allow_user_resizing(
-    const CNA_Handle gameHandle,
-    const CNA_Bool allowed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(allowed, "allowed");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestWindowChange([&]() { window->setAllowUserResizingProperty(allowed != CNA_FALSE); });
-    });
-}
-
 CNA_Result cna_game_window_get_client_bounds(
     const CNA_Handle gameHandle,
     CNA_Rectangle* const outBounds)
@@ -694,48 +602,6 @@ CNA_Result cna_game_window_get_native_window_ext(
         handle->surface = native.surface;
         handle->window_id = native.windowId;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_window_set_is_borderless_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Bool borderless)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(borderless, "borderless");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestWindowChange([&]() { window->setIsBorderlessEXTProperty(borderless != CNA_FALSE); });
-    });
-}
-
-CNA_Result cna_game_window_minimize_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestWindowChange([&]() { window->MinimizeEXT(); });
-    });
-}
-
-CNA_Result cna_game_window_restore_ext(const CNA_Handle gameHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestWindowChange([&]() { window->RestoreEXT(); });
     });
 }
 

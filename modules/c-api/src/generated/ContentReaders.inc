@@ -247,6 +247,19 @@ CNA_Result cna_object_dictionary_ext_get_count(
     });
 }
 
+CNA_Result cna_object_dictionary_ext_destroy(
+    const CNA_ObjectDictionaryHandle dictionary)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ObjectDictionaryResource> object{};
+        if (const CNA_Result routeResult = GetObjectDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRuntimeHandles().Release(dictionary);
+    });
+}
+
 CNA_Result cna_reflective_type_reader_builder_destroy(
     const CNA_ReflectiveTypeReaderBuilderHandle builder)
 {
@@ -257,5 +270,57 @@ CNA_Result cna_reflective_type_reader_builder_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(builder);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_get_canonical_name_size(
+    const CNA_StringView target_type_name,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_reflective_type_reader_get_canonical_name_size: out_byte_count is null.");
+        }
+        return CanonicalNameSize(target_type_name, ReflectiveCanonicalName, out_byte_count);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_copy_canonical_name(
+    const CNA_StringView target_type_name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_reflective_type_reader_copy_canonical_name: out_byte_count is null.");
+        }
+        return CanonicalNameCopy(target_type_name, ReflectiveCanonicalName, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_enum_type_reader_get_canonical_name_size(
+    const CNA_StringView target_type_name,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_enum_type_reader_get_canonical_name_size: out_byte_count is null.");
+        }
+        return CanonicalNameSize(target_type_name, EnumCanonicalName, out_byte_count);
+    });
+}
+
+CNA_Result cna_enum_type_reader_copy_canonical_name(
+    const CNA_StringView target_type_name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_enum_type_reader_copy_canonical_name: out_byte_count is null.");
+        }
+        return CanonicalNameCopy(target_type_name, EnumCanonicalName, destination, capacity, out_byte_count);
     });
 }

@@ -144,18 +144,6 @@ static_assert(sizeof(int) == sizeof(int32_t));
 
 } // namespace
 
-CNA_Result cna_vertex_declaration_create_empty(
-    CNA_VertexDeclarationHandle* const outDeclaration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDeclaration == nullptr) {
-            return InvalidArgument("The VertexDeclaration output handle is null.");
-        }
-        *outDeclaration = CNA_INVALID_HANDLE;
-        return RegisterDeclaration(std::make_shared<VertexDeclaration>(), outDeclaration);
-    });
-}
-
 CNA_Result cna_vertex_declaration_create(
     const CNA_VertexElement* const elements,
     const uint64_t elementCount,

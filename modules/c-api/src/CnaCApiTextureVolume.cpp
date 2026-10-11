@@ -532,22 +532,6 @@ CNA_Result cna_texture3d_get_info(
     });
 }
 
-CNA_Result cna_texture3d_copy_type_name(
-    const CNA_Handle textureHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyTypeName(*texture->value, destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_texture3d_set_data(
     const CNA_Handle textureHandle,
     const CNA_Texture3DTransfer* const transfer,
@@ -775,22 +759,6 @@ CNA_Result cna_texturecube_get_info(
             static_cast<CNA_SurfaceFormat>(texture.value->getFormatProperty()),
             0U};
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_texturecube_copy_type_name(
-    const CNA_Handle textureHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyTypeName(*texture.value, destination, capacity, outByteCount);
     });
 }
 

@@ -400,57 +400,6 @@ CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
     });
 }
 
-CNA_Result cna_graphics_device_manager_apply_changes(
-    const CNA_GraphicsDeviceManagerHandle manager)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestDeviceChange([&]() { resource->value->ApplyChanges(); });
-    });
-}
-
-CNA_Result cna_graphics_device_manager_toggle_full_screen(
-    const CNA_GraphicsDeviceManagerHandle manager)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestDeviceChange([&]() { resource->value->ToggleFullScreen(); });
-    });
-}
-
-CNA_Result cna_graphics_device_manager_create_device(
-    const CNA_GraphicsDeviceManagerHandle manager)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestDeviceChange([&]() { resource->value->CreateDevice(); });
-    });
-}
-
-CNA_Result cna_graphics_device_manager_end_draw(const CNA_GraphicsDeviceManagerHandle manager)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RequestDeviceChange([&]() { resource->value->EndDraw(); });
-    });
-}
-
 CNA_Result cna_graphics_device_manager_subscribe(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_GraphicsDeviceManagerEvent event,

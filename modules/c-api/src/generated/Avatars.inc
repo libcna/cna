@@ -64,3 +64,15 @@ CNA_Result cna_avatar_renderer_destroy(
         return CNA::C::Detail::ReleaseHandle(renderer);
     });
 }
+
+CNA_Result cna_avatar_description_create_random(
+    CNA_AvatarDescriptionHandle* const out_description)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_description == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_create_random: out_description is null.");
+        }
+        *out_description = CNA_INVALID_HANDLE;
+        return PublishDescription(AvatarDescription::CreateRandom(), out_description);
+    });
+}

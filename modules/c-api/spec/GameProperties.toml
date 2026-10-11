@@ -46,3 +46,25 @@ cna_game_window_get_is_borderless_ext = { get = "object->getIsBorderlessEXTPrope
 cna_game_window_begin_screen_device_change = { call = "object->BeginScreenDeviceChange(will_be_full_screen)" }
 cna_game_window_get_type_name_size = { size = "object->GetTypeName()" }
 cna_game_window_copy_type_name = { copy = "object->GetTypeName()" }
+cna_game_window_set_allow_user_resizing = { result = "RequestWindowChange([&]() { object->setAllowUserResizingProperty(allowed); })" }
+cna_game_window_set_is_borderless_ext = { result = "RequestWindowChange([&]() { object->setIsBorderlessEXTProperty(borderless); })" }
+cna_game_window_minimize_ext = { result = "RequestWindowChange([&]() { object->MinimizeEXT(); })" }
+cna_game_window_restore_ext = { result = "RequestWindowChange([&]() { object->RestoreEXT(); })" }
+
+[find_launch_parameter]
+lookup = "FindLaunchParameter"
+object = "std::string"
+arguments = 2
+
+[find_launch_parameter.routes]
+cna_game_launch_parameters_get_value_size = { size = "object" }
+cna_game_launch_parameters_copy_value = { copy = "object" }
+
+[find_launch_parameter_name]
+lookup = "FindLaunchParameterName"
+object = "std::string"
+arguments = 2
+
+[find_launch_parameter_name.routes]
+cna_game_launch_parameters_get_key_size = { size = "object" }
+cna_game_launch_parameters_copy_key = { copy = "object" }
