@@ -168,3 +168,8 @@ cna_attitude_reading_init = { value = "MapAttitudeReading(AttitudeReading())" }
 cna_accelerometer_reading_event_info_init = { value = "MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs())" }
 cna_accelerometer_reading_event_info_get_type_name_size = { size = "AccelerometerReadingEventArgs().GetTypeName()" }
 cna_calibration_event_info_get_type_name_size = { size = "CalibrationEventArgs().GetTypeName()" }
+cna_accelerometer_reading_get_type_name_size = { size = "AccelerometerReading().GetTypeName()" }
+cna_gyroscope_reading_get_type_name_size = { size = "GyroscopeReading().GetTypeName()" }
+cna_attitude_reading_get_type_name_size = { size = "AttitudeReading().GetTypeName()" }
+cna_compass_reading_get_type_name_size = { size = "CompassReading().GetTypeName()" }
+cna_motion_reading_get_type_name_size = { size = "MotionReading().GetTypeName()" }

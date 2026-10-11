@@ -2565,6 +2565,24 @@ CNA_Result cna_pbr_effect_get_alpha_cutoff_ext(
     });
 }
 
+CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_vertex_color_enabled_ext: out_enabled is null.");
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(static_cast<bool>(object.pbr != nullptr ? object.pbr->VertexColorEnabledEXT : object.skinned->VertexColorEnabledEXT));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
     const CNA_EffectHandle effect,
     int32_t* const out_value)

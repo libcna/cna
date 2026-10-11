@@ -501,28 +501,6 @@ CNA_Result cna_album_copy_thumbnail(
     });
 }
 
-CNA_Result cna_picture_get_date_unix_ticks(
-    const CNA_PictureHandle picture,
-    int64_t* const outUnixTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outUnixTicks == nullptr) {
-            return InvalidArgument("The picture date output is null.");
-        }
-        return Read<Picture>(picture, [&](const Picture& value) {
-            // A point in time, not a duration: the ABI's 100-nanosecond tick counted from the Unix
-            // epoch, which is exactly what the canonical clock's own epoch already is.
-            const auto since =
-                value.getDateProperty().time_since_epoch();
-            *outUnixTicks = static_cast<int64_t>(
-                std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(
-                    since)
-                    .count());
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
 CNA_Result cna_picture_get_image_size(const CNA_PictureHandle picture, uint64_t* const outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

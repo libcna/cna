@@ -275,6 +275,7 @@ cna_pbr_effect_get_normal_scale_ext = { get = "object.pbr != nullptr ? object.pb
 cna_pbr_effect_get_occlusion_strength_ext = { get = "object.pbr != nullptr ? object.pbr->getOcclusionStrengthEXTProperty() : object.skinned->getOcclusionStrengthEXTProperty()" }
 cna_pbr_effect_get_alpha_mode_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaModeEXTProperty() : object.skinned->getAlphaModeEXTProperty()" }
 cna_pbr_effect_get_alpha_cutoff_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaCutoffEXTProperty() : object.skinned->getAlphaCutoffEXTProperty()" }
+cna_pbr_effect_get_vertex_color_enabled_ext = { get = "static_cast<bool>(object.pbr != nullptr ? object.pbr->VertexColorEnabledEXT : object.skinned->VertexColorEnabledEXT)" }
 
 [skinned_pbr_effect]
 lookup = "GetStockEffect<SkinnedPbrEffect>"

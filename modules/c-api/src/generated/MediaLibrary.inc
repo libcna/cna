@@ -1230,6 +1230,24 @@ CNA_Result cna_picture_get_height(
     });
 }
 
+CNA_Result cna_picture_get_date_unix_ticks(
+    const CNA_PictureHandle picture,
+    int64_t* const out_unix_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_unix_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_date_unix_ticks: out_unix_ticks is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(picture, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_unix_ticks = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(object->value->getDateProperty().time_since_epoch()).count());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_picture_album_dispose(
     const CNA_PictureAlbumHandle album)
 {

@@ -378,25 +378,6 @@ CNA_Result cna_curve_key_collection_create(
     });
 }
 
-CNA_Result cna_curve_key_collection_get_count(
-    const CNA_CurveKeyCollectionHandle collectionHandle,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The collection-count output is null.");
-        }
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t count = static_cast<uint64_t>(collection->getCountProperty());
-        *outCount = count;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_curve_key_collection_get_is_read_only(
     const CNA_CurveKeyCollectionHandle collectionHandle,
     CNA_Bool* const outIsReadOnly)
@@ -752,26 +733,6 @@ CNA_Result cna_curve_clone(
         return CreateHandle(ObjectKind::Curve,
             clone,
             outCurve);
-    });
-}
-
-CNA_Result cna_curve_evaluate(
-    const CNA_CurveHandle curveHandle,
-    const float position,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The curve value output is null.");
-        }
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const float result = curve->Evaluate(position);
-        *outValue = result;
-        return CNA_RESULT_SUCCESS;
     });
 }
 

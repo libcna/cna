@@ -253,18 +253,6 @@ CNA_Result cna_graphics_device_information_clone(
     });
 }
 
-CNA_Result cna_graphics_device_information_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        const GraphicsDeviceInformation canonical;
-        *outBytes = canonical.GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_information_copy_type_name(
     char* const destination,
     const uint64_t capacity,

@@ -30,3 +30,7 @@ cna_graphics_device_manager_apply_changes = { result = "RequestDeviceChange([&](
 cna_graphics_device_manager_toggle_full_screen = { result = "RequestDeviceChange([&]() { object->value->ToggleFullScreen(); })" }
 cna_graphics_device_manager_create_device = { result = "RequestDeviceChange([&]() { object->value->CreateDevice(); })" }
 cna_graphics_device_manager_end_draw = { result = "RequestDeviceChange([&]() { object->value->EndDraw(); })" }
+
+[values]
+[values.routes]
+cna_graphics_device_information_get_type_name_size = { size = "GraphicsDeviceInformation().GetTypeName()" }

@@ -46,3 +46,13 @@ other = { lookup = "BorrowSong", object = "std::shared_ptr<SongResource>" }
 
 [song_pair.routes]
 cna_song_equals = { get = "object->value->Equals(other->value)" }
+
+[values]
+[values.routes]
+cna_visualization_data_get_type_name_size = { size = "VisualizationData().GetTypeName()" }
+
+[active_game_handle]
+lookup = "ValidateActiveGameHandle"
+
+[active_game_handle.routes]
+cna_media_source_get_available_count = { get = "OwnedMediaSources().Count()" }

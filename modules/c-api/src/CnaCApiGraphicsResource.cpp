@@ -332,25 +332,6 @@ CNA_Result cna_graphics_resource_get_is_disposed(
     });
 }
 
-CNA_Result cna_graphics_resource_get_name_byte_count(
-    const CNA_Handle resourceHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The name byte-count output is null.");
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t count = resource.value->getNameProperty().size();
-        *outByteCount = count;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_resource_copy_name(
     const CNA_Handle resourceHandle,
     char* const destination,
@@ -384,25 +365,6 @@ CNA_Result cna_graphics_resource_set_name(
             return result;
         }
         resource.value->setNameProperty(copiedName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_resource_get_string_byte_count(
-    const CNA_Handle resourceHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The string byte-count output is null.");
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t count = resource.value->ToString().size();
-        *outByteCount = count;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -534,3 +496,6 @@ CNA_Result cna_graphics_resource_unsubscribe_disposing(
             "The graphics-resource event-registration handle could not be released.");
     });
 }
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsResource.toml.
+#include "generated/GraphicsResource.inc"

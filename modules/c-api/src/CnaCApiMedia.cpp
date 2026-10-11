@@ -167,18 +167,6 @@ CNA_Result cna_visualization_data_init(CNA_VisualizationData* const outData)
     });
 }
 
-CNA_Result cna_visualization_data_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The visualization type-name byte-count output is null.");
-        }
-        const VisualizationData native;
-        *outBytes = native.GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_visualization_data_copy_type_name(
     char* const destination,
     const uint64_t capacity,
@@ -187,24 +175,6 @@ CNA_Result cna_visualization_data_copy_type_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         const VisualizationData native;
         return CopyText(native.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_media_source_get_available_count(
-    const CNA_Handle gameHandle,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The media source count output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const OwnedMediaSources sources;
-        *outCount = static_cast<uint32_t>(sources.Count());
-        return CNA_RESULT_SUCCESS;
     });
 }
 

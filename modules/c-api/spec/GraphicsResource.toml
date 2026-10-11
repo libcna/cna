@@ -1,0 +1,10 @@
+# GraphicsResource routes, generated into src/generated/GraphicsResource.inc,
+# which src/CnaCApiGraphicsResource.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[resource]
+lookup = "ResolveGraphicsResource"
+object = "GraphicsResourceView"
+
+[resource.routes]
+cna_graphics_resource_get_name_byte_count = { size = "object.value->getNameProperty()" }
+cna_graphics_resource_get_string_byte_count = { size = "object.value->ToString()" }

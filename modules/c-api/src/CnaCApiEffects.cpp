@@ -4058,27 +4058,6 @@ CNA_Result cna_texture_transform_ext_equals(
     });
 }
 
-CNA_Result cna_pbr_effect_get_vertex_color_enabled_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnabled == nullptr) {
-            return InvalidArgument("The vertex-colour-enabled output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const bool enabled = view.pbr != nullptr
-            ? view.pbr->VertexColorEnabledEXT
-            : view.skinned->VertexColorEnabledEXT;
-        *outEnabled = ToCBool(enabled);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
     const CNA_EffectHandle effectHandle,
     const CNA_Bool enabled)

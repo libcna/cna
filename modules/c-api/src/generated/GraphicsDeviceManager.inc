@@ -410,3 +410,14 @@ CNA_Result cna_graphics_device_manager_end_draw(
         return RequestDeviceChange([&]() { object->value->EndDraw(); });
     });
 }
+
+CNA_Result cna_graphics_device_information_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(GraphicsDeviceInformation().GetTypeName(), out_bytes);
+    });
+}

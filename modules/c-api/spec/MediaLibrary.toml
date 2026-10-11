@@ -138,6 +138,9 @@ cna_picture_get_token_size_ext = { size = "object->value->getTokenEXT()" }
 cna_picture_copy_token_ext = { copy = "object->value->getTokenEXT()" }
 cna_picture_get_width = { get = "object->value->getWidthProperty()" }
 cna_picture_get_height = { get = "object->value->getHeightProperty()" }
+# A point in time, not a duration: the ABI's 100-nanosecond tick counted from the Unix
+# epoch, which is exactly what the canonical clock's own epoch already is.
+cna_picture_get_date_unix_ticks = { get = "std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(object->value->getDateProperty().time_since_epoch()).count()" }
 
 [picture_album]
 lookup = "Borrow<PictureAlbum>"

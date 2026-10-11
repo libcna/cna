@@ -403,3 +403,31 @@ CNA_Result cna_song_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_visualization_data_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_visualization_data_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(VisualizationData().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_media_source_get_available_count(
+    const CNA_Handle game,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_get_available_count: out_count is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint32_t>(OwnedMediaSources().Count());
+        return CNA_RESULT_SUCCESS;
+    });
+}

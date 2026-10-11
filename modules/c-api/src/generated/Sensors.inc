@@ -1580,3 +1580,58 @@ CNA_Result cna_calibration_event_info_get_type_name_size(
         return CNA::C::Detail::ReportTextSize(CalibrationEventArgs().GetTypeName(), out_bytes);
     });
 }
+
+CNA_Result cna_accelerometer_reading_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(AccelerometerReading().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_gyroscope_reading_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_reading_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(GyroscopeReading().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_attitude_reading_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_attitude_reading_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(AttitudeReading().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_compass_reading_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_reading_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(CompassReading().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_motion_reading_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_reading_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(MotionReading().GetTypeName(), out_bytes);
+    });
+}

@@ -580,18 +580,6 @@ CNA_Result cna_accelerometer_reading_equals(
     });
 }
 
-CNA_Result cna_accelerometer_reading_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading type-name byte-count output is null.");
-        }
-        const AccelerometerReading native;
-        *outBytes = native.GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_reading_copy_type_name(
     char* const destination,
     const uint64_t capacity,
@@ -623,18 +611,6 @@ CNA_Result cna_gyroscope_reading_equals(
             return result;
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_reading_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading type-name byte-count output is null.");
-        }
-        const GyroscopeReading native;
-        *outBytes = native.GetTypeName().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -674,18 +650,6 @@ CNA_Result cna_attitude_reading_equals(
     });
 }
 
-CNA_Result cna_attitude_reading_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading type-name byte-count output is null.");
-        }
-        const AttitudeReading native;
-        *outBytes = native.GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_attitude_reading_copy_type_name(
     char* const destination,
     const uint64_t capacity,
@@ -721,18 +685,6 @@ CNA_Result cna_compass_reading_equals(
     });
 }
 
-CNA_Result cna_compass_reading_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading type-name byte-count output is null.");
-        }
-        const CompassReading native;
-        *outBytes = native.GetTypeName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_compass_reading_copy_type_name(
     char* const destination,
     const uint64_t capacity,
@@ -764,18 +716,6 @@ CNA_Result cna_motion_reading_equals(
             return result;
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_reading_get_type_name_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The reading type-name byte-count output is null.");
-        }
-        const MotionReading native;
-        *outBytes = native.GetTypeName().size();
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -25,6 +25,41 @@ CNA_Result cna_vertex_declaration_copy_type_name(
     });
 }
 
+CNA_Result cna_vertex_declaration_get_stride(
+    const CNA_VertexDeclarationHandle declaration,
+    int32_t* const out_vertex_stride)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_vertex_stride == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_get_stride: out_vertex_stride is null.");
+        }
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_vertex_stride = static_cast<int32_t>(object->getVertexStrideProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vertex_declaration_get_type_name_byte_count(
+    const CNA_VertexDeclarationHandle declaration,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_get_type_name_byte_count: out_byte_count is null.");
+        }
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->GetTypeName(), out_byte_count);
+    });
+}
+
 CNA_Result cna_vertex_declaration_create_empty(
     CNA_VertexDeclarationHandle* const out_declaration)
 {

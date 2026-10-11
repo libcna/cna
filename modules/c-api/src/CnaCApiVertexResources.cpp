@@ -220,25 +220,6 @@ CNA_Result cna_vertex_declaration_destroy(
     });
 }
 
-CNA_Result cna_vertex_declaration_get_stride(
-    const CNA_VertexDeclarationHandle declarationHandle,
-    int32_t* const outVertexStride)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVertexStride == nullptr) {
-            return InvalidArgument("The vertex-stride output is null.");
-        }
-        std::shared_ptr<VertexDeclaration> declaration;
-        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int32_t stride = declaration->getVertexStrideProperty();
-        *outVertexStride = stride;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_vertex_declaration_copy_elements(
     const CNA_VertexDeclarationHandle declarationHandle,
     CNA_VertexElement* const destination,
@@ -266,25 +247,6 @@ CNA_Result cna_vertex_declaration_copy_elements(
         for (uint64_t index = 0U; index < required; ++index) {
             destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_declaration_get_type_name_byte_count(
-    const CNA_VertexDeclarationHandle declarationHandle,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The type-name byte-count output is null.");
-        }
-        std::shared_ptr<VertexDeclaration> declaration;
-        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t count = declaration->GetTypeName().size();
-        *outByteCount = count;
         return CNA_RESULT_SUCCESS;
     });
 }

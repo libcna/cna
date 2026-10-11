@@ -14,6 +14,7 @@ object = "std::shared_ptr<CurveKeyCollection>"
 cna_curve_key_collection_clear = { call = "object->Clear()" }
 cna_curve_key_collection_remove_at = { call = "object->RemoveAt(index)" }
 cna_curve_key_collection_destroy = { release = true }
+cna_curve_key_collection_get_count = { get = "static_cast<uint64_t>(object->getCountProperty())" }
 
 [curve]
 lookup = "GetCurve"
@@ -21,3 +22,4 @@ object = "std::shared_ptr<Curve>"
 
 [curve.routes]
 cna_curve_destroy = { release = true }
+cna_curve_evaluate = { get = "object->Evaluate(position)" }
