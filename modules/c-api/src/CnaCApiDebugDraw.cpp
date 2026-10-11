@@ -32,12 +32,6 @@ struct DebugDrawResource final {
   std::shared_ptr<Ext::DebugDraw> value;
   CNA_Handle parentGame;
 };
-template <class T> CNA_Result StoreValue(T *out, T value) {
-  if (!out)
-    return InvalidArgument("Output is null.");
-  *out = value;
-  return CNA_RESULT_SUCCESS;
-}
 template <class T>
 CNA_Result GetEngineResource(CNA_Handle h, ObjectKind k, const char *name,
                              std::shared_ptr<T> *out) {
@@ -57,8 +51,14 @@ CNA_Result WithMap(CNA_Handle h, ObjectKind k, const char *name, F &&body) {
     return std::forward<F>(body)(resource);
   });
 }
-#define CNA_WITH_DEBUG(handle, body)                                           \
-  WithMap<DebugDrawResource>(handle, ObjectKind::DebugDraw, "DebugDraw", body)
+CNA_Result BorrowDebugDraw(CNA_DebugDrawHandle h,
+                           std::shared_ptr<DebugDrawResource> *out) {
+  return GetEngineResource(h, ObjectKind::DebugDraw, "DebugDraw", out);
+}
+template <class F> CNA_Result WithDebugDraw(CNA_DebugDrawHandle h, F &&body) {
+  return WithMap<DebugDrawResource>(h, ObjectKind::DebugDraw, "DebugDraw",
+                                    std::forward<F>(body));
+}
 CNA_Vector3 Vec3(float x, float y, float z) { return {x, y, z}; }
 Microsoft::Xna::Framework::Color ToNativeColour(CNA_Color v) {
   return {v.r, v.g, v.b, v.a};
@@ -131,7 +131,7 @@ CNA_Result cna_debug_draw_destroy(const CNA_DebugDrawHandle debug) {
 CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
                                 const CNA_Matrix *const view,
                                 const CNA_Matrix *const projection) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (view == nullptr || projection == nullptr) {
           return InvalidArgument("A matrix is null.");
@@ -141,27 +141,11 @@ CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_end(const CNA_DebugDrawHandle debug) {
-  return CNA_WITH_DEBUG(
-      debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
-        d->value->end();
-        return CNA_RESULT_SUCCESS;
-      });
-}
-
-CNA_Result cna_debug_draw_clear(const CNA_DebugDrawHandle debug) {
-  return CNA_WITH_DEBUG(
-      debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
-        d->value->clear();
-        return CNA_RESULT_SUCCESS;
-      });
-}
-
 CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
                                    const CNA_Vector3 *const from,
                                    const CNA_Vector3 *const to,
                                    const CNA_Color colour) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (from == nullptr || to == nullptr) {
           return InvalidArgument("An endpoint is null.");
@@ -175,7 +159,7 @@ CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
 CNA_Result cna_debug_draw_add_box(const CNA_DebugDrawHandle debug,
                                   const CNA_BoundingBox *const bounds,
                                   const CNA_Color colour) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         BoundingBox native;
         if (const CNA_Result result = ToNativeBounds(bounds, &native);
@@ -191,7 +175,7 @@ CNA_Result cna_debug_draw_add_sphere(const CNA_DebugDrawHandle debug,
                                      const CNA_Vector3 *const centre,
                                      const float radius, const CNA_Color colour,
                                      const int32_t segments) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (const CNA_Result result =
                 RequireVector3Argument(centre, "The centre is null.");
@@ -209,7 +193,7 @@ CNA_Result cna_debug_draw_add_sphere(const CNA_DebugDrawHandle debug,
 CNA_Result cna_debug_draw_add_bounding_sphere(
     const CNA_DebugDrawHandle debug, const CNA_BoundingSphere *const sphere,
     const CNA_Color colour, const int32_t segments) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (sphere == nullptr) {
           return InvalidArgument("The sphere is null.");
@@ -225,7 +209,7 @@ CNA_Result cna_debug_draw_add_bounding_sphere(
 CNA_Result cna_debug_draw_add_frustum(const CNA_DebugDrawHandle debug,
                                       const CNA_BoundingFrustum frustum,
                                       const CNA_Color colour) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         d->value->addFrustum(Microsoft::Xna::Framework::BoundingFrustum(
                                  ToNative(frustum.matrix)),
@@ -237,7 +221,7 @@ CNA_Result cna_debug_draw_add_frustum(const CNA_DebugDrawHandle debug,
 CNA_Result cna_debug_draw_add_cross(const CNA_DebugDrawHandle debug,
                                     const CNA_Vector3 *const position,
                                     const float size, const CNA_Color colour) {
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (const CNA_Result result =
                 RequireVector3Argument(position, "The position is null.");
@@ -250,38 +234,6 @@ CNA_Result cna_debug_draw_add_cross(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_is_depth_tested(const CNA_DebugDrawHandle debug,
-                                          CNA_Bool *const outDepthTested) {
-  return CNA_WITH_DEBUG(
-      debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
-        return StoreValue(outDepthTested,
-                          static_cast<CNA_Bool>(ToCBool(d->value->isDepthTested())));
-      });
-}
-
-CNA_Result cna_debug_draw_set_depth_tested(const CNA_DebugDrawHandle debug,
-                                           const CNA_Bool depthTested) {
-  if (const CNA_Result result =
-          CNA::C::Detail::ValidateCanonicalBool(depthTested, "depth_tested");
-      result != CNA_RESULT_SUCCESS) {
-    return result;
-  }
-  return CNA_WITH_DEBUG(
-      debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
-        d->value->setDepthTested(depthTested == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-      });
-}
-
-CNA_Result cna_debug_draw_get_line_count(const CNA_DebugDrawHandle debug,
-                                         int32_t *const outCount) {
-  return CNA_WITH_DEBUG(
-      debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
-        return StoreValue(outCount,
-                          static_cast<int32_t>(d->value->getLineCount()));
-      });
-}
-
 CNA_Result cna_debug_draw_copy_vertices(
     const CNA_DebugDrawHandle debug, const CNA_Bool depthTested,
     CNA_VertexPositionColor *const destination, const uint64_t capacity,
@@ -291,7 +243,7 @@ CNA_Result cna_debug_draw_copy_vertices(
       result != CNA_RESULT_SUCCESS) {
     return result;
   }
-  return CNA_WITH_DEBUG(
+  return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         const auto &vertices = d->value->getVertices(depthTested == CNA_TRUE);
         std::vector<CNA_VertexPositionColor> values;
@@ -321,12 +273,6 @@ CNA_Result cna_debug_draw_begin(CNA_DebugDrawHandle, const CNA_Matrix *,
                                 const CNA_Matrix *) {
   return CNA_RESULT_NOT_SUPPORTED;
 }
-CNA_Result cna_debug_draw_end(CNA_DebugDrawHandle) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_clear(CNA_DebugDrawHandle) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
 CNA_Result cna_debug_draw_add_line(CNA_DebugDrawHandle, const CNA_Vector3 *,
                                    const CNA_Vector3 *, CNA_Color) {
   return CNA_RESULT_NOT_SUPPORTED;
@@ -352,18 +298,12 @@ CNA_Result cna_debug_draw_add_cross(CNA_DebugDrawHandle, const CNA_Vector3 *,
                                     float, CNA_Color) {
   return CNA_RESULT_NOT_SUPPORTED;
 }
-CNA_Result cna_debug_draw_is_depth_tested(CNA_DebugDrawHandle, CNA_Bool *) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_set_depth_tested(CNA_DebugDrawHandle, CNA_Bool) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_get_line_count(CNA_DebugDrawHandle, int32_t *) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
 CNA_Result cna_debug_draw_copy_vertices(CNA_DebugDrawHandle, CNA_Bool,
                                         CNA_VertexPositionColor *, uint64_t,
                                         uint64_t *) {
   return CNA_RESULT_NOT_SUPPORTED;
 }
 #endif // CNA_CNAEXT
+
+// The mechanically regular routes of this family, generated from modules/c-api/spec/DebugDraw.toml.
+#include "generated/DebugDraw.inc"

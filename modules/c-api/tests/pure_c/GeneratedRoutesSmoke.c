@@ -121,6 +121,7 @@ static CNA_ContentReaderHandle v_CNA_ContentReaderHandle;
 static CNA_ContentTypeReaderHandle v_CNA_ContentTypeReaderHandle;
 static CNA_CurveHandle v_CNA_CurveHandle;
 static CNA_CurveKeyCollectionHandle v_CNA_CurveKeyCollectionHandle;
+static CNA_DebugDrawHandle v_CNA_DebugDrawHandle;
 static CNA_DepthFormat v_CNA_DepthFormat;
 static CNA_DirectionalLightHandle v_CNA_DirectionalLightHandle;
 static CNA_DisplayOrientation v_CNA_DisplayOrientation;
@@ -315,6 +316,13 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_reader_get_position(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_get_position", "a null out_position");
     failures += expect(cna_cnb_reader_get_size(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_get_size", "a null out_size");
     failures += expect(cna_cnb_reader_get_context_size(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_get_context_size", "a null out_byte_count");
+    failures += expect(cna_cnb_reader_read_u8(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_u8", "a null out_value");
+    failures += expect(cna_cnb_reader_read_u16(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_u16", "a null out_value");
+    failures += expect(cna_cnb_reader_read_u32(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_u32", "a null out_value");
+    failures += expect(cna_cnb_reader_read_u64(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_u64", "a null out_value");
+    failures += expect(cna_cnb_reader_read_i32(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_i32", "a null out_value");
+    failures += expect(cna_cnb_reader_read_f32(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_f32", "a null out_value");
+    failures += expect(cna_cnb_reader_read_f64(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_f64", "a null out_value");
     failures += expect(cna_cnb_cnj_result_get_asset_type_id(v_CNA_CnjToCnbResultHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_asset_type_id", "a null out_asset_type_id");
     failures += expect(cna_cnb_cnj_result_get_asset_type_name_size(v_CNA_CnjToCnbResultHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_asset_type_name_size", "a null out_byte_count");
     failures += expect(cna_cnb_cnj_result_get_absorbed_file_count(v_CNA_CnjToCnbResultHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_absorbed_file_count", "a null out_count");
@@ -427,6 +435,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_curve_key_init_tangents(v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_init_tangents", "a null out_key");
     failures += expect(cna_curve_key_collection_get_count(v_CNA_CurveKeyCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_collection_get_count", "a null out_count");
     failures += expect(cna_curve_evaluate(v_CNA_CurveHandle, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_evaluate", "a null out_value");
+    failures += expect_unless_compiled_out(cna_debug_draw_is_depth_tested(v_CNA_DebugDrawHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_debug_draw_is_depth_tested", "a null out_depth_tested");
+    failures += expect_unless_compiled_out(cna_debug_draw_get_line_count(v_CNA_DebugDrawHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_debug_draw_get_line_count", "a null out_count");
     failures += expect(cna_vibrate_controller_get_is_supported_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vibrate_controller_get_is_supported_ext", "a null out_supported");
     failures += expect(cna_vibrate_controller_get_device_name_size_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vibrate_controller_get_device_name_size_ext", "a null out_bytes");
     failures += expect_unless_compiled_out(cna_power_get_state_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_power_get_state_ext", "a null out_state");
@@ -1636,6 +1646,13 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_reader_get_position(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_get_position", what);
     failures += expect(cna_cnb_reader_get_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_get_size", what);
     failures += expect(cna_cnb_reader_get_context_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_get_context_size", what);
+    failures += expect(cna_cnb_reader_read_u8(handle, &o_uint8_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_u8", what);
+    failures += expect(cna_cnb_reader_read_u16(handle, &o_uint16_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_u16", what);
+    failures += expect(cna_cnb_reader_read_u32(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_u32", what);
+    failures += expect(cna_cnb_reader_read_u64(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_u64", what);
+    failures += expect(cna_cnb_reader_read_i32(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_i32", what);
+    failures += expect(cna_cnb_reader_read_f32(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_f32", what);
+    failures += expect(cna_cnb_reader_read_f64(handle, &o_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_f64", what);
     failures += expect(cna_cnb_model_clear_skeleton(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_clear_skeleton", what);
     failures += expect(cna_cnb_model_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_destroy", what);
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_asset_type_name", what);
@@ -1646,6 +1663,13 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_cnj_result_get_external_reference_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_get_external_reference_count", what);
     failures += expect(cna_cnb_byte_writer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_destroy", what);
     failures += expect(cna_cnb_byte_writer_get_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_get_size", what);
+    failures += expect(cna_cnb_byte_writer_write_u8(handle, v_uint8_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_u8", what);
+    failures += expect(cna_cnb_byte_writer_write_u16(handle, v_uint16_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_u16", what);
+    failures += expect(cna_cnb_byte_writer_write_u32(handle, v_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_u32", what);
+    failures += expect(cna_cnb_byte_writer_write_u64(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_u64", what);
+    failures += expect(cna_cnb_byte_writer_write_i32(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_i32", what);
+    failures += expect(cna_cnb_byte_writer_write_f32(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f32", what);
+    failures += expect(cna_cnb_byte_writer_write_f64(handle, v_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f64", what);
     failures += expect(cna_cnb_writer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_destroy", what);
     failures += expect(cna_cnb_writer_get_schema_chunk_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_get_schema_chunk_count", what);
     failures += expect(cna_cnb_texture_data_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_destroy", what);
@@ -1690,6 +1714,11 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_curve_key_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_curve_key_collection_get_count", what);
     failures += expect(cna_curve_destroy(curve_routes_handle), CNA_RESULT_INVALID_HANDLE, "cna_curve_destroy", what);
     failures += expect(cna_curve_evaluate(curve_routes_handle, v_float, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_curve_evaluate", what);
+    failures += expect_unless_compiled_out(cna_debug_draw_end(handle), CNA_RESULT_INVALID_HANDLE, "cna_debug_draw_end", what);
+    failures += expect_unless_compiled_out(cna_debug_draw_clear(handle), CNA_RESULT_INVALID_HANDLE, "cna_debug_draw_clear", what);
+    failures += expect_unless_compiled_out(cna_debug_draw_is_depth_tested(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_debug_draw_is_depth_tested", what);
+    failures += expect_unless_compiled_out(cna_debug_draw_set_depth_tested(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_debug_draw_set_depth_tested", what);
+    failures += expect_unless_compiled_out(cna_debug_draw_get_line_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_debug_draw_get_line_count", what);
     failures += expect(cna_vibrate_controller_start(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_vibrate_controller_start", what);
     failures += expect(cna_vibrate_controller_start_with_intensity_ext(handle, v_int64_t, v_float), CNA_RESULT_INVALID_HANDLE, "cna_vibrate_controller_start_with_intensity_ext", what);
     failures += expect(cna_vibrate_controller_start_left_right_ext(handle, v_float, v_float, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_vibrate_controller_start_left_right_ext", what);
@@ -2839,6 +2868,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1719 generated routes\n", failures);
+    printf("%d failed checks across 1738 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

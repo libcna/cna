@@ -41,6 +41,15 @@ cna_cnb_reader_get_remaining = { get = "object->value->Remaining()" }
 cna_cnb_reader_get_position = { get = "object->value->Position()" }
 cna_cnb_reader_get_size = { get = "object->value->Size()" }
 cna_cnb_reader_get_context_size = { result = "ReportTextSize(object->value->Context(), out_byte_count)" }
+# The fixed-width reads leave their output untouched on a truncation: the canonical read throws
+# before anything is assigned.
+cna_cnb_reader_read_u8 = { get = "object->value->ReadU8()" }
+cna_cnb_reader_read_u16 = { get = "object->value->ReadU16()" }
+cna_cnb_reader_read_u32 = { get = "object->value->ReadU32()" }
+cna_cnb_reader_read_u64 = { get = "object->value->ReadU64()" }
+cna_cnb_reader_read_i32 = { get = "object->value->ReadI32()" }
+cna_cnb_reader_read_f32 = { get = "object->value->ReadF32()" }
+cna_cnb_reader_read_f64 = { get = "object->value->ReadF64()" }
 
 [model]
 lookup = "GetModel"
@@ -69,6 +78,13 @@ object = "std::shared_ptr<CnbByteWriterResource>"
 [byte_writer.routes]
 cna_cnb_byte_writer_destroy = { release = true }
 cna_cnb_byte_writer_get_size = { get = "object->value->Size()" }
+cna_cnb_byte_writer_write_u8 = { call = "object->value->WriteU8(value)" }
+cna_cnb_byte_writer_write_u16 = { call = "object->value->WriteU16(value)" }
+cna_cnb_byte_writer_write_u32 = { call = "object->value->WriteU32(value)" }
+cna_cnb_byte_writer_write_u64 = { call = "object->value->WriteU64(value)" }
+cna_cnb_byte_writer_write_i32 = { call = "object->value->WriteI32(value)" }
+cna_cnb_byte_writer_write_f32 = { call = "object->value->WriteF32(value)" }
+cna_cnb_byte_writer_write_f64 = { call = "object->value->WriteF64(value)" }
 
 [writer]
 lookup = "GetWriter"

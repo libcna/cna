@@ -497,6 +497,132 @@ CNA_Result cna_cnb_reader_get_context_size(
     });
 }
 
+CNA_Result cna_cnb_reader_read_u8(
+    const CNA_CnbReaderHandle reader,
+    uint8_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_u8: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<uint8_t>(object->value->ReadU8());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_u16(
+    const CNA_CnbReaderHandle reader,
+    uint16_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_u16: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<uint16_t>(object->value->ReadU16());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_u32(
+    const CNA_CnbReaderHandle reader,
+    uint32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_u32: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<uint32_t>(object->value->ReadU32());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_u64(
+    const CNA_CnbReaderHandle reader,
+    uint64_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_u64: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<uint64_t>(object->value->ReadU64());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_i32(
+    const CNA_CnbReaderHandle reader,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_i32: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->ReadI32());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_f32(
+    const CNA_CnbReaderHandle reader,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_f32: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(object->value->ReadF32());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_f64(
+    const CNA_CnbReaderHandle reader,
+    double* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_f64: out_value is null.");
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<double>(object->value->ReadF64());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_cnb_model_clear_skeleton(
     const CNA_CnbModelDataHandle model)
 {
@@ -651,6 +777,111 @@ CNA_Result cna_cnb_byte_writer_get_size(
             return routeResult;
         }
         *out_size = static_cast<uint64_t>(object->value->Size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_u8(
+    const CNA_CnbByteWriterHandle writer,
+    const uint8_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteU8(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_u16(
+    const CNA_CnbByteWriterHandle writer,
+    const uint16_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteU16(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_u32(
+    const CNA_CnbByteWriterHandle writer,
+    const uint32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteU32(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_u64(
+    const CNA_CnbByteWriterHandle writer,
+    const uint64_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteU64(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_i32(
+    const CNA_CnbByteWriterHandle writer,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteI32(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_f32(
+    const CNA_CnbByteWriterHandle writer,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteF32(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_f64(
+    const CNA_CnbByteWriterHandle writer,
+    const double value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteF64(value);
         return CNA_RESULT_SUCCESS;
     });
 }

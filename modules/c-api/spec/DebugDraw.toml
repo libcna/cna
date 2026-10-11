@@ -1,0 +1,15 @@
+# DebugDraw routes, generated into src/generated/DebugDraw.inc,
+# which src/CnaCApiDebugDraw.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[debug_draw]
+lookup = "BorrowDebugDraw"
+object = "std::shared_ptr<DebugDrawResource>"
+feature = "CNA_CNAEXT"
+unavailable = "CNA_RESULT_NOT_SUPPORTED"
+
+[debug_draw.routes]
+cna_debug_draw_end = { call = "object->value->end()" }
+cna_debug_draw_clear = { call = "object->value->clear()" }
+cna_debug_draw_is_depth_tested = { get = "object->value->isDepthTested()" }
+cna_debug_draw_set_depth_tested = { call = "object->value->setDepthTested(depth_tested)" }
+cna_debug_draw_get_line_count = { get = "object->value->getLineCount()" }

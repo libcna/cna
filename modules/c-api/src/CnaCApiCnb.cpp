@@ -1568,38 +1568,6 @@ CNA_Result cna_cnb_reader_create(
     });
 }
 
-/*
- * The seven fixed-width reads are one shape repeated. Each leaves its output untouched on a
- * truncation, because the canonical read throws before it assigns and the assignment here is the
- * last thing that happens.
- */
-#define CNA_CNB_DEFINE_READ(routeName, cType, canonicalCall, outputName)                       \
-    CNA_Result routeName(const CNA_CnbReaderHandle readerHandle, cType* const outValue)        \
-    {                                                                                          \
-        return CallWithExceptionBarrier([&]() -> CNA_Result {                                  \
-            std::shared_ptr<CnbReaderResource> reader;                                         \
-            if (const CNA_Result result = GetReader(readerHandle, &reader);                    \
-                result != CNA_RESULT_SUCCESS) {                                                \
-                return result;                                                                 \
-            }                                                                                  \
-            if (outValue == nullptr) {                                                         \
-                return InvalidArgument(outputName);                                            \
-            }                                                                                  \
-            *outValue = reader->value->canonicalCall();                                        \
-            return CNA_RESULT_SUCCESS;                                                         \
-        });                                                                                    \
-    }
-
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_u8, uint8_t, ReadU8, "The byte output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_u16, uint16_t, ReadU16, "The value output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_u32, uint32_t, ReadU32, "The value output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_u64, uint64_t, ReadU64, "The value output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_i32, int32_t, ReadI32, "The value output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_f32, float, ReadF32, "The value output is null.")
-CNA_CNB_DEFINE_READ(cna_cnb_reader_read_f64, double, ReadF64, "The value output is null.")
-
-#undef CNA_CNB_DEFINE_READ
-
 CNA_Result cna_cnb_reader_read_string(
     const CNA_CnbReaderHandle readerHandle,
     uint64_t* const outByteCount)
@@ -1777,31 +1745,6 @@ CNA_Result cna_cnb_byte_writer_create_from_bytes(
         return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
     });
 }
-
-/* The seven fixed-width writes are one shape repeated, exactly as the seven reads are. */
-#define CNA_CNB_DEFINE_WRITE(routeName, cType, canonicalCall)                                  \
-    CNA_Result routeName(const CNA_CnbByteWriterHandle writerHandle, const cType value)        \
-    {                                                                                          \
-        return CallWithExceptionBarrier([&]() -> CNA_Result {                                  \
-            std::shared_ptr<CnbByteWriterResource> writer;                                     \
-            if (const CNA_Result result = GetByteWriter(writerHandle, &writer);                \
-                result != CNA_RESULT_SUCCESS) {                                                \
-                return result;                                                                 \
-            }                                                                                  \
-            writer->value->canonicalCall(value);                                               \
-            return CNA_RESULT_SUCCESS;                                                         \
-        });                                                                                    \
-    }
-
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_u8, uint8_t, WriteU8)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_u16, uint16_t, WriteU16)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_u32, uint32_t, WriteU32)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_u64, uint64_t, WriteU64)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_i32, int32_t, WriteI32)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_f32, float, WriteF32)
-CNA_CNB_DEFINE_WRITE(cna_cnb_byte_writer_write_f64, double, WriteF64)
-
-#undef CNA_CNB_DEFINE_WRITE
 
 CNA_Result cna_cnb_byte_writer_write_string(
     const CNA_CnbByteWriterHandle writerHandle,
