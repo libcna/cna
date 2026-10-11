@@ -108,9 +108,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
   the reason it's kept.
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
   per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
-- `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md` (+ their
-  `_images/` folders) — recent (Tasks 954/955, 2026-07-11), cross-repo `../cna-samples`
-  investigation write-ups; current as of their own dates.
+- `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md` — recent
+  (Tasks 954/955, 2026-07-11), cross-repo `../cna-samples` investigation write-ups; current as of
+  their own dates. Their screenshots were removed on 2026-10-11 and remain in Git history.
 
 ## Platform / renderer limitations
 

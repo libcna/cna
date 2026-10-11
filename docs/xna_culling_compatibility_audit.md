@@ -65,8 +65,8 @@ important clue — it just needed to be tested at the scale of the whole tank, n
 
 ## 3. Live confirmation — CNA vs. real XNA 4.0
 
-All screenshots referenced below are preserved at `docs/xna_culling_compatibility_audit_images/`
-(not generated/build output — committed investigation reference material).
+The screenshots named in this document were removed from the tree on 2026-10-11; Git history
+keeps them under `docs/xna_culling_compatibility_audit_images/` (commits `76a305efd`, `be7707579`).
 
 **CNA (pre-fix, EasyGL renderer, texture fix applied, no CullMode override), live screenshot:**
 `cna_default_bug_present.png`.
@@ -267,7 +267,7 @@ backward relative to real XNA, not by the asset.
 **This is exactly why `tools/xna-reference/CullModeTest/` (§9) existed — to settle it with real
 XNA, not more reasoning about FNA source.** The project owner built and ran it on the same
 Windows 7/XNA 4.0 VM used for §3's screenshot. Result
-(`docs/xna_culling_compatibility_audit_images/` — see the project's own screenshot from that run):
+(`xna4_cullmodetest_result_authoritative.png`, see §3):
 
 | Quadrant | CullMode | Real XNA 4.0 result |
 |---|---|---|
@@ -380,8 +380,8 @@ evidence that closed this investigation.
   Vulkan/Bgfx (retired 2026-09-17).
 - **New**: `modules/graphics/examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
   EasyGL/Vulkan/Bgfx.
-- **New**: this document + `docs/xna_culling_compatibility_audit_images/` (3 reference
-  screenshots, plus the XNA `CullModeTest` result).
+- **New**: this document + 3 reference screenshots and the XNA `CullModeTest` result (removed
+  from the tree on 2026-10-11, see §3).
 - `CMakeLists.txt`: the 2 new tests' registration (6 `add_test`/`cna_*_test` blocks total).
 - **No production `CNA`/`Microsoft::Xna` source changes** — the framework was found correct
   (confirmed twice over: internally self-consistent, §4; and independently matching real XNA,

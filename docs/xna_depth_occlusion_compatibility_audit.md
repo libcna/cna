@@ -33,18 +33,20 @@ patched (reverted before commit, confirmed via `git diff` showing zero net chang
 identity world rotation, with the camera already fixed (SimpleAnimation's own hardcoded
 `Matrix.CreateLookAt`).
 
-**Before fix** (`docs/xna_depth_occlusion_compatibility_audit_images/before_static_pose.png`):
+The screenshots named in this document were removed from the tree on 2026-10-11; Git history
+keeps them under `docs/xna_depth_occlusion_compatibility_audit_images/` (commit `3de312870`).
+
+**Before fix** (`before_static_pose.png`):
 the turret dome shows dark rectangular "window" gaps letting the grey background show through
 where it should be solid (the turret is a closed cylinder in the source mesh -- confirmed via
 the same edge-adjacency check used in the culling audit), and the engine/exhaust tube connecting
 the two sides of the hull incorrectly overlaps into the turret's own silhouette.
 
-**After fix** (`docs/xna_depth_occlusion_compatibility_audit_images/after_static_pose.png`):
+**After fix** (`after_static_pose.png`):
 turret dome is solid and closed, matching the authoritative XNA reference; the connecting tube no
 longer bleeds through the turret. 61,236 of 748,800 pixels (~8.2%) differ between the two
 screenshots -- concentrated exactly in the turret windows, the engine tube/turret overlap region,
-and parts of the wheel hub structure (see
-`docs/xna_depth_occlusion_compatibility_audit_images/before_after_diff.png`).
+and parts of the wheel hub structure (see `before_after_diff.png`).
 
 This was **constant**, not animation-angle-dependent -- the root cause (below) is a
 `GraphicsDevice`-construction-time default, unrelated to any per-frame animation state, so it
@@ -233,7 +235,7 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
 - **New**: `modules/graphics/examples/graphicsdevice_default_state_occlusion_test.cpp` (§7), registered on all 3
   renderers.
 - `CMakeLists.txt`: 3 new test registrations.
-- **New**: this document + `docs/xna_depth_occlusion_compatibility_audit_images/`.
+- **New**: this document + its screenshots (removed from the tree on 2026-10-11, see §2).
 
 ### `cna-samples`
 
