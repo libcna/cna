@@ -25,6 +25,23 @@ Every file except the two marked "never edit" (and `tests/pure_c/BoolContractSmo
 implement are in [`ERRORS.md`](ERRORS.md), [`HANDLES.md`](HANDLES.md),
 [`OWNERSHIP.md`](OWNERSHIP.md) and [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md).
 
+## Quick answers
+
+| Question | Answer |
+|---|---|
+| How do I add a simple C property? | Declare it in the header, add one spec line, regenerate — [below](#adding-a-simple-route). |
+| How do I add a complex hand-written function? | Write it in `src/CnaCApi<Family>.cpp` against the support layer — [What stays hand-written](#what-stays-hand-written). |
+| Where do C/C++ conversions live? | `ToNative`/`ToC` and the enum and value checks in `src/CnaCApiMarshal.hpp`. |
+| Where are handles defined? | Handle types in the public headers; the kinds (`ObjectKind`) and the registry in `src/CnaCApiDetail.hpp`; the contract in [`HANDLES.md`](HANDLES.md). A new kind is one `ObjectKind` value plus a lookup in its family. |
+| How do I specify ownership? | `CreateHandle`/`ReleaseHandle` publish and release; who owns what is in [`OWNERSHIP.md`](OWNERSHIP.md). A destroy with nothing to undo is a `release` spec line; anything else is hand-written. |
+| How are strings represented? | UTF-8 `CNA_StringView` in, size-then-copy out (`size`/`copy` kinds, `ReportTextSize`/`CopyText` in `src/CnaCApiOutput.hpp`) — [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md). |
+| How are arrays copied? | `CopyElements`/`CopyBytes` in `src/CnaCApiOutput.hpp`: the full count always, nothing written on a short buffer. |
+| How are errors translated? | `CallWithExceptionBarrier` (`src/CnaCApiDetail.hpp`) turns every exception into a result code and error record; `InvalidArgument`/`InvalidState`/`NotSupported` refuse — [`ERRORS.md`](ERRORS.md). |
+| How do I regenerate the C API? | `python3 tools/c-api/generate_routes.py`. |
+| How do I verify generated files are current? | `python3 tools/c-api/generate_routes.py --check` (CTest `CApiGeneratedRoutesCurrent`, and CI). |
+| Which files may I edit by hand? | All but `src/generated/*.inc` and `tests/pure_c/GeneratedRoutesSmoke.c` (and `BoolContractSmoke.c`, from its own script). |
+| How do I extend the schema safely? | [Changing the generator](#changing-the-generator): change `generate_routes.py`, regenerate, read the diff of `src/generated/`, build, test. |
+
 ## Adding a simple route
 
 1. Declare it in the public header, with its Doxygen comment, as for any route.
