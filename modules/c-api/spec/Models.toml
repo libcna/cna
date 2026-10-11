@@ -195,3 +195,35 @@ arguments = 2
 [model_skin.routes]
 cna_model_get_skin_name_byte_count_ext = { size = "object->Name" }
 cna_model_copy_skin_name_ext = { copy = "object->Name" }
+
+[collection_and_bone]
+lookup = "GetCollection"
+object = "std::shared_ptr<BoneCollectionResource>"
+other = { lookup = "GetBone", object = "std::shared_ptr<BoneResource>" }
+
+[collection_and_bone.routes]
+cna_model_bone_collection_contains = { get = "std::find(CollectionNodes(*object).begin(), CollectionNodes(*object).end(), other->node) != CollectionNodes(*object).end()" }
+
+[mesh_collection_and_mesh]
+lookup = "GetMeshCollection"
+object = "std::shared_ptr<MeshCollectionResource>"
+other = { lookup = "GetMesh", object = "std::shared_ptr<MeshResource>" }
+
+[mesh_collection_and_mesh.routes]
+cna_model_mesh_collection_contains = { get = "std::find(object->meshes.begin(), object->meshes.end(), other) != object->meshes.end()" }
+
+[effect_collection_and_effect]
+lookup = "GetEffectCollection"
+object = "std::shared_ptr<EffectCollectionResource>"
+other = { lookup = "ResolveEffect", object = "std::shared_ptr<EffectResource>" }
+
+[effect_collection_and_effect.routes]
+cna_model_effect_collection_contains = { get = "FindMeshEffect(*object->mesh, effect) != object->mesh->effects.end()" }
+
+[model_and_skinning_data]
+lookup = "GetModel"
+object = "std::shared_ptr<ModelResource>"
+other = { lookup = "GetSkinningData", object = "std::shared_ptr<SkinningDataResource>" }
+
+[model_and_skinning_data.routes]
+cna_model_apply_bind_pose_bone_transforms_ext = { get = "ApplyBindPoseBoneTransformsEXT(*object->value, *other->value)" }

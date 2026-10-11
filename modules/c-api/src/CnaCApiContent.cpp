@@ -1093,28 +1093,6 @@ CNA_Result cna_game_get_content_manager_ext(
     });
 }
 
-CNA_Result cna_game_set_content_manager_ext(
-    const CNA_Handle gameHandle,
-    const CNA_Handle contentManagerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::Game* game = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> source;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical setter copies, so the caller keeps its own manager and later changes to it
-        // never reach the game.
-        game->setContentProperty(*source->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace CNA::C::Detail {
 
 void ResetGameContentManagerState() noexcept

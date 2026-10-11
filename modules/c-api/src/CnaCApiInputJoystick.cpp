@@ -469,30 +469,6 @@ CNA_Result cna_joysticks_capture_state(
     });
 }
 
-CNA_Result cna_joystick_state_equals(
-    const CNA_JoystickStateHandle left,
-    const CNA_JoystickStateHandle right,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The joystick snapshot comparison output is null.");
-        }
-        std::shared_ptr<JoystickStateEXT> nativeLeft;
-        std::shared_ptr<JoystickStateEXT> nativeRight;
-        if (const CNA_Result result = BorrowState(left, &nativeLeft);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowState(right, &nativeRight);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEqual = ToCBool(*nativeLeft == *nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joysticks_unsubscribe_ext(
     const CNA_JoystickEventRegistrationHandle registration)
 {

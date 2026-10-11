@@ -1496,3 +1496,99 @@ CNA_Result cna_model_copy_skin_name_ext(
         return CNA::C::Detail::CopyText(object->Name, destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_model_bone_collection_contains(
+    const CNA_ModelBoneCollectionHandle collection,
+    const CNA_ModelBoneHandle bone,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_collection_contains: out_contains is null.");
+        }
+        std::shared_ptr<BoneCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BoneResource> other{};
+        if (const CNA_Result routeResult = GetBone(bone, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(std::find(CollectionNodes(*object).begin(), CollectionNodes(*object).end(), other->node) != CollectionNodes(*object).end());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_collection_contains(
+    const CNA_ModelMeshCollectionHandle collection,
+    const CNA_ModelMeshHandle mesh,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_collection_contains: out_contains is null.");
+        }
+        std::shared_ptr<MeshCollectionResource> object{};
+        if (const CNA_Result routeResult = GetMeshCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MeshResource> other{};
+        if (const CNA_Result routeResult = GetMesh(mesh, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(std::find(object->meshes.begin(), object->meshes.end(), other) != object->meshes.end());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_contains(
+    const CNA_ModelEffectCollectionHandle collection,
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_effect_collection_contains: out_contains is null.");
+        }
+        std::shared_ptr<EffectCollectionResource> object{};
+        if (const CNA_Result routeResult = GetEffectCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<EffectResource> other{};
+        if (const CNA_Result routeResult = ResolveEffect(effect, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(FindMeshEffect(*object->mesh, effect) != object->mesh->effects.end());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
+    const CNA_ModelHandle model,
+    const CNA_SkinningDataHandle data,
+    uint64_t* const out_posed_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_posed_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_apply_bind_pose_bone_transforms_ext: out_posed_count is null.");
+        }
+        std::shared_ptr<ModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SkinningDataResource> other{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_posed_count = static_cast<uint64_t>(ApplyBindPoseBoneTransformsEXT(*object->value, *other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}

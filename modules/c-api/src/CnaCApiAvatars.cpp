@@ -619,28 +619,6 @@ CNA_Result cna_avatar_renderer_get_bind_pose_at(
     });
 }
 
-CNA_Result cna_avatar_renderer_draw_animation(
-    const CNA_AvatarRendererHandle rendererHandle,
-    const CNA_AvatarAnimationHandle animationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical parameter is the animation interface, and this ABI's animation handle is the
-        // only thing that implements it -- a C caller cannot supply an implementation of its own.
-        renderer->value->Draw(animation->value.get());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_avatar_renderer_draw_bones(
     const CNA_AvatarRendererHandle rendererHandle,
     const CNA_Matrix* const bones,

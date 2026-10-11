@@ -30,3 +30,13 @@ cna_avatar_description_create_random = { result = "PublishDescription(AvatarDesc
 [values]
 [values.routes]
 cna_avatar_expression_init = { value = "ToC(AvatarExpression{})" }
+
+[renderer_and_animation]
+lookup = "BorrowRenderer"
+object = "std::shared_ptr<AvatarRendererResource>"
+other = { lookup = "BorrowAnimation", object = "std::shared_ptr<AvatarAnimationResource>" }
+
+[renderer_and_animation.routes]
+# The canonical parameter is the animation interface, and this ABI's animation handle is the
+# only thing that implements it -- a C caller cannot supply an implementation of its own.
+cna_avatar_renderer_draw_animation = { call = "object->value->Draw(other->value.get())" }

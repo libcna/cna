@@ -509,3 +509,23 @@ CNA_Result cna_media_player_subscribe_media_state_changed_ext(
         return SubscribePlayerEvent(MediaPlayer::MediaStateChanged, PlayerEventKind::MediaStateChanged, callback, context, out_registration);
     });
 }
+
+CNA_Result cna_media_queue_add(
+    const CNA_MediaQueueHandle queue,
+    const CNA_SongHandle song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaQueueResource> object{};
+        if (const CNA_Result routeResult = BorrowQueue(queue, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongResource> other{};
+        if (const CNA_Result routeResult = BorrowSong(song, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Add(new Song(other->value->getHandle(), other->value->getNameProperty()));
+        return CNA_RESULT_SUCCESS;
+    });
+}

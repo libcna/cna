@@ -53,3 +53,11 @@ cna_joysticks_subscribe_disconnected_ext = { result = "SubscribeHotplug(Joystick
 [values.routes]
 cna_joystick_info_init = { value = "MapInfo(JoystickInfoEXT())" }
 cna_joystick_capabilities_init = { value = "MapCapabilities(JoystickCapabilitiesEXT())" }
+
+[state_pair]
+lookup = "BorrowState"
+object = "std::shared_ptr<JoystickStateEXT>"
+other = { lookup = "BorrowState", object = "std::shared_ptr<JoystickStateEXT>" }
+
+[state_pair.routes]
+cna_joystick_state_equals = { get = "*object == *other" }

@@ -1385,3 +1385,23 @@ CNA_Result cna_cnb_loader_registry_register_builtins(void)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_cnb_sprite_font_data_set_atlas(
+    const CNA_CnbSpriteFontDataHandle font,
+    const CNA_CnbTextureDataHandle atlas)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> object{};
+        if (const CNA_Result routeResult = GetSpriteFont(font, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbTextureDataResource> other{};
+        if (const CNA_Result routeResult = GetTextureData(atlas, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->atlas = *other->value;
+        return CNA_RESULT_SUCCESS;
+    });
+}

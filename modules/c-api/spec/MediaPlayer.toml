@@ -54,3 +54,14 @@ cna_media_player_raise_media_state_changed_ext = { call = "MediaPlayer::OnMediaS
 [calls.routes]
 cna_media_player_subscribe_active_song_changed_ext = { result = "SubscribePlayerEvent(MediaPlayer::ActiveSongChanged, PlayerEventKind::ActiveSongChanged, callback, context, out_registration)" }
 cna_media_player_subscribe_media_state_changed_ext = { result = "SubscribePlayerEvent(MediaPlayer::MediaStateChanged, PlayerEventKind::MediaStateChanged, callback, context, out_registration)" }
+
+[queue_and_song]
+lookup = "BorrowQueue"
+object = "std::shared_ptr<MediaQueueResource>"
+other = { lookup = "BorrowSong", object = "std::shared_ptr<SongResource>" }
+
+[queue_and_song.routes]
+# The canonical Add adopts the pointer it is given. A handle's object cannot be handed
+# away without leaving the caller a stale handle, so C appends a copy -- which is exactly
+# what the canonical player does when it enqueues a song.
+cna_media_queue_add = { call = "object->value->Add(new Song(other->value->getHandle(), other->value->getNameProperty()))" }

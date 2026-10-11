@@ -348,3 +348,27 @@ CNA_Result cna_joystick_capabilities_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_joystick_state_equals(
+    const CNA_JoystickStateHandle left,
+    const CNA_JoystickStateHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_state_equals: out_equal is null.");
+        }
+        std::shared_ptr<JoystickStateEXT> object{};
+        if (const CNA_Result routeResult = BorrowState(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<JoystickStateEXT> other{};
+        if (const CNA_Result routeResult = BorrowState(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(*object == *other);
+        return CNA_RESULT_SUCCESS;
+    });
+}

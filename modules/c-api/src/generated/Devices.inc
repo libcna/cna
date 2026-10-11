@@ -874,3 +874,40 @@ CNA_Result cna_environment_get_device_type(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle texture,
+    CNA_Bool* const out_acquired)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_acquired == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_try_acquire_frame_ext: out_acquired is null.");
+        }
+        std::shared_ptr<CameraResource> object{};
+        if (const CNA_Result routeResult = BorrowCamera(camera, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> other{};
+        if (const CNA_Result routeResult = CNA::C::Detail::GetOwnedTexture2D(texture, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_acquired = CNA::C::Detail::ToCBool(object->value->TryAcquireFrame(*other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle texture,
+    CNA_Bool* const out_acquired)
+{
+    (void)camera;
+    (void)texture;
+    (void)out_acquired;
+    return ExtensionUnavailable();
+}
+#endif

@@ -862,3 +862,77 @@ CNA_Result cna_network_session_get_active_action_count_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_available_network_session_equals(
+    const CNA_AvailableNetworkSessionHandle left,
+    const CNA_AvailableNetworkSessionHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_equals: out_equal is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvailableSessionResource> other{};
+        if (const CNA_Result routeResult = GetSession(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(*object->value == *other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_not_equals(
+    const CNA_AvailableNetworkSessionHandle left,
+    const CNA_AvailableNetworkSessionHandle right,
+    CNA_Bool* const out_not_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_not_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_not_equals: out_not_equal is null.");
+        }
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvailableSessionResource> other{};
+        if (const CNA_Result routeResult = GetSession(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_not_equal = CNA::C::Detail::ToCBool(*object->value != *other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_enable_send_voice(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_NetworkGamerHandle remote_gamer,
+    const CNA_Bool c_enable)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enable, "enable");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        LocalNetworkGamer* object{};
+        if (const CNA_Result routeResult = BorrowLocalGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        NetworkGamer* other{};
+        if (const CNA_Result routeResult = BorrowOptionalGamer(remote_gamer, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enable = CNA::C::Detail::FromCBool(c_enable);
+        object->EnableSendVoice(other, enable);
+        return CNA_RESULT_SUCCESS;
+    });
+}

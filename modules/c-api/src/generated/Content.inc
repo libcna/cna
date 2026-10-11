@@ -139,3 +139,23 @@ CNA_Result cna_content_manager_copy_manifest_relative_path(
         return CNA::C::Detail::CopyText(object->relativePath, destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_game_set_content_manager_ext(
+    const CNA_Handle game,
+    const CNA_Handle content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::Game* object{};
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameObject(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ContentManagerResource> other{};
+        if (const CNA_Result routeResult = GetContentManager(content_manager, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setContentProperty(*other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}

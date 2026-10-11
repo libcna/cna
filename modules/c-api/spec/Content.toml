@@ -22,3 +22,13 @@ arguments = 2
 
 [manifest_entry.routes]
 cna_content_manager_copy_manifest_relative_path = { copy = "object->relativePath" }
+
+[game_and_content_manager]
+lookup = "CNA::C::Detail::GetGameObject"
+object = "Microsoft::Xna::Framework::Game*"
+other = { lookup = "GetContentManager", object = "std::shared_ptr<ContentManagerResource>" }
+
+[game_and_content_manager.routes]
+# The canonical setter copies, so the caller keeps its own manager and later changes to it
+# never reach the game.
+cna_game_set_content_manager_ext = { call = "object->setContentProperty(*other->value)" }

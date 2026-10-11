@@ -4777,26 +4777,6 @@ CNA_Result cna_cnb_sprite_font_data_set_glyph(
     });
 }
 
-CNA_Result cna_cnb_sprite_font_data_set_atlas(
-    const CNA_CnbSpriteFontDataHandle fontHandle,
-    const CNA_CnbTextureDataHandle atlasHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CnbTextureDataResource> atlas;
-        if (const CNA_Result result = GetTextureData(atlasHandle, &atlas);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        font->value->atlas = *atlas->value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_sprite_font_data_copy_atlas(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     CNA_CnbTextureDataHandle* const outAtlas)

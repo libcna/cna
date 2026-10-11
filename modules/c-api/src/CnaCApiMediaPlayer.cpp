@@ -342,28 +342,5 @@ CNA_Result cna_media_queue_get_at(
     });
 }
 
-CNA_Result cna_media_queue_add(const CNA_MediaQueueHandle queue, const CNA_SongHandle song)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaQueueResource> queueResource;
-        if (const CNA_Result result = BorrowQueue(queue, &queueResource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SongResource> songResource;
-        if (const CNA_Result result = BorrowSong(song, &songResource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical Add adopts the pointer it is given. A handle's object cannot be handed
-        // away without leaving the caller a stale handle, so C appends a copy -- which is exactly
-        // what the canonical player does when it enqueues a song.
-        queueResource->value->Add(new Song(
-            songResource->value->getHandle(),
-            songResource->value->getNameProperty()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 // The mechanically regular routes of this family, generated from modules/c-api/spec/MediaPlayer.toml.
 #include "generated/MediaPlayer.inc"

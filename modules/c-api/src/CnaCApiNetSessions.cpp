@@ -258,54 +258,6 @@ CNA_Result cna_available_network_session_get_quality_of_service(
     });
 }
 
-CNA_Result cna_available_network_session_equals(
-    const CNA_AvailableNetworkSessionHandle leftHandle,
-    const CNA_AvailableNetworkSessionHandle rightHandle,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The equality output is null.");
-        }
-        std::shared_ptr<AvailableSessionResource> left;
-        std::shared_ptr<AvailableSessionResource> right;
-        if (const CNA_Result result = GetSession(leftHandle, &left);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetSession(rightHandle, &right);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEqual = ToCBool(*left->value == *right->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_available_network_session_not_equals(
-    const CNA_AvailableNetworkSessionHandle leftHandle,
-    const CNA_AvailableNetworkSessionHandle rightHandle,
-    CNA_Bool* const outNotEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNotEqual == nullptr) {
-            return InvalidArgument("The inequality output is null.");
-        }
-        std::shared_ptr<AvailableSessionResource> left;
-        std::shared_ptr<AvailableSessionResource> right;
-        if (const CNA_Result result = GetSession(leftHandle, &left);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetSession(rightHandle, &right);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outNotEqual = ToCBool(*left->value != *right->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_available_network_session_destroy(
     const CNA_AvailableNetworkSessionHandle sessionHandle)
 {
@@ -1906,31 +1858,6 @@ CNA_Result cna_local_network_gamer_create_ext(
             session,
             sessionHandle,
             outGamer);
-    });
-}
-
-CNA_Result cna_local_network_gamer_enable_send_voice(
-    const CNA_NetworkGamerHandle gamerHandle,
-    const CNA_NetworkGamerHandle remoteGamerHandle,
-    const CNA_Bool enable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(enable, "enable");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* remote = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(remoteGamerHandle, &remote);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->EnableSendVoice(remote, enable != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
     });
 }
 

@@ -94,6 +94,14 @@ owner = "std::shared_ptr<ModelResource>"    # keeps the model, and so the camera
 arguments = 2
 ```
 
+A route over two objects — equals, contains, index_of, add — takes the second handle right after
+the lookup's parameters, and its group says how to reach it; the generated route looks it up after
+the first, into `other`:
+
+```toml
+other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementResource>" }
+```
+
 A lookup that only validates (`ValidateActiveGameHandle`) is written without `object`, and a group
 without `lookup` holds the routes that need no object: value computations, static queries,
 commands such as `CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's first two parameters (a
@@ -111,7 +119,8 @@ unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing 
 - the logic itself: what a creation publishes and counts, what a destroy undoes, how an event is
   subscribed, how a bulk transfer or info structure is filled. It lives in the family's helpers,
   which `result` routes call (`OWNERSHIP.md` has the ownership rules they implement);
-- routes with more than one lookup, or with several statements of work after it;
+- routes with more lookups than an object and an `other`, or with several statements of work
+  after them;
 - routes that validate one argument against another, or need an output that may be null.
 
 Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments

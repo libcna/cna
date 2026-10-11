@@ -1224,26 +1224,6 @@ CNA_Result cna_effect_annotation_collection_destroy(
     });
 }
 
-CNA_Result cna_effect_annotation_collection_add(
-    const CNA_EffectAnnotationCollectionHandle collectionHandle,
-    const CNA_EffectAnnotationHandle annotationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Add(*annotation->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_get_at(
     const CNA_EffectAnnotationCollectionHandle collectionHandle,
     const uint64_t index,

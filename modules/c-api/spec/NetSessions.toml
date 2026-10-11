@@ -93,3 +93,20 @@ cna_network_session_join_invited_with_local_gamers = { result = "CreateSessionRe
 [values.routes]
 cna_network_session_get_instance_count_ext = { value = "NetworkSession::GetInstanceCountForTesting()" }
 cna_network_session_get_active_action_count_ext = { value = "NetworkSession::GetActiveActionInstanceCountForTesting()" }
+
+[session_pair]
+lookup = "GetSession"
+object = "std::shared_ptr<AvailableSessionResource>"
+other = { lookup = "GetSession", object = "std::shared_ptr<AvailableSessionResource>" }
+
+[session_pair.routes]
+cna_available_network_session_equals = { get = "*object->value == *other->value" }
+cna_available_network_session_not_equals = { get = "*object->value != *other->value" }
+
+[local_gamer_and_optional_gamer]
+lookup = "BorrowLocalGamer"
+object = "LocalNetworkGamer*"
+other = { lookup = "BorrowOptionalGamer", object = "NetworkGamer*" }
+
+[local_gamer_and_optional_gamer.routes]
+cna_local_network_gamer_enable_send_voice = { call = "object->EnableSendVoice(other, enable)" }

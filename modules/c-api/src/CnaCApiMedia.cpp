@@ -396,30 +396,6 @@ CNA_Result cna_song_copy_handle_text_ext(
     });
 }
 
-CNA_Result cna_song_equals(
-    const CNA_SongHandle left,
-    const CNA_SongHandle right,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The song comparison output is null.");
-        }
-        std::shared_ptr<SongResource> nativeLeft;
-        std::shared_ptr<SongResource> nativeRight;
-        if (const CNA_Result result = BorrowSong(left, &nativeLeft);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowSong(right, &nativeRight);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEqual = ToCBool(nativeLeft->value->Equals(nativeRight->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_song_copy_type_name(
     const CNA_SongHandle song,
     char* const destination,

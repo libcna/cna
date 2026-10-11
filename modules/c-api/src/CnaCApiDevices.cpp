@@ -1519,30 +1519,6 @@ CNA_Result cna_camera_create_with_test_backend_ext(
     });
 }
 
-CNA_Result cna_camera_try_acquire_frame_ext(
-    const CNA_CameraHandle camera,
-    const CNA_Handle textureHandle,
-    CNA_Bool* const outAcquired)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAcquired == nullptr) {
-            return InvalidArgument("The camera frame output is null.");
-        }
-        std::shared_ptr<CameraResource> resource;
-        if (const CNA_Result result = BorrowCamera(camera, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
-        if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAcquired = ToCBool(resource->value->TryAcquireFrame(*texture->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_camera_set_test_state_ext(
     const CNA_CameraHandle camera,
     const CNA_CameraState state)
@@ -1914,17 +1890,6 @@ CNA_Result cna_camera_create_with_test_backend_ext(
     if (outCamera != nullptr) {
         *outCamera = CNA_INVALID_HANDLE;
     }
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_try_acquire_frame_ext(
-    const CNA_CameraHandle camera,
-    const CNA_Handle texture,
-    CNA_Bool* const outAcquired)
-{
-    (void)camera;
-    (void)texture;
-    (void)outAcquired;
     return ExtensionUnavailable();
 }
 

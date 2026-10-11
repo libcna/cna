@@ -379,3 +379,27 @@ CNA_Result cna_media_source_get_type_name_size_at(
         return ReadEnumeratedSource(game, index, [&](const MediaSource& source) { *out_bytes = source.GetTypeName().size(); return CNA_RESULT_SUCCESS; });
     });
 }
+
+CNA_Result cna_song_equals(
+    const CNA_SongHandle left,
+    const CNA_SongHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_equals: out_equal is null.");
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongResource> other{};
+        if (const CNA_Result routeResult = BorrowSong(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}

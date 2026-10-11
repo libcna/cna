@@ -338,3 +338,11 @@ owner = "std::shared_ptr<EffectResource>"
 
 [effect_material.routes]
 cna_effect_material_get_retained_parameter_texture_count_ext = { get = "object->GetRetainedParameterTextureCountEXT()" }
+
+[collection_and_annotation]
+lookup = "GetCollection"
+object = "std::shared_ptr<AnnotationCollectionResource>"
+other = { lookup = "GetAnnotation", object = "std::shared_ptr<AnnotationResource>" }
+
+[collection_and_annotation.routes]
+cna_effect_annotation_collection_add = { call = "object->value->Add(*other->value)" }

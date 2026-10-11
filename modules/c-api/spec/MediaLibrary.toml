@@ -209,3 +209,51 @@ cna_picture_get_album = { result = "OptionalChild<Picture, PictureAlbum>(picture
 cna_picture_album_get_parent = { result = "OptionalChild<PictureAlbum, PictureAlbum>(album, out_parent, out_available, [](const PictureAlbum& value) { return value.getParentProperty(); })" }
 cna_media_library_get_pictures = { result = "LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getPicturesProperty(); }, \"The picture collection output is null.\")" }
 cna_media_library_get_saved_pictures = { result = "LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getSavedPicturesProperty(); }, \"The saved picture collection output is null.\")" }
+
+[album_pair]
+lookup = "Borrow<Album>"
+object = "std::shared_ptr<MediaChildResource<Album>>"
+other = { lookup = "Borrow<Album>", object = "std::shared_ptr<MediaChildResource<Album>>" }
+
+[album_pair.routes]
+cna_album_equals = { get = "object->value->Equals(other->value)" }
+
+[artist_pair]
+lookup = "Borrow<Artist>"
+object = "std::shared_ptr<MediaChildResource<Artist>>"
+other = { lookup = "Borrow<Artist>", object = "std::shared_ptr<MediaChildResource<Artist>>" }
+
+[artist_pair.routes]
+cna_artist_equals = { get = "object->value->Equals(other->value)" }
+
+[genre_pair]
+lookup = "Borrow<Genre>"
+object = "std::shared_ptr<MediaChildResource<Genre>>"
+other = { lookup = "Borrow<Genre>", object = "std::shared_ptr<MediaChildResource<Genre>>" }
+
+[genre_pair.routes]
+cna_genre_equals = { get = "object->value->Equals(other->value)" }
+
+[playlist_pair]
+lookup = "Borrow<Playlist>"
+object = "std::shared_ptr<MediaChildResource<Playlist>>"
+other = { lookup = "Borrow<Playlist>", object = "std::shared_ptr<MediaChildResource<Playlist>>" }
+
+[playlist_pair.routes]
+cna_playlist_equals = { get = "object->value->Equals(other->value)" }
+
+[picture_pair]
+lookup = "Borrow<Picture>"
+object = "std::shared_ptr<MediaChildResource<Picture>>"
+other = { lookup = "Borrow<Picture>", object = "std::shared_ptr<MediaChildResource<Picture>>" }
+
+[picture_pair.routes]
+cna_picture_equals = { get = "object->value->Equals(other->value)" }
+
+[picture_album_pair]
+lookup = "Borrow<PictureAlbum>"
+object = "std::shared_ptr<MediaChildResource<PictureAlbum>>"
+other = { lookup = "Borrow<PictureAlbum>", object = "std::shared_ptr<MediaChildResource<PictureAlbum>>" }
+
+[picture_album_pair.routes]
+cna_picture_album_equals = { get = "object->value->Equals(other->value)" }

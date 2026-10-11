@@ -182,3 +182,11 @@ cna_cnb_audio_frame_bytes = { value = "Cnb::CnbAudioFrameBytes(static_cast<Cnb::
 cna_cnb_loader_registry_clear = { call = "CNA::Content::CnbLoaderRegistry::Clear()" }
 cna_cnb_loader_registry_is_registered = { value = "CNA::Content::CnbLoaderRegistry::IsRegistered(asset_type_id)" }
 cna_cnb_loader_registry_register_builtins = { call = "CNA::Content::CnbLoaderRegistry::RegisterBuiltIns()" }
+
+[sprite_font_and_texture_data]
+lookup = "GetSpriteFont"
+object = "std::shared_ptr<CnbSpriteFontResource>"
+other = { lookup = "GetTextureData", object = "std::shared_ptr<CnbTextureDataResource>" }
+
+[sprite_font_and_texture_data.routes]
+cna_cnb_sprite_font_data_set_atlas = { call = "object->value->atlas = *other->value" }

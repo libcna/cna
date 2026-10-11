@@ -1832,33 +1832,6 @@ CNA_Result cna_model_bone_collection_find(
     });
 }
 
-CNA_Result cna_model_bone_collection_contains(
-    const CNA_ModelBoneCollectionHandle collectionHandle,
-    const CNA_ModelBoneHandle boneHandle,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The ModelBoneCollection contains output is null.");
-        }
-        std::shared_ptr<BoneCollectionResource> collection;
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(std::find(
-            CollectionNodes(*collection).begin(),
-            CollectionNodes(*collection).end(),
-            bone->node) != CollectionNodes(*collection).end());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_part_create(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_IndexBufferHandle indexBufferHandle,
@@ -2404,32 +2377,6 @@ CNA_Result cna_model_mesh_collection_find(
     });
 }
 
-CNA_Result cna_model_mesh_collection_contains(
-    const CNA_ModelMeshCollectionHandle collectionHandle,
-    const CNA_ModelMeshHandle meshHandle,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The ModelMeshCollection contains output is null.");
-        }
-        std::shared_ptr<MeshCollectionResource> collection;
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(std::find(
-            collection->meshes.begin(), collection->meshes.end(), mesh) !=
-                collection->meshes.end());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_effect_collection_destroy(
     const CNA_ModelEffectCollectionHandle collectionHandle)
 {
@@ -2468,31 +2415,6 @@ CNA_Result cna_model_effect_collection_get_at(
             return InvalidArgument("The ModelEffectCollection index is outside the valid range.");
         }
         *outEffect = collection->mesh->effects[static_cast<std::size_t>(index)].handle;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_effect_collection_contains(
-    const CNA_ModelEffectCollectionHandle collectionHandle,
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The ModelEffectCollection contains output is null.");
-        }
-        std::shared_ptr<EffectCollectionResource> collection;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(FindMeshEffect(*collection->mesh, effectHandle) !=
-                collection->mesh->effects.end());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -5372,31 +5294,6 @@ CNA_Result cna_model_apply_clip_to_bones_ext(
         // would pose the wrong bones without saying so. The canonical helper throws; the barrier
         // turns that into INVALID_ARGUMENT rather than letting it pass as success.
         ApplyClipToBonesEXT(*model->value, animations->value->Clips.at(name), time);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
-    const CNA_ModelHandle modelHandle,
-    const CNA_SkinningDataHandle dataHandle,
-    uint64_t* const outPosedCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPosedCount == nullptr) {
-            return InvalidArgument("The bind-pose posed-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPosedCount = static_cast<uint64_t>(
-            ApplyBindPoseBoneTransformsEXT(*model->value, *data->value));
         return CNA_RESULT_SUCCESS;
     });
 }

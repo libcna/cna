@@ -90,3 +90,13 @@ cna_camera_get_frame_height_ext = { get = "object->value->getFrameHeightProperty
 [values]
 [values.routes]
 cna_environment_get_device_type = { value = "Microsoft::Devices::Environment::getDeviceTypeProperty()" }
+
+[camera_and_texture]
+lookup = "BorrowCamera"
+object = "std::shared_ptr<CameraResource>"
+other = { lookup = "CNA::C::Detail::GetOwnedTexture2D", object = "std::shared_ptr<CNA::C::Detail::Texture2DResource>" }
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[camera_and_texture.routes]
+cna_camera_try_acquire_frame_ext = { get = "object->value->TryAcquireFrame(*other->value)" }

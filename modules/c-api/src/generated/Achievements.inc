@@ -287,3 +287,95 @@ CNA_Result cna_signed_in_gamer_get_achievements(
         return PublishCollection(object->GetAchievements(), out_achievements);
     });
 }
+
+CNA_Result cna_achievement_collection_index_of(
+    const CNA_AchievementCollectionHandle collection,
+    const CNA_AchievementHandle achievement,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_index_of: out_index is null.");
+        }
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AchievementResource> other{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_index = static_cast<int32_t>(object->value->IndexOf(*other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_achievement_collection_contains(
+    const CNA_AchievementCollectionHandle collection,
+    const CNA_AchievementHandle achievement,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_contains: out_contains is null.");
+        }
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AchievementResource> other{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(object->value->Contains(*other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_achievement_collection_add(
+    const CNA_AchievementCollectionHandle collection,
+    const CNA_AchievementHandle achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AchievementResource> other{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Add(*other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_achievement_collection_remove(
+    const CNA_AchievementCollectionHandle collection,
+    const CNA_AchievementHandle achievement,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_remove: out_removed is null.");
+        }
+        std::shared_ptr<AchievementCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AchievementResource> other{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_removed = CNA::C::Detail::ToCBool(object->value->Remove(*other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}

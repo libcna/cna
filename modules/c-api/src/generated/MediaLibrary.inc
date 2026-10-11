@@ -1901,3 +1901,147 @@ CNA_Result cna_media_library_get_saved_pictures(
         return LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getSavedPicturesProperty(); }, "The saved picture collection output is null.");
     });
 }
+
+CNA_Result cna_album_equals(
+    const CNA_AlbumHandle left,
+    const CNA_AlbumHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<Album>> object{};
+        if (const CNA_Result routeResult = Borrow<Album>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<Album>> other{};
+        if (const CNA_Result routeResult = Borrow<Album>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_artist_equals(
+    const CNA_ArtistHandle left,
+    const CNA_ArtistHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_artist_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<Artist>> object{};
+        if (const CNA_Result routeResult = Borrow<Artist>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<Artist>> other{};
+        if (const CNA_Result routeResult = Borrow<Artist>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_genre_equals(
+    const CNA_GenreHandle left,
+    const CNA_GenreHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_genre_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<Genre>> object{};
+        if (const CNA_Result routeResult = Borrow<Genre>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<Genre>> other{};
+        if (const CNA_Result routeResult = Borrow<Genre>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_playlist_equals(
+    const CNA_PlaylistHandle left,
+    const CNA_PlaylistHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_playlist_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> object{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<Playlist>> other{};
+        if (const CNA_Result routeResult = Borrow<Playlist>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_equals(
+    const CNA_PictureHandle left,
+    const CNA_PictureHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> object{};
+        if (const CNA_Result routeResult = Borrow<Picture>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<Picture>> other{};
+        if (const CNA_Result routeResult = Borrow<Picture>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_equals(
+    const CNA_PictureAlbumHandle left,
+    const CNA_PictureAlbumHandle right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_equals: out_equal is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> object{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(left, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> other{};
+        if (const CNA_Result routeResult = Borrow<PictureAlbum>(right, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(object->value->Equals(other->value));
+        return CNA_RESULT_SUCCESS;
+    });
+}

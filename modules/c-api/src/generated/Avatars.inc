@@ -88,3 +88,23 @@ CNA_Result cna_avatar_expression_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_avatar_renderer_draw_animation(
+    const CNA_AvatarRendererHandle renderer,
+    const CNA_AvatarAnimationHandle animation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AvatarRendererResource> object{};
+        if (const CNA_Result routeResult = BorrowRenderer(renderer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarAnimationResource> other{};
+        if (const CNA_Result routeResult = BorrowAnimation(animation, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Draw(other->value.get());
+        return CNA_RESULT_SUCCESS;
+    });
+}

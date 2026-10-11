@@ -38,3 +38,14 @@ object = "SignedInGamer*"
 
 [signed_in.routes]
 cna_signed_in_gamer_get_achievements = { result = "PublishCollection(object->GetAchievements(), out_achievements)" }
+
+[collection_and_achievement]
+lookup = "BorrowCollection"
+object = "std::shared_ptr<AchievementCollectionResource>"
+other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementResource>" }
+
+[collection_and_achievement.routes]
+cna_achievement_collection_index_of = { get = "object->value->IndexOf(*other->value)" }
+cna_achievement_collection_contains = { get = "object->value->Contains(*other->value)" }
+cna_achievement_collection_add = { call = "object->value->Add(*other->value)" }
+cna_achievement_collection_remove = { get = "object->value->Remove(*other->value)" }

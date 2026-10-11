@@ -2977,3 +2977,23 @@ CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_effect_annotation_collection_add(
+    const CNA_EffectAnnotationCollectionHandle collection,
+    const CNA_EffectAnnotationHandle annotation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnnotationCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AnnotationResource> other{};
+        if (const CNA_Result routeResult = GetAnnotation(annotation, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Add(*other->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}

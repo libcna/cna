@@ -289,26 +289,6 @@ CNA_Result cna_network_gamer_copy_machine(
     });
 }
 
-CNA_Result cna_network_gamer_set_machine(
-    const CNA_NetworkGamerHandle gamerHandle,
-    const CNA_NetworkMachineHandle machineHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkGamerResource> gamer;
-        if (const CNA_Result result = GetGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<NetworkMachineResource> machine;
-        if (const CNA_Result result = GetMachine(machineHandle, &machine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->value->setMachineProperty(*machine->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_network_gamer_get_session(
     const CNA_NetworkGamerHandle gamerHandle,
     CNA_Handle* const outSession)

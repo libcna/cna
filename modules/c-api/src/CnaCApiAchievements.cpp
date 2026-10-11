@@ -266,74 +266,6 @@ CNA_Result cna_achievement_collection_get_by_key(
     });
 }
 
-CNA_Result cna_achievement_collection_index_of(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const CNA_AchievementHandle achievementHandle,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The collection index output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(collection->value->IndexOf(*achievement->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_contains(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const CNA_AchievementHandle achievementHandle,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The collection containment output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(collection->value->Contains(*achievement->value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_add(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const CNA_AchievementHandle achievementHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AchievementCollectionResource> collection;
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Add(*achievement->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_achievement_collection_insert(
     const CNA_AchievementCollectionHandle collectionHandle,
     const int32_t index,
@@ -351,30 +283,6 @@ CNA_Result cna_achievement_collection_insert(
             return result;
         }
         collection->value->Insert(static_cast<int>(index), *achievement->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_achievement_collection_remove(
-    const CNA_AchievementCollectionHandle collectionHandle,
-    const CNA_AchievementHandle achievementHandle,
-    CNA_Bool* const outRemoved)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRemoved == nullptr) {
-            return InvalidArgument("The collection removal output is null.");
-        }
-        std::shared_ptr<AchievementCollectionResource> collection;
-        std::shared_ptr<AchievementResource> achievement;
-        if (const CNA_Result result = BorrowCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowAchievement(achievementHandle, &achievement);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRemoved = ToCBool(collection->value->Remove(*achievement->value));
         return CNA_RESULT_SUCCESS;
     });
 }
