@@ -261,6 +261,66 @@ CNA_Result cna_song_destroy(
     });
 }
 
+CNA_Result cna_song_copy_name(
+    const CNA_SongHandle song,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_song_copy_handle_text_ext(
+    const CNA_SongHandle song,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getHandle(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_song_copy_type_name(
+    const CNA_SongHandle song,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongResource> object{};
+        if (const CNA_Result routeResult = BorrowSong(song, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_song_collection_get_count(
     const CNA_SongCollectionHandle collection,
     int32_t* const out_count)
@@ -341,6 +401,26 @@ CNA_Result cna_song_collection_destroy(
     });
 }
 
+CNA_Result cna_song_collection_copy_type_name(
+    const CNA_SongCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SongCollectionResource> object{};
+        if (const CNA_Result routeResult = BorrowSongCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_media_source_get_type_at(
     const CNA_Handle game,
     const uint32_t index,
@@ -412,6 +492,16 @@ CNA_Result cna_visualization_data_get_type_name_size(
             return CNA::C::Detail::InvalidArgument("cna_visualization_data_get_type_name_size: out_bytes is null.");
         }
         return CNA::C::Detail::ReportTextSize(VisualizationData().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_visualization_data_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return VisualizationData().GetTypeName();
     });
 }
 

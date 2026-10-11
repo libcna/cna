@@ -55,6 +55,25 @@ CNA_Result cna_clipboard_get_has_text(
     });
 }
 
+CNA_Result cna_clipboard_copy_text(
+    const CNA_Handle game,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(Clipboard::GetTextEXT(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_sensors_get_count(
     const CNA_Handle game,
     uint32_t* const out_count)

@@ -173,3 +173,8 @@ cna_gyroscope_reading_get_type_name_size = { size = "GyroscopeReading().GetTypeN
 cna_attitude_reading_get_type_name_size = { size = "AttitudeReading().GetTypeName()" }
 cna_compass_reading_get_type_name_size = { size = "CompassReading().GetTypeName()" }
 cna_motion_reading_get_type_name_size = { size = "MotionReading().GetTypeName()" }
+cna_accelerometer_reading_copy_type_name = { copy = "AccelerometerReading().GetTypeName()" }
+cna_gyroscope_reading_copy_type_name = { copy = "GyroscopeReading().GetTypeName()" }
+cna_attitude_reading_copy_type_name = { copy = "AttitudeReading().GetTypeName()" }
+cna_compass_reading_copy_type_name = { copy = "CompassReading().GetTypeName()" }
+cna_motion_reading_copy_type_name = { copy = "MotionReading().GetTypeName()" }

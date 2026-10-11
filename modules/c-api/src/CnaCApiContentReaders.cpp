@@ -1590,26 +1590,6 @@ template <typename T>
 
 } // namespace
 
-CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
-    const CNA_ObjectDictionaryHandle dictionaryHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The dictionary runtime type-name output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            dictionary->value->GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_object_dictionary_ext_contains_key(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,

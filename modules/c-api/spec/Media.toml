@@ -21,6 +21,11 @@ cna_song_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_song_get_hash_code = { get = "object->value->GetHashCode()" }
 cna_song_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_song_destroy = { release = true }
+# The canonical string conversion returns the display name unchanged, so one route
+# serves both members.
+cna_song_copy_name = { copy = "object->value->ToString()" }
+cna_song_copy_handle_text_ext = { copy = "object->value->getHandle()" }
+cna_song_copy_type_name = { copy = "object->value->GetTypeName()" }
 
 [song_collection]
 lookup = "BorrowSongCollection"
@@ -32,6 +37,7 @@ cna_song_collection_get_is_disposed = { get = "object->value->getIsDisposedPrope
 cna_song_collection_dispose = { call = "object->value->Dispose()" }
 cna_song_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_song_collection_destroy = { release = true }
+cna_song_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
 
 [calls]
 [calls.routes]
@@ -50,6 +56,7 @@ cna_song_equals = { get = "object->value->Equals(other->value)" }
 [values]
 [values.routes]
 cna_visualization_data_get_type_name_size = { size = "VisualizationData().GetTypeName()" }
+cna_visualization_data_copy_type_name = { copy = "VisualizationData().GetTypeName()" }
 
 [active_game_handle]
 lookup = "ValidateActiveGameHandle"

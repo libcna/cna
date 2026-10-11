@@ -481,24 +481,6 @@ CNA_Result cna_input_devices_unsubscribe_ext(
     });
 }
 
-CNA_Result cna_clipboard_copy_text(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The clipboard text output is invalid.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(Clipboard::GetTextEXT(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_clipboard_set_text(const CNA_Handle gameHandle, const CNA_StringView text)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

@@ -290,6 +290,26 @@ CNA_Result cna_object_dictionary_ext_destroy(
     });
 }
 
+CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
+    const CNA_ObjectDictionaryHandle dictionary,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ObjectDictionaryResource> object{};
+        if (const CNA_Result routeResult = GetObjectDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_reflective_type_reader_builder_destroy(
     const CNA_ReflectiveTypeReaderBuilderHandle builder)
 {

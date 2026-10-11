@@ -29,6 +29,7 @@ arguments = 2
 [enumerated_joystick.routes]
 cna_joysticks_get_name_size_at = { get = "object.name.size()" }
 cna_joysticks_get_info_at = { get = "MapInfo(object)" }
+cna_joysticks_copy_name_at = { copy = "object.name" }
 
 [capabilities]
 lookup = "BorrowCapabilities"
@@ -39,6 +40,8 @@ arguments = 2
 cna_joysticks_get_capabilities_name_size = { size = "object.name" }
 cna_joysticks_get_capabilities_guid_size = { size = "object.guid" }
 cna_joysticks_get_capabilities = { get = "MapCapabilities(object)" }
+cna_joysticks_copy_capabilities_name = { copy = "object.name" }
+cna_joysticks_copy_capabilities_guid = { copy = "object.guid" }
 
 [calls]
 [calls.routes]

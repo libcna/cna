@@ -489,6 +489,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_content_type_reader_supports_version(v_CNA_ContentTypeReaderHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_type_reader_supports_version", "a null out_value");
     failures += expect(cna_object_dictionary_ext_get_runtime_type_name_size(v_CNA_ObjectDictionaryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_get_runtime_type_name_size", "a null out_byte_count");
     failures += expect(cna_object_dictionary_ext_get_count(v_CNA_ObjectDictionaryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_get_count", "a null out_count");
+    failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(v_CNA_ObjectDictionaryHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_copy_runtime_type_name", "a null destination with a capacity");
+    failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(v_CNA_ObjectDictionaryHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_copy_runtime_type_name", "a null out_bytes");
     failures += expect(cna_reflective_type_reader_get_canonical_name_size(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_reflective_type_reader_get_canonical_name_size", "a null out_byte_count");
     failures += expect(cna_reflective_type_reader_copy_canonical_name(v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_reflective_type_reader_copy_canonical_name", "a null out_byte_count");
     failures += expect(cna_enum_type_reader_get_canonical_name_size(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_enum_type_reader_get_canonical_name_size", "a null out_byte_count");
@@ -934,6 +936,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_device_manager_copy_type_name(v_CNA_GraphicsDeviceManagerHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_manager_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_graphics_device_manager_copy_type_name(v_CNA_GraphicsDeviceManagerHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_manager_copy_type_name", "a null out_bytes");
     failures += expect(cna_graphics_device_information_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_graphics_device_information_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_graphics_device_information_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_copy_type_name", "a null out_bytes");
     failures += expect_unless_compiled_out(cna_ascii_post_process_effect_get_quantize_mode(v_CNA_AsciiPostProcessEffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_ascii_post_process_effect_get_quantize_mode", "a null out_mode");
     failures += expect(cna_graphics_resource_get_name_byte_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_resource_get_name_byte_count", "a null out_byte_count");
     failures += expect(cna_graphics_resource_get_string_byte_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_resource_get_string_byte_count", "a null out_byte_count");
@@ -1041,6 +1045,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_gamepad_get_touchpad_finger_count_ext(v_CNA_Handle, v_CNA_PlayerIndex, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_touchpad_finger_count_ext", "a null out_count");
     failures += expect(cna_clipboard_get_text_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_get_text_size", "a null out_bytes");
     failures += expect(cna_clipboard_get_has_text(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_get_has_text", "a null out_has_text");
+    failures += expect(cna_clipboard_copy_text(v_CNA_Handle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_copy_text", "a null destination with a capacity");
+    failures += expect(cna_clipboard_copy_text(v_CNA_Handle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_clipboard_copy_text", "a null out_bytes");
     failures += expect(cna_sensors_get_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sensors_get_count", "a null out_count");
     failures += expect(cna_sensors_get_accelerometer(v_CNA_Handle, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_sensors_get_accelerometer", "a null out_acceleration");
     failures += expect(cna_sensors_get_accelerometer(v_CNA_Handle, &o_CNA_Vector3, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sensors_get_accelerometer", "a null out_available");
@@ -1078,8 +1084,12 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_haptic_device_get_effect_status(v_CNA_HapticDeviceHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_get_effect_status", "a null out_playing");
     failures += expect(cna_haptic_device_set_gain(v_CNA_HapticDeviceHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_set_gain", "a null out_applied");
     failures += expect(cna_haptic_device_set_autocenter(v_CNA_HapticDeviceHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_set_autocenter", "a null out_applied");
+    failures += expect(cna_haptic_device_copy_name(v_CNA_HapticDeviceHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_copy_name", "a null destination with a capacity");
+    failures += expect(cna_haptic_device_copy_name(v_CNA_HapticDeviceHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_copy_name", "a null out_bytes");
     failures += expect(cna_haptics_get_id_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptics_get_id_at", "a null out_id");
     failures += expect(cna_haptics_get_name_size_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptics_get_name_size_at", "a null out_bytes");
+    failures += expect(cna_haptics_copy_name_at(v_CNA_Handle, v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_haptics_copy_name_at", "a null destination with a capacity");
+    failures += expect(cna_haptics_copy_name_at(v_CNA_Handle, v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptics_copy_name_at", "a null out_bytes");
     failures += expect(cna_haptic_device_init_rumble(v_CNA_HapticDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_init_rumble", "a null out_applied");
     failures += expect(cna_haptic_device_stop_rumble(v_CNA_HapticDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_stop_rumble", "a null out_applied");
     failures += expect(cna_haptic_device_stop_all_effects(v_CNA_HapticDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_haptic_device_stop_all_effects", "a null out_applied");
@@ -1094,9 +1104,15 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_joystick_state_copy_balls(v_CNA_JoystickStateHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joystick_state_copy_balls", "a null out_count");
     failures += expect(cna_joysticks_get_name_size_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_get_name_size_at", "a null out_bytes");
     failures += expect(cna_joysticks_get_info_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_get_info_at", "a null out_info");
+    failures += expect(cna_joysticks_copy_name_at(v_CNA_Handle, v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_name_at", "a null destination with a capacity");
+    failures += expect(cna_joysticks_copy_name_at(v_CNA_Handle, v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_name_at", "a null out_bytes");
     failures += expect(cna_joysticks_get_capabilities_name_size(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_get_capabilities_name_size", "a null out_bytes");
     failures += expect(cna_joysticks_get_capabilities_guid_size(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_get_capabilities_guid_size", "a null out_bytes");
     failures += expect(cna_joysticks_get_capabilities(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_get_capabilities", "a null out_capabilities");
+    failures += expect(cna_joysticks_copy_capabilities_name(v_CNA_Handle, v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_capabilities_name", "a null destination with a capacity");
+    failures += expect(cna_joysticks_copy_capabilities_name(v_CNA_Handle, v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_capabilities_name", "a null out_bytes");
+    failures += expect(cna_joysticks_copy_capabilities_guid(v_CNA_Handle, v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_capabilities_guid", "a null destination with a capacity");
+    failures += expect(cna_joysticks_copy_capabilities_guid(v_CNA_Handle, v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joysticks_copy_capabilities_guid", "a null out_bytes");
     failures += expect(cna_joystick_state_get_axis_count(v_CNA_JoystickStateHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joystick_state_get_axis_count", "a null out_count");
     failures += expect(cna_joystick_state_get_button_count(v_CNA_JoystickStateHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joystick_state_get_button_count", "a null out_count");
     failures += expect(cna_joystick_state_get_hat_count(v_CNA_JoystickStateHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_joystick_state_get_hat_count", "a null out_count");
@@ -1196,14 +1212,24 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_song_get_is_disposed(v_CNA_SongHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_get_is_disposed", "a null out_disposed");
     failures += expect(cna_song_get_hash_code(v_CNA_SongHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_get_hash_code", "a null out_hash");
     failures += expect(cna_song_get_type_name_size(v_CNA_SongHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_song_copy_name(v_CNA_SongHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_name", "a null destination with a capacity");
+    failures += expect(cna_song_copy_name(v_CNA_SongHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_name", "a null out_bytes");
+    failures += expect(cna_song_copy_handle_text_ext(v_CNA_SongHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_handle_text_ext", "a null destination with a capacity");
+    failures += expect(cna_song_copy_handle_text_ext(v_CNA_SongHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_handle_text_ext", "a null out_bytes");
+    failures += expect(cna_song_copy_type_name(v_CNA_SongHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_song_copy_type_name(v_CNA_SongHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_copy_type_name", "a null out_bytes");
     failures += expect(cna_song_collection_get_count(v_CNA_SongCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_collection_get_count", "a null out_count");
     failures += expect(cna_song_collection_get_is_disposed(v_CNA_SongCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_collection_get_is_disposed", "a null out_disposed");
     failures += expect(cna_song_collection_get_type_name_size(v_CNA_SongCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_collection_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_song_collection_copy_type_name(v_CNA_SongCollectionHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_song_collection_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_song_collection_copy_type_name(v_CNA_SongCollectionHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_collection_copy_type_name", "a null out_bytes");
     failures += expect(cna_media_source_get_type_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_source_get_type_at", "a null out_type");
     failures += expect(cna_media_source_get_name_size_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_source_get_name_size_at", "a null out_bytes");
     failures += expect(cna_media_source_get_type_name_size_at(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_source_get_type_name_size_at", "a null out_bytes");
     failures += expect(cna_song_equals(v_CNA_SongHandle, v_CNA_SongHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_song_equals", "a null out_equal");
     failures += expect(cna_visualization_data_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_visualization_data_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_visualization_data_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_visualization_data_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_visualization_data_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_visualization_data_copy_type_name", "a null out_bytes");
     failures += expect(cna_media_source_get_available_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_source_get_available_count", "a null out_count");
     failures += expect(cna_album_get_name_size(v_CNA_AlbumHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_album_get_name_size", "a null out_bytes");
     failures += expect(cna_album_copy_name(v_CNA_AlbumHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_album_copy_name", "a null destination with a capacity");
@@ -1626,6 +1652,16 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_attitude_reading_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_attitude_reading_get_type_name_size", "a null out_bytes");
     failures += expect(cna_compass_reading_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_compass_reading_get_type_name_size", "a null out_bytes");
     failures += expect(cna_motion_reading_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_reading_get_type_name_size", "a null out_bytes");
+    failures += expect(cna_accelerometer_reading_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_accelerometer_reading_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_copy_type_name", "a null out_bytes");
+    failures += expect(cna_gyroscope_reading_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gyroscope_reading_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_gyroscope_reading_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gyroscope_reading_copy_type_name", "a null out_bytes");
+    failures += expect(cna_attitude_reading_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_attitude_reading_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_attitude_reading_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_attitude_reading_copy_type_name", "a null out_bytes");
+    failures += expect(cna_compass_reading_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_compass_reading_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_compass_reading_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_compass_reading_copy_type_name", "a null out_bytes");
+    failures += expect(cna_motion_reading_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_reading_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_motion_reading_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_reading_copy_type_name", "a null out_bytes");
     failures += expect(cna_storage_device_get_free_space(v_CNA_StorageDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_get_free_space", "a null out_free_space");
     failures += expect(cna_storage_device_get_is_connected(v_CNA_StorageDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_get_is_connected", "a null out_is_connected");
     failures += expect(cna_storage_device_get_total_space(v_CNA_StorageDeviceHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_get_total_space", "a null out_total_space");
@@ -2043,6 +2079,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_object_dictionary_ext_get_runtime_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_get_runtime_type_name_size", what);
     failures += expect(cna_object_dictionary_ext_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_get_count", what);
     failures += expect(cna_object_dictionary_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_destroy", what);
+    failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_copy_runtime_type_name", what);
     failures += expect(cna_reflective_type_reader_builder_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_reflective_type_reader_builder_destroy", what);
     failures += expect(cna_object_dictionary_ext_get_type_name_size(handle, v_CNA_StringView, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_get_type_name_size", what);
     failures += expect(cna_curve_key_collection_clear(handle), CNA_RESULT_INVALID_HANDLE, "cna_curve_key_collection_clear", what);
@@ -2528,6 +2565,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_input_devices_reset_for_tests_ext(handle), CNA_RESULT_INVALID_HANDLE, "cna_input_devices_reset_for_tests_ext", what);
     failures += expect(cna_clipboard_get_text_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_text_size", what);
     failures += expect(cna_clipboard_get_has_text(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_has_text", what);
+    failures += expect(cna_clipboard_copy_text(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_copy_text", what);
     failures += expect(cna_haptics_get_count(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_count", what);
     failures += expect(cna_haptics_get_is_joystick_haptic(handle, v_uint32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_is_joystick_haptic", what);
     failures += expect(cna_haptics_get_is_mouse_haptic(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_is_mouse_haptic", what);
@@ -2551,8 +2589,10 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_haptic_device_set_autocenter(handle, v_int32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_haptic_device_set_autocenter", what);
     failures += expect(cna_haptic_device_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_haptic_device_dispose", what);
     failures += expect(cna_haptic_device_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_haptic_device_destroy", what);
+    failures += expect(cna_haptic_device_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_haptic_device_copy_name", what);
     failures += expect(cna_haptics_get_id_at(handle, v_uint32_t, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_id_at", what);
     failures += expect(cna_haptics_get_name_size_at(handle, v_uint32_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_name_size_at", what);
+    failures += expect(cna_haptics_copy_name_at(handle, v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_haptics_copy_name_at", what);
     failures += expect(cna_joysticks_get_count(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_count", what);
     failures += expect(cna_joysticks_raise_connected_ext(handle, v_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_raise_connected_ext", what);
     failures += expect(cna_joysticks_raise_disconnected_ext(handle, v_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_raise_disconnected_ext", what);
@@ -2564,9 +2604,12 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_joystick_state_copy_balls(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joystick_state_copy_balls", what);
     failures += expect(cna_joysticks_get_name_size_at(handle, v_uint32_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_name_size_at", what);
     failures += expect(cna_joysticks_get_info_at(handle, v_uint32_t, &o_CNA_JoystickInfo), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_info_at", what);
+    failures += expect(cna_joysticks_copy_name_at(handle, v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_copy_name_at", what);
     failures += expect(cna_joysticks_get_capabilities_name_size(handle, v_uint32_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_capabilities_name_size", what);
     failures += expect(cna_joysticks_get_capabilities_guid_size(handle, v_uint32_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_capabilities_guid_size", what);
     failures += expect(cna_joysticks_get_capabilities(handle, v_uint32_t, &o_CNA_JoystickCapabilities), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_get_capabilities", what);
+    failures += expect(cna_joysticks_copy_capabilities_name(handle, v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_copy_capabilities_name", what);
+    failures += expect(cna_joysticks_copy_capabilities_guid(handle, v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_joysticks_copy_capabilities_guid", what);
     failures += expect(cna_joystick_state_equals(handle, v_CNA_JoystickStateHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_joystick_state_equals", what);
     failures += expect(cna_leaderboard_reader_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_leaderboard_reader_destroy", what);
     failures += expect(cna_leaderboard_reader_page_down(handle), CNA_RESULT_INVALID_HANDLE, "cna_leaderboard_reader_page_down", what);
@@ -2595,11 +2638,15 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_song_get_hash_code(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_song_get_hash_code", what);
     failures += expect(cna_song_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_get_type_name_size", what);
     failures += expect(cna_song_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_song_destroy", what);
+    failures += expect(cna_song_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_copy_name", what);
+    failures += expect(cna_song_copy_handle_text_ext(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_copy_handle_text_ext", what);
+    failures += expect(cna_song_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_copy_type_name", what);
     failures += expect(cna_song_collection_get_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_get_count", what);
     failures += expect(cna_song_collection_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_get_is_disposed", what);
     failures += expect(cna_song_collection_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_dispose", what);
     failures += expect(cna_song_collection_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_get_type_name_size", what);
     failures += expect(cna_song_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_destroy", what);
+    failures += expect(cna_song_collection_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_song_collection_copy_type_name", what);
     failures += expect(cna_song_equals(handle, v_CNA_SongHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_song_equals", what);
     failures += expect(cna_media_source_get_available_count(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_media_source_get_available_count", what);
     failures += expect(cna_album_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_album_dispose", what);
@@ -3171,6 +3218,16 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_viewport_copy_string(v_CNA_Viewport, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_viewport_copy_string", "an exact buffer");
     }
+    failures += expect(cna_graphics_device_information_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_graphics_device_information_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_graphics_device_information_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_graphics_device_information_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_graphics_device_information_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_graphics_device_information_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_graphics_device_information_copy_type_name", "an exact buffer");
+    }
     failures += expect(cna_point_get_string_size(v_CNA_Point, &size), CNA_RESULT_SUCCESS, "cna_point_get_string_size", "zeroed input");
     if (size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
@@ -3201,6 +3258,16 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_matrix_copy_string(v_CNA_Matrix, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_matrix_copy_string", "an exact buffer");
     }
+    failures += expect(cna_visualization_data_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_visualization_data_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_visualization_data_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_visualization_data_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_visualization_data_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_visualization_data_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_visualization_data_copy_type_name", "an exact buffer");
+    }
     failures += expect(cna_quaternion_get_string_size(v_CNA_Quaternion, &size), CNA_RESULT_SUCCESS, "cna_quaternion_get_string_size", "zeroed input");
     if (size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
@@ -3210,6 +3277,56 @@ static int text_protocol_holds(void)
             ++failures;
         }
         failures += expect(cna_quaternion_copy_string(v_CNA_Quaternion, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_quaternion_copy_string", "an exact buffer");
+    }
+    failures += expect(cna_accelerometer_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_accelerometer_reading_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_accelerometer_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_accelerometer_reading_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_accelerometer_reading_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_accelerometer_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_accelerometer_reading_copy_type_name", "an exact buffer");
+    }
+    failures += expect(cna_gyroscope_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_gyroscope_reading_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_gyroscope_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_gyroscope_reading_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_gyroscope_reading_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_gyroscope_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_gyroscope_reading_copy_type_name", "an exact buffer");
+    }
+    failures += expect(cna_attitude_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_attitude_reading_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_attitude_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_attitude_reading_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_attitude_reading_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_attitude_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_attitude_reading_copy_type_name", "an exact buffer");
+    }
+    failures += expect(cna_compass_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_compass_reading_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_compass_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_compass_reading_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_compass_reading_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_compass_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_compass_reading_copy_type_name", "an exact buffer");
+    }
+    failures += expect(cna_motion_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_motion_reading_get_type_name_size", "zeroed input");
+    if (size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_motion_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_motion_reading_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_motion_reading_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_motion_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_motion_reading_copy_type_name", "an exact buffer");
     }
     failures += expect(cna_vector2_get_string_size(v_CNA_Vector2, &size), CNA_RESULT_SUCCESS, "cna_vector2_get_string_size", "zeroed input");
     if (size > 0U && size <= sizeof(text)) {
@@ -3268,6 +3385,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1844 generated routes\n", failures);
+    printf("%d failed checks across 1862 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

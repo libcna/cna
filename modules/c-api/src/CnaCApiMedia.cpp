@@ -167,17 +167,6 @@ CNA_Result cna_visualization_data_init(CNA_VisualizationData* const outData)
     });
 }
 
-CNA_Result cna_visualization_data_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const VisualizationData native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_media_source_copy_name_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -332,56 +321,6 @@ CNA_Result cna_song_create_from_uri(
     });
 }
 
-CNA_Result cna_song_copy_name(
-    const CNA_SongHandle song,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The song name output is invalid.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            // The canonical string conversion returns the display name unchanged, so one route
-            // serves both members.
-            return CopyText(value.ToString(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_song_copy_handle_text_ext(
-    const CNA_SongHandle song,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The song handle-text output is invalid.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            return CopyText(value.getHandle(), destination, capacity, outBytes);
-        });
-    });
-}
-
-CNA_Result cna_song_copy_type_name(
-    const CNA_SongHandle song,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The song type-name output is invalid.");
-        }
-        return ReadSong(song, [&](const Song& value) {
-            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
-        });
-    });
-}
-
 CNA_Result cna_song_collection_create(
     const CNA_Handle gameHandle,
     const CNA_SongHandle* const songs,
@@ -456,25 +395,6 @@ CNA_Result cna_song_collection_get_at(
         borrowed->library = resource->library;
         borrowed->value = element;
         return PublishSong(std::move(borrowed), outSong);
-    });
-}
-
-CNA_Result cna_song_collection_copy_type_name(
-    const CNA_SongCollectionHandle collection,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The song collection type-name output is invalid.");
-        }
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(collection, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
     });
 }
 

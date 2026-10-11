@@ -1683,3 +1683,53 @@ CNA_Result cna_motion_reading_get_type_name_size(
         return CNA::C::Detail::ReportTextSize(MotionReading().GetTypeName(), out_bytes);
     });
 }
+
+CNA_Result cna_accelerometer_reading_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return AccelerometerReading().GetTypeName();
+    });
+}
+
+CNA_Result cna_gyroscope_reading_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return GyroscopeReading().GetTypeName();
+    });
+}
+
+CNA_Result cna_attitude_reading_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return AttitudeReading().GetTypeName();
+    });
+}
+
+CNA_Result cna_compass_reading_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return CompassReading().GetTypeName();
+    });
+}
+
+CNA_Result cna_motion_reading_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return MotionReading().GetTypeName();
+    });
+}

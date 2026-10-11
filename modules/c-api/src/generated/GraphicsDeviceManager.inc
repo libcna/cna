@@ -497,3 +497,13 @@ CNA_Result cna_graphics_device_information_get_type_name_size(
         return CNA::C::Detail::ReportTextSize(GraphicsDeviceInformation().GetTypeName(), out_bytes);
     });
 }
+
+CNA_Result cna_graphics_device_information_copy_type_name(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return GraphicsDeviceInformation().GetTypeName();
+    });
+}

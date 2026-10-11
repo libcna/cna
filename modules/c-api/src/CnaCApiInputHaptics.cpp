@@ -383,45 +383,6 @@ CNA_Result cna_haptic_capabilities_equals(
     });
 }
 
-CNA_Result cna_haptics_copy_name_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The haptic device name output is invalid.");
-        }
-        HapticInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedHaptic(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(info.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_haptic_device_copy_name(
-    const CNA_HapticDeviceHandle deviceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The haptic device name output is invalid.");
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(device->GetNameEXT(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_haptic_device_get_capabilities(
     const CNA_HapticDeviceHandle deviceHandle,
     CNA_HapticCapabilities* const outCapabilities)

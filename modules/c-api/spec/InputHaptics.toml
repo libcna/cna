@@ -28,6 +28,7 @@ cna_haptic_device_set_gain = { get = "object->SetGainEXT(gain)" }
 cna_haptic_device_set_autocenter = { get = "object->SetAutocenterEXT(autocenter)" }
 cna_haptic_device_dispose = { call = "object->Dispose()" }
 cna_haptic_device_destroy = { release = true }
+cna_haptic_device_copy_name = { copy = "object->GetNameEXT()" }
 
 [enumerated_haptic]
 lookup = "BorrowEnumeratedHaptic"
@@ -37,6 +38,7 @@ arguments = 2
 [enumerated_haptic.routes]
 cna_haptics_get_id_at = { get = "object.id" }
 cna_haptics_get_name_size_at = { get = "object.name.size()" }
+cna_haptics_copy_name_at = { copy = "object.name" }
 
 [calls]
 [calls.routes]

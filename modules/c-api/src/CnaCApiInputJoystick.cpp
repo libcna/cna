@@ -388,66 +388,6 @@ CNA_Result cna_joystick_capabilities_equals(
     });
 }
 
-CNA_Result cna_joysticks_copy_name_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The joystick name output is invalid.");
-        }
-        JoystickInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(info.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_joysticks_copy_capabilities_name(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The joystick device-name output is invalid.");
-        }
-        JoystickCapabilitiesEXT capabilities;
-        if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(capabilities.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_joysticks_copy_capabilities_guid(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The joystick GUID output is invalid.");
-        }
-        JoystickCapabilitiesEXT capabilities;
-        if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(capabilities.guid, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_joysticks_capture_state(
     const CNA_Handle gameHandle,
     const uint32_t id,

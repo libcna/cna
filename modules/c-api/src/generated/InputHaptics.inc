@@ -307,6 +307,26 @@ CNA_Result cna_haptic_device_destroy(
     });
 }
 
+CNA_Result cna_haptic_device_copy_name(
+    const CNA_HapticDeviceHandle device,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<HapticDevice> object{};
+        if (const CNA_Result routeResult = BorrowDevice(device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->GetNameEXT(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_haptics_get_id_at(
     const CNA_Handle game,
     const uint32_t index,
@@ -342,6 +362,27 @@ CNA_Result cna_haptics_get_name_size_at(
         }
         *out_bytes = static_cast<uint64_t>(object.name.size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_haptics_copy_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        HapticInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedHaptic(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.name, destination, capacity, out_bytes);
     });
 }
 

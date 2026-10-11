@@ -580,17 +580,6 @@ CNA_Result cna_accelerometer_reading_equals(
     });
 }
 
-CNA_Result cna_accelerometer_reading_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const AccelerometerReading native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_gyroscope_reading_equals(
     const CNA_GyroscopeReading* const left,
     const CNA_GyroscopeReading* const right,
@@ -612,17 +601,6 @@ CNA_Result cna_gyroscope_reading_equals(
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_reading_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const GyroscopeReading native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
     });
 }
 
@@ -650,17 +628,6 @@ CNA_Result cna_attitude_reading_equals(
     });
 }
 
-CNA_Result cna_attitude_reading_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const AttitudeReading native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_compass_reading_equals(
     const CNA_CompassReading* const left,
     const CNA_CompassReading* const right,
@@ -685,17 +652,6 @@ CNA_Result cna_compass_reading_equals(
     });
 }
 
-CNA_Result cna_compass_reading_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const CompassReading native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_motion_reading_equals(
     const CNA_MotionReading* const left,
     const CNA_MotionReading* const right,
@@ -717,17 +673,6 @@ CNA_Result cna_motion_reading_equals(
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_motion_reading_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const MotionReading native;
-        return CopyText(native.GetTypeName(), destination, capacity, outBytes);
     });
 }
 

@@ -194,6 +194,27 @@ CNA_Result cna_joysticks_get_info_at(
     });
 }
 
+CNA_Result cna_joysticks_copy_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        JoystickInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedJoystick(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.name, destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_joysticks_get_capabilities_name_size(
     const CNA_Handle game,
     const uint32_t id,
@@ -246,6 +267,48 @@ CNA_Result cna_joysticks_get_capabilities(
         }
         *out_capabilities = MapCapabilities(object);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_joysticks_copy_capabilities_name(
+    const CNA_Handle game,
+    const uint32_t id,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        JoystickCapabilitiesEXT object{};
+        if (const CNA_Result routeResult = BorrowCapabilities(game, id, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_joysticks_copy_capabilities_guid(
+    const CNA_Handle game,
+    const uint32_t id,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        JoystickCapabilitiesEXT object{};
+        if (const CNA_Result routeResult = BorrowCapabilities(game, id, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object.guid, destination, capacity, out_bytes);
     });
 }
 

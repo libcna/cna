@@ -253,17 +253,6 @@ CNA_Result cna_graphics_device_information_clone(
     });
 }
 
-CNA_Result cna_graphics_device_information_copy_type_name(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const GraphicsDeviceInformation canonical;
-        return CopyText(canonical.GetTypeName(), destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_graphics_device_manager_create(
     const CNA_Handle gameHandle,
     CNA_GraphicsDeviceManagerHandle* const outManager)
