@@ -2455,6 +2455,20 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_Handle = UINT64_C(0xDEAD);
     failures += expect_unless_arguments_refused(cna_pbr_effect_get_texture(handle, v_CNA_PbrTextureSlot, &o_CNA_Bool, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_get_texture", what);
     failures += expect_cleared(o_CNA_Handle, "cna_pbr_effect_get_texture");
+    failures += expect(cna_pbr_effect_set_diffuse_color(handle, v_CNA_Vector3), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_diffuse_color", what);
+    failures += expect(cna_pbr_effect_set_alpha(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_alpha", what);
+    failures += expect(cna_pbr_effect_set_metallic_factor(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_metallic_factor", what);
+    failures += expect(cna_pbr_effect_set_roughness_factor(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_roughness_factor", what);
+    failures += expect(cna_pbr_effect_set_emissive_factor(handle, v_CNA_Vector3), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_emissive_factor", what);
+    failures += expect(cna_pbr_effect_set_vertex_color_enabled_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_vertex_color_enabled_ext", what);
+    failures += expect(cna_pbr_effect_set_ior_ext(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_ior_ext", what);
+    failures += expect(cna_pbr_effect_set_specular_factor_ext(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_specular_factor_ext", what);
+    failures += expect(cna_pbr_effect_set_specular_color_factor_ext(handle, v_CNA_Vector3), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_specular_color_factor_ext", what);
+    failures += expect(cna_pbr_effect_set_normal_scale_ext(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_normal_scale_ext", what);
+    failures += expect(cna_pbr_effect_set_occlusion_strength_ext(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_occlusion_strength_ext", what);
+    failures += expect(cna_pbr_effect_set_encode_output_to_srgb_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_encode_output_to_srgb_ext", what);
+    failures += expect(cna_pbr_effect_set_alpha_cutoff_ext(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_alpha_cutoff_ext", what);
+    failures += expect(cna_pbr_effect_set_double_sided_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_pbr_effect_set_double_sided_ext", what);
     failures += expect(cna_skinned_pbr_effect_get_weights_per_vertex(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_pbr_effect_get_weights_per_vertex", what);
     failures += expect_unless_arguments_refused(cna_skinned_pbr_effect_set_weights_per_vertex(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_pbr_effect_set_weights_per_vertex", what);
     o_CNA_EffectHandle = UINT64_C(0xDEAD);
@@ -3588,6 +3602,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1902 generated routes\n", failures);
+    printf("%d failed checks across 1916 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

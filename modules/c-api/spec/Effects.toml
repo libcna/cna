@@ -297,6 +297,20 @@ cna_pbr_effect_get_alpha_mode_ext = { get = "object.pbr != nullptr ? object.pbr-
 cna_pbr_effect_get_alpha_cutoff_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaCutoffEXTProperty() : object.skinned->getAlphaCutoffEXTProperty()" }
 cna_pbr_effect_get_vertex_color_enabled_ext = { get = "static_cast<bool>(object.pbr != nullptr ? object.pbr->VertexColorEnabledEXT : object.skinned->VertexColorEnabledEXT)" }
 cna_pbr_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture, \"The PBR texture outputs are null.\")", invalid_if = "slot > CNA_PBR_TEXTURE_MAXIMUM" }
+cna_pbr_effect_set_diffuse_color = { call = "object.pbr != nullptr ? object.pbr->setDiffuseColorProperty(value) : object.skinned->setDiffuseColorProperty(value)" }
+cna_pbr_effect_set_alpha = { call = "object.pbr != nullptr ? object.pbr->setAlphaProperty(value) : object.skinned->setAlphaProperty(value)" }
+cna_pbr_effect_set_metallic_factor = { call = "object.pbr != nullptr ? object.pbr->setMetallicFactorProperty(value) : object.skinned->setMetallicFactorProperty(value)" }
+cna_pbr_effect_set_roughness_factor = { call = "object.pbr != nullptr ? object.pbr->setRoughnessFactorProperty(value) : object.skinned->setRoughnessFactorProperty(value)" }
+cna_pbr_effect_set_emissive_factor = { call = "object.pbr != nullptr ? object.pbr->setEmissiveFactorProperty(value) : object.skinned->setEmissiveFactorProperty(value)" }
+cna_pbr_effect_set_vertex_color_enabled_ext = { call = "object.pbr != nullptr ? (object.pbr->VertexColorEnabledEXT = enabled) : (object.skinned->VertexColorEnabledEXT = enabled)" }
+cna_pbr_effect_set_ior_ext = { call = "object.pbr != nullptr ? object.pbr->setIorEXTProperty(value) : object.skinned->setIorEXTProperty(value)" }
+cna_pbr_effect_set_specular_factor_ext = { call = "object.pbr != nullptr ? object.pbr->setSpecularFactorEXTProperty(value) : object.skinned->setSpecularFactorEXTProperty(value)" }
+cna_pbr_effect_set_specular_color_factor_ext = { call = "object.pbr != nullptr ? object.pbr->setSpecularColorFactorEXTProperty(value) : object.skinned->setSpecularColorFactorEXTProperty(value)" }
+cna_pbr_effect_set_normal_scale_ext = { call = "object.pbr != nullptr ? object.pbr->setNormalScaleEXTProperty(value) : object.skinned->setNormalScaleEXTProperty(value)" }
+cna_pbr_effect_set_occlusion_strength_ext = { call = "object.pbr != nullptr ? object.pbr->setOcclusionStrengthEXTProperty(value) : object.skinned->setOcclusionStrengthEXTProperty(value)" }
+cna_pbr_effect_set_encode_output_to_srgb_ext = { call = "object.pbr != nullptr ? object.pbr->setEncodeOutputToSrgbEXTProperty(value) : object.skinned->setEncodeOutputToSrgbEXTProperty(value)" }
+cna_pbr_effect_set_alpha_cutoff_ext = { call = "object.pbr != nullptr ? object.pbr->setAlphaCutoffEXTProperty(value) : object.skinned->setAlphaCutoffEXTProperty(value)" }
+cna_pbr_effect_set_double_sided_ext = { call = "object.pbr != nullptr ? object.pbr->setDoubleSidedEXTProperty(value) : object.skinned->setDoubleSidedEXTProperty(value)" }
 
 [skinned_pbr_effect]
 lookup = "GetStockEffect<SkinnedPbrEffect>"

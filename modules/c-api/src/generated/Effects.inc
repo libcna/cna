@@ -2729,6 +2729,234 @@ CNA_Result cna_pbr_effect_get_texture(
     });
 }
 
+CNA_Result cna_pbr_effect_set_diffuse_color(
+    const CNA_EffectHandle effect,
+    const CNA_Vector3 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object.pbr != nullptr ? object.pbr->setDiffuseColorProperty(value) : object.skinned->setDiffuseColorProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setAlphaProperty(value) : object.skinned->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_metallic_factor(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setMetallicFactorProperty(value) : object.skinned->setMetallicFactorProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_roughness_factor(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setRoughnessFactorProperty(value) : object.skinned->setRoughnessFactorProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_emissive_factor(
+    const CNA_EffectHandle effect,
+    const CNA_Vector3 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object.pbr != nullptr ? object.pbr->setEmissiveFactorProperty(value) : object.skinned->setEmissiveFactorProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
+    const CNA_EffectHandle effect,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        object.pbr != nullptr ? (object.pbr->VertexColorEnabledEXT = enabled) : (object.skinned->VertexColorEnabledEXT = enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_ior_ext(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setIorEXTProperty(value) : object.skinned->setIorEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_specular_factor_ext(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setSpecularFactorEXTProperty(value) : object.skinned->setSpecularFactorEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_specular_color_factor_ext(
+    const CNA_EffectHandle effect,
+    const CNA_Vector3 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object.pbr != nullptr ? object.pbr->setSpecularColorFactorEXTProperty(value) : object.skinned->setSpecularColorFactorEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_normal_scale_ext(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setNormalScaleEXTProperty(value) : object.skinned->setNormalScaleEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_occlusion_strength_ext(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setOcclusionStrengthEXTProperty(value) : object.skinned->setOcclusionStrengthEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
+    const CNA_EffectHandle effect,
+    const CNA_Bool c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool value = CNA::C::Detail::FromCBool(c_value);
+        object.pbr != nullptr ? object.pbr->setEncodeOutputToSrgbEXTProperty(value) : object.skinned->setEncodeOutputToSrgbEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha_cutoff_ext(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.pbr != nullptr ? object.pbr->setAlphaCutoffEXTProperty(value) : object.skinned->setAlphaCutoffEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_double_sided_ext(
+    const CNA_EffectHandle effect,
+    const CNA_Bool c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool value = CNA::C::Detail::FromCBool(c_value);
+        object.pbr != nullptr ? object.pbr->setDoubleSidedEXTProperty(value) : object.skinned->setDoubleSidedEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
     const CNA_EffectHandle effect,
     int32_t* const out_value)

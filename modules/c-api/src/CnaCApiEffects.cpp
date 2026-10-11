@@ -3729,44 +3729,6 @@ CNA_Result cna_color_matrix_effect_set_matrix(
     });
 }
 
-CNA_Result cna_pbr_effect_set_diffuse_color(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setDiffuseColorProperty(ToNative(value));
-        } else {
-            view.skinned->setDiffuseColorProperty(ToNative(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_alpha(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setAlphaProperty(value);
-        } else {
-            view.skinned->setAlphaProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_texture(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
@@ -3808,63 +3770,6 @@ CNA_Result cna_pbr_effect_set_texture(
                     }
                 }
             });
-    });
-}
-
-CNA_Result cna_pbr_effect_set_metallic_factor(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setMetallicFactorProperty(value);
-        } else {
-            view.skinned->setMetallicFactorProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_roughness_factor(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setRoughnessFactorProperty(value);
-        } else {
-            view.skinned->setRoughnessFactorProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_emissive_factor(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setEmissiveFactorProperty(ToNative(value));
-        } else {
-            view.skinned->setEmissiveFactorProperty(ToNative(value));
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3922,121 +3827,6 @@ CNA_Result cna_texture_transform_ext_equals(
             return InvalidArgument("A texture transform operand is null or malformed.");
         }
         *outEqual = ToCBoolean(ToNative(*left) == ToNative(*right));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_vertex_color_enabled_ext(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool enabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(enabled)) {
-            return InvalidArgument("The vertex-colour-enabled value is not a CNA_Bool.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->VertexColorEnabledEXT = enabled == CNA_TRUE;
-        } else {
-            view.skinned->VertexColorEnabledEXT = enabled == CNA_TRUE;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_ior_ext(const CNA_EffectHandle effectHandle, const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setIorEXTProperty(value);
-        } else {
-            view.skinned->setIorEXTProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_specular_factor_ext(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setSpecularFactorEXTProperty(value);
-        } else {
-            view.skinned->setSpecularFactorEXTProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_specular_color_factor_ext(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setSpecularColorFactorEXTProperty(ToNative(value));
-        } else {
-            view.skinned->setSpecularColorFactorEXTProperty(ToNative(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_normal_scale_ext(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setNormalScaleEXTProperty(value);
-        } else {
-            view.skinned->setNormalScaleEXTProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_occlusion_strength_ext(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setOcclusionStrengthEXTProperty(value);
-        } else {
-            view.skinned->setOcclusionStrengthEXTProperty(value);
-        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4278,28 +4068,6 @@ CNA_Result cna_pbr_effect_get_encode_output_to_srgb_ext(
     });
 }
 
-CNA_Result cna_pbr_effect_set_encode_output_to_srgb_ext(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setEncodeOutputToSrgbEXTProperty((value == CNA_TRUE));
-        } else {
-            view.skinned->setEncodeOutputToSrgbEXTProperty((value == CNA_TRUE));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_alpha_mode_ext(
     const CNA_EffectHandle effectHandle,
     const CNA_AlphaModeEXT value)
@@ -4323,25 +4091,6 @@ CNA_Result cna_pbr_effect_set_alpha_mode_ext(
     });
 }
 
-CNA_Result cna_pbr_effect_set_alpha_cutoff_ext(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setAlphaCutoffEXTProperty(value);
-        } else {
-            view.skinned->setAlphaCutoffEXTProperty(value);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_get_double_sided_ext(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outValue)
@@ -4358,28 +4107,6 @@ CNA_Result cna_pbr_effect_get_double_sided_ext(
         *outValue = ToCBoolean(view.pbr != nullptr
             ? view.pbr->getDoubleSidedEXTProperty()
             : view.skinned->getDoubleSidedEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_set_double_sided_ext(
-    const CNA_EffectHandle effectHandle,
-    const CNA_Bool value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.pbr != nullptr) {
-            view.pbr->setDoubleSidedEXTProperty((value == CNA_TRUE));
-        } else {
-            view.skinned->setDoubleSidedEXTProperty((value == CNA_TRUE));
-        }
         return CNA_RESULT_SUCCESS;
     });
 }
