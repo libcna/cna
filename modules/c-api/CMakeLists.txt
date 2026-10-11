@@ -1773,7 +1773,7 @@ if(CNA_BUILD_TESTS)
         C_STANDARD_REQUIRED ON
         C_EXTENSIONS OFF
     )
-    target_link_libraries(cna_c_api_audio_sound_effect_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_audio_sound_effect_smoke PRIVATE cna_c_api Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_sound_effect_smoke)
     add_test(NAME CApi_AudioSoundEffectSmoke COMMAND cna_c_api_audio_sound_effect_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
@@ -2274,6 +2274,8 @@ if(CNA_BUILD_TESTS)
         src/CnaCApi.cpp
         src/CnaCApiDetail.cpp
     )
+    # The routes are compiled into the test itself: neither exported nor imported.
+    target_compile_definitions(cna_c_api_boundary_detail_test PRIVATE CNA_C_API_STATIC)
     target_include_directories(cna_c_api_boundary_detail_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -2319,6 +2321,8 @@ if(CNA_BUILD_TESTS)
         src/CnaCApi.cpp
         src/CnaCApiDetail.cpp
     )
+    # The routes are compiled into the test itself: neither exported nor imported.
+    target_compile_definitions(cna_c_api_utf8_oracle_test PRIVATE CNA_C_API_STATIC)
     target_include_directories(cna_c_api_utf8_oracle_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src

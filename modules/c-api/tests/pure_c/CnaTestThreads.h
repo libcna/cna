@@ -14,7 +14,8 @@
 #ifndef CNA_C_API_TEST_THREADS_H
 #define CNA_C_API_TEST_THREADS_H
 
-#if !defined(__STDC_NO_THREADS__) || defined(_WIN32)
+/* MSVC's C library has <threads.h>; MinGW-w64's has not, but has POSIX threads (winpthreads). */
+#if defined(_MSC_VER) || (!defined(__STDC_NO_THREADS__) && !defined(__MINGW32__))
 
 #include <threads.h>
 

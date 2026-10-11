@@ -39,6 +39,11 @@ if(NOT EMSCRIPTEN)
         message(STATUS "CNA: no libcurl for ${CMAKE_SYSTEM_NAME}; the CNA service transport refuses (SERVICE_TRANSPORT_UNAVAILABLE)")
     endif()
 endif()
+# The Windows credential store seals the refresh token with DPAPI (CryptProtectData), which lives
+# in crypt32 -- a library neither MinGW-w64 nor MSVC links by default.
+if(WIN32)
+    target_link_libraries(CNA_GamerServices PRIVATE crypt32)
+endif()
 # GS-009/GSP-B1: every original avatar catalog version (tools/avatar_builder) is compiled in as
 # "v<N>/<file>", so standard avatars render offline and each description resolves against exactly
 # the catalog version it names.
