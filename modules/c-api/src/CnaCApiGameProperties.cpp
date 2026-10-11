@@ -26,7 +26,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -35,9 +34,11 @@ using CNA::C::Detail::ValidateCanonicalBool;
 namespace {
 
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::FrameworkDispatcher;
 using Microsoft::Xna::Framework::Game;
@@ -262,17 +263,9 @@ CNA_Result cna_game_subscribe(
         }
         const auto token = source->Add(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::GameEventRegistration,
+        return CreateHandle(ObjectKind::GameEventRegistration,
             TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
             outRegistration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The game registration could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -284,15 +277,7 @@ CNA_Result cna_game_unsubscribe(const CNA_GameEventRegistrationHandle registrati
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The game registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 
@@ -826,17 +811,9 @@ CNA_Result cna_game_window_subscribe(
         }
         const auto token = source->Add(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::GameEventRegistration,
+        return CreateHandle(ObjectKind::GameEventRegistration,
             TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
             outRegistration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The window registration could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 

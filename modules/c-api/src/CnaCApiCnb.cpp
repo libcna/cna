@@ -45,7 +45,6 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::LookupHandle;
@@ -60,8 +59,10 @@ namespace {
 using CNA::C::Detail::CopyBytes;
 using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReportTextSize;
 using CNA::C::Detail::ToCBool;
 
@@ -328,14 +329,7 @@ struct CnbTextureDataResource final {
 {
     const auto resource = std::make_shared<CnbTextureDataResource>();
     resource->value = std::make_shared<Cnb::CnbTextureData>(std::move(data));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbTextureData, resource, outTexture);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The CNB texture handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbTextureData, resource, outTexture);
 }
 
 /// CBIND-109: the model graph. One handle for the whole of it; its nodes are reached by index.
@@ -377,14 +371,7 @@ struct CnbModelFromCnjResource final {
 {
     const auto resource = std::make_shared<CnbModelResource>();
     resource->value = std::make_shared<Cnb::CnbModelData>(std::move(data));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbModelData, resource, outModel);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The CNB model handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbModelData, resource, outModel);
 }
 
 /// The prefix rule, in the one place every versioned model structure can share it.
@@ -605,13 +592,7 @@ struct CnbAnimationClipResource final {
 {
     const auto resource = std::make_shared<CnbSpriteFontResource>();
     resource->value = std::make_shared<Cnb::CnbSpriteFontData>(std::move(data));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbSpriteFontData, resource, outFont);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB font handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbSpriteFontData, resource, outFont);
 }
 
 [[nodiscard]] CNA_Result CreateSoundEffect(
@@ -620,13 +601,7 @@ struct CnbAnimationClipResource final {
 {
     const auto resource = std::make_shared<CnbSoundEffectResource>();
     resource->value = std::make_shared<Cnb::CnbSoundEffectData>(std::move(data));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbSoundEffectData, resource, outSound);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB sound handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbSoundEffectData, resource, outSound);
 }
 
 [[nodiscard]] CNA_Result CreateAnimationClip(
@@ -636,13 +611,7 @@ struct CnbAnimationClipResource final {
     const auto resource = std::make_shared<CnbAnimationClipResource>();
     resource->value =
         std::make_shared<Microsoft::Xna::Framework::Graphics::AnimationClipEXT>(std::move(clip));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbAnimationClip, resource, outClip);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The CNB clip handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbAnimationClip, resource, outClip);
 }
 
 /**
@@ -790,14 +759,7 @@ struct CnjToCnbResultResource final {
 {
     const auto resource = std::make_shared<CnbLoaderResource>();
     resource->value = std::move(loader);
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbLoader, resource, outLoader);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The CNB loader handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbLoader, resource, outLoader);
 }
 
 /**
@@ -864,14 +826,7 @@ struct CnjToCnbResultResource final {
 {
     const auto resource = std::make_shared<CnjToCnbResultResource>();
     resource->value = std::make_shared<Cnb::CnjToCnbResult>(std::move(compiled));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnjToCnbResult, resource, outResult);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The CNJ compile handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnjToCnbResult, resource, outResult);
 }
 
 } // namespace
@@ -1343,14 +1298,7 @@ namespace {
 {
     const auto resource = std::make_shared<CnbDocumentResource>();
     resource->value = std::make_shared<Cnb::CnbDocument>(std::move(document));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::CnbDocument, resource, outDocument);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The CNB document handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::CnbDocument, resource, outDocument);
 }
 
 } // namespace
@@ -1430,13 +1378,7 @@ CNA_Result cna_cnb_document_destroy(const CNA_CnbDocumentHandle documentHandle)
                 CNA_ERROR_CATEGORY_STATE,
                 "Every reader opened from this CNB document must be destroyed before it.");
         }
-        const CNA_Result result = GetRuntimeHandles().Release(documentHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB document handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(documentHandle);
     });
 }
 
@@ -1648,14 +1590,7 @@ CNA_Result cna_cnb_document_open_chunk(
         resource->documentBorrow = std::make_shared<CountedBorrow<CnbDocumentResource>>(document);
         resource->value = std::make_shared<Cnb::CnbByteReader>(
             document->value->OpenChunk(static_cast<std::size_t>(index)));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbReader, resource, outReader);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB reader handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbReader, resource, outReader);
     });
 }
 
@@ -1988,14 +1923,7 @@ CNA_Result cna_cnb_reader_create(
             std::make_shared<std::vector<uint8_t>>(span.begin(), span.end());
         resource->value = std::make_shared<Cnb::CnbByteReader>(
             std::span<const uint8_t>(*resource->ownedBytes), std::move(contextText), nativeLimits);
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbReader, resource, outReader);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB reader handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbReader, resource, outReader);
     });
 }
 
@@ -2007,13 +1935,7 @@ CNA_Result cna_cnb_reader_destroy(const CNA_CnbReaderHandle readerHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(readerHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB reader handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(readerHandle);
     });
 }
 
@@ -2272,14 +2194,7 @@ CNA_Result cna_cnb_byte_writer_create(CNA_CnbByteWriterHandle* const outWriter)
         *outWriter = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<CnbByteWriterResource>();
         resource->value = std::make_shared<Cnb::CnbByteWriter>();
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbByteWriter, resource, outWriter);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB byte-writer handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
     });
 }
 
@@ -2301,14 +2216,7 @@ CNA_Result cna_cnb_byte_writer_create_from_bytes(
         const auto resource = std::make_shared<CnbByteWriterResource>();
         resource->value = std::make_shared<Cnb::CnbByteWriter>(
             std::vector<uint8_t>(span.begin(), span.end()));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbByteWriter, resource, outWriter);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB byte-writer handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
     });
 }
 
@@ -2320,13 +2228,7 @@ CNA_Result cna_cnb_byte_writer_destroy(const CNA_CnbByteWriterHandle writerHandl
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(writerHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB byte-writer handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(writerHandle);
     });
 }
 
@@ -2510,14 +2412,7 @@ CNA_Result cna_cnb_writer_create(
         *outWriter = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<CnbWriterResource>();
         resource->value = std::make_shared<Cnb::CnbWriter>(assetTypeId, assetSchemaVersion);
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbWriter, resource, outWriter);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB writer handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbWriter, resource, outWriter);
     });
 }
 
@@ -2529,13 +2424,7 @@ CNA_Result cna_cnb_writer_destroy(const CNA_CnbWriterHandle writerHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(writerHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB writer handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(writerHandle);
     });
 }
 
@@ -2947,13 +2836,7 @@ CNA_Result cna_cnb_texture_data_destroy(const CNA_CnbTextureDataHandle textureHa
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB texture handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(textureHandle);
     });
 }
 
@@ -3399,13 +3282,7 @@ CNA_Result cna_cnb_model_destroy(const CNA_CnbModelDataHandle modelHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB model handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(modelHandle);
     });
 }
 
@@ -5290,14 +5167,7 @@ CNA_Result cna_cnb_build_model_from_cnj(
         const auto resource = std::make_shared<CnbModelFromCnjResource>();
         resource->value = std::make_shared<Cnb::CnbModelFromCnjResult>(
             Cnb::BuildCnbModelFromCnj(pathText, rootText));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::CnbModelFromCnj, resource, outResult);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB model compile handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::CnbModelFromCnj, resource, outResult);
     });
 }
 
@@ -5309,13 +5179,7 @@ CNA_Result cna_cnb_model_from_cnj_destroy(const CNA_CnbModelFromCnjHandle result
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(resultHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB model compile handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(resultHandle);
     });
 }
 
@@ -5556,13 +5420,7 @@ CNA_Result cna_cnb_sprite_font_data_destroy(const CNA_CnbSpriteFontDataHandle fo
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(fontHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB font handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(fontHandle);
     });
 }
 
@@ -5877,13 +5735,7 @@ CNA_Result cna_cnb_sound_effect_data_destroy(const CNA_CnbSoundEffectDataHandle 
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(soundHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB sound handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(soundHandle);
     });
 }
 
@@ -6177,14 +6029,7 @@ CNA_Result cna_cnb_decode_curve(
         *outCurve = CNA_INVALID_HANDLE;
         const auto decoded = std::make_shared<Microsoft::Xna::Framework::Curve>(
             Cnb::DecodeCurveFromCnb(*document->value));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::Curve, decoded, outCurve);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The Curve handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::Curve, decoded, outCurve);
     });
 }
 
@@ -6241,13 +6086,7 @@ CNA_Result cna_cnb_animation_clip_destroy(const CNA_CnbAnimationClipHandle clipH
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(clipHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB clip handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(clipHandle);
     });
 }
 
@@ -6542,13 +6381,7 @@ CNA_Result cna_cnb_loader_destroy(const CNA_CnbLoaderHandle loaderHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(loaderHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNB loader handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(loaderHandle);
     });
 }
 
@@ -6778,13 +6611,7 @@ CNA_Result cna_cnb_cnj_result_destroy(const CNA_CnjToCnbResultHandle resultHandl
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(resultHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The CNJ compile handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(resultHandle);
     });
 }
 

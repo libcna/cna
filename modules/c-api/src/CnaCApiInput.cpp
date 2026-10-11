@@ -63,15 +63,16 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::TryMapPlayerIndex;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
-using CNA::C::Detail::TryMapPlayerIndex;
-using CNA::C::Detail::IsFinite;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Input::ButtonState;
@@ -2706,17 +2707,9 @@ CNA_Result cna_mouse_subscribe_clicked_ext(
             callback(static_cast<int32_t>(button), context);
         });
         const auto resource = std::make_shared<MouseClickedRegistration>(token);
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            CNA::C::Detail::ObjectKind::MouseEventRegistration,
+        return CreateHandle(CNA::C::Detail::ObjectKind::MouseEventRegistration,
             resource,
             outRegistration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                CNA::C::Detail::ErrorCategoryForResult(result),
-                "The mouse clicked registration could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3003,17 +2996,9 @@ private:
     CNA_TextInputRegistrationHandle* const outRegistration)
 {
     const auto resource = std::make_shared<TextInputRegistration>(kind, token);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        CNA::C::Detail::ObjectKind::TextInputEventRegistration,
+    return CreateHandle(CNA::C::Detail::ObjectKind::TextInputEventRegistration,
         resource,
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            CNA::C::Detail::ErrorCategoryForResult(result),
-            "The text-input registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result ToTextInputType(

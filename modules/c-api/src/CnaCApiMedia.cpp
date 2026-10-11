@@ -21,15 +21,15 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Media::MediaSource;
 using Microsoft::Xna::Framework::Media::Song;
@@ -453,14 +453,7 @@ CNA_Result cna_song_destroy(const CNA_SongHandle song)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(song);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                CNA::C::Detail::ErrorCategoryForResult(result),
-                "The song handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(song);
     });
 }
 
@@ -589,14 +582,7 @@ CNA_Result cna_song_collection_destroy(const CNA_SongCollectionHandle collection
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(collection);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                CNA::C::Detail::ErrorCategoryForResult(result),
-                "The song collection handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(collection);
     });
 }
 

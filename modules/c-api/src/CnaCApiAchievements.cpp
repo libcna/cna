@@ -18,17 +18,17 @@
 
 namespace {
 
+using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
-using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::BorrowSignedIn;
 
 using Microsoft::Xna::Framework::GamerServices::Achievement;
 using Microsoft::Xna::Framework::GamerServices::AchievementCollection;
@@ -64,15 +64,7 @@ struct AchievementCollectionResource final {
 {
     const auto resource = std::make_shared<AchievementResource>();
     resource->value = std::make_shared<Achievement>(std::move(value));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::Achievement, resource, outAchievement);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned Achievement handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::Achievement, resource, outAchievement);
 }
 
 [[nodiscard]] CNA_Result PublishCollection(
@@ -81,15 +73,7 @@ struct AchievementCollectionResource final {
 {
     const auto resource = std::make_shared<AchievementCollectionResource>();
     resource->value = std::make_shared<AchievementCollection>(std::move(value));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::AchievementCollection, resource, outCollection);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned achievement collection handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::AchievementCollection, resource, outCollection);
 }
 
 } // namespace
@@ -153,14 +137,7 @@ CNA_Result cna_achievement_destroy(const CNA_AchievementHandle achievementHandle
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(achievementHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Achievement handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(achievementHandle);
     });
 }
 
@@ -288,14 +265,7 @@ CNA_Result cna_achievement_collection_destroy(
             return result;
         }
         collection->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned achievement collection handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(collectionHandle);
     });
 }
 

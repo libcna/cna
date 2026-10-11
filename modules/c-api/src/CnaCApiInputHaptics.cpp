@@ -29,7 +29,9 @@ using CNA::C::Detail::ValidateActiveGameHandle;
 namespace {
 
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateVersionedStructure;
 
@@ -180,17 +182,9 @@ void CopyAxesToNative(const TC* const source, std::array<TNative, TCount>* const
     CNA_HapticDeviceHandle* const outDevice)
 {
     auto resource = std::make_shared<HapticDevice>(std::move(device));
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        CNA::C::Detail::ObjectKind::HapticDevice,
+    return CreateHandle(CNA::C::Detail::ObjectKind::HapticDevice,
         std::move(resource),
         outDevice);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The haptic device handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 using DeviceAction = bool (HapticDevice::*)();
@@ -718,14 +712,7 @@ CNA_Result cna_haptic_device_destroy(const CNA_HapticDeviceHandle deviceHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(deviceHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The haptic device handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(deviceHandle);
     });
 }
 

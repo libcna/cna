@@ -19,11 +19,11 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -405,17 +405,9 @@ CNA_Result cna_curve_key_collection_create(
         }
         *outCollection = CNA_INVALID_HANDLE;
         const auto collection = std::make_shared<CurveKeyCollection>();
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::CurveKeyCollection,
+        return CreateHandle(ObjectKind::CurveKeyCollection,
             collection,
             outCollection);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The CurveKeyCollection handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -428,14 +420,7 @@ CNA_Result cna_curve_key_collection_destroy(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The CurveKeyCollection handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(collectionHandle);
     });
 }
 
@@ -561,17 +546,9 @@ CNA_Result cna_curve_key_collection_clone(
             return result;
         }
         const auto clone = std::make_shared<CurveKeyCollection>(collection->Clone());
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::CurveKeyCollection,
+        return CreateHandle(ObjectKind::CurveKeyCollection,
             clone,
             outCollection);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The cloned CurveKeyCollection handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -706,17 +683,9 @@ CNA_Result cna_curve_create(CNA_CurveHandle* const outCurve)
         }
         *outCurve = CNA_INVALID_HANDLE;
         const auto curve = std::make_shared<Curve>();
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::Curve,
+        return CreateHandle(ObjectKind::Curve,
             curve,
             outCurve);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The Curve handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -728,14 +697,7 @@ CNA_Result cna_curve_destroy(const CNA_CurveHandle curveHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(curveHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The Curve handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(curveHandle);
     });
 }
 
@@ -779,17 +741,9 @@ CNA_Result cna_curve_get_keys(
             return result;
         }
         const std::shared_ptr<CurveKeyCollection> keys(curve, &curve->getKeysProperty());
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::CurveKeyCollection,
+        return CreateHandle(ObjectKind::CurveKeyCollection,
             keys,
             outKeys);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The Curve key-view handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -895,17 +849,9 @@ CNA_Result cna_curve_clone(
             return result;
         }
         const auto clone = std::make_shared<Curve>(curve->Clone());
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::Curve,
+        return CreateHandle(ObjectKind::Curve,
             clone,
             outCurve);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The cloned Curve handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 

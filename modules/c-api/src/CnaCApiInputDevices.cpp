@@ -20,18 +20,18 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateVersionedStructure;
-using CNA::C::Detail::ReadText;
 
 using CNA::Input::Clipboard;
 using CNA::Input::InputDeviceInfoEXT;
@@ -250,17 +250,9 @@ private:
         callback(id, context);
     });
     const auto resource = std::make_shared<DeviceRegistration>(kind, token);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        CNA::C::Detail::ObjectKind::InputDeviceEventRegistration,
+    return CreateHandle(CNA::C::Detail::ObjectKind::InputDeviceEventRegistration,
         resource,
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The input-device hot-plug registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result RaiseHotplug(
@@ -759,15 +751,7 @@ CNA_Result cna_input_devices_unsubscribe_ext(
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The input-device registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 

@@ -24,6 +24,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -176,15 +177,11 @@ public:
 
         const auto reference = std::make_shared<BorrowedGraphicsDevice>(
             BorrowedGraphicsDevice{&getGraphicsDeviceProperty(), handle_});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::GraphicsDevice,
+        if (const CNA_Result result = CreateHandle(ObjectKind::GraphicsDevice,
             reference,
             &borrowedGraphicsDeviceHandle_);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The callback-scoped graphics-device handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         *outGraphicsDevice = borrowedGraphicsDeviceHandle_;
         return CNA_RESULT_SUCCESS;

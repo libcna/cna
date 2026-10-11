@@ -36,6 +36,7 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetLastError;
@@ -43,10 +44,10 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
-using CNA::C::Detail::NativeOrdinal;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
@@ -617,15 +618,11 @@ CNA_Result cna_network_session_properties_create_enumerator(
                 CNA_ERROR_CATEGORY_INTERNAL,
                 "The canonical property list returned no enumerator.");
         }
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkSessionPropertyEnumerator,
+        if (const CNA_Result result = CreateHandle(ObjectKind::NetworkSessionPropertyEnumerator,
             resource,
             outEnumerator);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned session-property enumerator handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         resource->owner = properties;
         properties->activeEnumerators += 1U;

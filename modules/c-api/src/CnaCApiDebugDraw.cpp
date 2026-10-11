@@ -17,6 +17,8 @@
 #include <vector>
 namespace {
 
+using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 namespace Ext = CNA::Graphics;
@@ -104,11 +106,9 @@ CNA_Result cna_debug_draw_create(const CNA_Handle graphicsDeviceHandle,
     const auto resource = std::make_shared<DebugDrawResource>(DebugDrawResource{
         std::make_shared<Ext::DebugDraw>(*graphicsDevice->value),
         graphicsDevice->parentGame});
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::DebugDraw, resource, outDebug);
-    if (result != CNA_RESULT_SUCCESS) {
-      return Fail(result, ErrorCategoryForResult(result),
-                  "The owned handle could not be created.");
+    if (const CNA_Result result = CreateHandle(ObjectKind::DebugDraw, resource, outDebug);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
     return CNA_RESULT_SUCCESS;
@@ -123,10 +123,9 @@ CNA_Result cna_debug_draw_destroy(const CNA_DebugDrawHandle debug) {
         result != CNA_RESULT_SUCCESS) {
       return result;
     }
-    const CNA_Result released = GetRuntimeHandles().Release(debug);
-    if (released != CNA_RESULT_SUCCESS) {
-      return Fail(released, ErrorCategoryForResult(released),
-                  "The owned handle could not be released.");
+    if (const CNA_Result released = ReleaseHandle(debug);
+        released != CNA_RESULT_SUCCESS) {
+        return released;
     }
     RemoveOwnedGraphicsResourceFor(resource->parentGame);
     return CNA_RESULT_SUCCESS;

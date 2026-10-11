@@ -50,7 +50,9 @@ namespace {
 
 using CNA::C::Detail::CopyBytes;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::Media::Album;
@@ -513,17 +515,9 @@ CNA_Result cna_media_library_create(
         }
         auto resource = std::make_shared<MediaLibraryResource>();
         resource->value = std::make_unique<MediaLibrary>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::MediaLibrary,
+        return CreateHandle(ObjectKind::MediaLibrary,
             std::move(resource),
             outLibrary);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The media library handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -558,17 +552,9 @@ CNA_Result cna_media_library_create_from_source(
         auto resource = std::make_shared<MediaLibraryResource>();
         resource->value =
             std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get());
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::MediaLibrary,
+        return CreateHandle(ObjectKind::MediaLibrary,
             std::move(resource),
             outLibrary);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The media library handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -580,14 +566,7 @@ CNA_Result cna_media_library_destroy(const CNA_MediaLibraryHandle library)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(library);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The media library handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(library);
     });
 }
 

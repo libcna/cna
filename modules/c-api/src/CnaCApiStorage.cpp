@@ -32,15 +32,17 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
-using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::NativeOrdinal;
+using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Storage::StorageContainer;
 using Microsoft::Xna::Framework::Storage::StorageDevice;
@@ -200,15 +202,11 @@ private:
     const auto resource = std::make_shared<StorageStreamResource>();
     resource->value = std::move(stream);
     resource->container = std::move(container);
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::StorageStream,
+    if (const CNA_Result result = CreateHandle(ObjectKind::StorageStream,
         resource,
         outStream);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned storage stream handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     resource->container->openStreams += 1U;
     return CNA_RESULT_SUCCESS;
@@ -766,15 +764,11 @@ CNA_Result cna_storage_container_open(
         resource->value = std::shared_ptr<StorageContainer>(std::move(nativeContainer));
         resource->device = device;
         resource->deviceHandle = deviceHandle;
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::StorageContainer,
+        if (const CNA_Result result = CreateHandle(ObjectKind::StorageContainer,
             resource,
             outContainer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned StorageContainer handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         device->openContainers += 1U;
         return CNA_RESULT_SUCCESS;
@@ -1132,12 +1126,9 @@ CNA_Result cna_storage_container_destroy(const CNA_StorageContainerHandle contai
                 "Every stream opened from this StorageContainer must be closed first.");
         }
         container->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(containerHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned StorageContainer handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(containerHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         if (container->device->openContainers != 0U) {
             container->device->openContainers -= 1U;
@@ -1285,12 +1276,9 @@ CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
                 "Every reader borrowing this stream must be destroyed before it is closed.");
         }
         stream->value->Close();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(streamHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned storage stream handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(streamHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         if (stream->container->openStreams != 0U) {
             stream->container->openStreams -= 1U;

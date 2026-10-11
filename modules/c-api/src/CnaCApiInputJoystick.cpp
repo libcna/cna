@@ -23,7 +23,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -32,10 +31,12 @@ namespace {
 
 using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateVersionedStructure;
-using CNA::C::Detail::ReadText;
 
 using CNA::Input::JoystickCapabilitiesEXT;
 using CNA::Input::JoystickHatPositionEXT;
@@ -240,17 +241,9 @@ private:
         callback(id, context);
     });
     const auto resource = std::make_shared<JoystickRegistration>(kind, token);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        CNA::C::Detail::ObjectKind::JoystickEventRegistration,
+    return CreateHandle(CNA::C::Detail::ObjectKind::JoystickEventRegistration,
         resource,
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The joystick hot-plug registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -587,17 +580,9 @@ CNA_Result cna_joysticks_capture_state(
             return result;
         }
         auto resource = std::make_shared<JoystickStateEXT>(Joysticks::GetStateEXT(id));
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            CNA::C::Detail::ObjectKind::JoystickState,
+        return CreateHandle(CNA::C::Detail::ObjectKind::JoystickState,
             std::move(resource),
             outState);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The joystick snapshot handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -768,14 +753,7 @@ CNA_Result cna_joystick_state_destroy(const CNA_JoystickStateHandle state)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(state);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The joystick snapshot handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(state);
     });
 }
 
@@ -818,15 +796,7 @@ CNA_Result cna_joysticks_unsubscribe_ext(
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The joystick registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 

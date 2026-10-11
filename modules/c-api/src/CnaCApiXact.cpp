@@ -29,18 +29,20 @@ using CNA::C::Detail::AddOwnedAudioResource;
 using CNA::C::Detail::AudioRegistration;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
-using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::IsFinite;
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -260,15 +262,11 @@ template<typename TResource>
 
     const auto resource = std::make_shared<EngineResource>(
         EngineResource{std::move(nativeEngine), gameHandle, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::AudioEngine,
+    if (const CNA_Result result = CreateHandle(ObjectKind::AudioEngine,
         resource,
         outEngine);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned AudioEngine handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedAudioResource();
     return CNA_RESULT_SUCCESS;
@@ -328,12 +326,9 @@ CNA_Result cna_audio_engine_destroy(const CNA_Handle engineHandle)
                 "All C bank and category children must be destroyed before their AudioEngine.");
         }
         engine->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(engineHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AudioEngine handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(engineHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         RemoveOwnedAudioResource();
         return CNA_RESULT_SUCCESS;
@@ -613,15 +608,11 @@ CNA_Result cna_audio_engine_get_category(
             CategoryResource{
                 std::make_shared<AudioCategory>(engine->value->GetCategory(nativeName)),
                 engine});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::AudioCategory,
+        if (const CNA_Result result = CreateHandle(ObjectKind::AudioCategory,
             resource,
             outCategory);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AudioCategory handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++engine->childCount;
         return CNA_RESULT_SUCCESS;
@@ -636,12 +627,9 @@ CNA_Result cna_audio_category_destroy(const CNA_Handle categoryHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(categoryHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AudioCategory handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(categoryHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         --category->parent->childCount;
         return CNA_RESULT_SUCCESS;
@@ -734,15 +722,11 @@ CNA_Result cna_wave_bank_create(
             WaveBankResource{
                 std::make_shared<WaveBank>(engine->value.get(), nativeFilename),
                 engine});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::WaveBank,
+        if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
             resource,
             outWaveBank);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned WaveBank handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++engine->childCount;
         return CNA_RESULT_SUCCESS;
@@ -776,15 +760,11 @@ CNA_Result cna_wave_bank_create_streaming(
             WaveBankResource{
                 std::make_shared<WaveBank>(engine->value.get(), nativeFilename, offset, packetSize),
                 engine});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::WaveBank,
+        if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
             resource,
             outWaveBank);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned WaveBank handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++engine->childCount;
         return CNA_RESULT_SUCCESS;
@@ -800,12 +780,9 @@ CNA_Result cna_wave_bank_destroy(const CNA_Handle waveBankHandle)
             return result;
         }
         waveBank->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(waveBankHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned WaveBank handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(waveBankHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         --waveBank->parent->childCount;
         return CNA_RESULT_SUCCESS;
@@ -866,15 +843,11 @@ CNA_Result cna_sound_bank_create(
                 std::make_shared<SoundBank>(engine->value.get(), nativeFilename),
                 engine,
                 0U});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SoundBank,
+        if (const CNA_Result result = CreateHandle(ObjectKind::SoundBank,
             resource,
             outSoundBank);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundBank handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++engine->childCount;
         return CNA_RESULT_SUCCESS;
@@ -896,12 +869,9 @@ CNA_Result cna_sound_bank_destroy(const CNA_Handle soundBankHandle)
                 "All C Cue children must be destroyed before their SoundBank.");
         }
         soundBank->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(soundBankHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundBank handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(soundBankHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         --soundBank->parent->childCount;
         return CNA_RESULT_SUCCESS;
@@ -934,12 +904,9 @@ CNA_Result cna_sound_bank_get_cue(
             CueResource{
                 std::shared_ptr<Cue>(soundBank->value->GetCue(nativeName)),
                 soundBank});
-        const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Cue, resource, outCue);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Cue handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::Cue, resource, outCue);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++soundBank->cueCount;
         return CNA_RESULT_SUCCESS;
@@ -1030,12 +997,9 @@ CNA_Result cna_cue_destroy(const CNA_Handle cueHandle)
             return result;
         }
         cue->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(cueHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Cue handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(cueHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         --cue->parent->cueCount;
         return CNA_RESULT_SUCCESS;

@@ -36,6 +36,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -44,6 +45,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -398,13 +400,9 @@ CNA_Result cna_vertex_buffer_create(
 
         const auto resource = std::make_shared<VertexBufferResource>(
             VertexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::VertexBuffer, resource, outVertexBuffer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned VertexBuffer handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::VertexBuffer, resource, outVertexBuffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -425,12 +423,9 @@ CNA_Result cna_vertex_buffer_destroy(const CNA_VertexBufferHandle vertexBufferHa
                 CNA_ERROR_CATEGORY_STATE,
                 "The VertexBuffer is retained by a ModelMeshPart.");
         }
-        if (const CNA_Result result = GetRuntimeHandles().Release(vertexBufferHandle);
+        if (const CNA_Result result = ReleaseHandle(vertexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned VertexBuffer handle could not be released.");
+            return result;
         }
         RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;

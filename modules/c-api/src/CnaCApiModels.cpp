@@ -51,6 +51,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -60,6 +61,7 @@ using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToC;
@@ -2761,12 +2763,9 @@ CNA_Result cna_model_destroy(const CNA_ModelHandle modelHandle)
         }
         // CBIND-118: taken before the release, because the resource record is what holds them.
         const std::vector<CNA_Handle> published = model->contentOwnedHandles;
-        const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Model handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(modelHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         // A content-loaded model published these; the caller never created them, so releasing the
         // model is what ends them. Each release is best-effort: a caller that already released one
@@ -6106,12 +6105,9 @@ template <typename TResource, typename TValue>
     resource->value = BorrowFromModel(owner, pointer);
     resource->parentGame = parentGame;
     CNA_Handle handle = CNA_INVALID_HANDLE;
-    if (const CNA_Result result = GetRuntimeHandles().Create(kind, resource, &handle);
+    if (const CNA_Result result = CreateHandle(kind, resource, &handle);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "A loaded Model resource could not be published as a handle.");
+        return result;
     }
     published.emplace(static_cast<const void*>(pointer), handle);
     ownedHandles.push_back(handle);

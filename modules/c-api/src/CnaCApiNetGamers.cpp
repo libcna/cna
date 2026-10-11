@@ -27,6 +27,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -164,15 +165,11 @@ CNA_Result CreateBorrowedNetworkGamer(
     const auto resource = std::make_shared<NetworkGamerResource>();
     resource->value = value;
     resource->session = session;
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::NetworkGamer,
+    if (const CNA_Result result = CreateHandle(ObjectKind::NetworkGamer,
         resource,
         outGamer);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The borrowed NetworkGamer handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     resource->viewOwner = std::move(viewOwner);
     resource->viewCounter = viewCounter;
@@ -413,15 +410,11 @@ CNA_Result cna_network_machine_get_gamer(
                 CNA_ERROR_CATEGORY_INTERNAL,
                 "The canonical machine reported a null gamer.");
         }
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkGamer,
+        if (const CNA_Result result = CreateHandle(ObjectKind::NetworkGamer,
             resource,
             outGamer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The borrowed NetworkGamer handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         resource->viewOwner = machine;
         resource->viewCounter = &machine->activeGamerViews;

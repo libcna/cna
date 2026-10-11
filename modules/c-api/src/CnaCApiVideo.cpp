@@ -29,7 +29,9 @@ using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::MediaState;
@@ -130,17 +132,9 @@ void InvalidateFrameTexture(VideoPlayerResource& player) noexcept
 {
     auto resource = std::make_shared<VideoResource>();
     resource->value = std::move(video);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::Video,
+    return CreateHandle(ObjectKind::Video,
         std::move(resource),
         outVideo);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The video handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 template<typename TRead>
@@ -300,14 +294,7 @@ CNA_Result cna_video_destroy(const CNA_VideoHandle video)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(video);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(video);
     });
 }
 
@@ -327,17 +314,9 @@ CNA_Result cna_video_player_create(
         auto resource = std::make_shared<VideoPlayerResource>();
         resource->value = std::make_unique<VideoPlayer>();
         resource->parentGame = gameHandle;
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::VideoPlayer,
+        return CreateHandle(ObjectKind::VideoPlayer,
             std::move(resource),
             outPlayer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video player handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -476,14 +455,7 @@ CNA_Result cna_video_player_destroy(const CNA_VideoPlayerHandle player)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(player);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video player handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(player);
     });
 }
 

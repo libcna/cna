@@ -156,6 +156,7 @@ namespace {
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -164,13 +165,14 @@ using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
 using CNA::C::Detail::TextureCubeResourceView;
-using CNA::C::Detail::IsSurfaceFormat;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
@@ -373,13 +375,9 @@ template<typename TResource>
 {
     const auto resource = std::make_shared<Texture3DResource>(
         Texture3DResource{std::move(texture), parentGame, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::Texture3D, resource, outTexture);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned Texture3D handle could not be created.");
+    if (const CNA_Result result = CreateHandle(ObjectKind::Texture3D, resource, outTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
@@ -392,13 +390,9 @@ template<typename TResource>
 {
     const auto resource = std::make_shared<TextureCubeResource>(
         TextureCubeResource{std::move(texture), parentGame, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::TextureCube, resource, outTexture);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned TextureCube handle could not be created.");
+    if (const CNA_Result result = CreateHandle(ObjectKind::TextureCube, resource, outTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
@@ -514,12 +508,9 @@ CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
                 CNA_ERROR_CATEGORY_STATE,
                 "The Texture3D is retained by an EffectParameter.");
         }
-        if (const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
+        if (const CNA_Result result = ReleaseHandle(textureHandle);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Texture3D handle could not be released.");
+            return result;
         }
         RemoveOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -788,12 +779,9 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
                 CNA_ERROR_CATEGORY_STATE,
                 "The TextureCube is retained by an EffectParameter.");
         }
-        if (const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
+        if (const CNA_Result result = ReleaseHandle(textureHandle);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned TextureCube handle could not be released.");
+            return result;
         }
         RemoveOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;

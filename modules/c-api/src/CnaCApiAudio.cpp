@@ -36,19 +36,21 @@ using CNA::C::Detail::AudioRegistrationBase;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
-using CNA::C::Detail::IsFinite;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
@@ -195,15 +197,11 @@ CNA_Result CreateOwnedSoundEffect(
     }
     const auto resource = std::make_shared<SoundEffectResource>(
         SoundEffectResource{std::move(soundEffect), parentGame, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::SoundEffect,
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffect,
         resource,
         outSoundEffect);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SoundEffect handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedAudioResource();
     return CNA_RESULT_SUCCESS;
@@ -320,15 +318,11 @@ CNA_Result cna_sound_effect_create_pcm16(
 
         const auto resource = std::make_shared<SoundEffectResource>(
             SoundEffectResource{nativeSoundEffect, gameHandle, 0U});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SoundEffect,
+        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffect,
             resource,
             outSoundEffect);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundEffect handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedAudioResource();
         return CNA_RESULT_SUCCESS;
@@ -357,15 +351,11 @@ CNA_Result cna_sound_effect_create_instance(
             soundEffect->value->CreateInstance());
         const auto resource = std::make_shared<SoundEffectInstanceResource>(
             SoundEffectInstanceResource{nativeInstance, soundEffect});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SoundEffectInstance,
+        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
             resource,
             outInstance);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundEffectInstance handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         ++soundEffect->instanceCount;
         AddOwnedAudioResource();
@@ -388,12 +378,9 @@ CNA_Result cna_sound_effect_destroy(const CNA_Handle soundEffectHandle)
                 "All C SoundEffectInstance children must be destroyed before their SoundEffect.");
         }
         soundEffect->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(soundEffectHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundEffect handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(soundEffectHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         RemoveOwnedAudioResource();
         return CNA_RESULT_SUCCESS;
@@ -554,12 +541,9 @@ CNA_Result cna_sound_effect_instance_destroy(const CNA_Handle instanceHandle)
             return result;
         }
         instance->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(instanceHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SoundEffectInstance handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(instanceHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         // A streaming instance has no parent effect, so there is no instance count to decrement.
         if (instance->parent && instance->parent->instanceCount != 0U) {
@@ -581,15 +565,11 @@ namespace {
 {
     const auto resource = std::make_shared<SoundEffectResource>(
         SoundEffectResource{std::move(nativeSoundEffect), gameHandle, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::SoundEffect,
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffect,
         resource,
         outSoundEffect);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SoundEffect handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedAudioResource();
     return CNA_RESULT_SUCCESS;
@@ -877,15 +857,11 @@ CNA_Result cna_dynamic_sound_effect_instance_create(
         // bookkeeping a SoundEffect child carries has nothing to point at here.
         const auto resource = std::make_shared<SoundEffectInstanceResource>(
             SoundEffectInstanceResource{std::move(nativeInstance), nullptr});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SoundEffectInstance,
+        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
             resource,
             outInstance);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned streaming instance handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedAudioResource();
         return CNA_RESULT_SUCCESS;
@@ -1155,14 +1131,7 @@ CNA_Result cna_audio_unsubscribe_ext(const CNA_Handle registration)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The audio registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 

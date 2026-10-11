@@ -22,13 +22,13 @@ namespace {
 
 using CNA::C::Detail::BorrowAnyGamer;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedPropertyDictionary;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -138,15 +138,7 @@ struct LeaderboardEntryResource final {
 {
     const auto resource = std::make_shared<LeaderboardReaderResource>();
     resource->value = std::make_shared<LeaderboardReader>(std::move(value));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::LeaderboardReader, resource, outReader);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned LeaderboardReader handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::LeaderboardReader, resource, outReader);
 }
 
 // The C ABI exposes a completed read and owns the underlying queued Begin/End operation.
@@ -162,15 +154,7 @@ template<typename TBegin>
     const auto resource = std::make_shared<LeaderboardEntryResource>();
     resource->owned = std::make_shared<LeaderboardEntry>(std::move(value));
     resource->readerOwner = std::move(readerOwner);
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::LeaderboardEntry, resource, outEntry);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned LeaderboardEntry handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::LeaderboardEntry, resource, outEntry);
 }
 
 } // namespace
@@ -390,14 +374,7 @@ CNA_Result cna_leaderboard_reader_destroy(const CNA_LeaderboardReaderHandle read
             return result;
         }
         reader->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(readerHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned LeaderboardReader handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(readerHandle);
     });
 }
 
@@ -563,14 +540,7 @@ CNA_Result cna_leaderboard_entry_destroy(const CNA_LeaderboardEntryHandle entryH
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(entryHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned LeaderboardEntry handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(entryHandle);
     });
 }
 

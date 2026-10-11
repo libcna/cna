@@ -24,25 +24,26 @@
 
 namespace {
 
+using CNA::C::Detail::ApplyPresentationParameters;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
-using CNA::C::Detail::LookupHandle;
-using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::ValidateCanonicalBool;
-using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsDepthFormat;
-using CNA::C::Detail::IsPresentInterval;
 using CNA::C::Detail::IsDisplayOrientation;
-using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsGraphicsProfile;
+using CNA::C::Detail::IsPresentInterval;
+using CNA::C::Detail::IsRenderTargetUsage;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCPresentationParameters;
-using CNA::C::Detail::ApplyPresentationParameters;
+using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
@@ -771,13 +772,9 @@ CNA_Result cna_graphics_device_create(
             static_cast<GraphicsProfile>(graphicsProfile),
             nativeParameters);
 
-        const CNA_Result result = GetRuntimeHandles().Create(
-            CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned GraphicsDevice handle could not be created.");
+        if (const CNA_Result result = CreateHandle(CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         // The owner token is the device's own handle, so resources created on it are as
         // distinguishable from another device's as two games' resources are from each other.
@@ -796,14 +793,7 @@ CNA_Result cna_graphics_device_destroy(const CNA_Handle graphicsDeviceHandle)
             return getResult;
         }
         owned->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(graphicsDeviceHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned GraphicsDevice handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(graphicsDeviceHandle);
     });
 }
 

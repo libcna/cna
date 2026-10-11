@@ -22,23 +22,24 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
 namespace {
 
-using CNA::C::Detail::CopyText;
-using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::IsSurfaceFormat;
-using CNA::C::Detail::IsDepthFormat;
-using CNA::C::Detail::IsPresentInterval;
-using CNA::C::Detail::IsDisplayOrientation;
-using CNA::C::Detail::IsRenderTargetUsage;
-using CNA::C::Detail::IsGraphicsProfile;
-using CNA::C::Detail::ToCPresentationParameters;
 using CNA::C::Detail::ApplyPresentationParameters;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsDepthFormat;
+using CNA::C::Detail::IsDisplayOrientation;
+using CNA::C::Detail::IsGraphicsProfile;
+using CNA::C::Detail::IsPresentInterval;
+using CNA::C::Detail::IsRenderTargetUsage;
+using CNA::C::Detail::IsSurfaceFormat;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCPresentationParameters;
 
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Game;
@@ -207,17 +208,9 @@ private:
     std::shared_ptr<ManagerRegistrationBase> registration,
     CNA_Handle* const outRegistration)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::GameEventRegistration,
+    return CreateHandle(ObjectKind::GameEventRegistration,
         std::move(registration),
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The manager registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -299,15 +292,11 @@ CNA_Result cna_graphics_device_manager_create(
         auto resource = std::make_shared<ManagerResource>();
         resource->game = gameHandle;
         resource->value = std::make_unique<GraphicsDeviceManager>(game);
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::GraphicsDeviceManager,
+        if (const CNA_Result result = CreateHandle(ObjectKind::GraphicsDeviceManager,
             std::move(resource),
             outManager);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The manager handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         CNA::C::Detail::AddOwnedGameComponent();
         return CNA_RESULT_SUCCESS;
@@ -608,12 +597,9 @@ CNA_Result cna_graphics_device_manager_destroy(const CNA_GraphicsDeviceManagerHa
             return result;
         }
         resource->value->Dispose();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(manager);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The manager handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(manager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         {
             const std::lock_guard<std::mutex> lock(RetiredManagerMutex());

@@ -24,6 +24,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
@@ -32,6 +33,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
@@ -141,13 +143,9 @@ CNA_Result cna_sprite_font_create(
             defaultCharacter);
         const auto resource = std::make_shared<SpriteFontResource>(
             SpriteFontResource{nativeFont, texture, texture->parentGame});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SpriteFont, resource, outSpriteFont);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SpriteFont handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::SpriteFont, resource, outSpriteFont);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         if (texture->activeFontReferenceCount == std::numeric_limits<uint64_t>::max()) {
             static_cast<void>(GetRuntimeHandles().Release(*outSpriteFont));
@@ -375,12 +373,9 @@ CNA_Result cna_sprite_font_destroy(const CNA_Handle spriteFontHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(spriteFontHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned SpriteFont handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(spriteFontHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         if (spriteFont->texture->activeFontReferenceCount != 0U) {
             --spriteFont->texture->activeFontReferenceCount;

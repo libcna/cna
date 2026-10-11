@@ -30,6 +30,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedRenderTarget2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -38,15 +39,16 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
+using CNA::C::Detail::IsDepthFormat;
+using CNA::C::Detail::IsRenderTargetUsage;
+using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::IsSurfaceFormat;
-using CNA::C::Detail::IsDepthFormat;
-using CNA::C::Detail::IsRenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -97,13 +99,9 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 {
     const auto resource = std::make_shared<RenderTargetCubeResource>(
         RenderTargetCubeResource{std::move(target), parentGame, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::RenderTargetCube, resource, outTarget);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned RenderTargetCube handle could not be created.");
+    if (const CNA_Result result = CreateHandle(ObjectKind::RenderTargetCube, resource, outTarget);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
@@ -793,12 +791,9 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
                 "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
         }
         resource->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(renderTargetHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned RenderTargetCube handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(renderTargetHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         RemoveOwnedGraphicsResourceFor(resource->parentGame);
         return CNA_RESULT_SUCCESS;

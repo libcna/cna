@@ -49,7 +49,9 @@
 
 namespace {
 
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::NativeOrdinal;
+using CNA::C::Detail::ReleaseHandle;
 
 namespace NativeGraphics = Microsoft::Xna::Framework::Graphics;
 
@@ -1119,14 +1121,7 @@ CNA_Result cna_graphics_device_unsubscribe(
             return result;
         }
         registration->Unsubscribe();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The graphics-device event-registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registrationHandle);
     });
 }
 
@@ -1876,13 +1871,9 @@ CNA_Result cna_occlusion_query_create(
         auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);
         const auto resource = std::make_shared<OcclusionQueryResource>(
             OcclusionQueryResource{std::move(native), graphicsDevice->parentGame});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned occlusion-query handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -1898,12 +1889,9 @@ CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQ
             return result;
         }
         static_cast<System::IDisposable*>(query->value.get())->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(occlusionQueryHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned occlusion-query handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(occlusionQueryHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         RemoveOwnedGraphicsResourceFor(query->parentGame);
         return CNA_RESULT_SUCCESS;

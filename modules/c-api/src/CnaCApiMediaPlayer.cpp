@@ -23,7 +23,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -36,7 +35,9 @@ using CNA::C::Media::Detail::SongResource;
 
 namespace {
 
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::MediaQueue;
@@ -161,17 +162,9 @@ private:
     const auto token = event.Add(
         [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
     const auto resource = std::make_shared<PlayerRegistration>(kind, token);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::MediaPlayerEventRegistration,
+    return CreateHandle(ObjectKind::MediaPlayerEventRegistration,
         resource,
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The media player registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -318,15 +311,7 @@ CNA_Result cna_media_player_unsubscribe_ext(
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The media player registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 
@@ -418,14 +403,7 @@ CNA_Result cna_media_queue_destroy(const CNA_MediaQueueHandle queue)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(queue);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The media queue handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(queue);
     });
 }
 

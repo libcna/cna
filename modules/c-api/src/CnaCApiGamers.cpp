@@ -32,9 +32,11 @@
 
 namespace {
 
+using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GamerRegistration;
@@ -44,12 +46,12 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
-using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::TryMapPlayerIndex;
-using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::BorrowSignedIn;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -180,14 +182,7 @@ struct GamerEnumeratorResource final {
     const auto resource = std::make_shared<GamerResource>();
     resource->value = std::move(value);
     resource->friendGamer = friendGamer;
-    const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Gamer, resource, outGamer);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned Gamer handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::Gamer, resource, outGamer);
 }
 
 [[nodiscard]] CNA_Result PublishProfile(
@@ -196,32 +191,16 @@ struct GamerEnumeratorResource final {
 {
     const auto resource = std::make_shared<GamerProfileResource>();
     resource->value = std::move(value);
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::GamerProfile, resource, outProfile);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned GamerProfile handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::GamerProfile, resource, outProfile);
 }
 
 [[nodiscard]] CNA_Result PublishRegistration(
     std::shared_ptr<GamerRegistrationBase> registration,
     CNA_Handle* const outRegistration)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::GamerEventRegistration,
+    return CreateHandle(ObjectKind::GamerEventRegistration,
         std::move(registration),
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The gamer-services registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 // The canonical event carries a gamer the runtime owns, so the callback gets a handle that lives
@@ -264,14 +243,7 @@ CNA_Result CreateBorrowedGamer(
     // The aliasing constructor keeps the owner alive without ever deleting the gamer itself.
     resource->value = std::shared_ptr<Gamer>(std::move(retentionOwner), value);
     resource->friendGamer = dynamic_cast<FriendGamer*>(value);
-    const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Gamer, resource, outGamer);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The borrowed Gamer handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::Gamer, resource, outGamer);
 }
 
 CNA_Result BorrowAnyGamer(const CNA_Handle handle, Gamer** const outGamer)
@@ -314,14 +286,7 @@ CNA_Result cna_gamer_destroy(const CNA_GamerHandle gamerHandle)
                 ErrorCategoryForResult(result),
                 "The owned Gamer handle is invalid for this call.");
         }
-        const CNA_Result result = GetRuntimeHandles().Release(gamerHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Gamer handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(gamerHandle);
     });
 }
 
@@ -775,15 +740,7 @@ CNA_Result cna_signed_in_gamer_get_friends(
         }
         const auto resource = std::make_shared<GamerCollectionResource>();
         resource->friends = std::make_shared<FriendCollection>(gamer->GetFriends());
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::GamerCollection, resource, outFriends);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned gamer collection handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::GamerCollection, resource, outFriends);
     });
 }
 
@@ -883,14 +840,7 @@ CNA_Result cna_gamer_unsubscribe_ext(const CNA_Handle registration)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(registration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The gamer registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 
@@ -970,14 +920,7 @@ CNA_Result cna_gamer_profile_destroy(const CNA_GamerProfileHandle profileHandle)
             return result;
         }
         profile->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(profileHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned GamerProfile handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(profileHandle);
     });
 }
 
@@ -1076,15 +1019,7 @@ CNA_Result cna_friend_collection_create_ext(
         }
         resource->friends =
             std::make_shared<FriendCollection>(FriendCollection::CreateInternal(nativeFriends));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::GamerCollection, resource, outCollection);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned gamer collection handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::GamerCollection, resource, outCollection);
     });
 }
 
@@ -1358,15 +1293,7 @@ CNA_Result cna_gamer_collection_create_enumerator(
         const auto resource = std::make_shared<GamerEnumeratorResource>();
         resource->collection = collection;
         resource->position = -1;
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::GamerEnumerator, resource, outEnumerator);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned gamer enumerator handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::GamerEnumerator, resource, outEnumerator);
     });
 }
 
@@ -1456,14 +1383,7 @@ CNA_Result cna_gamer_enumerator_destroy(const CNA_GamerEnumeratorHandle enumerat
         }
         auto cursor = enumerator->collection->friends->GetEnumerator();
         cursor.Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(enumeratorHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned gamer enumerator handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(enumeratorHandle);
     });
 }
 
@@ -1476,14 +1396,7 @@ CNA_Result cna_gamer_collection_destroy(const CNA_GamerCollectionHandle collecti
             return result;
         }
         collection->friends->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned gamer collection handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(collectionHandle);
     });
 }
 

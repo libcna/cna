@@ -24,6 +24,7 @@ using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -33,6 +34,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -275,13 +277,9 @@ CNA_Result cna_index_buffer_create(
 
         const auto resource = std::make_shared<IndexBufferResource>(
             IndexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::IndexBuffer, resource, outIndexBuffer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned IndexBuffer handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::IndexBuffer, resource, outIndexBuffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -302,12 +300,9 @@ CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandl
                 CNA_ERROR_CATEGORY_STATE,
                 "The IndexBuffer is retained by a ModelMeshPart.");
         }
-        if (const CNA_Result result = GetRuntimeHandles().Release(indexBufferHandle);
+        if (const CNA_Result result = ReleaseHandle(indexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned IndexBuffer handle could not be released.");
+            return result;
         }
         RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;

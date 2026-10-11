@@ -26,14 +26,15 @@
 #include <utility>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
 namespace {
 
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 
 using Microsoft::Xna::Framework::DrawableGameComponent;
@@ -273,17 +274,9 @@ private:
     std::shared_ptr<ComponentRegistrationBase> registration,
     CNA_Handle* const outRegistration)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::GameComponentEventRegistration,
+    return CreateHandle(ObjectKind::GameComponentEventRegistration,
         std::move(registration),
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The component registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result BorrowComponent(
@@ -355,15 +348,11 @@ template<typename TComponent>
     resource->game = gameHandle;
     IGameComponent* const key = component.get();
     resource->value = std::move(component);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::GameComponent,
+    if (const CNA_Result result = CreateHandle(ObjectKind::GameComponent,
         resource,
         outComponent);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The game component handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     resource->handle = *outComponent;
     {
@@ -411,15 +400,11 @@ CNA_Result CreateOwnedCanonicalGameComponent(
     // the same as for a component a caller built.
     IGameComponent* const key = component.get();
     resource->value = std::move(component);
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::GameComponent,
+    if (const CNA_Result result = CreateHandle(ObjectKind::GameComponent,
         resource,
         outComponent);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The game component handle could not be created.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     resource->handle = *outComponent;
     {
@@ -633,15 +618,7 @@ CNA_Result cna_game_component_unsubscribe(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The component registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 
@@ -664,12 +641,9 @@ CNA_Result cna_game_component_destroy(const CNA_GameComponentHandle component)
             const std::lock_guard<std::mutex> lock(ComponentRegistryMutex());
             ComponentRegistry().erase(resource->value.get());
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(component);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The game component handle could not be released.");
+        if (const CNA_Result result = ReleaseHandle(component);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         CNA::C::Detail::RemoveOwnedGameComponent();
         return CNA_RESULT_SUCCESS;

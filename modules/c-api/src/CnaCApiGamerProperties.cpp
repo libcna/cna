@@ -23,19 +23,19 @@
 
 namespace {
 
+using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
-using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::ReadTextBytes;
-using CNA::C::Detail::BorrowSignedIn;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::GamerServices::GameDefaults;
@@ -189,15 +189,7 @@ CNA_Result CreateOwnedPropertyDictionary(
     *outDictionary = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<PropertyDictionaryResource>();
     resource->value = std::move(value);
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::PropertyDictionary, resource, outDictionary);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned property dictionary handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::PropertyDictionary, resource, outDictionary);
 }
 
 } // namespace CNA::C::Detail
@@ -254,14 +246,7 @@ CNA_Result cna_property_dictionary_destroy(const CNA_PropertyDictionaryHandle di
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(dictionaryHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned property dictionary handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(dictionaryHandle);
     });
 }
 

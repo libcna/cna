@@ -29,16 +29,16 @@ namespace {
 
 using CNA::C::Detail::BorrowAnyGamer;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
-using CNA::C::Detail::IsFinite;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -135,15 +135,7 @@ struct AvatarRendererResource final {
 {
     const auto resource = std::make_shared<AvatarDescriptionResource>();
     resource->value = std::make_shared<AvatarDescription>(std::move(value));
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::AvatarDescription, resource, outDescription);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned AvatarDescription handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return CreateHandle(ObjectKind::AvatarDescription, resource, outDescription);
 }
 
 } // namespace
@@ -248,14 +240,7 @@ CNA_Result cna_avatar_description_destroy(const CNA_AvatarDescriptionHandle desc
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(descriptionHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AvatarDescription handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(descriptionHandle);
     });
 }
 
@@ -341,20 +326,12 @@ CNA_Result cna_avatar_description_subscribe_changed_ext(
         auto* const source = &description->value->Changed;
         const auto token = source->Add(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::GamerEventRegistration,
+        return CreateHandle(ObjectKind::GamerEventRegistration,
             std::static_pointer_cast<CNA::C::Detail::GamerRegistrationBase>(
                 std::make_shared<CNA::C::Detail::GamerRegistration<System::EventArgs>>(
                     source,
                     token)),
             outRegistration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The avatar registration could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -373,15 +350,7 @@ CNA_Result cna_avatar_animation_create(
         const auto resource = std::make_shared<AvatarAnimationResource>();
         resource->value =
             std::make_shared<AvatarAnimation>(static_cast<AvatarAnimationPreset>(preset));
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::AvatarAnimation, resource, outAnimation);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AvatarAnimation handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::AvatarAnimation, resource, outAnimation);
     });
 }
 
@@ -394,14 +363,7 @@ CNA_Result cna_avatar_animation_destroy(const CNA_AvatarAnimationHandle animatio
             return result;
         }
         animation->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(animationHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AvatarAnimation handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(animationHandle);
     });
 }
 
@@ -533,15 +495,7 @@ CNA_Result cna_avatar_renderer_create(
         resource->value = std::make_shared<AvatarRenderer>(
             description->value.get(),
             useLoadingEffect == CNA_TRUE);
-        const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::AvatarRenderer, resource, outRenderer);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AvatarRenderer handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::AvatarRenderer, resource, outRenderer);
     });
 }
 
@@ -554,14 +508,7 @@ CNA_Result cna_avatar_renderer_destroy(const CNA_AvatarRendererHandle rendererHa
             return result;
         }
         renderer->value->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(rendererHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned AvatarRenderer handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(rendererHandle);
     });
 }
 

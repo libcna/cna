@@ -661,8 +661,19 @@ private:
 /** @brief The process-wide registry every C handle lives in. */
 [[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
 
-/** @brief "The <kind> handle is invalid for this call.", a static string for each kind. */
-[[nodiscard]] std::string_view InvalidHandleMessage(ObjectKind kind) noexcept;
+/** @brief The object kind's name as diagnostics spell it ("ModelBone", "SoundEffectInstance"). */
+[[nodiscard]] std::string_view ObjectKindName(ObjectKind kind) noexcept;
+
+/**
+ * @brief Records and returns a failure about a handle: "The <kind> handle <predicate>".
+ *
+ * The message is composed inside the error record, so a failure to allocate it costs the text and
+ * never throws.
+ */
+[[nodiscard]] CNA_Result FailHandle(
+    CNA_Result result,
+    ObjectKind kind,
+    std::string_view predicate) noexcept;
 
 /**
  * @brief Looks a handle up as one object kind, recording the diagnostic when it is not one.
@@ -682,7 +693,36 @@ template<typename TObject>
     if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(result, ErrorCategoryForResult(result), InvalidHandleMessage(kind));
+    return FailHandle(result, kind, "is invalid for this call.");
+}
+
+/**
+ * @brief Publishes an object as a new handle of one kind, recording the diagnostic on refusal.
+ *
+ * Only the registry entry: the caller still does its own ownership bookkeeping (a game's resource
+ * counts, a parent's child list) on success.
+ */
+[[nodiscard]] inline CNA_Result CreateHandle(
+    const ObjectKind kind,
+    std::shared_ptr<void> object,
+    CNA_Handle* const outHandle)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(kind, std::move(object), outHandle);
+    return result == CNA_RESULT_SUCCESS ? result : FailHandle(result, kind, "could not be created.");
+}
+
+/**
+ * @brief Releases a handle's registry entry, recording the diagnostic on refusal.
+ *
+ * Only the registry entry: the caller undoes its own ownership bookkeeping. The object is
+ * destroyed when the last reference to it goes, which may be this call.
+ */
+[[nodiscard]] inline CNA_Result ReleaseHandle(const CNA_Handle handle)
+{
+    ObjectKind kind = ObjectKind::Unknown;
+    (void)GetRuntimeHandles().GetKind(handle, &kind);
+    const CNA_Result result = GetRuntimeHandles().Release(handle);
+    return result == CNA_RESULT_SUCCESS ? result : FailHandle(result, kind, "could not be released.");
 }
 
 } // namespace CNA::C::Detail

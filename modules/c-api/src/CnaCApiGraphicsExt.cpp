@@ -30,7 +30,9 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::ToCBool;
 
@@ -62,13 +64,12 @@ template<typename TValue>
 #ifdef CNA_CNAEXT
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TextureResourceView;
-using CNA::C::Detail::NativeOrdinal;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -314,13 +315,9 @@ CNA_Result cna_ascii_post_process_effect_create(
             std::make_shared<Ext::AsciiPostProcessEffect>(*graphicsDevice->value);
         const auto resource = std::make_shared<AsciiEffectResource>(
             AsciiEffectResource{std::move(native), graphicsDevice->parentGame});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::AsciiPostProcessEffect, resource, outEffect);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ASCII post-process effect handle could not be created.");
+        if (const CNA_Result result = CreateHandle(ObjectKind::AsciiPostProcessEffect, resource, outEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -485,12 +482,9 @@ CNA_Result cna_ascii_post_process_effect_destroy(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(effectHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned ASCII post-process effect handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(effectHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         RemoveOwnedGraphicsResourceFor(effect->parentGame);
         return CNA_RESULT_SUCCESS;

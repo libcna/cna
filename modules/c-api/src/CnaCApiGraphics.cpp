@@ -47,6 +47,7 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -55,6 +56,7 @@ using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
@@ -465,12 +467,9 @@ CNA_Result CreateOwnedTexture2DWithKind(
     *outTexture = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<Texture2DResource>(
         Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(kind, resource, outTexture);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned Texture2D handle could not be created.");
+    if (const CNA_Result result = CreateHandle(kind, resource, outTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (parentGame != CNA_INVALID_HANDLE) {
         AddOwnedGraphicsResourceFor(parentGame);
@@ -1193,12 +1192,9 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
         if (texture->disposeAllowed) {
             texture->value->Dispose();
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(textureHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned Texture2D handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(textureHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         if (texture->ownedResource && texture->parentGame != CNA_INVALID_HANDLE) {
             RemoveOwnedGraphicsResourceFor(texture->parentGame);
@@ -1234,15 +1230,11 @@ CNA_Result cna_sprite_batch_create(
             graphicsDevice->parentGame,
             false,
             {}});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SpriteBatch,
+        if (const CNA_Result result = CreateHandle(ObjectKind::SpriteBatch,
             resource,
             outSpriteBatch);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned SpriteBatch handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
@@ -1724,12 +1716,9 @@ CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
         }
 
         spriteBatch->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(spriteBatchHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned SpriteBatch handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(spriteBatchHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         RemoveOwnedGraphicsResourceFor(spriteBatch->parentGame);
         return CNA_RESULT_SUCCESS;

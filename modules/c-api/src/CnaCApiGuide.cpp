@@ -35,23 +35,21 @@ namespace {
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedCanonicalGameComponent;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedSpriteBatchValue;
 using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetOwnedTexture2D;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadTextBytes;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
-using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::TryMapPlayerIndex;
-using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ValidateCanonicalBool;
 
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -210,17 +208,9 @@ struct GuideRenderSurfaces final {
     std::shared_ptr<GuideRegistrationBase> registration,
     CNA_Handle* const outRegistration)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::GamerEventRegistration,
+    return CreateHandle(ObjectKind::GamerEventRegistration,
         std::move(registration),
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The gamer-services registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace

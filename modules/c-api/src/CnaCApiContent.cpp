@@ -37,6 +37,7 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -45,6 +46,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
 using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::Texture2DResource;
@@ -223,15 +225,11 @@ CNA_Result cna_content_manager_create(
                 graphicsDevice->parentGame,
                 graphicsDeviceHandle,
                 false});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::ContentManager,
+        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
             resource,
             outContentManager);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ContentManager handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedContentManager();
         return CNA_RESULT_SUCCESS;
@@ -417,15 +415,11 @@ CNA_Result cna_content_manager_create_resource(
                 graphicsDevice->parentGame,
                 graphicsDeviceHandle,
                 false});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::ContentManager,
+        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
             resource,
             outContentManager);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ContentManager handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         AddOwnedContentManager();
         return CNA_RESULT_SUCCESS;
@@ -1119,12 +1113,9 @@ CNA_Result cna_content_manager_destroy(const CNA_Handle contentManagerHandle)
                 "The game owns this ContentManager; it is released with the game.");
         }
         contentManager->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(contentManagerHandle);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The owned ContentManager handle could not be released.");
+        if (const CNA_Result releaseResult = ReleaseHandle(contentManagerHandle);
+            releaseResult != CNA_RESULT_SUCCESS) {
+            return releaseResult;
         }
         RemoveOwnedContentManager();
         return CNA_RESULT_SUCCESS;
@@ -1166,15 +1157,11 @@ CNA_Result cna_game_get_content_manager_ext(
             &game->getContentProperty());
         const auto resource = std::make_shared<ContentManagerResource>(
             ContentManagerResource{borrowed, gameHandle, CNA_INVALID_HANDLE, true});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::ContentManager,
+        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
             resource,
             outContentManager);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The borrowed ContentManager handle could not be created.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
         cached = *outContentManager;
         return CNA_RESULT_SUCCESS;

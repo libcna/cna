@@ -49,7 +49,9 @@ using CNA::C::Detail::ValidateCanonicalBool;
 namespace {
 
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateVersionedStructure;
@@ -283,17 +285,9 @@ private:
     std::shared_ptr<SensorRegistrationBase> registration,
     CNA_Handle* const outRegistration)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        ObjectKind::SensorEventRegistration,
+    return CreateHandle(ObjectKind::SensorEventRegistration,
         std::move(registration),
         outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The sensor registration could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_AccelerometerReading MapAccelerometerReadingValue(
@@ -830,15 +824,7 @@ CNA_Result cna_sensor_unsubscribe_ext(const CNA_SensorEventRegistrationHandle re
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                releaseResult,
-                ErrorCategoryForResult(releaseResult),
-                "The sensor registration handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(registration);
     });
 }
 
@@ -855,17 +841,9 @@ CNA_Result cna_accelerometer_create(const CNA_Handle gameHandle, CNA_Acceleromet
         }
         auto resource = std::make_shared<SensorResource<Accelerometer>>();
         resource->value = std::make_unique<Accelerometer>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Accelerometer,
+        return CreateHandle(ObjectKind::Accelerometer,
             std::move(resource),
             outSensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -979,14 +957,7 @@ CNA_Result cna_accelerometer_destroy(const CNA_AccelerometerHandle sensor)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(sensor);
     });
 }
 
@@ -1003,17 +974,9 @@ CNA_Result cna_gyroscope_create(const CNA_Handle gameHandle, CNA_GyroscopeHandle
         }
         auto resource = std::make_shared<SensorResource<Gyroscope>>();
         resource->value = std::make_unique<Gyroscope>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Gyroscope,
+        return CreateHandle(ObjectKind::Gyroscope,
             std::move(resource),
             outSensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1127,14 +1090,7 @@ CNA_Result cna_gyroscope_destroy(const CNA_GyroscopeHandle sensor)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(sensor);
     });
 }
 
@@ -1517,17 +1473,9 @@ CNA_Result cna_compass_create(const CNA_Handle gameHandle, CNA_CompassHandle* co
         }
         auto resource = std::make_shared<SensorResource<Compass>>();
         resource->value = std::make_unique<Compass>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Compass,
+        return CreateHandle(ObjectKind::Compass,
             std::move(resource),
             outSensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1671,14 +1619,7 @@ CNA_Result cna_compass_destroy(const CNA_CompassHandle sensor)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(sensor);
     });
 }
 
@@ -1695,17 +1636,9 @@ CNA_Result cna_motion_create(const CNA_Handle gameHandle, CNA_MotionHandle* cons
         }
         auto resource = std::make_shared<SensorResource<Motion>>();
         resource->value = std::make_unique<Motion>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Motion,
+        return CreateHandle(ObjectKind::Motion,
             std::move(resource),
             outSensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1855,14 +1788,7 @@ CNA_Result cna_motion_destroy(const CNA_MotionHandle sensor)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The sensor handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(sensor);
     });
 }
 

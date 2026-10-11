@@ -59,9 +59,11 @@ using CNA::C::Detail::ValidateCanonicalBool;
 namespace {
 
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::ToCBool;
 
 using Microsoft::Devices::VibrateController;
 
@@ -1526,17 +1528,9 @@ CNA_Result cna_system_tray_create(
         }
         auto resource = std::make_shared<SystemTrayResource>();
         resource->value = std::make_unique<SystemTray>(tooltipText);
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::SystemTray,
+        return CreateHandle(ObjectKind::SystemTray,
             std::move(resource),
             outTray);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The system tray handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1568,17 +1562,9 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
         resource->testService = std::make_unique<TestTrayService>(resource->testState);
         CNA::C::Detail::GetPlatformOverride().SetTray(resource->testService.get());
         resource->value = std::make_unique<SystemTray>(tooltipText);
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::SystemTray,
+        return CreateHandle(ObjectKind::SystemTray,
             std::move(resource),
             outTray);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The system tray handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1793,14 +1779,7 @@ CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(tray);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The system tray handle could not be released.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(tray);
     });
 }
 
@@ -1908,17 +1887,9 @@ CNA_Result cna_camera_create(const CNA_Handle gameHandle, CNA_CameraHandle* cons
         }
         auto resource = std::make_shared<CameraResource>();
         resource->value = std::make_unique<Camera>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Camera,
+        return CreateHandle(ObjectKind::Camera,
             std::move(resource),
             outCamera);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The camera handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1940,17 +1911,9 @@ CNA_Result cna_camera_create_with_test_backend_ext(
         resource->testService = std::make_unique<TestCameraProvider>(resource->testState);
         CNA::C::Detail::GetPlatformOverride().SetCamera(resource->testService.get());
         resource->value = std::make_unique<Camera>();
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-            ObjectKind::Camera,
+        return CreateHandle(ObjectKind::Camera,
             std::move(resource),
             outCamera);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The camera handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 

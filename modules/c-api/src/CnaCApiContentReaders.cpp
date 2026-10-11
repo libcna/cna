@@ -42,12 +42,14 @@ using CNA::C::Detail::BorrowedStorageStream;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReleaseStorageStream;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
@@ -691,13 +693,9 @@ CNA_Result cna_content_type_reader_manager_register(
                 "A content type-reader factory is already registered under that canonical name.");
         }
 
-        if (const CNA_Result result = GetRuntimeHandles().Create(
-                ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
+        if (const CNA_Result result = CreateHandle(ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The content type-reader registration handle could not be created.");
+            return result;
         }
 
         ContentTypeReaderManager::AddTypeCreator(
@@ -1186,14 +1184,7 @@ CNA_Result cna_reflective_type_reader_builder_create(
         }
         resource->registration->create = createCallback;
         resource->registration->createContext = context;
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The reflective builder handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
     });
 }
 
@@ -1206,13 +1197,7 @@ CNA_Result cna_reflective_type_reader_builder_destroy(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const CNA_Result result = GetRuntimeHandles().Release(builderHandle);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The reflective builder handle could not be destroyed.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return ReleaseHandle(builderHandle);
     });
 }
 
@@ -2179,14 +2164,7 @@ CNA_Result cna_content_manager_load_object_dictionary_ext(
         } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
             return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
         }
-        if (const CNA_Result result = GetRuntimeHandles().Create(
-                ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The loaded object dictionary could not be published as a handle.");
-        }
-        return CNA_RESULT_SUCCESS;
+        return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
     });
 }
 
