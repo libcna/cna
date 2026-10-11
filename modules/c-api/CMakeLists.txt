@@ -710,6 +710,22 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_bool_contract_smoke)
     add_test(NAME CApi_BoolContractSmoke COMMAND cna_c_api_bool_contract_smoke)
 
+    # The mechanical contracts of every generated route -- a null output refused first, a null,
+    # wrong-kind or destroyed handle refused with INVALID_HANDLE, the size-then-copy protocol of the
+    # value text routes. Generated with the routes by tools/c-api/generate_routes.py, so a route
+    # added to a spec is covered without anyone writing these checks by hand.
+    add_executable(cna_c_api_generated_routes_smoke
+        tests/pure_c/GeneratedRoutesSmoke.c
+    )
+    set_target_properties(cna_c_api_generated_routes_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_generated_routes_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_generated_routes_smoke)
+    add_test(NAME CApi_GeneratedRoutesSmoke COMMAND cna_c_api_generated_routes_smoke)
+
     add_executable(cna_c_api_core_ext_smoke
         tests/pure_c/CoreExtSmoke.c
     )

@@ -100,6 +100,12 @@ python3 tools/c-api/generate_routes.py --list   # every generated route and its 
 `--check` runs as the CTest test `CApiGeneratedRoutesCurrent` and in the
 `c-api-generated-routes` workflow. Generation is deterministic and needs only Python 3.11+.
 
+The same run writes `modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c` (CTest
+`CApi_GeneratedRoutesSmoke`), which holds every generated route to the contracts above: a null
+output is refused, a null, wrong-kind or destroyed handle answers `CNA_RESULT_INVALID_HANDLE`, and
+each value text pair keeps the size-then-copy protocol. What a route computes is still tested by the
+family's own hand-written smoke test.
+
 ## Changing the generator
 
 Keep the emitted code the code a person would write by hand, so a debugger and a compiler
