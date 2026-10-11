@@ -16,13 +16,14 @@ Inputs, all in the repository:
 
 Output: ``modules/c-api/src/generated/<Family>.inc``, included at the end of
 ``modules/c-api/src/CnaCApi<Family>.cpp``. The routes there may use that file's hand-written
-lookup helpers and its using-declarations for native types.
+lookup helpers and its using-declarations for native types. Also written:
+``modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c``, the contract test of every generated route.
 
 Spec format. Each top-level table is one group of routes sharing how they reach their object::
 
     [basic_effect]
-    lookup = "GetBasicEffect"   # CNA_Result GetBasicEffect(<handle>, <object>*), hand-written
-    object = "BasicEffect*"     # the local the lookup fills; expressions call it `object`
+    lookup = "GetStockEffect<BasicEffect>"  # CNA_Result Lookup(<first>, <object>*), hand-written
+    object = "BasicEffect*"                 # the local the lookup fills; expressions call it `object`
 
     [basic_effect.routes]
     cna_basic_effect_get_alpha = { get = "object->getAlphaProperty()" }
