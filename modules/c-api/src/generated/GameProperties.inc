@@ -663,3 +663,16 @@ CNA_Result cna_game_launch_parameters_copy_key(
         return CNA::C::Detail::CopyText(object, destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_game_fps_to_milliseconds_per_frame_ext(
+    const int32_t frames_per_second,
+    double* const out_milliseconds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_milliseconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_fps_to_milliseconds_per_frame_ext: out_milliseconds is null.");
+        }
+        *out_milliseconds = static_cast<double>(Game::fpsToMillisecondsPerFrame(static_cast<SharpRuntime::intcs>(frames_per_second)));
+        return CNA_RESULT_SUCCESS;
+    });
+}

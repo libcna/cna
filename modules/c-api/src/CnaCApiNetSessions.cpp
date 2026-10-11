@@ -878,28 +878,6 @@ CNA_Result cna_network_session_remove_gamer_ext(
     });
 }
 
-CNA_Result cna_network_session_get_instance_count_ext(int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The instance-count output is null.");
-        }
-        *outCount = static_cast<int32_t>(NetworkSession::GetInstanceCountForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_get_active_action_count_ext(int32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The action-count output is null.");
-        }
-        *outCount = static_cast<int32_t>(NetworkSession::GetActiveActionInstanceCountForTesting());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_network_session_destroy(const CNA_NetworkSessionHandle sessionHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

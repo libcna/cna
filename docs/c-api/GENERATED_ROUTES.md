@@ -50,7 +50,7 @@ using-declarations and helpers. The route kinds are:
 |---|---|---|
 | `value` | `(args..., T* out)` | `*out` = the expression |
 | `get` | `(first, args..., T* out)` | look up `first`, then `*out` = the expression |
-| `call` | `(first, args...)` | look up `first`, then run the expression |
+| `call` | `([first,] args...)` | look up `first` if the group has a lookup, then run the expression |
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
 | `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol |
 | `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
@@ -62,7 +62,9 @@ The generator takes the signature from the header and the conversions from the C
   its header name as the native value (`ToNative`); a `CNA_Bool` is first refused unless it is
   `CNA_FALSE` or `CNA_TRUE`, then available as `bool`; every other parameter is passed as declared;
 - the result is converted by the output's type: `ToC` for a marshaled struct, `ToCBool` for
-  `CNA_Bool`, `static_cast` for an enumeration or a number.
+  `CNA_Bool`, `static_cast` for an enumeration or a number; any other C structure is assigned as
+  the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
+  decide ownership, so they are a `result`.
 
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `result`, every non-const `out_*`
@@ -81,12 +83,13 @@ A group's `lookup` is an ordinary hand-written function in the family's `.cpp`,
 `CNA_Result Name(<first parameter>, <object>*)`, which receives the route's first parameter
 unconverted — usually a handle, sometimes a struct or string view it validates. Most lookups are
 one line over `LookupHandle`, which records "The <kind> handle is invalid for this call." for a
-null, stale, released or wrong-kind handle. A group without `lookup` holds value routes; a lookup
-that only validates (`ValidateActiveGameHandle`) is written without `object`. `arguments = 2` passes
-the lookup the route's first two parameters (a handle and an index), and
-`accepts_null_handle = true` records that the lookup reads the null handle as "none" (the
-contract test then refuses only real handles). A group whose routes exist only in builds with an
-optional module says so, and what the routes answer without it:
+null, stale, released or wrong-kind handle. A lookup that only validates
+(`ValidateActiveGameHandle`) is written without `object`, and a group without `lookup` holds the
+routes that need no object: value computations, static queries, commands such as
+`CnbLoaderRegistry::Clear()`. `arguments = 2` passes the lookup the route's first two parameters (a
+handle and an index), and `accepts_null_handle = true` records that the lookup reads the null
+handle as "none" (the contract test then refuses only real handles). A group whose routes exist
+only in builds with an optional module says so, and what the routes answer without it:
 
 ```toml
 feature = "CNA_DEVICES"                 # the real routes compile under #if defined(CNA_DEVICES)

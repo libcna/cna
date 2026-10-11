@@ -160,3 +160,7 @@ cna_model_get_gltf_import_diagnostic_code_byte_count_ext = { result = "GetDiagno
 cna_model_get_gltf_import_diagnostic_subject_byte_count_ext = { result = "GetDiagnosticStringByteCount(model, index, out_byte_count, SelectSubject)" }
 cna_model_get_gltf_import_diagnostic_message_byte_count_ext = { result = "GetDiagnosticStringByteCount(model, index, out_byte_count, SelectMessage)" }
 cna_skinned_model_ext_create_default = { result = "CreateSkinnedModelHandle(std::make_shared<SkinnedModelResource>(), out_model)" }
+
+[matrix]
+[matrix.routes]
+cna_matrix_create_infinite_perspective_field_of_view_ext = { value = "Microsoft::Xna::Framework::Graphics::CreateInfinitePerspectiveFieldOfViewEXT(field_of_view, aspect_ratio, near_plane_distance)" }

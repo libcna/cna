@@ -215,17 +215,6 @@ struct GuideRenderSurfaces final {
 
 } // namespace
 
-CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* const outIsEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsEnabled == nullptr) {
-            return InvalidArgument("The screen-saver output is null.");
-        }
-        *outIsEnabled = ToCBool(Guide::getIsScreenSaverEnabledProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -242,39 +231,6 @@ CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
     });
 }
 
-CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* const outIsTrialMode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsTrialMode == nullptr) {
-            return InvalidArgument("The trial-mode output is null.");
-        }
-        *outIsTrialMode = ToCBool(Guide::getIsTrialModeProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_is_visible(CNA_Bool* const outIsVisible)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsVisible == nullptr) {
-            return InvalidArgument("The guide-visibility output is null.");
-        }
-        *outIsVisible = ToCBool(Guide::getIsVisibleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_notification_position(CNA_NotificationPosition* const outPosition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPosition == nullptr) {
-            return InvalidArgument("The notification-position output is null.");
-        }
-        *outPosition = static_cast<CNA_NotificationPosition>(Guide::getNotificationPositionProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_set_notification_position(const CNA_NotificationPosition position)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -282,17 +238,6 @@ CNA_Result cna_guide_set_notification_position(const CNA_NotificationPosition po
             return InvalidArgument("The notification position is not a defined identity.");
         }
         Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_simulate_trial_mode(CNA_Bool* const outSimulate)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSimulate == nullptr) {
-            return InvalidArgument("The simulate-trial-mode output is null.");
-        }
-        *outSimulate = ToCBool(Guide::getSimulateTrialModeProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -406,17 +351,6 @@ CNA_Result cna_guide_end_show_keyboard_input(
     });
 }
 
-CNA_Result cna_guide_get_has_pending_keyboard_input_ext(CNA_Bool* const outHasPending)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasPending == nullptr) {
-            return InvalidArgument("The pending keyboard-input output is null.");
-        }
-        *outHasPending = ToCBool(Guide::getHasPendingKeyboardInputEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_was_keyboard_input_canceled_ext(CNA_Bool* const outWasCanceled)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -428,39 +362,6 @@ CNA_Result cna_guide_was_keyboard_input_canceled_ext(CNA_Bool* const outWasCance
         }
         *outWasCanceled =
             ToCBool(Guide::WasKeyboardInputCanceledEXT(PendingKeyboardInput().get()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_pending_keyboard_input_title_size_ext(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The pending title size output is null.");
-        }
-        *outBytes = Guide::GetPendingKeyboardInputTitleForTestingEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The pending description size output is null.");
-        }
-        *outBytes = Guide::GetPendingKeyboardInputDescriptionForTestingEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The pending display-text size output is null.");
-        }
-        *outBytes = Guide::GetPendingKeyboardInputDisplayTextForTestingEXT().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -487,14 +388,6 @@ CNA_Result cna_guide_render_pending_keyboard_input_ext(
             *surfaces.spriteBatch,
             *surfaces.font->value,
             *surfaces.whitePixel->value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_simulate_keyboard_input_cancel_ext(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Guide::SimulateKeyboardInputCancelEXT();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -596,17 +489,6 @@ CNA_Result cna_guide_end_show_message_box(
     });
 }
 
-CNA_Result cna_guide_get_has_pending_message_box_ext(CNA_Bool* const outHasPending)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasPending == nullptr) {
-            return InvalidArgument("The pending message-box output is null.");
-        }
-        *outHasPending = ToCBool(Guide::getHasPendingMessageBoxEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_get_pending_message_box_focus_button_ext(int32_t* const outFocusButton)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -648,28 +530,12 @@ CNA_Result cna_guide_render_pending_message_box_ext(
     });
 }
 
-CNA_Result cna_guide_simulate_message_box_click_ext(const int32_t buttonIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Guide::SimulateMessageBoxClickEXT(static_cast<int>(buttonIndex));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_reset_pending_message_box_ext(void)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         Guide::ResetPendingMessageBoxForTestingEXT();
         PendingMessageBox().reset();
         EndedMessageBox().reset();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_delay_notifications(const int64_t delayTicks)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Guide::DelayNotifications(System::TimeSpan(delayTicks));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -901,68 +767,6 @@ CNA_Result cna_guide_show_achievements_ext(const CNA_PlayerIndex player)
             return result;
         }
         Guide::ShowAchievementsEXT(nativePlayer);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_get_is_initialized(CNA_Bool* const outIsInitialized)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsInitialized == nullptr) {
-            return InvalidArgument("The dispatcher initialization output is null.");
-        }
-        *outIsInitialized = ToCBool(GamerServicesDispatcher::getIsInitializedProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_get_window_handle(uint64_t* const outWindowHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWindowHandle == nullptr) {
-            return InvalidArgument("The window-handle output is null.");
-        }
-        *outWindowHandle =
-            static_cast<uint64_t>(GamerServicesDispatcher::getWindowHandleProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_set_window_handle(const uint64_t windowHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GamerServicesDispatcher::setWindowHandleProperty(
-            static_cast<SharpRuntime::IntPtr>(windowHandle));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_update(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GamerServicesDispatcher::Update();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_update_async(CNA_Bool* const outDidWork)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDidWork == nullptr) {
-            return InvalidArgument("The dispatcher work output is null.");
-        }
-        *outDidWork = ToCBool(GamerServicesDispatcher::UpdateAsync());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The freed-gamer count output is null.");
-        }
-        *outCount = static_cast<uint64_t>(GamerServicesDispatcher::GetFreedGamerCountForTesting());
         return CNA_RESULT_SUCCESS;
     });
 }

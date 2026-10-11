@@ -86,3 +86,7 @@ unavailable = "ExtensionUnavailable()"
 cna_camera_get_state_ext = { get = "object->value->getStateProperty()" }
 cna_camera_get_frame_width_ext = { get = "object->value->getFrameWidthProperty()" }
 cna_camera_get_frame_height_ext = { get = "object->value->getFrameHeightProperty()" }
+
+[values]
+[values.routes]
+cna_environment_get_device_type = { value = "Microsoft::Devices::Environment::getDeviceTypeProperty()" }

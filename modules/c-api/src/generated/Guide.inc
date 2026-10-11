@@ -79,3 +79,211 @@ CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
         return CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_guide_get_is_screen_saver_enabled(
+    CNA_Bool* const out_is_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_is_screen_saver_enabled: out_is_enabled is null.");
+        }
+        *out_is_enabled = CNA::C::Detail::ToCBool(Guide::getIsScreenSaverEnabledProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_is_trial_mode(
+    CNA_Bool* const out_is_trial_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_trial_mode == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_is_trial_mode: out_is_trial_mode is null.");
+        }
+        *out_is_trial_mode = CNA::C::Detail::ToCBool(Guide::getIsTrialModeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_is_visible(
+    CNA_Bool* const out_is_visible)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_visible == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_is_visible: out_is_visible is null.");
+        }
+        *out_is_visible = CNA::C::Detail::ToCBool(Guide::getIsVisibleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_notification_position(
+    CNA_NotificationPosition* const out_position)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_position == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_notification_position: out_position is null.");
+        }
+        *out_position = static_cast<CNA_NotificationPosition>(Guide::getNotificationPositionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_simulate_trial_mode(
+    CNA_Bool* const out_simulate)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_simulate == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_simulate_trial_mode: out_simulate is null.");
+        }
+        *out_simulate = CNA::C::Detail::ToCBool(Guide::getSimulateTrialModeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_has_pending_keyboard_input_ext(
+    CNA_Bool* const out_has_pending)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_pending == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_has_pending_keyboard_input_ext: out_has_pending is null.");
+        }
+        *out_has_pending = CNA::C::Detail::ToCBool(Guide::getHasPendingKeyboardInputEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_pending_keyboard_input_title_size_ext(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_pending_keyboard_input_title_size_ext: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(Guide::GetPendingKeyboardInputTitleForTestingEXT(), out_bytes);
+    });
+}
+
+CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_pending_keyboard_input_description_size_ext: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), out_bytes);
+    });
+}
+
+CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_pending_keyboard_input_display_text_size_ext: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), out_bytes);
+    });
+}
+
+CNA_Result cna_guide_simulate_keyboard_input_cancel_ext(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Guide::SimulateKeyboardInputCancelEXT();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_get_has_pending_message_box_ext(
+    CNA_Bool* const out_has_pending)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_pending == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_has_pending_message_box_ext: out_has_pending is null.");
+        }
+        *out_has_pending = CNA::C::Detail::ToCBool(Guide::getHasPendingMessageBoxEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_simulate_message_box_click_ext(
+    const int32_t button_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Guide::SimulateMessageBoxClickEXT(static_cast<int>(button_index));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_delay_notifications(
+    const int64_t delay_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Guide::DelayNotifications(System::TimeSpan(delay_ticks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_get_is_initialized(
+    CNA_Bool* const out_is_initialized)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_initialized == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_dispatcher_get_is_initialized: out_is_initialized is null.");
+        }
+        *out_is_initialized = CNA::C::Detail::ToCBool(GamerServicesDispatcher::getIsInitializedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_get_window_handle(
+    uint64_t* const out_window_handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_window_handle == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_dispatcher_get_window_handle: out_window_handle is null.");
+        }
+        *out_window_handle = static_cast<uint64_t>(GamerServicesDispatcher::getWindowHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_set_window_handle(
+    const uint64_t window_handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        GamerServicesDispatcher::setWindowHandleProperty(static_cast<SharpRuntime::IntPtr>(window_handle));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_update(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        GamerServicesDispatcher::Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_update_async(
+    CNA_Bool* const out_did_work)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_did_work == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_dispatcher_update_async: out_did_work is null.");
+        }
+        *out_did_work = CNA::C::Detail::ToCBool(GamerServicesDispatcher::UpdateAsync());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_dispatcher_get_freed_gamer_count_ext: out_count is null.");
+        }
+        *out_count = static_cast<uint64_t>(GamerServicesDispatcher::GetFreedGamerCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}

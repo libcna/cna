@@ -205,20 +205,6 @@ CNA_Result cna_game_set_inactive_sleep_time_ticks(
     });
 }
 
-CNA_Result cna_game_fps_to_milliseconds_per_frame_ext(
-    const int32_t framesPerSecond,
-    double* const outMilliseconds)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMilliseconds == nullptr) {
-            return InvalidArgument("The frame time output is null.");
-        }
-        *outMilliseconds =
-            Game::fpsToMillisecondsPerFrame(static_cast<SharpRuntime::intcs>(framesPerSecond));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_subscribe(
     const CNA_Handle gameHandle,
     const CNA_GameEvent event,

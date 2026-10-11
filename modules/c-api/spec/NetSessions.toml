@@ -88,3 +88,8 @@ arguments = 2
 
 [signed_in_gamers.routes]
 cna_network_session_join_invited_with_local_gamers = { result = "CreateSessionResourceHandle(NetworkSession::JoinInvited(object), out_session)" }
+
+[values]
+[values.routes]
+cna_network_session_get_instance_count_ext = { value = "NetworkSession::GetInstanceCountForTesting()" }
+cna_network_session_get_active_action_count_ext = { value = "NetworkSession::GetActiveActionInstanceCountForTesting()" }

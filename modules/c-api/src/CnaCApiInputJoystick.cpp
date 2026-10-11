@@ -248,17 +248,6 @@ private:
 
 } // namespace
 
-CNA_Result cna_joystick_info_init(CNA_JoystickInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The joystick descriptor output is null.");
-        }
-        *outInfo = MapInfo(JoystickInfoEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joystick_info_equals(
     const CNA_JoystickInfo* const left,
     const CNA_StringView leftName,
@@ -307,17 +296,6 @@ CNA_Result cna_joystick_info_equals(
         nativeLeft.id = left->id;
         nativeRight.id = right->id;
         *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_joystick_capabilities_init(CNA_JoystickCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCapabilities == nullptr) {
-            return InvalidArgument("The joystick capabilities output is null.");
-        }
-        *outCapabilities = MapCapabilities(JoystickCapabilitiesEXT());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -410,25 +388,6 @@ CNA_Result cna_joystick_capabilities_equals(
     });
 }
 
-CNA_Result cna_joysticks_get_info_at(
-    const CNA_Handle gameHandle,
-    const uint32_t index,
-    CNA_JoystickInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The joystick descriptor output is null.");
-        }
-        JoystickInfoEXT info;
-        if (const CNA_Result result = BorrowEnumeratedJoystick(gameHandle, index, &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = MapInfo(info);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_joysticks_copy_name_at(
     const CNA_Handle gameHandle,
     const uint32_t index,
@@ -446,25 +405,6 @@ CNA_Result cna_joysticks_copy_name_at(
             return result;
         }
         return CopyText(info.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_joysticks_get_capabilities(
-    const CNA_Handle gameHandle,
-    const uint32_t id,
-    CNA_JoystickCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCapabilities == nullptr) {
-            return InvalidArgument("The joystick capabilities output is null.");
-        }
-        JoystickCapabilitiesEXT capabilities;
-        if (const CNA_Result result = BorrowCapabilities(gameHandle, id, &capabilities);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCapabilities = MapCapabilities(capabilities);
-        return CNA_RESULT_SUCCESS;
     });
 }
 

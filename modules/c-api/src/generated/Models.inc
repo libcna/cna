@@ -1353,3 +1353,18 @@ CNA_Result cna_skinned_model_ext_create_default(
         return CreateSkinnedModelHandle(std::make_shared<SkinnedModelResource>(), out_model);
     });
 }
+
+CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
+    const float field_of_view,
+    const float aspect_ratio,
+    const float near_plane_distance,
+    CNA_Matrix* const out_matrix)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_matrix == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_matrix_create_infinite_perspective_field_of_view_ext: out_matrix is null.");
+        }
+        *out_matrix = CNA::C::Detail::ToC(Microsoft::Xna::Framework::Graphics::CreateInfinitePerspectiveFieldOfViewEXT(field_of_view, aspect_ratio, near_plane_distance));
+        return CNA_RESULT_SUCCESS;
+    });
+}

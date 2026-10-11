@@ -53,3 +53,8 @@ cna_reflective_type_reader_get_canonical_name_size = { result = "CanonicalNameSi
 cna_reflective_type_reader_copy_canonical_name = { result = "CanonicalNameCopy(target_type_name, ReflectiveCanonicalName, destination, capacity, out_byte_count)" }
 cna_enum_type_reader_get_canonical_name_size = { result = "CanonicalNameSize(target_type_name, EnumCanonicalName, out_byte_count)" }
 cna_enum_type_reader_copy_canonical_name = { result = "CanonicalNameCopy(target_type_name, EnumCanonicalName, destination, capacity, out_byte_count)" }
+
+[values]
+[values.routes]
+cna_content_type_reader_manager_clear_type_creators = { call = "ContentTypeReaderManager::ClearTypeCreators()" }
+cna_content_register_known_unsupported_xnb_readers = { call = "Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders()" }

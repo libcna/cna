@@ -761,17 +761,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_gamepad_capabilities_init(CNA_GamePadCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCapabilities == nullptr) {
-            return InvalidArgument("The gamepad-capabilities output structure is null.");
-        }
-        *outCapabilities = SnapshotCapabilities(GamePadCapabilities{});
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_get_capabilities(
     const CNA_Handle gameHandle,
     const CNA_PlayerIndex playerIndex,
@@ -945,17 +934,6 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
 
 } // namespace
 
-CNA_Result cna_gamepad_buttons_init(CNA_GamePadButtonFlags* const outButtons)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outButtons == nullptr) {
-            return InvalidArgument("The gamepad button-set output is null.");
-        }
-        *outButtons = MaskFromNamedButtons(GamePadButtons());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamepad_buttons_init_from_button_array(
     const CNA_GamePadButtonFlags* const buttons,
     const uint64_t count,
@@ -993,58 +971,6 @@ CNA_Result cna_gamepad_buttons_is_pressed(
         bool handled = false;
         const bool pressed = NamedButtonIsPressed(NativeButtons(buttons), button, &handled);
         *outIsPressed = ToCBool(handled ? pressed : (buttons & button) == button);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_buttons_equals(
-    const CNA_GamePadButtonFlags left,
-    const CNA_GamePadButtonFlags right,
-    CNA_Bool* const outEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The gamepad button-set comparison output is null.");
-        }
-        *outEquals = ToCBool(NativeButtons(left).Equals(NativeButtons(right)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_buttons_not_equals(
-    const CNA_GamePadButtonFlags left,
-    const CNA_GamePadButtonFlags right,
-    CNA_Bool* const outNotEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNotEquals == nullptr) {
-            return InvalidArgument("The gamepad button-set comparison output is null.");
-        }
-        *outNotEquals = ToCBool(NativeButtons(left) != NativeButtons(right));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_buttons_get_hash_code(
-    const CNA_GamePadButtonFlags buttons,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The gamepad button-set hash output is null.");
-        }
-        *outHash = static_cast<int32_t>(NativeButtons(buttons).GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_dpad_init(CNA_GamePadButtonFlags* const outDPad)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDPad == nullptr) {
-            return InvalidArgument("The directional-pad output is null.");
-        }
-        *outDPad = CNA_GAMEPAD_BUTTON_NONE;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1127,47 +1053,6 @@ CNA_Result cna_gamepad_dpad_is_pressed(
             default: state = native.getRightProperty(); break;
         }
         *outIsPressed = ToCBool(state == ButtonState::Pressed);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_dpad_equals(
-    const CNA_GamePadButtonFlags left,
-    const CNA_GamePadButtonFlags right,
-    CNA_Bool* const outEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The directional-pad comparison output is null.");
-        }
-        *outEquals = ToCBool(NativeDPad(left).Equals(NativeDPad(right)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_dpad_not_equals(
-    const CNA_GamePadButtonFlags left,
-    const CNA_GamePadButtonFlags right,
-    CNA_Bool* const outNotEquals)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNotEquals == nullptr) {
-            return InvalidArgument("The directional-pad comparison output is null.");
-        }
-        *outNotEquals = ToCBool(NativeDPad(left) != NativeDPad(right));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_dpad_get_hash_code(
-    const CNA_GamePadButtonFlags dpad,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The directional-pad hash output is null.");
-        }
-        *outHash = static_cast<int32_t>(NativeDPad(dpad).GetHashCode());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1322,17 +1207,6 @@ CNA_Result cna_gamepad_triggers_get_hash_code(
             return InvalidArgument("The trigger hash input or output is null.");
         }
         *outHash = static_cast<int32_t>(NativeTriggers(*triggers).GetHashCode());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_state_init(CNA_GamePadState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The gamepad snapshot output is null.");
-        }
-        *outState = SnapshotState(GamePadState());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2061,17 +1935,6 @@ using KeyLookupRoute = Keys (*)(const std::string&);
 
 } // namespace
 
-CNA_Result cna_keyboard_state_init(CNA_KeyboardState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The keyboard snapshot output is null.");
-        }
-        *outState = SnapshotKeyboard(KeyboardState());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_keyboard_state_init_from_keys(
     const CNA_Key* const keys,
     const uint64_t count,
@@ -2309,17 +2172,6 @@ private:
 };
 
 } // namespace
-
-CNA_Result cna_mouse_state_init(CNA_MouseState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The mouse snapshot output is null.");
-        }
-        *outState = SnapshotMouse(MouseState());
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_mouse_state_init_from_values(
     const int32_t x,
@@ -3167,17 +3019,6 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
 
 } // namespace
 
-CNA_Result cna_gesture_sample_init(CNA_GestureSample* const outSample)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSample == nullptr) {
-            return InvalidArgument("The gesture-sample output is null.");
-        }
-        *outSample = MapGestureSample(GestureSample());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gesture_sample_init_from_values(
     const CNA_GestureType gestureType,
     const int64_t timestampTicks,
@@ -3267,17 +3108,6 @@ CNA_Result cna_touch_capabilities_init_from_values_ext(
             {0U, 0U, 0U},
             static_cast<uint32_t>(maximumTouchCount)
         };
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_touch_location_init(CNA_TouchLocation* const outLocation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLocation == nullptr) {
-            return InvalidArgument("The touch-location output is null.");
-        }
-        *outLocation = MapTouchLocation(TouchLocation());
         return CNA_RESULT_SUCCESS;
     });
 }

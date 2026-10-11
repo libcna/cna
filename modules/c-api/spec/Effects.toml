@@ -326,3 +326,7 @@ unavailable = "ExtensionEffectUnavailable()"
 [borrowed_graphics_device_cnaext.routes]
 cna_crt_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::CRTEffect>(*object->value), object->parentGame, out_effect)" }
 cna_depth_effect_create = { result = "CreateEffectHandle(std::make_shared<CNA::Graphics::DepthEffect>(*object->value), object->parentGame, out_effect)" }
+
+[values]
+[values.routes]
+cna_texture_transform_ext_init = { value = "ToC(TextureTransformEXT{})" }

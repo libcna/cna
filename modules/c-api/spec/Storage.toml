@@ -48,3 +48,7 @@ cna_storage_container_copy_file_name = { result = "CopyName(container, search_pa
 cna_storage_container_open_file = { result = "OpenFileHandle(container, file, file_mode, CNA_FILE_ACCESS_READ_WRITE, CNA_FILE_SHARE_READ_WRITE, 1, out_stream)" }
 cna_storage_container_open_file_access = { result = "OpenFileHandle(container, file, file_mode, file_access, CNA_FILE_SHARE_READ_WRITE, 2, out_stream)" }
 cna_storage_container_open_file_share = { result = "OpenFileHandle(container, file, file_mode, file_access, file_share, 3, out_stream)" }
+
+[values]
+[values.routes]
+cna_storage_get_root_size_ext = { size = "StorageDevice::GetStorageRootEXT()" }

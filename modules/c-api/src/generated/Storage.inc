@@ -445,3 +445,14 @@ CNA_Result cna_storage_container_open_file_share(
         return OpenFileHandle(container, file, file_mode, file_access, file_share, 3, out_stream);
     });
 }
+
+CNA_Result cna_storage_get_root_size_ext(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_get_root_size_ext: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(StorageDevice::GetStorageRootEXT(), out_bytes);
+    });
+}

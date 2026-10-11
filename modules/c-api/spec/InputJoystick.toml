@@ -28,6 +28,7 @@ arguments = 2
 
 [enumerated_joystick.routes]
 cna_joysticks_get_name_size_at = { get = "object.name.size()" }
+cna_joysticks_get_info_at = { get = "MapInfo(object)" }
 
 [capabilities]
 lookup = "BorrowCapabilities"
@@ -37,6 +38,7 @@ arguments = 2
 [capabilities.routes]
 cna_joysticks_get_capabilities_name_size = { size = "object.name" }
 cna_joysticks_get_capabilities_guid_size = { size = "object.guid" }
+cna_joysticks_get_capabilities = { get = "MapCapabilities(object)" }
 
 [calls]
 [calls.routes]
@@ -46,3 +48,8 @@ cna_joystick_state_get_hat_count = { result = "CountElements(state, out_count, [
 cna_joystick_state_get_ball_count = { result = "CountElements(state, out_count, [](const JoystickStateEXT& value) { return value.balls.size(); })" }
 cna_joysticks_subscribe_connected_ext = { result = "SubscribeHotplug(Joysticks::ConnectedEXT, JoystickEventKind::Connected, callback, context, out_registration)" }
 cna_joysticks_subscribe_disconnected_ext = { result = "SubscribeHotplug(Joysticks::DisconnectedEXT, JoystickEventKind::Disconnected, callback, context, out_registration)" }
+
+[values]
+[values.routes]
+cna_joystick_info_init = { value = "MapInfo(JoystickInfoEXT())" }
+cna_joystick_capabilities_init = { value = "MapCapabilities(JoystickCapabilitiesEXT())" }

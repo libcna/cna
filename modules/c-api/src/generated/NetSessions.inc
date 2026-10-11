@@ -838,3 +838,27 @@ CNA_Result cna_network_session_join_invited_with_local_gamers(
         return CreateSessionResourceHandle(NetworkSession::JoinInvited(object), out_session);
     });
 }
+
+CNA_Result cna_network_session_get_instance_count_ext(
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_instance_count_ext: out_count is null.");
+        }
+        *out_count = static_cast<int32_t>(NetworkSession::GetInstanceCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_network_session_get_active_action_count_ext(
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_active_action_count_ext: out_count is null.");
+        }
+        *out_count = static_cast<int32_t>(NetworkSession::GetActiveActionInstanceCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}

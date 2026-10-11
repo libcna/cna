@@ -68,3 +68,7 @@ arguments = 2
 [find_launch_parameter_name.routes]
 cna_game_launch_parameters_get_key_size = { size = "object" }
 cna_game_launch_parameters_copy_key = { copy = "object" }
+
+[values]
+[values.routes]
+cna_game_fps_to_milliseconds_per_frame_ext = { value = "Game::fpsToMillisecondsPerFrame(static_cast<SharpRuntime::intcs>(frames_per_second))" }

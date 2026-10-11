@@ -26,3 +26,7 @@ cna_avatar_renderer_destroy = { release = "object->value->Dispose()" }
 [calls]
 [calls.routes]
 cna_avatar_description_create_random = { result = "PublishDescription(AvatarDescription::CreateRandom(), out_description)" }
+
+[values]
+[values.routes]
+cna_avatar_expression_init = { value = "ToC(AvatarExpression{})" }

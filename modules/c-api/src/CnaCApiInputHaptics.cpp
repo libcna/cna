@@ -225,17 +225,6 @@ using DeviceAction = bool (HapticDevice::*)();
 
 } // namespace
 
-CNA_Result cna_haptic_direction_init(CNA_HapticDirection* const outDirection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDirection == nullptr) {
-            return InvalidArgument("The haptic direction output is null.");
-        }
-        *outDirection = MapDirection(HapticDirectionEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_haptic_direction_equals(
     const CNA_HapticDirection* const left,
     const CNA_HapticDirection* const right,
@@ -328,17 +317,6 @@ CNA_Result cna_haptic_effect_equals(
             return result;
         }
         *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_haptic_capabilities_init(CNA_HapticCapabilities* const outCapabilities)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCapabilities == nullptr) {
-            return InvalidArgument("The haptic capabilities output is null.");
-        }
-        *outCapabilities = MapCapabilities(HapticCapabilitiesEXT());
         return CNA_RESULT_SUCCESS;
     });
 }

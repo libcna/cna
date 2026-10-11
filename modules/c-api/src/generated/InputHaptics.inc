@@ -404,3 +404,27 @@ CNA_Result cna_haptic_device_resume(
         return ApplyDeviceAction(device, &HapticDevice::ResumeEXT, out_applied, "The resume output is null.");
     });
 }
+
+CNA_Result cna_haptic_direction_init(
+    CNA_HapticDirection* const out_direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_direction == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_direction_init: out_direction is null.");
+        }
+        *out_direction = MapDirection(HapticDirectionEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_haptic_capabilities_init(
+    CNA_HapticCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_capabilities_init: out_capabilities is null.");
+        }
+        *out_capabilities = MapCapabilities(HapticCapabilitiesEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}

@@ -38,7 +38,7 @@ they return without it; a handle output is cleared there too. Each route is ``na
 
 ``value``  (args..., T* out)          ``*out`` = the expression; no handle.
 ``get``    (handle, args..., T* out)   ``*out`` = the expression, after the lookup.
-``call``   (handle, args...)           the expression is a statement run after the lookup.
+``call``   ([handle,] args...)         the expression is a statement run after the lookup, if any.
 ``size``   ([handle,] args..., uint64_t* out_bytes)
                                        the byte count of the text the expression yields.
 ``copy``   ([handle,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)
@@ -54,7 +54,8 @@ Inside an expression every route parameter is available under its header name, a
 to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, and a CNA_Bool is
 validated as canonical and read as ``bool``. Every other parameter is passed as declared. The
 result is converted back by the output's C type: ToC for a marshaled struct, ToCBool for
-CNA_Bool, and static_cast for an enumeration or a number.
+CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
+expression builds it.
 
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output with
 CNA_RESULT_INVALID_ARGUMENT before doing anything else, validates CNA_Bool inputs before the
@@ -214,7 +215,7 @@ class Route:
             if len(params) < count:
                 raise self._fail(f"a route in this group passes its lookup {count} parameter(s)")
             self.handle, self.lookup_params, params = params[0], params[:count], params[count:]
-        elif self.kind in ("get", "call", "release"):
+        elif self.kind in ("get", "release"):
             raise self._fail(f"'{self.kind}' needs a group with a lookup")
         else:
             self.handle = None
@@ -230,9 +231,9 @@ class Route:
                 raise self._fail(f"'{self.kind}' needs a final output pointer")
             self.outputs = [params.pop()]
             kind = self.types.kind_of(self.outputs[0].type)
-            if kind not in ("marshaled", "bool", "enum", "number"):
-                raise self._fail(f"'{self.kind}' cannot convert an output of type "
-                                 f"{self.outputs[0].type}")
+            if kind == "handle" or "*" in self.outputs[0].type:
+                raise self._fail(f"'{self.kind}' does not return handles; a handle output "
+                                 "decides ownership, so write it by hand or as a 'result'")
         elif self.kind == "size":
             if not params or params[-1].type != "uint64_t" or not params[-1].pointer:
                 raise self._fail("'size' needs a final uint64_t* byte-count output")
@@ -318,6 +319,8 @@ class Route:
             return f"{DETAIL}ToC({self.expression})"
         if kind == "bool":
             return f"{DETAIL}ToCBool({self.expression})"
+        if kind == "other":
+            return self.expression  # a C structure the expression already builds
         return f"static_cast<{output.type}>({self.expression})"
 
     def body(self) -> list[str]:

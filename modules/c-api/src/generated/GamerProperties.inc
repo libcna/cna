@@ -83,3 +83,15 @@ CNA_Result cna_property_dictionary_create_ext(
         return CNA::C::Detail::CreateOwnedPropertyDictionary(std::make_shared<PropertyDictionary>(PropertyDictionary::CreateInternal({})), out_dictionary);
     });
 }
+
+CNA_Result cna_game_defaults_init(
+    CNA_GameDefaults* const out_defaults)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_defaults == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_defaults_init: out_defaults is null.");
+        }
+        *out_defaults = ToC(GameDefaults::CreateInternal());
+        return CNA_RESULT_SUCCESS;
+    });
+}

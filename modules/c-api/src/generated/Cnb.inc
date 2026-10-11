@@ -1194,3 +1194,194 @@ CNA_Result cna_cnb_import_wav_as_sound_effect(
         return CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound);
     });
 }
+
+CNA_Result cna_cnb_make_chunk_id(
+    const uint8_t a,
+    const uint8_t b,
+    const uint8_t c,
+    const uint8_t d,
+    CNA_CnbChunkId* const out_id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_make_chunk_id: out_id is null.");
+        }
+        *out_id = static_cast<CNA_CnbChunkId>(Cnb::MakeChunkId(static_cast<char>(a), static_cast<char>(b), static_cast<char>(c), static_cast<char>(d)).value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_is_well_formed_chunk_id(
+    const CNA_CnbChunkId id,
+    CNA_Bool* const out_well_formed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_well_formed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_well_formed_chunk_id: out_well_formed is null.");
+        }
+        *out_well_formed = CNA::C::Detail::ToCBool(Cnb::IsWellFormedChunkId(Cnb::CnbChunkId{id}));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_is_custom_asset_type_id(
+    const uint32_t asset_type_id,
+    CNA_Bool* const out_custom)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_custom == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_custom_asset_type_id: out_custom is null.");
+        }
+        *out_custom = CNA::C::Detail::ToCBool(Cnb::IsCustomAssetTypeId(asset_type_id));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_crc32c_uses_hardware(
+    CNA_Bool* const out_uses_hardware)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_uses_hardware == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_crc32c_uses_hardware: out_uses_hardware is null.");
+        }
+        *out_uses_hardware = CNA::C::Detail::ToCBool(Cnb::Crc32cUsesHardwareEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_is_compression_supported(
+    const CNA_CnbCompression codec,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_compression_supported: out_supported is null.");
+        }
+        *out_supported = CNA::C::Detail::ToCBool(Cnb::IsCnbCompressionSupported(ToCodec(codec)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_is_known_texture_format(
+    const uint32_t value,
+    CNA_Bool* const out_known)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_known == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_known_texture_format: out_known is null.");
+        }
+        *out_known = CNA::C::Detail::ToCBool(Cnb::IsKnownCnbTextureFormat(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_is_block_compressed_texture_format(
+    const CNA_CnbTextureFormat format,
+    CNA_Bool* const out_block_compressed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_block_compressed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_block_compressed_texture_format: out_block_compressed is null.");
+        }
+        *out_block_compressed = CNA::C::Detail::ToCBool(Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_texture_format_unit_bytes(
+    const CNA_CnbTextureFormat format,
+    uint32_t* const out_unit_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_unit_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_get_texture_format_unit_bytes: out_unit_bytes is null.");
+        }
+        *out_unit_bytes = static_cast<uint32_t>(Cnb::CnbTextureFormatUnitBytes(ToTextureFormat(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_texture_level_byte_size(
+    const CNA_CnbTextureFormat format,
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth,
+    uint64_t* const out_byte_size)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_size == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_get_texture_level_byte_size: out_byte_size is null.");
+        }
+        *out_byte_size = static_cast<uint64_t>(Cnb::CnbTextureLevelByteSize(ToTextureFormat(format), width, height, depth));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_format_to_surface_format(
+    const CNA_CnbTextureFormat format,
+    CNA_SurfaceFormat* const out_surface_format)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_surface_format == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_format_to_surface_format: out_surface_format is null.");
+        }
+        *out_surface_format = static_cast<CNA_SurfaceFormat>(Cnb::CnbTextureFormatToSurfaceFormat(ToTextureFormat(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_format_from_surface_format(
+    const CNA_SurfaceFormat surface_format,
+    CNA_CnbTextureFormat* const out_format)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_format == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_format_from_surface_format: out_format is null.");
+        }
+        *out_format = static_cast<CNA_CnbTextureFormat>(Cnb::SurfaceFormatToCnbTextureFormat(static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surface_format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_audio_frame_bytes(
+    const CNA_CnbAudioFormat format,
+    const uint32_t channels,
+    uint32_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_audio_frame_bytes: out_byte_count is null.");
+        }
+        *out_byte_count = static_cast<uint32_t>(Cnb::CnbAudioFrameBytes(static_cast<Cnb::CnbAudioFormat>(format), channels));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_clear(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA::Content::CnbLoaderRegistry::Clear();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_is_registered(
+    const uint32_t asset_type_id,
+    CNA_Bool* const out_registered)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registered == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_loader_registry_is_registered: out_registered is null.");
+        }
+        *out_registered = CNA::C::Detail::ToCBool(CNA::Content::CnbLoaderRegistry::IsRegistered(asset_type_id));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_register_builtins(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA::Content::CnbLoaderRegistry::RegisterBuiltIns();
+        return CNA_RESULT_SUCCESS;
+    });
+}

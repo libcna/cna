@@ -11,8 +11,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
-- **The C API's mechanically regular routes are generated.** 1,560 of the 3,210 `cna_*` routes —
-  property reads and writes, commands, value computations, text size/copy pairs, plain destroys,
+- **The C API's mechanically regular routes are generated.** 1,650 of the 3,210 `cna_*` routes —
+  property reads and writes, commands, static queries, value computations, text size/copy pairs, plain destroys,
   and routes that only call a hand-written helper — are one spec line each in
   `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
   `tools/c-api/generate_routes.py`; the helpers every route shares live in one support layer. See

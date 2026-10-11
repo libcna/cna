@@ -745,18 +745,6 @@ struct CameraResource final {
 
 } // namespace
 
-CNA_Result cna_environment_get_device_type(CNA_DeviceType* const outDeviceType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDeviceType == nullptr) {
-            return InvalidArgument("The environment device-type output is null.");
-        }
-        *outDeviceType = static_cast<CNA_DeviceType>(
-            Microsoft::Devices::Environment::getDeviceTypeProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_devices_ext_is_available(CNA_Bool* const outAvailable)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

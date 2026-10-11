@@ -164,3 +164,21 @@ object = "std::string"
 [text.routes]
 cna_cnb_import_dds_as_texture_cube = { result = "CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(object), out_texture)" }
 cna_cnb_import_wav_as_sound_effect = { result = "CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound)" }
+
+[values]
+[values.routes]
+cna_cnb_make_chunk_id = { value = "Cnb::MakeChunkId(static_cast<char>(a), static_cast<char>(b), static_cast<char>(c), static_cast<char>(d)).value" }
+cna_cnb_is_well_formed_chunk_id = { value = "Cnb::IsWellFormedChunkId(Cnb::CnbChunkId{id})" }
+cna_cnb_is_custom_asset_type_id = { value = "Cnb::IsCustomAssetTypeId(asset_type_id)" }
+cna_cnb_crc32c_uses_hardware = { value = "Cnb::Crc32cUsesHardwareEXT()" }
+cna_cnb_is_compression_supported = { value = "Cnb::IsCnbCompressionSupported(ToCodec(codec))" }
+cna_cnb_is_known_texture_format = { value = "Cnb::IsKnownCnbTextureFormat(value)" }
+cna_cnb_is_block_compressed_texture_format = { value = "Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format))" }
+cna_cnb_get_texture_format_unit_bytes = { value = "Cnb::CnbTextureFormatUnitBytes(ToTextureFormat(format))" }
+cna_cnb_get_texture_level_byte_size = { value = "Cnb::CnbTextureLevelByteSize(ToTextureFormat(format), width, height, depth)" }
+cna_cnb_texture_format_to_surface_format = { value = "Cnb::CnbTextureFormatToSurfaceFormat(ToTextureFormat(format))" }
+cna_cnb_texture_format_from_surface_format = { value = "Cnb::SurfaceFormatToCnbTextureFormat(static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surface_format))" }
+cna_cnb_audio_frame_bytes = { value = "Cnb::CnbAudioFrameBytes(static_cast<Cnb::CnbAudioFormat>(format), channels)" }
+cna_cnb_loader_registry_clear = { call = "CNA::Content::CnbLoaderRegistry::Clear()" }
+cna_cnb_loader_registry_is_registered = { value = "CNA::Content::CnbLoaderRegistry::IsRegistered(asset_type_id)" }
+cna_cnb_loader_registry_register_builtins = { call = "CNA::Content::CnbLoaderRegistry::RegisterBuiltIns()" }

@@ -45,3 +45,8 @@ cna_haptic_device_stop_rumble = { result = "ApplyDeviceAction(device, &HapticDev
 cna_haptic_device_stop_all_effects = { result = "ApplyDeviceAction(device, &HapticDevice::StopAllEffectsEXT, out_applied, \"The stop-all-effects output is null.\")" }
 cna_haptic_device_pause = { result = "ApplyDeviceAction(device, &HapticDevice::PauseEXT, out_applied, \"The pause output is null.\")" }
 cna_haptic_device_resume = { result = "ApplyDeviceAction(device, &HapticDevice::ResumeEXT, out_applied, \"The resume output is null.\")" }
+
+[values]
+[values.routes]
+cna_haptic_direction_init = { value = "MapDirection(HapticDirectionEXT())" }
+cna_haptic_capabilities_init = { value = "MapCapabilities(HapticCapabilitiesEXT())" }

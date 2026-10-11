@@ -189,17 +189,6 @@ CNA_Result CreateOwnedPropertyDictionary(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_game_defaults_init(CNA_GameDefaults* const outDefaults)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDefaults == nullptr) {
-            return InvalidArgument("The GameDefaults output is null.");
-        }
-        *outDefaults = ToC(GameDefaults::CreateInternal());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_signed_in_gamer_get_game_defaults(
     const CNA_SignedInGamerHandle gamerHandle,
     CNA_GameDefaults* const outDefaults)

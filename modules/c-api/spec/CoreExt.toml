@@ -21,3 +21,21 @@ cna_logger_experiment = { result = "LogWithCategory(&CNA::Logger::Experiment, me
 cna_platform_copy_current_name_ext = { result = "CopyText(CNA::getCurrentPlatformName(), destination, capacity, out_bytes)" }
 cna_graphics_renderer_get_current_name_size = { result = "ReportTextSize(CNA::getCurrentGraphicsRendererName(), out_bytes)" }
 cna_graphics_renderer_copy_current_name = { result = "CopyText(CNA::getCurrentGraphicsRendererName(), destination, capacity, out_bytes)" }
+
+[values]
+[values.routes]
+cna_logger_get_minimum_level = { value = "MapLogLevelToC(CNA::Logger::GetMinimumLevel())" }
+cna_graphics_backend_get_current_category = { value = "MapBackendCategoryToC(CNA::getCurrentGraphicsBackendCategory())" }
+cna_graphics_backend_get_current_maturity = { value = "MapBackendMaturityToC(CNA::getCurrentGraphicsBackendMaturity())" }
+cna_platform_get_is_apple_ext = { value = "CNA::isApplePlatform()" }
+cna_platform_get_is_mobile_ext = { value = "CNA::isMobilePlatform()" }
+cna_platform_get_current_name_size_ext = { size = "std::string_view(CNA::getCurrentPlatformName())" }
+cna_graphics_renderer_get_selected_ext = { value = "MapRendererTypeToC(CNA::GraphicsRendererSelection::GetSelected())" }
+cna_graphics_renderer_get_active_ext = { value = "MapRendererTypeToC(CNA::GraphicsRendererSelection::GetActive())" }
+cna_graphics_renderer_get_is_latched_ext = { value = "CNA::GraphicsRendererSelection::IsLatched()" }
+cna_graphics_renderer_get_available_count_ext = { value = "CNA::GraphicsRendererSelection::GetAvailable().size()" }
+cna_graphics_renderer_set_automatic_fallback_ext = { call = "CNA::GraphicsRendererSelection::EnableAutomaticFallback(enabled)" }
+cna_graphics_renderer_get_automatic_fallback_ext = { value = "CNA::GraphicsRendererSelection::IsFallbackEnabled()" }
+cna_graphics_renderer_get_fallback_count_ext = { value = "CNA::GraphicsRendererSelection::GetFallbackHistory().size()" }
+cna_graphics_renderer_reset_selection_for_tests_ext = { call = "CNA::GraphicsRendererSelection::ResetForTestingEXT()" }
+cna_graphics_renderer_get_current_type = { value = "MapRendererTypeToC(CNA::getCurrentGraphicsRendererType())" }

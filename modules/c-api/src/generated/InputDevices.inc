@@ -349,3 +349,27 @@ CNA_Result cna_input_devices_raise_keyboard_disconnected_ext(
         return RaiseHotplug(game, InputDevices::KeyboardDisconnectedEXT, id);
     });
 }
+
+CNA_Result cna_sensor_info_init(
+    CNA_SensorInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensor_info_init: out_info is null.");
+        }
+        *out_info = MapSensorInfo(SensorInfoEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_input_device_info_init(
+    CNA_InputDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_device_info_init: out_info is null.");
+        }
+        *out_info = MapDeviceInfo(InputDeviceInfoEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}

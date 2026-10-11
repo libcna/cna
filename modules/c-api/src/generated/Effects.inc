@@ -2946,3 +2946,15 @@ CNA_Result cna_depth_effect_create(
     return ExtensionEffectUnavailable();
 }
 #endif
+
+CNA_Result cna_texture_transform_ext_init(
+    CNA_TextureTransformEXT* const out_transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_transform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_transform_ext_init: out_transform is null.");
+        }
+        *out_transform = ToC(TextureTransformEXT{});
+        return CNA_RESULT_SUCCESS;
+    });
+}

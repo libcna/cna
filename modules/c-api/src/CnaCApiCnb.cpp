@@ -868,40 +868,6 @@ CNA_Result cna_cnb_copy_format_magic(
     });
 }
 
-CNA_Result cna_cnb_make_chunk_id(
-    const uint8_t a,
-    const uint8_t b,
-    const uint8_t c,
-    const uint8_t d,
-    CNA_CnbChunkId* const outId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outId == nullptr) {
-            return InvalidArgument("The chunk-identifier output is null.");
-        }
-        *outId = Cnb::MakeChunkId(
-                     static_cast<char>(a),
-                     static_cast<char>(b),
-                     static_cast<char>(c),
-                     static_cast<char>(d))
-                     .value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_is_well_formed_chunk_id(
-    const CNA_CnbChunkId id,
-    CNA_Bool* const outWellFormed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWellFormed == nullptr) {
-            return InvalidArgument("The chunk-identifier output is null.");
-        }
-        *outWellFormed = ToCBool(Cnb::IsWellFormedChunkId(Cnb::CnbChunkId{id}));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_asset_type_id_from_name(
     const CNA_StringView name,
     uint32_t* const outAssetTypeId)
@@ -921,19 +887,6 @@ CNA_Result cna_cnb_asset_type_id_from_name(
             return InvalidArgument("A custom asset type name must not be empty.");
         }
         *outAssetTypeId = Cnb::CnbAssetTypeIdFromName(value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_is_custom_asset_type_id(
-    const uint32_t assetTypeId,
-    CNA_Bool* const outCustom)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCustom == nullptr) {
-            return InvalidArgument("The asset-type classification output is null.");
-        }
-        *outCustom = ToCBool(Cnb::IsCustomAssetTypeId(assetTypeId));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1027,30 +980,6 @@ CNA_Result cna_cnb_crc32c_continue(
             return result;
         }
         *outChecksum = Cnb::Crc32cContinue(previous, bytes);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_crc32c_uses_hardware(CNA_Bool* const outUsesHardware)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outUsesHardware == nullptr) {
-            return InvalidArgument("The hardware-path output is null.");
-        }
-        *outUsesHardware = ToCBool(Cnb::Crc32cUsesHardwareEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_is_compression_supported(
-    const CNA_CnbCompression codec,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The compression-support output is null.");
-        }
-        *outSupported = ToCBool(Cnb::IsCnbCompressionSupported(ToCodec(codec)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2236,89 +2165,6 @@ CNA_Result cna_cnb_writer_write_to_file(
 }
 
 /* --- CBIND-108: texture pixel formats ---------------------------------------------------------- */
-
-CNA_Result cna_cnb_is_known_texture_format(const uint32_t value, CNA_Bool* const outKnown)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outKnown == nullptr) {
-            return InvalidArgument("The format-known output is null.");
-        }
-        *outKnown = ToCBool(Cnb::IsKnownCnbTextureFormat(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_is_block_compressed_texture_format(
-    const CNA_CnbTextureFormat format,
-    CNA_Bool* const outBlockCompressed)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBlockCompressed == nullptr) {
-            return InvalidArgument("The block-compression output is null.");
-        }
-        *outBlockCompressed =
-            ToCBool(Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_get_texture_format_unit_bytes(
-    const CNA_CnbTextureFormat format,
-    uint32_t* const outUnitBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outUnitBytes == nullptr) {
-            return InvalidArgument("The unit-size output is null.");
-        }
-        *outUnitBytes = Cnb::CnbTextureFormatUnitBytes(ToTextureFormat(format));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_get_texture_level_byte_size(
-    const CNA_CnbTextureFormat format,
-    const uint32_t width,
-    const uint32_t height,
-    const uint32_t depth,
-    uint64_t* const outByteSize)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteSize == nullptr) {
-            return InvalidArgument("The level byte-size output is null.");
-        }
-        *outByteSize = Cnb::CnbTextureLevelByteSize(ToTextureFormat(format), width, height, depth);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_texture_format_to_surface_format(
-    const CNA_CnbTextureFormat format,
-    CNA_SurfaceFormat* const outSurfaceFormat)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSurfaceFormat == nullptr) {
-            return InvalidArgument("The surface-format output is null.");
-        }
-        *outSurfaceFormat = static_cast<CNA_SurfaceFormat>(
-            Cnb::CnbTextureFormatToSurfaceFormat(ToTextureFormat(format)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_texture_format_from_surface_format(
-    const CNA_SurfaceFormat surfaceFormat,
-    CNA_CnbTextureFormat* const outFormat)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFormat == nullptr) {
-            return InvalidArgument("The CNB texture-format output is null.");
-        }
-        *outFormat = static_cast<CNA_CnbTextureFormat>(
-            Cnb::SurfaceFormatToCnbTextureFormat(
-                static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 /* --- CBIND-108: the texture schemas ------------------------------------------------------------ */
 
@@ -5013,20 +4859,6 @@ CNA_Result cna_cnb_decode_sprite_font(
     });
 }
 
-CNA_Result cna_cnb_audio_frame_bytes(
-    const CNA_CnbAudioFormat format,
-    const uint32_t channels,
-    uint32_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The frame-size output is null.");
-        }
-        *outBytes = Cnb::CnbAudioFrameBytes(static_cast<Cnb::CnbAudioFormat>(format), channels);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_sound_effect_data_create(
     const CNA_CnbSoundEffectInfo* const info,
     const uint8_t* const samples,
@@ -5512,28 +5344,6 @@ CNA_Result cna_cnb_loader_registry_remove(
     });
 }
 
-CNA_Result cna_cnb_loader_registry_clear(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::Content::CnbLoaderRegistry::Clear();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_loader_registry_is_registered(
-    const uint32_t assetTypeId,
-    CNA_Bool* const outRegistered)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistered == nullptr) {
-            return InvalidArgument("The registration output is null.");
-        }
-        *outRegistered =
-            ToCBool(CNA::Content::CnbLoaderRegistry::IsRegistered(assetTypeId));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_loader_registry_find(
     const uint32_t assetTypeId,
     CNA_Bool* const outFound,
@@ -5572,14 +5382,6 @@ CNA_Result cna_cnb_loader_registry_resolve_for_document(
         *outLoader = CNA_INVALID_HANDLE;
         return CreateLoader(
             CNA::Content::CnbLoaderRegistry::ResolveForDocument(*document->value), outLoader);
-    });
-}
-
-CNA_Result cna_cnb_loader_registry_register_builtins(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::Content::CnbLoaderRegistry::RegisterBuiltIns();
-        return CNA_RESULT_SUCCESS;
     });
 }
 

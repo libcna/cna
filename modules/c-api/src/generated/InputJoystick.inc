@@ -175,6 +175,25 @@ CNA_Result cna_joysticks_get_name_size_at(
     });
 }
 
+CNA_Result cna_joysticks_get_info_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_JoystickInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_get_info_at: out_info is null.");
+        }
+        JoystickInfoEXT object{};
+        if (const CNA_Result routeResult = BorrowEnumeratedJoystick(game, index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = MapInfo(object);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_joysticks_get_capabilities_name_size(
     const CNA_Handle game,
     const uint32_t id,
@@ -208,6 +227,25 @@ CNA_Result cna_joysticks_get_capabilities_guid_size(
             return routeResult;
         }
         return CNA::C::Detail::ReportTextSize(object.guid, out_bytes);
+    });
+}
+
+CNA_Result cna_joysticks_get_capabilities(
+    const CNA_Handle game,
+    const uint32_t id,
+    CNA_JoystickCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_get_capabilities: out_capabilities is null.");
+        }
+        JoystickCapabilitiesEXT object{};
+        if (const CNA_Result routeResult = BorrowCapabilities(game, id, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_capabilities = MapCapabilities(object);
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -284,5 +322,29 @@ CNA_Result cna_joysticks_subscribe_disconnected_ext(
         }
         *out_registration = CNA_INVALID_HANDLE;
         return SubscribeHotplug(Joysticks::DisconnectedEXT, JoystickEventKind::Disconnected, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_joystick_info_init(
+    CNA_JoystickInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_info_init: out_info is null.");
+        }
+        *out_info = MapInfo(JoystickInfoEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_joystick_capabilities_init(
+    CNA_JoystickCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_capabilities_init: out_capabilities is null.");
+        }
+        *out_capabilities = MapCapabilities(JoystickCapabilitiesEXT());
+        return CNA_RESULT_SUCCESS;
     });
 }

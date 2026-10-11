@@ -34,3 +34,8 @@ cna_input_devices_raise_mouse_connected_ext = { result = "RaiseHotplug(game, Inp
 cna_input_devices_raise_mouse_disconnected_ext = { result = "RaiseHotplug(game, InputDevices::MouseDisconnectedEXT, id)" }
 cna_input_devices_raise_keyboard_connected_ext = { result = "RaiseHotplug(game, InputDevices::KeyboardConnectedEXT, id)" }
 cna_input_devices_raise_keyboard_disconnected_ext = { result = "RaiseHotplug(game, InputDevices::KeyboardDisconnectedEXT, id)" }
+
+[values]
+[values.routes]
+cna_sensor_info_init = { value = "MapSensorInfo(SensorInfoEXT())" }
+cna_input_device_info_init = { value = "MapDeviceInfo(InputDeviceInfoEXT())" }

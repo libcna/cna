@@ -725,14 +725,6 @@ CNA_Result cna_content_type_reader_manager_unregister(const CNA_Handle registrat
     });
 }
 
-CNA_Result cna_content_type_reader_manager_clear_type_creators(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ContentTypeReaderManager::ClearTypeCreators();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_content_type_reader_manager_create_reader(
     const CNA_StringView canonicalName,
     CNA_ContentTypeReaderHandle* const outTypeReader)
@@ -753,14 +745,6 @@ CNA_Result cna_content_type_reader_manager_create_reader(
             return NotSupported("No content type reader is registered under that canonical name.");
         }
         return CreateTypeReaderHandle(std::move(typeReader), outTypeReader);
-    });
-}
-
-CNA_Result cna_content_register_known_unsupported_xnb_readers(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
-        return CNA_RESULT_SUCCESS;
     });
 }
 

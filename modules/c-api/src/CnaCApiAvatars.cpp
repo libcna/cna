@@ -139,17 +139,6 @@ struct AvatarRendererResource final {
 
 } // namespace
 
-CNA_Result cna_avatar_expression_init(CNA_AvatarExpression* const outExpression)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outExpression == nullptr) {
-            return InvalidArgument("The AvatarExpression output is null.");
-        }
-        *outExpression = ToC(AvatarExpression{});
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_avatar_description_create(
     const uint8_t* const description,
     const uint64_t byteCount,

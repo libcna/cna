@@ -110,3 +110,20 @@ cna_keyboard_copy_key_name_ext = { result = "CopyKeyTextValue(&Keyboard::GetKeyN
 cna_keyboard_get_key_from_name_ext = { result = "LookUpKey(&Keyboard::GetKeyFromNameEXT, game, name, out_key)" }
 cna_touch_location_get_string_size = { result = "ReportTouchLocationString(location, nullptr, UINT64_C(0), out_bytes, false)" }
 cna_touch_location_copy_string = { result = "ReportTouchLocationString(location, destination, capacity, out_bytes, true)" }
+
+[values]
+[values.routes]
+cna_gamepad_capabilities_init = { value = "SnapshotCapabilities(GamePadCapabilities{})" }
+cna_gamepad_buttons_init = { value = "MaskFromNamedButtons(GamePadButtons())" }
+cna_gamepad_buttons_equals = { value = "NativeButtons(left).Equals(NativeButtons(right))" }
+cna_gamepad_buttons_not_equals = { value = "NativeButtons(left) != NativeButtons(right)" }
+cna_gamepad_buttons_get_hash_code = { value = "NativeButtons(buttons).GetHashCode()" }
+cna_gamepad_dpad_init = { value = "CNA_GAMEPAD_BUTTON_NONE" }
+cna_gamepad_dpad_equals = { value = "NativeDPad(left).Equals(NativeDPad(right))" }
+cna_gamepad_dpad_not_equals = { value = "NativeDPad(left) != NativeDPad(right)" }
+cna_gamepad_dpad_get_hash_code = { value = "NativeDPad(dpad).GetHashCode()" }
+cna_gamepad_state_init = { value = "SnapshotState(GamePadState())" }
+cna_keyboard_state_init = { value = "SnapshotKeyboard(KeyboardState())" }
+cna_mouse_state_init = { value = "SnapshotMouse(MouseState())" }
+cna_gesture_sample_init = { value = "MapGestureSample(GestureSample())" }
+cna_touch_location_init = { value = "MapTouchLocation(TouchLocation())" }

@@ -5284,23 +5284,6 @@ CNA_Result cna_model_copy_material_variant_name_ext(
     });
 }
 
-CNA_Result cna_matrix_create_infinite_perspective_field_of_view_ext(
-    const float fieldOfView,
-    const float aspectRatio,
-    const float nearPlaneDistance,
-    CNA_Matrix* const outMatrix)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMatrix == nullptr) {
-            return InvalidArgument("The infinite-perspective matrix output is null.");
-        }
-        *outMatrix = ToC(Microsoft::Xna::Framework::Graphics::
-                                   CreateInfinitePerspectiveFieldOfViewEXT(
-                                       fieldOfView, aspectRatio, nearPlaneDistance));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace {
 
 struct ModelAnimationsResource final {

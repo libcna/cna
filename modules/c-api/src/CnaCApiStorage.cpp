@@ -539,17 +539,6 @@ CNA_Result cna_storage_set_app_name_ext(const CNA_StringView appName)
     });
 }
 
-CNA_Result cna_storage_get_root_size_ext(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The storage root size output is null.");
-        }
-        *outBytes = StorageDevice::GetStorageRootEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_storage_device_delete_container(
     const CNA_StorageDeviceHandle deviceHandle,
     const CNA_StringView titleName)

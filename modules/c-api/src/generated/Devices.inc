@@ -862,3 +862,15 @@ CNA_Result cna_camera_get_frame_height_ext(
     return ExtensionUnavailable();
 }
 #endif
+
+CNA_Result cna_environment_get_device_type(
+    CNA_DeviceType* const out_device_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_environment_get_device_type: out_device_type is null.");
+        }
+        *out_device_type = static_cast<CNA_DeviceType>(Microsoft::Devices::Environment::getDeviceTypeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}

@@ -299,17 +299,6 @@ using SensorRead = bool (*)(Microsoft::Xna::Framework::Vector3&);
 
 } // namespace
 
-CNA_Result cna_sensor_info_init(CNA_SensorInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The sensor descriptor output is null.");
-        }
-        *outInfo = MapSensorInfo(SensorInfoEXT());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sensor_info_equals(
     const CNA_SensorInfo* const left,
     const CNA_StringView leftName,
@@ -432,17 +421,6 @@ CNA_Result cna_sensors_copy_name_at(
             return result;
         }
         return CopyText(info.name, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_input_device_info_init(CNA_InputDeviceInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The input-device descriptor output is null.");
-        }
-        *outInfo = MapDeviceInfo(InputDeviceInfoEXT());
-        return CNA_RESULT_SUCCESS;
     });
 }
 

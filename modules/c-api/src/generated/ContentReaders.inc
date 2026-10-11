@@ -324,3 +324,19 @@ CNA_Result cna_enum_type_reader_copy_canonical_name(
         return CanonicalNameCopy(target_type_name, EnumCanonicalName, destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_content_type_reader_manager_clear_type_creators(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        ContentTypeReaderManager::ClearTypeCreators();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_content_register_known_unsupported_xnb_readers(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
+        return CNA_RESULT_SUCCESS;
+    });
+}

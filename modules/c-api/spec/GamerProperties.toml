@@ -16,3 +16,7 @@ cna_property_dictionary_clear = { call = "object->value->Clear()" }
 # The only constructor is private; the canonical factory with an empty map is how an empty
 # dictionary is made, and the typed setters fill it from there.
 cna_property_dictionary_create_ext = { result = "CNA::C::Detail::CreateOwnedPropertyDictionary(std::make_shared<PropertyDictionary>(PropertyDictionary::CreateInternal({})), out_dictionary)" }
+
+[values]
+[values.routes]
+cna_game_defaults_init = { value = "ToC(GameDefaults::CreateInternal())" }

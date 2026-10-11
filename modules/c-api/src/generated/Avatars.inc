@@ -76,3 +76,15 @@ CNA_Result cna_avatar_description_create_random(
         return PublishDescription(AvatarDescription::CreateRandom(), out_description);
     });
 }
+
+CNA_Result cna_avatar_expression_init(
+    CNA_AvatarExpression* const out_expression)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_expression == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_expression_init: out_expression is null.");
+        }
+        *out_expression = ToC(AvatarExpression{});
+        return CNA_RESULT_SUCCESS;
+    });
+}

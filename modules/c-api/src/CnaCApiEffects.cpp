@@ -4061,17 +4061,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_texture_transform_ext_init(CNA_TextureTransformEXT* const outTransform)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTransform == nullptr) {
-            return InvalidArgument("The texture transform output is null.");
-        }
-        *outTransform = ToC(TextureTransformEXT{});
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_texture_transform_ext_equals(
     const CNA_TextureTransformEXT* const left,
     const CNA_TextureTransformEXT* const right,

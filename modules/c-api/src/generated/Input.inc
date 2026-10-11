@@ -1088,3 +1088,181 @@ CNA_Result cna_touch_location_copy_string(
         return ReportTouchLocationString(location, destination, capacity, out_bytes, true);
     });
 }
+
+CNA_Result cna_gamepad_capabilities_init(
+    CNA_GamePadCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_capabilities_init: out_capabilities is null.");
+        }
+        *out_capabilities = SnapshotCapabilities(GamePadCapabilities{});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_init(
+    CNA_GamePadButtonFlags* const out_buttons)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_buttons == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_init: out_buttons is null.");
+        }
+        *out_buttons = static_cast<CNA_GamePadButtonFlags>(MaskFromNamedButtons(GamePadButtons()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const out_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_equals: out_equals is null.");
+        }
+        *out_equals = CNA::C::Detail::ToCBool(NativeButtons(left).Equals(NativeButtons(right)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_not_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const out_not_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_not_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_not_equals: out_not_equals is null.");
+        }
+        *out_not_equals = CNA::C::Detail::ToCBool(NativeButtons(left) != NativeButtons(right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_get_hash_code(
+    const CNA_GamePadButtonFlags buttons,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_get_hash_code: out_hash is null.");
+        }
+        *out_hash = static_cast<int32_t>(NativeButtons(buttons).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init(
+    CNA_GamePadButtonFlags* const out_dpad)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dpad == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_init: out_dpad is null.");
+        }
+        *out_dpad = static_cast<CNA_GamePadButtonFlags>(CNA_GAMEPAD_BUTTON_NONE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const out_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_equals: out_equals is null.");
+        }
+        *out_equals = CNA::C::Detail::ToCBool(NativeDPad(left).Equals(NativeDPad(right)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_not_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const out_not_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_not_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_not_equals: out_not_equals is null.");
+        }
+        *out_not_equals = CNA::C::Detail::ToCBool(NativeDPad(left) != NativeDPad(right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_get_hash_code(
+    const CNA_GamePadButtonFlags dpad,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_get_hash_code: out_hash is null.");
+        }
+        *out_hash = static_cast<int32_t>(NativeDPad(dpad).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_init(
+    CNA_GamePadState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_state_init: out_state is null.");
+        }
+        *out_state = SnapshotState(GamePadState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_init(
+    CNA_KeyboardState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_state_init: out_state is null.");
+        }
+        *out_state = SnapshotKeyboard(KeyboardState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_init(
+    CNA_MouseState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_state_init: out_state is null.");
+        }
+        *out_state = SnapshotMouse(MouseState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gesture_sample_init(
+    CNA_GestureSample* const out_sample)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sample == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gesture_sample_init: out_sample is null.");
+        }
+        *out_sample = MapGestureSample(GestureSample());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_location_init(
+    CNA_TouchLocation* const out_location)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_location == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_location_init: out_location is null.");
+        }
+        *out_location = MapTouchLocation(TouchLocation());
+        return CNA_RESULT_SUCCESS;
+    });
+}

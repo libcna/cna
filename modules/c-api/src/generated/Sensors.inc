@@ -764,6 +764,24 @@ CNA_Result cna_accelerometer_destroy(
     });
 }
 
+CNA_Result cna_accelerometer_get_current_value(
+    const CNA_AccelerometerHandle sensor,
+    CNA_AccelerometerReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_get_current_value: out_reading is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_reading = MapAccelerometerReadingValue(object->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_gyroscope_get_state(
     const CNA_GyroscopeHandle sensor,
     CNA_SensorState* const out_state)
@@ -1024,6 +1042,24 @@ CNA_Result cna_gyroscope_destroy(
     });
 }
 
+CNA_Result cna_gyroscope_get_current_value(
+    const CNA_GyroscopeHandle sensor,
+    CNA_GyroscopeReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_get_current_value: out_reading is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_reading = MapGyroscopeReadingValue(object->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_accelerometer_reading_event_info_get_hash_code(
     const CNA_AccelerometerReadingEventInfo* const info,
     uint64_t* const out_hash)
@@ -1232,6 +1268,24 @@ CNA_Result cna_compass_destroy(
     });
 }
 
+CNA_Result cna_compass_get_current_value(
+    const CNA_CompassHandle sensor,
+    CNA_CompassReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_get_current_value: out_reading is null.");
+        }
+        std::shared_ptr<SensorResource<Compass>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Compass>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_reading = MapCompassReadingValue(object->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_motion_get_state(
     const CNA_MotionHandle sensor,
     CNA_SensorState* const out_state)
@@ -1407,6 +1461,24 @@ CNA_Result cna_motion_destroy(
     });
 }
 
+CNA_Result cna_motion_get_current_value(
+    const CNA_MotionHandle sensor,
+    CNA_MotionReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_get_current_value: out_reading is null.");
+        }
+        std::shared_ptr<SensorResource<Motion>> object{};
+        if (const CNA_Result routeResult = BorrowSensor<Motion>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_reading = MapMotionReadingValue(object->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_accelerometer_reading_event_info_copy_type_name(
     char* const destination,
     const uint64_t capacity,
@@ -1460,5 +1532,51 @@ CNA_Result cna_motion_subscribe_calibrate(
         }
         *out_registration = CNA_INVALID_HANDLE;
         return SubscribeCalibrate<Motion>(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_attitude_reading_init(
+    CNA_AttitudeReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_attitude_reading_init: out_reading is null.");
+        }
+        *out_reading = MapAttitudeReading(AttitudeReading());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_reading_event_info_init(
+    CNA_AccelerometerReadingEventInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_init: out_info is null.");
+        }
+        *out_info = MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_reading_event_info_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(AccelerometerReadingEventArgs().GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_calibration_event_info_get_type_name_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_calibration_event_info_get_type_name_size: out_bytes is null.");
+        }
+        return CNA::C::Detail::ReportTextSize(CalibrationEventArgs().GetTypeName(), out_bytes);
     });
 }

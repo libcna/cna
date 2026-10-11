@@ -14,3 +14,25 @@ cna_gamer_services_component_create = { result = "CreateOwnedCanonicalGameCompon
 cna_guide_copy_pending_keyboard_input_title_ext = { result = "CopyText(Guide::GetPendingKeyboardInputTitleForTestingEXT(), destination, capacity, out_bytes)" }
 cna_guide_copy_pending_keyboard_input_description_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), destination, capacity, out_bytes)" }
 cna_guide_copy_pending_keyboard_input_display_text_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes)" }
+
+[values]
+[values.routes]
+cna_guide_get_is_screen_saver_enabled = { value = "Guide::getIsScreenSaverEnabledProperty()" }
+cna_guide_get_is_trial_mode = { value = "Guide::getIsTrialModeProperty()" }
+cna_guide_get_is_visible = { value = "Guide::getIsVisibleProperty()" }
+cna_guide_get_notification_position = { value = "Guide::getNotificationPositionProperty()" }
+cna_guide_get_simulate_trial_mode = { value = "Guide::getSimulateTrialModeProperty()" }
+cna_guide_get_has_pending_keyboard_input_ext = { value = "Guide::getHasPendingKeyboardInputEXTProperty()" }
+cna_guide_get_pending_keyboard_input_title_size_ext = { size = "Guide::GetPendingKeyboardInputTitleForTestingEXT()" }
+cna_guide_get_pending_keyboard_input_description_size_ext = { size = "Guide::GetPendingKeyboardInputDescriptionForTestingEXT()" }
+cna_guide_get_pending_keyboard_input_display_text_size_ext = { size = "Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()" }
+cna_guide_simulate_keyboard_input_cancel_ext = { call = "Guide::SimulateKeyboardInputCancelEXT()" }
+cna_guide_get_has_pending_message_box_ext = { value = "Guide::getHasPendingMessageBoxEXTProperty()" }
+cna_guide_simulate_message_box_click_ext = { call = "Guide::SimulateMessageBoxClickEXT(static_cast<int>(button_index))" }
+cna_guide_delay_notifications = { call = "Guide::DelayNotifications(System::TimeSpan(delay_ticks))" }
+cna_gamer_services_dispatcher_get_is_initialized = { value = "GamerServicesDispatcher::getIsInitializedProperty()" }
+cna_gamer_services_dispatcher_get_window_handle = { value = "GamerServicesDispatcher::getWindowHandleProperty()" }
+cna_gamer_services_dispatcher_set_window_handle = { call = "GamerServicesDispatcher::setWindowHandleProperty(static_cast<SharpRuntime::IntPtr>(window_handle))" }
+cna_gamer_services_dispatcher_update = { call = "GamerServicesDispatcher::Update()" }
+cna_gamer_services_dispatcher_update_async = { value = "GamerServicesDispatcher::UpdateAsync()" }
+cna_gamer_services_dispatcher_get_freed_gamer_count_ext = { value = "GamerServicesDispatcher::GetFreedGamerCountForTesting()" }

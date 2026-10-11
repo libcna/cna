@@ -86,6 +86,7 @@ cna_accelerometer_unregister_started_instance_for_tests_ext = { call = "Accelero
 cna_accelerometer_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_accelerometer_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_accelerometer_destroy = { release = true }
+cna_accelerometer_get_current_value = { get = "MapAccelerometerReadingValue(object->value->getCurrentValueProperty())" }
 
 [gyroscope]
 lookup = "BorrowSensor<Gyroscope>"
@@ -108,6 +109,7 @@ cna_gyroscope_unregister_started_instance_for_tests_ext = { call = "Gyroscope::U
 cna_gyroscope_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_gyroscope_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_gyroscope_destroy = { release = true }
+cna_gyroscope_get_current_value = { get = "MapGyroscopeReadingValue(object->value->getCurrentValueProperty())" }
 
 [accelerometer_reading_event_args]
 lookup = "ToAccelerometerReadingEventArgs"
@@ -133,6 +135,7 @@ cna_compass_set_time_between_updates_ticks = { call = "object->value->setTimeBet
 cna_compass_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_compass_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_compass_destroy = { release = true }
+cna_compass_get_current_value = { get = "MapCompassReadingValue(object->value->getCurrentValueProperty())" }
 
 [motion]
 lookup = "BorrowSensor<Motion>"
@@ -150,6 +153,7 @@ cna_motion_set_time_between_updates_ticks = { call = "object->value->setTimeBetw
 cna_motion_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_motion_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_motion_destroy = { release = true }
+cna_motion_get_current_value = { get = "MapMotionReadingValue(object->value->getCurrentValueProperty())" }
 
 [calls]
 [calls.routes]
@@ -157,3 +161,10 @@ cna_accelerometer_reading_event_info_copy_type_name = { result = "CopyText(Accel
 cna_calibration_event_info_copy_type_name = { result = "CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, out_bytes)" }
 cna_compass_subscribe_calibrate = { result = "SubscribeCalibrate<Compass>(sensor, callback, context, out_registration)" }
 cna_motion_subscribe_calibrate = { result = "SubscribeCalibrate<Motion>(sensor, callback, context, out_registration)" }
+
+[values]
+[values.routes]
+cna_attitude_reading_init = { value = "MapAttitudeReading(AttitudeReading())" }
+cna_accelerometer_reading_event_info_init = { value = "MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs())" }
+cna_accelerometer_reading_event_info_get_type_name_size = { size = "AccelerometerReadingEventArgs().GetTypeName()" }
+cna_calibration_event_info_get_type_name_size = { size = "CalibrationEventArgs().GetTypeName()" }
