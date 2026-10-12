@@ -436,7 +436,7 @@ install(DIRECTORY include/
 
 # CBIND-045: the package carries the native libraries CNA itself builds.
 #
-# libcna_c_api.so records DT_NEEDED entries for SDL3, SDL3_image and SDL3_mixer, which this project
+# libcna_c_api.so records DT_NEEDED entries for SDL3 and SDL3_mixer, which this project
 # builds from third_party/ into CNA_SDL_PREBUILT_ROOT. Shipping them in the same directory, with the
 # library's INSTALL_RPATH of $ORIGIN, is what makes the installed package load with no environment
 # variable and link with no -rpath-link: the loader looks beside the library and finds them.

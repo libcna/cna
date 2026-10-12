@@ -232,34 +232,35 @@ then reconfigure.")
 endfunction()
 
 function(cna_configure_vendored_sdl)
-    if(TARGET SDL3::SDL3 AND TARGET SDL3_image::SDL3_image AND TARGET SDL3_mixer::SDL3_mixer)
+    # SDL3_image is not built: CNA decodes images itself (stb_image in ImageLoader.cpp) and no CNA
+    # target links it, so building it only cost every tree a dependency it never used.
+    if(TARGET SDL3::SDL3 AND TARGET SDL3_mixer::SDL3_mixer)
         return()
     endif()
 
     if(CNA_USE_SYSTEM_SDL)
         find_package(SDL3       REQUIRED)
-        find_package(SDL3_image REQUIRED)
         find_package(SDL3_mixer REQUIRED)
         return()
     endif()
 
     set(_tp "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
-    foreach(_dep IN ITEMS SDL SDL_image SDL_mixer)
+    foreach(_dep IN ITEMS SDL SDL_mixer)
         if(NOT EXISTS "${_tp}/${_dep}/CMakeLists.txt")
             # Task DEV-BUILD-001: "git submodule update --init --recursive"
-            # (the previous suggestion here) also recurses into SDL_image's/
-            # SDL_mixer's own nested "external/*" codec submodules (AVIF,
+            # (the previous suggestion here) also recurses into SDL_mixer's own
+            # nested "external/*" codec submodules (AVIF,
             # JXL, WebP, libpng, GME, mod_xmp, mpg123, FluidSynth-MIDI, Opus,
             # Vorbis, ~19 total) -- none of which this project's own
-            # SDLIMAGE_*/SDLMIXER_* CMAKE_ARGS below actually enable, and
+            # SDLMIXER_* CMAKE_ARGS below actually enable, and
             # cloning all of them measured 6-7x slower than the plain,
             # non-recursive form that is actually sufficient.
             message(FATAL_ERROR
                 "Missing vendored '${_dep}' in ${_tp}. "
                 "Run: git submodule update --init "
                 "(non-recursive -- this project's CMAKE_ARGS below disable "
-                "every optional codec dependency under SDL_image's/"
-                "SDL_mixer's own nested submodules, so --recursive only "
+                "every optional codec dependency under SDL_mixer's own "
+                "nested submodules, so --recursive only "
                 "adds a much slower, unnecessary fetch)")
         endif()
     endforeach()
@@ -268,33 +269,27 @@ function(cna_configure_vendored_sdl)
     if(MSVC)
         # SDL projects intentionally install package configs directly under cmake/ for MSVC.
         set(_sdl3_cmake_dir       "${_prefix}/cmake")
-        set(_sdl_image_cmake_dir  "${_prefix}/cmake")
         set(_sdl_mixer_cmake_dir  "${_prefix}/cmake")
     else()
         set(_cmake_dir            "${_prefix}/lib/cmake")
         set(_sdl3_cmake_dir       "${_cmake_dir}/SDL3")
-        set(_sdl_image_cmake_dir  "${_cmake_dir}/SDL3_image")
         set(_sdl_mixer_cmake_dir  "${_cmake_dir}/SDL3_mixer")
     endif()
 
     # Platform-specific shared-library filenames
     if(EMSCRIPTEN)
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
-        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.a")
         set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
         set(_sdl_shared OFF)
         set(_sdl_static  ON)
     elseif(ANDROID)
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
-        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.so")
         set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
         set(_sdl_shared ON)
         set(_sdl_static OFF)
     elseif(WIN32)
         set(_sdl3_lib      "${_prefix}/bin/SDL3.dll")
         set(_sdl3_implib   "${_prefix}/lib/SDL3.lib")
-        set(_sdl_image_lib "${_prefix}/bin/SDL3_image.dll")
-        set(_sdl_image_implib "${_prefix}/lib/SDL3_image.lib")
         set(_sdl_mixer_lib "${_prefix}/bin/SDL3_mixer.dll")
         set(_sdl_mixer_implib "${_prefix}/lib/SDL3_mixer.lib")
         set(_sdl_shared ON)
@@ -305,20 +300,17 @@ function(cna_configure_vendored_sdl)
         # cmake --install used below does not do, and none of which the simulator forgives.
         # Linking SDL statically keeps the app a single signed Mach-O executable.
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
-        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.a")
         set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
         set(_sdl_shared OFF)
         set(_sdl_static  ON)
     elseif(APPLE)
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.dylib")
-        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.dylib")
         set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.dylib")
         set(_sdl_shared ON)
         set(_sdl_static OFF)
     else()
         # Linux / other Unix
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
-        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.so")
         set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
         set(_sdl_shared ON)
         set(_sdl_static OFF)
@@ -363,27 +355,6 @@ function(cna_configure_vendored_sdl)
     )
 
     _cna_ensure_sdl_dep(
-        LIBRARY  "${_sdl_image_lib}"
-        NAME     SDL3_image
-        SOURCE   "${_tp}/SDL_image"
-        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_image/build"
-        CMAKE_ARGS
-            "-DCMAKE_PREFIX_PATH=${_prefix}"
-            "-DSDL3_DIR=${_sdl3_cmake_dir}"
-            -DBUILD_SHARED_LIBS=${_sdl_shared}
-            -DSDLIMAGE_DEPS_SHARED=${_sdl_shared}
-            -DSDLIMAGE_INSTALL=ON
-            -DSDLIMAGE_VENDORED=ON
-            -DSDLIMAGE_TESTS=OFF
-            -DSDLIMAGE_SAMPLES=OFF
-            -DSDLIMAGE_AVIF=OFF
-            -DSDLIMAGE_JXL=OFF
-            -DSDLIMAGE_TIF=OFF
-            -DSDLIMAGE_WEBP=OFF
-            -DSDLIMAGE_PNG_LIBPNG=OFF
-    )
-
-    _cna_ensure_sdl_dep(
         LIBRARY  "${_sdl_mixer_lib}"
         NAME     SDL3_mixer
         SOURCE   "${_tp}/SDL_mixer"
@@ -412,10 +383,8 @@ function(cna_configure_vendored_sdl)
 
     # SDL is now installed — let find_package set up the targets properly.
     set(SDL3_DIR       "${_sdl3_cmake_dir}"      CACHE PATH "" FORCE)
-    set(SDL3_image_DIR "${_sdl_image_cmake_dir}" CACHE PATH "" FORCE)
     set(SDL3_mixer_DIR "${_sdl_mixer_cmake_dir}" CACHE PATH "" FORCE)
     find_package(SDL3       REQUIRED CONFIG)
-    find_package(SDL3_image REQUIRED CONFIG)
     find_package(SDL3_mixer REQUIRED CONFIG)
 
     # Windows resolves a DLL from the executable's own directory first and has no RPATH, so an
@@ -520,7 +489,7 @@ function(_cna_ensure_sdl_dep)
         if(CNA_APPLE_IOS)
             list(APPEND _base_args "-DCMAKE_SYSTEM_NAME=iOS")
             list(APPEND _base_args "-DCNA_IOS_SIMULATOR=${CNA_IOS_SIMULATOR}")
-            # SDL3_image/SDL3_mixer resolve SDL3 through find_package(SDL3 CONFIG); the iOS
+            # SDL3_mixer resolves SDL3 through find_package(SDL3 CONFIG); the iOS
             # toolchain's re-rooted find rules would otherwise reject the install prefix.
             list(APPEND _base_args "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH")
         endif()
@@ -742,7 +711,7 @@ function(cna_copy_sdl_runtime target_name)
     else()
         # Retain support for callers that provide SDL through visible package targets instead of
         # cna_configure_vendored_sdl().
-        foreach(_dep_target IN ITEMS SDL3::SDL3 SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer)
+        foreach(_dep_target IN ITEMS SDL3::SDL3 SDL3_mixer::SDL3_mixer)
             if(TARGET ${_dep_target})
                 add_custom_command(TARGET ${target_name} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different

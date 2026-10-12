@@ -112,7 +112,7 @@ off, the consumer test says so by name rather than testing half a package in sil
 
 ## Native dependencies
 
-`libcna_c_api.so` carries `DT_NEEDED` entries for SDL3, SDL3_image and SDL3_mixer. It additionally
+`libcna_c_api.so` carries `DT_NEEDED` entries for SDL3 and SDL3_mixer. It additionally
 carries FFmpeg entries only when `CNA_ENABLE_VIDEO=AUTO/ON` selected `cna_video_ffmpeg`; an `OFF`
 build has no FFmpeg dependency.
 
