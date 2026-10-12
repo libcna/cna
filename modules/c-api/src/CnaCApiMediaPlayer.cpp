@@ -166,179 +166,152 @@ private:
         outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_media_player_get_visualization_data(
+[[nodiscard]] CNA_Result MediaPlayerGetVisualizationData(
     const CNA_Handle gameHandle,
     CNA_VisualizationData* const data)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(data, "The visualization data structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+    if (const CNA_Result result =
+            ValidateVersionedStructure(data, "The visualization data structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithGame(gameHandle, [&]() -> CNA_Result {
+        VisualizationData native;
+        const auto& frequencies = native.getFrequenciesProperty();
+        const auto& samples = native.getSamplesProperty();
+        for (std::size_t index = 0U;
+             index < static_cast<std::size_t>(VisualizationData::Size);
+             ++index) {
+            native.freq[index] = data->frequencies[index];
+            native.samp[index] = data->samples[index];
         }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            VisualizationData native;
-            const auto& frequencies = native.getFrequenciesProperty();
-            const auto& samples = native.getSamplesProperty();
-            for (std::size_t index = 0U;
-                 index < static_cast<std::size_t>(VisualizationData::Size);
-                 ++index) {
-                native.freq[index] = data->frequencies[index];
-                native.samp[index] = data->samples[index];
-            }
-            MediaPlayer::GetVisualizationData(native);
-            for (std::size_t index = 0U;
-                 index < static_cast<std::size_t>(VisualizationData::Size);
-                 ++index) {
-                data->frequencies[index] = frequencies[index];
-                data->samples[index] = samples[index];
-            }
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_get_queue(
-    const CNA_Handle gameHandle,
-    CNA_MediaQueueHandle* const outQueue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outQueue == nullptr) {
-            return InvalidArgument("The media queue output is null.");
+        MediaPlayer::GetVisualizationData(native);
+        for (std::size_t index = 0U;
+             index < static_cast<std::size_t>(VisualizationData::Size);
+             ++index) {
+            data->frequencies[index] = frequencies[index];
+            data->samples[index] = samples[index];
         }
-        *outQueue = CNA_INVALID_HANDLE;
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            auto resource = std::make_shared<MediaQueueResource>();
-            resource->value = &MediaPlayer::getQueueProperty();
-            return PublishMediaChild<MediaQueue>(
-                ObjectKind::MediaQueue,
-                std::move(resource),
-                "The media queue handle could not be created.",
-                outQueue);
-        });
-    });
-}
-
-CNA_Result cna_media_player_play_song(const CNA_Handle gameHandle, const CNA_SongHandle song)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongResource> resource;
-        if (const CNA_Result result = BorrowSong(song, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Play(resource->value);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_play_songs(
-    const CNA_Handle gameHandle,
-    const CNA_SongCollectionHandle songs)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(songs, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            MediaPlayer::Play(*resource->value);
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_play_songs_from(
-    const CNA_Handle gameHandle,
-    const CNA_SongCollectionHandle songs,
-    const int32_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SongCollectionResource> resource;
-        if (const CNA_Result result = BorrowSongCollection(songs, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return WithGame(gameHandle, [&]() -> CNA_Result {
-            // The canonical overload does not range-check the index, so neither does this route.
-            MediaPlayer::Play(*resource->value, static_cast<SharpRuntime::intcs>(index));
-            return CNA_RESULT_SUCCESS;
-        });
-    });
-}
-
-CNA_Result cna_media_player_unsubscribe_ext(
-    const CNA_MediaPlayerEventRegistrationHandle registration)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PlayerRegistration> resource;
-        const CNA_Result getResult =
-                LookupHandle(registration, ObjectKind::MediaPlayerEventRegistration, &resource);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        return ReleaseHandle(registration);
-    });
-}
-
-CNA_Result cna_media_queue_get_active_song(
-    const CNA_MediaQueueHandle queue,
-    CNA_SongHandle* const outSong,
-    CNA_Bool* const outAvailable)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSong == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The active song output is null.");
-        }
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Song* const active = resource->value->getActiveSongProperty();
-        if (active == nullptr) {
-            *outAvailable = CNA_FALSE;
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = PublishSongCopy(*active, outSong);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable = CNA_TRUE;
         return CNA_RESULT_SUCCESS;
     });
 }
 
-CNA_Result cna_media_queue_get_at(
+[[nodiscard]] CNA_Result MediaPlayerGetQueue(
+    const CNA_Handle gameHandle,
+    CNA_MediaQueueHandle* const outQueue)
+{
+    return WithGame(gameHandle, [&]() -> CNA_Result {
+        auto resource = std::make_shared<MediaQueueResource>();
+        resource->value = &MediaPlayer::getQueueProperty();
+        return PublishMediaChild<MediaQueue>(
+            ObjectKind::MediaQueue,
+            std::move(resource),
+            "The media queue handle could not be created.",
+            outQueue);
+    });
+}
+
+[[nodiscard]] CNA_Result MediaPlayerPlaySong(const CNA_Handle gameHandle, const CNA_SongHandle song)
+{
+    std::shared_ptr<SongResource> resource;
+    if (const CNA_Result result = BorrowSong(song, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithGame(gameHandle, [&]() -> CNA_Result {
+        MediaPlayer::Play(resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+[[nodiscard]] CNA_Result MediaPlayerPlaySongs(
+    const CNA_Handle gameHandle,
+    const CNA_SongCollectionHandle songs)
+{
+    std::shared_ptr<SongCollectionResource> resource;
+    if (const CNA_Result result = BorrowSongCollection(songs, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithGame(gameHandle, [&]() -> CNA_Result {
+        MediaPlayer::Play(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+[[nodiscard]] CNA_Result MediaPlayerPlaySongsFrom(
+    const CNA_Handle gameHandle,
+    const CNA_SongCollectionHandle songs,
+    const int32_t index)
+{
+    std::shared_ptr<SongCollectionResource> resource;
+    if (const CNA_Result result = BorrowSongCollection(songs, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithGame(gameHandle, [&]() -> CNA_Result {
+        // The canonical overload does not range-check the index, so neither does this route.
+        MediaPlayer::Play(*resource->value, static_cast<SharpRuntime::intcs>(index));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+[[nodiscard]] CNA_Result MediaPlayerUnsubscribeExt(
+    const CNA_MediaPlayerEventRegistrationHandle registration)
+{
+    std::shared_ptr<PlayerRegistration> resource;
+    const CNA_Result getResult =
+            LookupHandle(registration, ObjectKind::MediaPlayerEventRegistration, &resource);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    return ReleaseHandle(registration);
+}
+
+[[nodiscard]] CNA_Result MediaQueueGetActiveSong(
+    const CNA_MediaQueueHandle queue,
+    CNA_SongHandle* const outSong,
+    CNA_Bool* const outAvailable)
+{
+    std::shared_ptr<MediaQueueResource> resource;
+    if (const CNA_Result result = BorrowQueue(queue, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Song* const active = resource->value->getActiveSongProperty();
+    if (active == nullptr) {
+        *outAvailable = CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    }
+    if (const CNA_Result result = PublishSongCopy(*active, outSong);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outAvailable = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result MediaQueueGetAt(
     const CNA_MediaQueueHandle queue,
     const int32_t index,
     CNA_SongHandle* const outSong)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSong == nullptr) {
-            return InvalidArgument("The media queue song output is null.");
-        }
-        *outSong = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaQueueResource> resource;
-        if (const CNA_Result result = BorrowQueue(queue, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index < 0 || index >= static_cast<int32_t>(resource->value->getCountProperty())) {
-            return InvalidArgument("The media queue index is out of range.");
-        }
-        const Song* const song = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
-        if (song == nullptr) {
-            return InternalError("The media queue holds no song at this index.");
-        }
-        return PublishSongCopy(*song, outSong);
-    });
+    std::shared_ptr<MediaQueueResource> resource;
+    if (const CNA_Result result = BorrowQueue(queue, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index < 0 || index >= static_cast<int32_t>(resource->value->getCountProperty())) {
+        return InvalidArgument("The media queue index is out of range.");
+    }
+    const Song* const song = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
+    if (song == nullptr) {
+        return InternalError("The media queue holds no song at this index.");
+    }
+    return PublishSongCopy(*song, outSong);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/MediaPlayer.toml.
 #include "generated/MediaPlayer.inc"

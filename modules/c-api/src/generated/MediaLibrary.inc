@@ -2265,3 +2265,213 @@ CNA_Result cna_media_library_create(
         return CreateResourceHandle<MediaLibraryResource>(ObjectKind::MediaLibrary, std::make_unique<MediaLibrary>(), out_library);
     });
 }
+
+CNA_Result cna_media_library_create_from_source(
+    const CNA_Handle game,
+    const uint32_t source_index,
+    CNA_MediaLibraryHandle* const out_library)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_library == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_create_from_source: out_library is null.");
+        }
+        *out_library = CNA_INVALID_HANDLE;
+        return MediaLibraryCreateFromSource(game, source_index, out_library);
+    });
+}
+
+CNA_Result cna_media_library_get_media_source_type(
+    const CNA_MediaLibraryHandle library,
+    CNA_MediaSourceType* const out_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_media_source_type: out_type is null.");
+        }
+        return MediaLibraryGetMediaSourceType(library, out_type);
+    });
+}
+
+CNA_Result cna_album_get_art_size(
+    const CNA_AlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_art_size: out_bytes is null.");
+        }
+        return AlbumGetArtSize(album, out_bytes);
+    });
+}
+
+CNA_Result cna_album_get_thumbnail_size(
+    const CNA_AlbumHandle album,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_album_get_thumbnail_size: out_bytes is null.");
+        }
+        return AlbumGetThumbnailSize(album, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_get_image_size(
+    const CNA_PictureHandle picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_image_size: out_bytes is null.");
+        }
+        return PictureGetImageSize(picture, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_get_thumbnail_size(
+    const CNA_PictureHandle picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_get_thumbnail_size: out_bytes is null.");
+        }
+        return PictureGetThumbnailSize(picture, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_album_get_albums(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumCollectionHandle* const out_albums)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_albums == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_albums: out_albums is null.");
+        }
+        *out_albums = CNA_INVALID_HANDLE;
+        return PictureAlbumGetAlbums(album, out_albums);
+    });
+}
+
+CNA_Result cna_picture_album_get_pictures(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureCollectionHandle* const out_pictures)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pictures == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_picture_album_get_pictures: out_pictures is null.");
+        }
+        *out_pictures = CNA_INVALID_HANDLE;
+        return PictureAlbumGetPictures(album, out_pictures);
+    });
+}
+
+CNA_Result cna_media_library_get_root_picture_album(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureAlbumHandle* const out_album,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_album == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_root_picture_album: out_album is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_root_picture_album: out_available is null.");
+        }
+        *out_album = CNA_INVALID_HANDLE;
+        return MediaLibraryGetRootPictureAlbum(library, out_album, out_available);
+    });
+}
+
+CNA_Result cna_media_library_get_picture_from_token(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView token,
+    CNA_PictureHandle* const out_picture,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_picture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_picture_from_token: out_picture is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_picture_from_token: out_available is null.");
+        }
+        *out_picture = CNA_INVALID_HANDLE;
+        return MediaLibraryGetPictureFromToken(library, token, out_picture, out_available);
+    });
+}
+
+CNA_Result cna_media_library_save_picture(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView name,
+    const uint8_t* const image_data,
+    const uint64_t image_byte_count,
+    CNA_PictureHandle* const out_picture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_picture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_save_picture: out_picture is null.");
+        }
+        *out_picture = CNA_INVALID_HANDLE;
+        return MediaLibrarySavePicture(library, name, image_data, image_byte_count, out_picture);
+    });
+}
+
+CNA_Result cna_media_library_save_picture_from_stream(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView name,
+    const CNA_Handle source,
+    CNA_PictureHandle* const out_picture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_picture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_save_picture_from_stream: out_picture is null.");
+        }
+        *out_picture = CNA_INVALID_HANDLE;
+        return MediaLibrarySavePictureFromStream(library, name, source, out_picture);
+    });
+}
+
+CNA_Result cna_album_copy_art(
+    const CNA_AlbumHandle album,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AlbumCopyArt(album, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_album_copy_thumbnail(
+    const CNA_AlbumHandle album,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AlbumCopyThumbnail(album, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_copy_image(
+    const CNA_PictureHandle picture,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PictureCopyImage(picture, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_picture_copy_thumbnail(
+    const CNA_PictureHandle picture,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PictureCopyThumbnail(picture, destination, capacity, out_bytes);
+    });
+}

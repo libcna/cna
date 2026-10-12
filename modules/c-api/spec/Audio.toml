@@ -107,3 +107,32 @@ cna_dynamic_sound_effect_instance_copy_type_name = { copy = "object->GetTypeName
 [values.routes]
 cna_audio_emitter_init = { value = "ToCAudioEmitter(AudioEmitter())" }
 cna_audio_listener_init = { value = "ToCAudioListener(AudioListener())" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_sound_effect_create_pcm16 = { result = "SoundEffectCreatePcm16(game, create_info, pcm_bytes, byte_count, out_sound_effect)" }
+cna_sound_effect_create_instance = { result = "SoundEffectCreateInstance(sound_effect, out_instance)" }
+cna_sound_effect_instance_set_is_looped = { result = "SoundEffectInstanceSetIsLooped(instance, is_looped)" }
+cna_sound_effect_create_pcm16_range_ext = { result = "SoundEffectCreatePcm16RangeExt(game, create_info, pcm_bytes, byte_count, offset, count, loop_start, loop_length, out_sound_effect)" }
+cna_sound_effect_create_from_encoded_ext = { result = "SoundEffectCreateFromEncodedExt(game, bytes, byte_count, out_sound_effect)" }
+cna_sound_effect_create_from_asset_ext = { result = "SoundEffectCreateFromAssetExt(game, asset_name, out_sound_effect)" }
+cna_sound_effect_get_sample_duration_ticks = { result = "SoundEffectGetSampleDurationTicks(size_in_bytes, sample_rate, channels, out_ticks)" }
+cna_sound_effect_get_sample_size_in_bytes = { result = "SoundEffectGetSampleSizeInBytes(duration_ticks, sample_rate, channels, out_bytes)" }
+cna_dynamic_sound_effect_instance_create = { result = "DynamicSoundEffectInstanceCreate(game, sample_rate, channels, out_instance)" }
+cna_dynamic_sound_effect_instance_subscribe_buffer_needed = { result = "DynamicSoundEffectInstanceSubscribeBufferNeeded(instance, callback, context, out_registration)" }
+cna_microphone_get_default_index_ext = { result = "MicrophoneGetDefaultIndexExt(game, out_index, out_available)" }
+cna_microphone_get_data_at = { result = "MicrophoneGetDataAt(game, index, destination, capacity, out_bytes)" }
+cna_microphone_subscribe_buffer_ready_at = { result = "MicrophoneSubscribeBufferReadyAt(game, index, callback, context, out_registration)" }
+cna_audio_get_capabilities = { result = "AudioGetCapabilities(game, out_capabilities)" }
+cna_sound_effect_destroy = { result = "SoundEffectDestroy(sound_effect)" }
+cna_sound_effect_instance_destroy = { result = "SoundEffectInstanceDestroy(instance)" }
+cna_dynamic_sound_effect_instance_submit_buffer = { result = "DynamicSoundEffectInstanceSubmitBuffer(instance, bytes, byte_count, offset, count)" }
+cna_dynamic_sound_effect_instance_submit_float_buffer_ext = { result = "DynamicSoundEffectInstanceSubmitFloatBufferExt(instance, samples, sample_count, offset, count)" }
+cna_audio_unsubscribe_ext = { result = "AudioUnsubscribeExt(registration)" }
+cna_sound_effect_instance_apply_3d = { result = "SoundEffectInstanceApply3d(instance, listener, emitter)" }
+cna_sound_effect_instance_apply_3d_multi_ext = { result = "SoundEffectInstanceApply3dMultiExt(instance, listeners, listener_count, emitter)" }

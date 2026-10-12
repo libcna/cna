@@ -46,3 +46,21 @@ cna_video_player_dispose = { call = "object->value->Dispose()" }
 cna_video_player_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_video_player_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_video_player_destroy = { release = true }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_video_info_init = { result = "VideoInfoInit(out_info)" }
+cna_video_create = { result = "VideoCreate(graphics_device, file_name, out_video)" }
+cna_video_create_with_metadata = { result = "VideoCreateWithMetadata(graphics_device, file_name, duration_milliseconds, width, height, frames_per_second, soundtrack_type, out_video)" }
+cna_video_create_from_uri_ext = { result = "VideoCreateFromUriExt(graphics_device, uri, out_video)" }
+cna_video_player_create = { result = "VideoPlayerCreate(game, out_player)" }
+cna_video_player_get_video = { result = "VideoPlayerGetVideo(player, out_video, out_available)" }
+cna_video_player_get_texture = { result = "VideoPlayerGetTexture(player, out_texture, out_available)" }
+cna_video_get_info = { result = "VideoGetInfo(video, out_info)" }
+cna_video_player_get_frame_ext = { result = "VideoPlayerGetFrameExt(player, out_frame)" }
+cna_video_player_play = { result = "VideoPlayerPlay(player, video)" }

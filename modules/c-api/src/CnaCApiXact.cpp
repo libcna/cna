@@ -287,526 +287,447 @@ template<typename TResource>
         outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_audio_engine_create(
+[[nodiscard]] CNA_Result AudioEngineCreate(
     const CNA_Handle gameHandle,
     const CNA_StringView settingsFile,
     CNA_Handle* const outEngine)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const CNA_StringView empty = {nullptr, UINT64_C(0)};
-        return CreateEngine(gameHandle, settingsFile, false, INT64_C(0), empty, outEngine);
-    });
+    const CNA_StringView empty = {nullptr, UINT64_C(0)};
+    return CreateEngine(gameHandle, settingsFile, false, INT64_C(0), empty, outEngine);
 }
 
-CNA_Result cna_audio_engine_destroy(const CNA_Handle engineHandle)
+[[nodiscard]] CNA_Result AudioEngineDestroy(const CNA_Handle engineHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (engine->childCount != 0U) {
-            return InvalidState(
-                "All C bank and category children must be destroyed before their AudioEngine.");
-        }
-        engine->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(engineHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (engine->childCount != 0U) {
+        return InvalidState(
+            "All C bank and category children must be destroyed before their AudioEngine.");
+    }
+    engine->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(engineHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_audio_engine_renderers_equal(
+[[nodiscard]] CNA_Result AudioEngineRenderersEqual(
     const CNA_Handle engineHandle,
     const uint64_t rendererIndex,
     const uint64_t otherRendererIndex,
     CNA_Bool* const outEquals)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEquals == nullptr) {
-            return InvalidArgument("The renderer equality output is null.");
-        }
-        std::shared_ptr<EngineResource> engine;
-        const Microsoft::Xna::Framework::Audio::RendererDetail* first = nullptr;
-        const Microsoft::Xna::Framework::Audio::RendererDetail* second = nullptr;
-        if (const CNA_Result result =
-                GetRendererDetail(engineHandle, rendererIndex, &engine, &first);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                GetRendererDetail(engineHandle, otherRendererIndex, &engine, &second);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical inequality operator is the negation of this one answer, so both operators
-        // and the equality method are the same route here.
-        *outEquals = ToCBool(*first == *second);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EngineResource> engine;
+    const Microsoft::Xna::Framework::Audio::RendererDetail* first = nullptr;
+    const Microsoft::Xna::Framework::Audio::RendererDetail* second = nullptr;
+    if (const CNA_Result result =
+            GetRendererDetail(engineHandle, rendererIndex, &engine, &first);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            GetRendererDetail(engineHandle, otherRendererIndex, &engine, &second);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical inequality operator is the negation of this one answer, so both operators
+    // and the equality method are the same route here.
+    *outEquals = ToCBool(*first == *second);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_audio_engine_subscribe_disposing_ext(
+[[nodiscard]] CNA_Result AudioEngineSubscribeDisposingExt(
     const CNA_Handle engineHandle,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SubscribeDisposing(
-            &engine->value->Disposing,
-            engine,
-            callback,
-            context,
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SubscribeDisposing(
+        &engine->value->Disposing,
+        engine,
+        callback,
+        context,
+        outRegistration);
 }
 
-CNA_Result cna_audio_engine_get_category(
+[[nodiscard]] CNA_Result AudioEngineGetCategory(
     const CNA_Handle engineHandle,
     const CNA_StringView name,
     CNA_Handle* const outCategory)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCategory == nullptr) {
-            return InvalidArgument("The AudioCategory output handle is null.");
-        }
-        *outCategory = CNA_INVALID_HANDLE;
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(name, "The category name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<CategoryResource>(
-            CategoryResource{
-                std::make_shared<AudioCategory>(engine->value->GetCategory(nativeName)),
-                engine});
-        if (const CNA_Result result = CreateHandle(ObjectKind::AudioCategory,
-            resource,
-            outCategory);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++engine->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeName;
+    if (const CNA_Result result =
+            ReadText(name, "The category name is invalid.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<CategoryResource>(
+        CategoryResource{
+            std::make_shared<AudioCategory>(engine->value->GetCategory(nativeName)),
+            engine});
+    if (const CNA_Result result = CreateHandle(ObjectKind::AudioCategory,
+        resource,
+        outCategory);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++engine->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_audio_category_destroy(const CNA_Handle categoryHandle)
+[[nodiscard]] CNA_Result AudioCategoryDestroy(const CNA_Handle categoryHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReleaseHandle(categoryHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        --category->parent->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CategoryResource> category;
+    if (const CNA_Result result = GetCategory(categoryHandle, &category);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReleaseHandle(categoryHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    --category->parent->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_audio_category_stop(
+[[nodiscard]] CNA_Result AudioCategoryStop(
     const CNA_Handle categoryHandle,
     const CNA_AudioStopOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
-        if (!TryMapStopOptions(options, &nativeOptions)) {
-            return InvalidArgument("The audio stop options are not a defined identity.");
-        }
-        std::shared_ptr<CategoryResource> category;
-        if (const CNA_Result result = GetCategory(categoryHandle, &category);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        category->value->Stop(nativeOptions);
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
+    if (!TryMapStopOptions(options, &nativeOptions)) {
+        return InvalidArgument("The audio stop options are not a defined identity.");
+    }
+    std::shared_ptr<CategoryResource> category;
+    if (const CNA_Result result = GetCategory(categoryHandle, &category);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    category->value->Stop(nativeOptions);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_wave_bank_create(
+[[nodiscard]] CNA_Result WaveBankCreate(
     const CNA_Handle engineHandle,
     const CNA_StringView filename,
     CNA_Handle* const outWaveBank)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWaveBank == nullptr) {
-            return InvalidArgument("The WaveBank output handle is null.");
-        }
-        *outWaveBank = CNA_INVALID_HANDLE;
-        std::string nativeFilename;
-        if (const CNA_Result result =
-                ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<WaveBankResource>(
-            WaveBankResource{
-                std::make_shared<WaveBank>(engine->value.get(), nativeFilename),
-                engine});
-        if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
-            resource,
-            outWaveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++engine->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeFilename;
+    if (const CNA_Result result =
+            ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<WaveBankResource>(
+        WaveBankResource{
+            std::make_shared<WaveBank>(engine->value.get(), nativeFilename),
+            engine});
+    if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
+        resource,
+        outWaveBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++engine->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_wave_bank_create_streaming(
+[[nodiscard]] CNA_Result WaveBankCreateStreaming(
     const CNA_Handle engineHandle,
     const CNA_StringView filename,
     const int32_t offset,
     const int16_t packetSize,
     CNA_Handle* const outWaveBank)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWaveBank == nullptr) {
-            return InvalidArgument("The WaveBank output handle is null.");
-        }
-        *outWaveBank = CNA_INVALID_HANDLE;
-        std::string nativeFilename;
-        if (const CNA_Result result =
-                ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<WaveBankResource>(
-            WaveBankResource{
-                std::make_shared<WaveBank>(engine->value.get(), nativeFilename, offset, packetSize),
-                engine});
-        if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
-            resource,
-            outWaveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++engine->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeFilename;
+    if (const CNA_Result result =
+            ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<WaveBankResource>(
+        WaveBankResource{
+            std::make_shared<WaveBank>(engine->value.get(), nativeFilename, offset, packetSize),
+            engine});
+    if (const CNA_Result result = CreateHandle(ObjectKind::WaveBank,
+        resource,
+        outWaveBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++engine->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_wave_bank_destroy(const CNA_Handle waveBankHandle)
+[[nodiscard]] CNA_Result WaveBankDestroy(const CNA_Handle waveBankHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        waveBank->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(waveBankHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        --waveBank->parent->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<WaveBankResource> waveBank;
+    if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    waveBank->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(waveBankHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    --waveBank->parent->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_wave_bank_subscribe_disposing_ext(
+[[nodiscard]] CNA_Result WaveBankSubscribeDisposingExt(
     const CNA_Handle waveBankHandle,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        std::shared_ptr<WaveBankResource> waveBank;
-        if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SubscribeDisposing(
-            &waveBank->value->Disposing,
-            waveBank,
-            callback,
-            context,
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    std::shared_ptr<WaveBankResource> waveBank;
+    if (const CNA_Result result = GetWaveBank(waveBankHandle, &waveBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SubscribeDisposing(
+        &waveBank->value->Disposing,
+        waveBank,
+        callback,
+        context,
+        outRegistration);
 }
 
-CNA_Result cna_sound_bank_create(
+[[nodiscard]] CNA_Result SoundBankCreate(
     const CNA_Handle engineHandle,
     const CNA_StringView filename,
     CNA_Handle* const outSoundBank)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSoundBank == nullptr) {
-            return InvalidArgument("The SoundBank output handle is null.");
-        }
-        *outSoundBank = CNA_INVALID_HANDLE;
-        std::string nativeFilename;
-        if (const CNA_Result result =
-                ReadText(filename, "The sound-bank path is invalid.", &nativeFilename);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<SoundBankResource>(
-            SoundBankResource{
-                std::make_shared<SoundBank>(engine->value.get(), nativeFilename),
-                engine,
-                0U});
-        if (const CNA_Result result = CreateHandle(ObjectKind::SoundBank,
-            resource,
-            outSoundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++engine->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeFilename;
+    if (const CNA_Result result =
+            ReadText(filename, "The sound-bank path is invalid.", &nativeFilename);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EngineResource> engine;
+    if (const CNA_Result result = GetEngine(engineHandle, &engine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<SoundBankResource>(
+        SoundBankResource{
+            std::make_shared<SoundBank>(engine->value.get(), nativeFilename),
+            engine,
+            0U});
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundBank,
+        resource,
+        outSoundBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++engine->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_bank_destroy(const CNA_Handle soundBankHandle)
+[[nodiscard]] CNA_Result SoundBankDestroy(const CNA_Handle soundBankHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (soundBank->cueCount != 0U) {
-            return InvalidState("All C Cue children must be destroyed before their SoundBank.");
-        }
-        soundBank->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(soundBankHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        --soundBank->parent->childCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SoundBankResource> soundBank;
+    if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (soundBank->cueCount != 0U) {
+        return InvalidState("All C Cue children must be destroyed before their SoundBank.");
+    }
+    soundBank->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(soundBankHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    --soundBank->parent->childCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_bank_get_cue(
+[[nodiscard]] CNA_Result SoundBankGetCue(
     const CNA_Handle soundBankHandle,
     const CNA_StringView name,
     CNA_Handle* const outCue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCue == nullptr) {
-            return InvalidArgument("The Cue output handle is null.");
-        }
-        *outCue = CNA_INVALID_HANDLE;
-        std::string nativeName;
-        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical lookup hands back a raw cue the caller owns, so the handle takes that
-        // ownership straight away rather than borrowing something the bank keeps.
-        const auto resource = std::make_shared<CueResource>(
-            CueResource{
-                std::shared_ptr<Cue>(soundBank->value->GetCue(nativeName)),
-                soundBank});
-        if (const CNA_Result result = CreateHandle(ObjectKind::Cue, resource, outCue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++soundBank->cueCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeName;
+    if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SoundBankResource> soundBank;
+    if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical lookup hands back a raw cue the caller owns, so the handle takes that
+    // ownership straight away rather than borrowing something the bank keeps.
+    const auto resource = std::make_shared<CueResource>(
+        CueResource{
+            std::shared_ptr<Cue>(soundBank->value->GetCue(nativeName)),
+            soundBank});
+    if (const CNA_Result result = CreateHandle(ObjectKind::Cue, resource, outCue);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++soundBank->cueCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_bank_play_cue_3d(
+[[nodiscard]] CNA_Result SoundBankPlayCue3d(
     const CNA_Handle soundBankHandle,
     const CNA_StringView name,
     const CNA_AudioListener* const listener,
     const CNA_AudioEmitter* const emitter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeName;
-        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AudioListener nativeListener;
-        AudioEmitter nativeEmitter;
-        if (const CNA_Result result =
-                ToNativePosition(listener, emitter, &nativeListener, &nativeEmitter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        soundBank->value->PlayCue(nativeName, nativeListener, nativeEmitter);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string nativeName;
+    if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AudioListener nativeListener;
+    AudioEmitter nativeEmitter;
+    if (const CNA_Result result =
+            ToNativePosition(listener, emitter, &nativeListener, &nativeEmitter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SoundBankResource> soundBank;
+    if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    soundBank->value->PlayCue(nativeName, nativeListener, nativeEmitter);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_bank_subscribe_disposing_ext(
+[[nodiscard]] CNA_Result SoundBankSubscribeDisposingExt(
     const CNA_Handle soundBankHandle,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SubscribeDisposing(
-            &soundBank->value->Disposing,
-            soundBank,
-            callback,
-            context,
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    std::shared_ptr<SoundBankResource> soundBank;
+    if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SubscribeDisposing(
+        &soundBank->value->Disposing,
+        soundBank,
+        callback,
+        context,
+        outRegistration);
 }
 
-CNA_Result cna_cue_destroy(const CNA_Handle cueHandle)
+[[nodiscard]] CNA_Result CueDestroy(const CNA_Handle cueHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(cueHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        --cue->parent->cueCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CueResource> cue;
+    if (const CNA_Result result = GetCue(cueHandle, &cue);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    cue->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(cueHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    --cue->parent->cueCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cue_apply_3d(
+[[nodiscard]] CNA_Result CueApply3d(
     const CNA_Handle cueHandle,
     const CNA_AudioListener* const listener,
     const CNA_AudioEmitter* const emitter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AudioListener nativeListener;
-        AudioEmitter nativeEmitter;
-        if (const CNA_Result result =
-                ToNativePosition(listener, emitter, &nativeListener, &nativeEmitter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Apply3D(nativeListener, nativeEmitter);
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioListener nativeListener;
+    AudioEmitter nativeEmitter;
+    if (const CNA_Result result =
+            ToNativePosition(listener, emitter, &nativeListener, &nativeEmitter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<CueResource> cue;
+    if (const CNA_Result result = GetCue(cueHandle, &cue);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    cue->value->Apply3D(nativeListener, nativeEmitter);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cue_stop(const CNA_Handle cueHandle, const CNA_AudioStopOptions options)
+[[nodiscard]] CNA_Result CueStop(const CNA_Handle cueHandle, const CNA_AudioStopOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
-        if (!TryMapStopOptions(options, &nativeOptions)) {
-            return InvalidArgument("The audio stop options are not a defined identity.");
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->Stop(nativeOptions);
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioStopOptions nativeOptions = AudioStopOptions::AsAuthored;
+    if (!TryMapStopOptions(options, &nativeOptions)) {
+        return InvalidArgument("The audio stop options are not a defined identity.");
+    }
+    std::shared_ptr<CueResource> cue;
+    if (const CNA_Result result = GetCue(cueHandle, &cue);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    cue->value->Stop(nativeOptions);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cue_subscribe_disposing_ext(
+[[nodiscard]] CNA_Result CueSubscribeDisposingExt(
     const CNA_Handle cueHandle,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SubscribeDisposing(
-            &cue->value->Disposing,
-            cue,
-            callback,
-            context,
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    std::shared_ptr<CueResource> cue;
+    if (const CNA_Result result = GetCue(cueHandle, &cue);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SubscribeDisposing(
+        &cue->value->Disposing,
+        cue,
+        callback,
+        context,
+        outRegistration);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Xact.toml.
 #include "generated/Xact.inc"

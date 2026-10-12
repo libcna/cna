@@ -210,66 +210,51 @@ template<typename TCollection, typename TElement>
     return PublishChildOf<TElement, TCollection>(resource, element, outElement);
 }
 
-} // namespace
-
-CNA_Result cna_media_library_create_from_source(
+[[nodiscard]] CNA_Result MediaLibraryCreateFromSource(
     const CNA_Handle gameHandle,
     const uint32_t sourceIndex,
     CNA_MediaLibraryHandle* const outLibrary)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLibrary == nullptr) {
-            return InvalidArgument("The media library output is null.");
-        }
-        *outLibrary = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical enumeration hands back raw owning pointers, and the canonical constructor
-        // does NOT adopt the one it is given -- it copies that source's kind and name into its own
-        // object. Sanitizer evidence, not an assumption: leaving the selected source to the
-        // library leaked it. So every enumerated source is destroyed here, the selected one after
-        // the library has copied it.
-        std::vector<MediaSource*> sources = MediaSource::GetAvailableMediaSources();
-        std::vector<std::unique_ptr<MediaSource>> owned;
-        owned.reserve(sources.size());
-        for (MediaSource* const source : sources) {
-            owned.emplace_back(source);
-        }
-        if (static_cast<std::size_t>(sourceIndex) >= owned.size()) {
-            return InvalidArgument("The media source index is out of range.");
-        }
-        return CreateResourceHandle<MediaLibraryResource>(
-            ObjectKind::MediaLibrary,
-            std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get()),
-            outLibrary);
-    });
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical enumeration hands back raw owning pointers, and the canonical constructor
+    // does NOT adopt the one it is given -- it copies that source's kind and name into its own
+    // object. Sanitizer evidence, not an assumption: leaving the selected source to the
+    // library leaked it. So every enumerated source is destroyed here, the selected one after
+    // the library has copied it.
+    std::vector<MediaSource*> sources = MediaSource::GetAvailableMediaSources();
+    std::vector<std::unique_ptr<MediaSource>> owned;
+    owned.reserve(sources.size());
+    for (MediaSource* const source : sources) {
+        owned.emplace_back(source);
+    }
+    if (static_cast<std::size_t>(sourceIndex) >= owned.size()) {
+        return InvalidArgument("The media source index is out of range.");
+    }
+    return CreateResourceHandle<MediaLibraryResource>(
+        ObjectKind::MediaLibrary,
+        std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get()),
+        outLibrary);
 }
 
-CNA_Result cna_media_library_get_media_source_type(
+[[nodiscard]] CNA_Result MediaLibraryGetMediaSourceType(
     const CNA_MediaLibraryHandle library,
     CNA_MediaSourceType* const outType)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outType == nullptr) {
-            return InvalidArgument("The media source kind output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const MediaSource* const source = resource->value->getMediaSourceProperty();
-        if (source == nullptr) {
-            return InvalidState("The media library has no media source.");
-        }
-        *outType = static_cast<CNA_MediaSourceType>(source->getMediaSourceTypeProperty());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MediaLibraryResource> resource;
+    if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const MediaSource* const source = resource->value->getMediaSourceProperty();
+    if (source == nullptr) {
+        return InvalidState("The media library has no media source.");
+    }
+    *outType = static_cast<CNA_MediaSourceType>(source->getMediaSourceTypeProperty());
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 template<typename TCollection, typename TGet>
 [[nodiscard]] CNA_Result LibraryCollection(
@@ -298,10 +283,6 @@ template<typename TCollection, typename TGet>
         "The media library collection handle could not be created.",
         outCollection);
 }
-
-} // namespace
-
-namespace {
 
 // A canonical getter that may answer null becomes an availability flag plus an untouched output,
 // the same rule the sensor and gamepad queries follow.
@@ -333,296 +314,246 @@ template<typename TOwner, typename TValue, typename TGet>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_album_get_art_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
+[[nodiscard]] CNA_Result AlbumGetArtSize(const CNA_AlbumHandle album, uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The album art byte-count output is null.");
-        }
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetAlbumArt(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(bytes.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MediaChildResource<Album>> resource;
+    if (const CNA_Result result = Borrow<Album>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetAlbumArt(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = static_cast<uint64_t>(bytes.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_album_copy_art(
+[[nodiscard]] CNA_Result AlbumCopyArt(
     const CNA_AlbumHandle album,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetAlbumArt(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(bytes, destination, capacity, outBytes);
-    });
+    std::shared_ptr<MediaChildResource<Album>> resource;
+    if (const CNA_Result result = Borrow<Album>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetAlbumArt(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(bytes, destination, capacity, outBytes);
 }
 
-CNA_Result cna_album_get_thumbnail_size(const CNA_AlbumHandle album, uint64_t* const outBytes)
+[[nodiscard]] CNA_Result AlbumGetThumbnailSize(
+    const CNA_AlbumHandle album,
+    uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The album thumbnail byte-count output is null.");
-        }
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(bytes.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MediaChildResource<Album>> resource;
+    if (const CNA_Result result = Borrow<Album>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = static_cast<uint64_t>(bytes.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_album_copy_thumbnail(
+[[nodiscard]] CNA_Result AlbumCopyThumbnail(
     const CNA_AlbumHandle album,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Album>> resource;
-        if (const CNA_Result result = Borrow<Album>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(bytes, destination, capacity, outBytes);
-    });
+    std::shared_ptr<MediaChildResource<Album>> resource;
+    if (const CNA_Result result = Borrow<Album>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(bytes, destination, capacity, outBytes);
 }
 
-CNA_Result cna_picture_get_image_size(const CNA_PictureHandle picture, uint64_t* const outBytes)
+[[nodiscard]] CNA_Result PictureGetImageSize(
+    const CNA_PictureHandle picture,
+    uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture image byte-count output is null.");
-        }
-        std::shared_ptr<MediaChildResource<Picture>> resource;
-        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(bytes.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MediaChildResource<Picture>> resource;
+    if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = static_cast<uint64_t>(bytes.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_picture_copy_image(
+[[nodiscard]] CNA_Result PictureCopyImage(
     const CNA_PictureHandle picture,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Picture>> resource;
-        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(bytes, destination, capacity, outBytes);
-    });
+    std::shared_ptr<MediaChildResource<Picture>> resource;
+    if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(bytes, destination, capacity, outBytes);
 }
 
-CNA_Result cna_picture_get_thumbnail_size(
+[[nodiscard]] CNA_Result PictureGetThumbnailSize(
     const CNA_PictureHandle picture,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The picture thumbnail byte-count output is null.");
-        }
-        std::shared_ptr<MediaChildResource<Picture>> resource;
-        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = static_cast<uint64_t>(bytes.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MediaChildResource<Picture>> resource;
+    if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = static_cast<uint64_t>(bytes.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_picture_copy_thumbnail(
+[[nodiscard]] CNA_Result PictureCopyThumbnail(
     const CNA_PictureHandle picture,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaChildResource<Picture>> resource;
-        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> bytes;
-        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(bytes, destination, capacity, outBytes);
-    });
+    std::shared_ptr<MediaChildResource<Picture>> resource;
+    if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> bytes;
+    if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(bytes, destination, capacity, outBytes);
 }
 
-CNA_Result cna_picture_album_get_albums(
+[[nodiscard]] CNA_Result PictureAlbumGetAlbums(
     const CNA_PictureAlbumHandle album,
     CNA_PictureAlbumCollectionHandle* const outAlbums)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAlbums == nullptr) {
-            return InvalidArgument("The picture album collection output is null.");
-        }
-        *outAlbums = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
-        if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        PictureAlbumCollection* const children = resource->value->getAlbumsProperty();
-        if (children == nullptr) {
-            return InvalidState("The picture album has no child album collection.");
-        }
-        return PublishChildOf<PictureAlbumCollection, PictureAlbum>(resource, children, outAlbums);
-    });
+    std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
+    if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    PictureAlbumCollection* const children = resource->value->getAlbumsProperty();
+    if (children == nullptr) {
+        return InvalidState("The picture album has no child album collection.");
+    }
+    return PublishChildOf<PictureAlbumCollection, PictureAlbum>(resource, children, outAlbums);
 }
 
-CNA_Result cna_picture_album_get_pictures(
+[[nodiscard]] CNA_Result PictureAlbumGetPictures(
     const CNA_PictureAlbumHandle album,
     CNA_PictureCollectionHandle* const outPictures)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPictures == nullptr) {
-            return InvalidArgument("The picture collection output is null.");
-        }
-        *outPictures = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
-        if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        PictureCollection* const pictures = resource->value->getPicturesProperty();
-        if (pictures == nullptr) {
-            return InvalidState("The picture album has no picture collection.");
-        }
-        return PublishChildOf<PictureCollection, PictureAlbum>(resource, pictures, outPictures);
-    });
+    std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
+    if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    PictureCollection* const pictures = resource->value->getPicturesProperty();
+    if (pictures == nullptr) {
+        return InvalidState("The picture album has no picture collection.");
+    }
+    return PublishChildOf<PictureCollection, PictureAlbum>(resource, pictures, outPictures);
 }
 
-CNA_Result cna_media_library_get_root_picture_album(
+[[nodiscard]] CNA_Result MediaLibraryGetRootPictureAlbum(
     const CNA_MediaLibraryHandle library,
     CNA_PictureAlbumHandle* const outAlbum,
     CNA_Bool* const outAvailable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAlbum == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The root picture album output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        PictureAlbum* const root = resource->value->getRootPictureAlbumProperty();
-        if (root == nullptr) {
-            *outAvailable = CNA_FALSE;
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = PublishLibraryChild<PictureAlbum>(
-                ObjectKind::PictureAlbum,
-                resource,
-                root,
-                "The picture album handle could not be created.",
-                outAlbum);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable = CNA_TRUE;
+    std::shared_ptr<MediaLibraryResource> resource;
+    if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    PictureAlbum* const root = resource->value->getRootPictureAlbumProperty();
+    if (root == nullptr) {
+        *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = PublishLibraryChild<PictureAlbum>(
+            ObjectKind::PictureAlbum,
+            resource,
+            root,
+            "The picture album handle could not be created.",
+            outAlbum);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outAvailable = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_media_library_get_picture_from_token(
+[[nodiscard]] CNA_Result MediaLibraryGetPictureFromToken(
     const CNA_MediaLibraryHandle library,
     const CNA_StringView token,
     CNA_PictureHandle* const outPicture,
     CNA_Bool* const outAvailable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPicture == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The picture lookup output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeToken;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                token, "The picture token is not valid UTF-8.", &nativeToken);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Picture* const picture = resource->value->GetPictureFromToken(nativeToken);
-        if (picture == nullptr) {
-            *outAvailable = CNA_FALSE;
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = PublishLibraryChild<Picture>(
-                ObjectKind::Picture,
-                resource,
-                picture,
-                "The picture handle could not be created.",
-                outPicture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable = CNA_TRUE;
+    std::shared_ptr<MediaLibraryResource> resource;
+    if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nativeToken;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            token, "The picture token is not valid UTF-8.", &nativeToken);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Picture* const picture = resource->value->GetPictureFromToken(nativeToken);
+    if (picture == nullptr) {
+        *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = PublishLibraryChild<Picture>(
+            ObjectKind::Picture,
+            resource,
+            picture,
+            "The picture handle could not be created.",
+            outPicture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outAvailable = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 [[nodiscard]] CNA_Result PublishSavedPicture(
     const std::shared_ptr<MediaLibraryResource>& library,
@@ -640,91 +571,79 @@ namespace {
         outPicture);
 }
 
-} // namespace
-
-CNA_Result cna_media_library_save_picture(
+[[nodiscard]] CNA_Result MediaLibrarySavePicture(
     const CNA_MediaLibraryHandle library,
     const CNA_StringView name,
     const uint8_t* const imageData,
     const uint64_t imageByteCount,
     CNA_PictureHandle* const outPicture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPicture == nullptr) {
-            return InvalidArgument("The saved picture output is null.");
-        }
-        *outPicture = CNA_INVALID_HANDLE;
-        if (imageData == nullptr && imageByteCount != UINT64_C(0)) {
-            return InvalidArgument("The image buffer is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> bytes(
-            imageData,
-            imageData + static_cast<std::size_t>(imageByteCount));
-        return PublishSavedPicture(
-            resource,
-            resource->value->SavePicture(std::move(nativeName), bytes),
-            outPicture);
-    });
+    if (imageData == nullptr && imageByteCount != UINT64_C(0)) {
+        return InvalidArgument("The image buffer is null.");
+    }
+    std::shared_ptr<MediaLibraryResource> resource;
+    if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nativeName;
+    if (const CNA_Result result =
+            CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint8_t> bytes(
+        imageData,
+        imageData + static_cast<std::size_t>(imageByteCount));
+    return PublishSavedPicture(
+        resource,
+        resource->value->SavePicture(std::move(nativeName), bytes),
+        outPicture);
 }
 
-CNA_Result cna_media_library_save_picture_from_stream(
+[[nodiscard]] CNA_Result MediaLibrarySavePictureFromStream(
     const CNA_MediaLibraryHandle library,
     const CNA_StringView name,
     const CNA_Handle source,
     CNA_PictureHandle* const outPicture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPicture == nullptr) {
-            return InvalidArgument("The saved picture output is null.");
-        }
-        *outPicture = CNA_INVALID_HANDLE;
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // A storage stream is the only byte source this ABI owns, so it is what the canonical
-        // stream overload accepts. The borrow keeps it open for the call and hands it straight
-        // back afterwards -- the stream stays the caller's to close.
-        CNA::C::Detail::BorrowedStorageStream stream;
-        if (const CNA_Result result = CNA::C::Detail::AcquireStorageStream(source, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The storage stream handle is invalid for this call.");
-        }
-        CNA_Result result = CNA_RESULT_SUCCESS;
-        try {
-            result = PublishSavedPicture(
-                resource,
-                resource->value->SavePicture(std::move(nativeName), stream.value),
-                outPicture);
-        } catch (...) {
-            CNA::C::Detail::ReleaseStorageStream(stream);
-            throw;
-        }
-        CNA::C::Detail::ReleaseStorageStream(stream);
+    std::shared_ptr<MediaLibraryResource> resource;
+    if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string nativeName;
+    if (const CNA_Result result =
+            CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // A storage stream is the only byte source this ABI owns, so it is what the canonical
+    // stream overload accepts. The borrow keeps it open for the call and hands it straight
+    // back afterwards -- the stream stays the caller's to close.
+    CNA::C::Detail::BorrowedStorageStream stream;
+    if (const CNA_Result result = CNA::C::Detail::AcquireStorageStream(source, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The storage stream handle is invalid for this call.");
+    }
+    CNA_Result result = CNA_RESULT_SUCCESS;
+    try {
+        result = PublishSavedPicture(
+            resource,
+            resource->value->SavePicture(std::move(nativeName), stream.value),
+            outPicture);
+    } catch (...) {
+        CNA::C::Detail::ReleaseStorageStream(stream);
+        throw;
+    }
+    CNA::C::Detail::ReleaseStorageStream(stream);
+    return result;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/MediaLibrary.toml.
 #include "generated/MediaLibrary.inc"

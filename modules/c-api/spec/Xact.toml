@@ -104,3 +104,31 @@ other = { lookup = "GetCategory", object = "std::shared_ptr<CategoryResource>" }
 # Categories compare by name alone, so two categories from two engines can be equal. Both
 # canonical equality operators are this one answer; inequality is its negation.
 cna_audio_category_equals = { get = "*object->value == *other->value" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_audio_engine_renderers_equal = { result = "AudioEngineRenderersEqual(engine, renderer_index, other_renderer_index, out_equals)" }
+cna_audio_engine_subscribe_disposing_ext = { result = "AudioEngineSubscribeDisposingExt(engine, callback, context, out_registration)" }
+cna_audio_engine_get_category = { result = "AudioEngineGetCategory(engine, name, out_category)" }
+cna_wave_bank_create = { result = "WaveBankCreate(engine, filename, out_wave_bank)" }
+cna_wave_bank_create_streaming = { result = "WaveBankCreateStreaming(engine, filename, offset, packet_size, out_wave_bank)" }
+cna_wave_bank_subscribe_disposing_ext = { result = "WaveBankSubscribeDisposingExt(wave_bank, callback, context, out_registration)" }
+cna_sound_bank_create = { result = "SoundBankCreate(engine, filename, out_sound_bank)" }
+cna_sound_bank_get_cue = { result = "SoundBankGetCue(sound_bank, name, out_cue)" }
+cna_sound_bank_subscribe_disposing_ext = { result = "SoundBankSubscribeDisposingExt(sound_bank, callback, context, out_registration)" }
+cna_cue_subscribe_disposing_ext = { result = "CueSubscribeDisposingExt(cue, callback, context, out_registration)" }
+cna_audio_engine_create = { result = "AudioEngineCreate(game, settings_file, out_engine)", optional = ["out_engine"] }
+cna_audio_engine_destroy = { result = "AudioEngineDestroy(engine)" }
+cna_audio_category_destroy = { result = "AudioCategoryDestroy(category)" }
+cna_audio_category_stop = { result = "AudioCategoryStop(category, options)" }
+cna_wave_bank_destroy = { result = "WaveBankDestroy(wave_bank)" }
+cna_sound_bank_destroy = { result = "SoundBankDestroy(sound_bank)" }
+cna_sound_bank_play_cue_3d = { result = "SoundBankPlayCue3d(sound_bank, name, listener, emitter)" }
+cna_cue_destroy = { result = "CueDestroy(cue)" }
+cna_cue_apply_3d = { result = "CueApply3d(cue, listener, emitter)" }
+cna_cue_stop = { result = "CueStop(cue, options)" }

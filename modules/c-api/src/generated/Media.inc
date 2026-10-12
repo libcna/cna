@@ -521,3 +521,119 @@ CNA_Result cna_media_source_get_available_count(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_visualization_data_init(
+    CNA_VisualizationData* const out_data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_visualization_data_init: out_data is null.");
+        }
+        return VisualizationDataInit(out_data);
+    });
+}
+
+CNA_Result cna_media_source_copy_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_copy_name_at: out_bytes is null.");
+        }
+        return MediaSourceCopyNameAt(game, index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_media_source_copy_type_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_source_copy_type_name_at: out_bytes is null.");
+        }
+        return MediaSourceCopyTypeNameAt(game, index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_song_create(
+    const CNA_Handle game,
+    const CNA_StringView file_name,
+    const CNA_StringView name,
+    CNA_SongHandle* const out_song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_create: out_song is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return SongCreate(game, file_name, name, out_song);
+    });
+}
+
+CNA_Result cna_song_create_with_duration(
+    const CNA_Handle game,
+    const CNA_StringView file_name,
+    const CNA_StringView asset_name,
+    const int32_t duration_milliseconds,
+    CNA_SongHandle* const out_song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_create_with_duration: out_song is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return SongCreateWithDuration(game, file_name, asset_name, duration_milliseconds, out_song);
+    });
+}
+
+CNA_Result cna_song_create_from_uri(
+    const CNA_Handle game,
+    const CNA_StringView name,
+    const CNA_StringView uri,
+    CNA_SongHandle* const out_song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_create_from_uri: out_song is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return SongCreateFromUri(game, name, uri, out_song);
+    });
+}
+
+CNA_Result cna_song_collection_create(
+    const CNA_Handle game,
+    const CNA_SongHandle* const songs,
+    const uint64_t count,
+    CNA_SongCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return SongCollectionCreate(game, songs, count, out_collection);
+    });
+}
+
+CNA_Result cna_song_collection_get_at(
+    const CNA_SongCollectionHandle collection,
+    const int32_t index,
+    CNA_SongHandle* const out_song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_song_collection_get_at: out_song is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return SongCollectionGetAt(collection, index, out_song);
+    });
+}

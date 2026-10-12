@@ -136,50 +136,37 @@ template<typename TRead>
     return read(*resource->value);
 }
 
-} // namespace
-
-CNA_Result cna_video_info_init(CNA_VideoInfo* const outInfo)
+[[nodiscard]] CNA_Result VideoInfoInit(CNA_VideoInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The video metadata output is null.");
-        }
-        CNA_VideoInfo info = {};
-        info.struct_size = sizeof(CNA_VideoInfo);
-        info.struct_version = StructureVersion;
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_VideoInfo info = {};
+    info.struct_size = sizeof(CNA_VideoInfo);
+    info.struct_version = StructureVersion;
+    *outInfo = info;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_video_create(
+[[nodiscard]] CNA_Result VideoCreate(
     const CNA_Handle deviceHandle,
     const CNA_StringView fileName,
     CNA_VideoHandle* const outVideo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVideo == nullptr) {
-            return InvalidArgument("The video output is null.");
-        }
-        *outVideo = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeName;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                fileName, "The video file name is not valid UTF-8.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishVideo(
-            std::make_unique<Video>(std::move(nativeName), device->value),
-            outVideo);
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nativeName;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            fileName, "The video file name is not valid UTF-8.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return PublishVideo(
+        std::make_unique<Video>(std::move(nativeName), device->value),
+        outVideo);
 }
 
-CNA_Result cna_video_create_with_metadata(
+[[nodiscard]] CNA_Result VideoCreateWithMetadata(
     const CNA_Handle deviceHandle,
     const CNA_StringView fileName,
     const int32_t durationMilliseconds,
@@ -189,236 +176,204 @@ CNA_Result cna_video_create_with_metadata(
     const CNA_VideoSoundtrackType soundtrackType,
     CNA_VideoHandle* const outVideo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVideo == nullptr) {
-            return InvalidArgument("The video output is null.");
-        }
-        *outVideo = CNA_INVALID_HANDLE;
-        VideoSoundtrackType nativeSoundtrack = VideoSoundtrackType::Music;
-        if (const CNA_Result result = ToSoundtrackType(soundtrackType, &nativeSoundtrack);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeName;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                fileName, "The video file name is not valid UTF-8.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishVideo(
-            std::make_unique<Video>(
-                std::move(nativeName),
-                device->value,
-                static_cast<SharpRuntime::intcs>(durationMilliseconds),
-                static_cast<SharpRuntime::intcs>(width),
-                static_cast<SharpRuntime::intcs>(height),
-                framesPerSecond,
-                nativeSoundtrack),
-            outVideo);
-    });
+    VideoSoundtrackType nativeSoundtrack = VideoSoundtrackType::Music;
+    if (const CNA_Result result = ToSoundtrackType(soundtrackType, &nativeSoundtrack);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nativeName;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            fileName, "The video file name is not valid UTF-8.", &nativeName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return PublishVideo(
+        std::make_unique<Video>(
+            std::move(nativeName),
+            device->value,
+            static_cast<SharpRuntime::intcs>(durationMilliseconds),
+            static_cast<SharpRuntime::intcs>(width),
+            static_cast<SharpRuntime::intcs>(height),
+            framesPerSecond,
+            nativeSoundtrack),
+        outVideo);
 }
 
-CNA_Result cna_video_create_from_uri_ext(
+[[nodiscard]] CNA_Result VideoCreateFromUriExt(
     const CNA_Handle deviceHandle,
     const CNA_StringView uri,
     CNA_VideoHandle* const outVideo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVideo == nullptr) {
-            return InvalidArgument("The video output is null.");
-        }
-        *outVideo = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nativeUri;
-        if (const CNA_Result result =
-                CNA::C::Detail::ReadText(uri, "The video URI is not valid UTF-8.", &nativeUri);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return PublishVideo(
-            std::unique_ptr<Video>(Video::FromUriEXT(nativeUri, device->value)),
-            outVideo);
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nativeUri;
+    if (const CNA_Result result =
+            CNA::C::Detail::ReadText(uri, "The video URI is not valid UTF-8.", &nativeUri);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return PublishVideo(
+        std::unique_ptr<Video>(Video::FromUriEXT(nativeUri, device->value)),
+        outVideo);
 }
 
-CNA_Result cna_video_get_info(const CNA_VideoHandle video, CNA_VideoInfo* const outInfo)
+[[nodiscard]] CNA_Result VideoGetInfo(const CNA_VideoHandle video, CNA_VideoInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The video metadata structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReadVideo(video, [&](const Video& value) {
-            outInfo->width = static_cast<int32_t>(value.getWidthProperty());
-            outInfo->height = static_cast<int32_t>(value.getHeightProperty());
-            outInfo->fps = static_cast<double>(value.getFramesPerSecondProperty());
-            return CNA_RESULT_SUCCESS;
-        });
+    if (const CNA_Result result =
+            ValidateVersionedStructure(outInfo, "The video metadata structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReadVideo(video, [&](const Video& value) {
+        outInfo->width = static_cast<int32_t>(value.getWidthProperty());
+        outInfo->height = static_cast<int32_t>(value.getHeightProperty());
+        outInfo->fps = static_cast<double>(value.getFramesPerSecondProperty());
+        return CNA_RESULT_SUCCESS;
     });
 }
 
-CNA_Result cna_video_player_create(
+[[nodiscard]] CNA_Result VideoPlayerCreate(
     const CNA_Handle gameHandle,
     CNA_VideoPlayerHandle* const outPlayer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlayer == nullptr) {
-            return InvalidArgument("The video player output is null.");
-        }
-        *outPlayer = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<VideoPlayerResource>();
-        resource->value = std::make_unique<VideoPlayer>();
-        resource->parentGame = gameHandle;
-        return CreateHandle(ObjectKind::VideoPlayer,
-            std::move(resource),
-            outPlayer);
-    });
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<VideoPlayerResource>();
+    resource->value = std::make_unique<VideoPlayer>();
+    resource->parentGame = gameHandle;
+    return CreateHandle(ObjectKind::VideoPlayer,
+        std::move(resource),
+        outPlayer);
 }
 
-CNA_Result cna_video_player_get_video(
+[[nodiscard]] CNA_Result VideoPlayerGetVideo(
     const CNA_VideoPlayerHandle player,
     CNA_VideoHandle* const outVideo,
     CNA_Bool* const outAvailable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVideo == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The video player video output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (resource->value->getVideoProperty() == nullptr ||
-            resource->playingVideoHandle == CNA_INVALID_HANDLE) {
-            *outAvailable = CNA_FALSE;
-            return CNA_RESULT_SUCCESS;
-        }
-        *outVideo = resource->playingVideoHandle;
-        *outAvailable = CNA_TRUE;
+    std::shared_ptr<VideoPlayerResource> resource;
+    if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (resource->value->getVideoProperty() == nullptr ||
+        resource->playingVideoHandle == CNA_INVALID_HANDLE) {
+        *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outVideo = resource->playingVideoHandle;
+    *outAvailable = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_video_player_get_frame_ext(
+[[nodiscard]] CNA_Result VideoPlayerGetFrameExt(
     const CNA_VideoPlayerHandle player,
     CNA_VideoFrameEXT* const outFrame)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outFrame, "The video frame descriptor is null or malformed.",
-                CNA_VIDEO_FRAME_EXT_STRUCT_VERSION);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        outFrame->texture = CNA_INVALID_HANDLE;
-        outFrame->generation = 0U;
-        outFrame->presentation_time = -1.0;
-        outFrame->available = CNA_FALSE;
-        outFrame->reserved[0] = 0U;
-        outFrame->reserved[1] = 0U;
-        outFrame->reserved[2] = 0U;
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outFrame, "The video frame descriptor is null or malformed.",
+            CNA_VIDEO_FRAME_EXT_STRUCT_VERSION);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outFrame->texture = CNA_INVALID_HANDLE;
+    outFrame->generation = 0U;
+    outFrame->presentation_time = -1.0;
+    outFrame->available = CNA_FALSE;
+    outFrame->reserved[0] = 0U;
+    outFrame->reserved[1] = 0U;
+    outFrame->reserved[2] = 0U;
 
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Read the identity before the texture: GetTexture() is what advances the frame, so
-        // asking afterwards would report the generation of a frame the caller was not handed.
-        Texture2D* const frame = resource->value->GetTexture();
-        outFrame->generation = resource->value->GetFrameGenerationEXT();
-        outFrame->presentation_time = resource->value->GetFramePresentationTimeEXT();
-        if (frame == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        // Same borrow as cna_video_player_get_texture: the player owns the texture and this keeps
-        // it alive while the handle exists; the next call on the player releases it.
-        const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result =
-                CreateGameFrameTexture2D(borrowed, resource->parentGame, &outFrame->texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->frameTexture = outFrame->texture;
-        outFrame->available = CNA_TRUE;
+    std::shared_ptr<VideoPlayerResource> resource;
+    if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Read the identity before the texture: GetTexture() is what advances the frame, so
+    // asking afterwards would report the generation of a frame the caller was not handed.
+    Texture2D* const frame = resource->value->GetTexture();
+    outFrame->generation = resource->value->GetFrameGenerationEXT();
+    outFrame->presentation_time = resource->value->GetFramePresentationTimeEXT();
+    if (frame == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    // Same borrow as cna_video_player_get_texture: the player owns the texture and this keeps
+    // it alive while the handle exists; the next call on the player releases it.
+    const std::shared_ptr<Texture2D> borrowed(resource, frame);
+    if (const CNA_Result result =
+            CreateGameFrameTexture2D(borrowed, resource->parentGame, &outFrame->texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->frameTexture = outFrame->texture;
+    outFrame->available = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_video_player_get_texture(
+[[nodiscard]] CNA_Result VideoPlayerGetTexture(
     const CNA_VideoPlayerHandle player,
     CNA_Handle* const outTexture,
     CNA_Bool* const outAvailable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The video frame output is null.");
-        }
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Texture2D* const frame = resource->value->GetTexture();
-        if (frame == nullptr) {
-            // The canonical implementation deliberately answers null before playback rather than
-            // faulting the way the original API does, so this is an ordinary answer.
-            *outAvailable = CNA_FALSE;
-            return CNA_RESULT_SUCCESS;
-        }
-        // Aliasing share: the texture stays owned by the player, and this keeps the player's
-        // resource alive for as long as the handle exists. The handle is released again by the
-        // next call on this player, before anything can replace the frame.
-        const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result =
-                CreateGameFrameTexture2D(borrowed, resource->parentGame, outTexture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->frameTexture = *outTexture;
-        *outAvailable = CNA_TRUE;
+    std::shared_ptr<VideoPlayerResource> resource;
+    if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Texture2D* const frame = resource->value->GetTexture();
+    if (frame == nullptr) {
+        // The canonical implementation deliberately answers null before playback rather than
+        // faulting the way the original API does, so this is an ordinary answer.
+        *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    // Aliasing share: the texture stays owned by the player, and this keeps the player's
+    // resource alive for as long as the handle exists. The handle is released again by the
+    // next call on this player, before anything can replace the frame.
+    const std::shared_ptr<Texture2D> borrowed(resource, frame);
+    if (const CNA_Result result =
+            CreateGameFrameTexture2D(borrowed, resource->parentGame, outTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->frameTexture = *outTexture;
+    *outAvailable = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_video_player_play(
+[[nodiscard]] CNA_Result VideoPlayerPlay(
     const CNA_VideoPlayerHandle player,
     const CNA_VideoHandle video)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VideoPlayerResource> resource;
-        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<VideoResource> videoResource;
-        if (const CNA_Result result = BorrowVideo(video, &videoResource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Play(videoResource->value.get());
-        // The player keeps a bare pointer to the video, so the C resource retains it: releasing
-        // the caller's handle can then never leave the player pointing at a destroyed video.
-        resource->video = videoResource;
-        resource->playingVideoHandle = video;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VideoPlayerResource> resource;
+    if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<VideoResource> videoResource;
+    if (const CNA_Result result = BorrowVideo(video, &videoResource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->value->Play(videoResource->value.get());
+    // The player keeps a bare pointer to the video, so the C resource retains it: releasing
+    // the caller's handle can then never leave the player pointing at a destroyed video.
+    resource->video = videoResource;
+    resource->playingVideoHandle = video;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Video.toml.
 #include "generated/Video.inc"

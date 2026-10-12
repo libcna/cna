@@ -547,3 +547,141 @@ CNA_Result cna_video_player_destroy(
         return CNA::C::Detail::ReleaseHandle(player);
     });
 }
+
+CNA_Result cna_video_info_init(
+    CNA_VideoInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_info_init: out_info is null.");
+        }
+        return VideoInfoInit(out_info);
+    });
+}
+
+CNA_Result cna_video_create(
+    const CNA_Handle graphics_device,
+    const CNA_StringView file_name,
+    CNA_VideoHandle* const out_video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_video == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_create: out_video is null.");
+        }
+        *out_video = CNA_INVALID_HANDLE;
+        return VideoCreate(graphics_device, file_name, out_video);
+    });
+}
+
+CNA_Result cna_video_create_with_metadata(
+    const CNA_Handle graphics_device,
+    const CNA_StringView file_name,
+    const int32_t duration_milliseconds,
+    const int32_t width,
+    const int32_t height,
+    const float frames_per_second,
+    const CNA_VideoSoundtrackType soundtrack_type,
+    CNA_VideoHandle* const out_video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_video == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_create_with_metadata: out_video is null.");
+        }
+        *out_video = CNA_INVALID_HANDLE;
+        return VideoCreateWithMetadata(graphics_device, file_name, duration_milliseconds, width, height, frames_per_second, soundtrack_type, out_video);
+    });
+}
+
+CNA_Result cna_video_create_from_uri_ext(
+    const CNA_Handle graphics_device,
+    const CNA_StringView uri,
+    CNA_VideoHandle* const out_video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_video == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_create_from_uri_ext: out_video is null.");
+        }
+        *out_video = CNA_INVALID_HANDLE;
+        return VideoCreateFromUriExt(graphics_device, uri, out_video);
+    });
+}
+
+CNA_Result cna_video_player_create(
+    const CNA_Handle game,
+    CNA_VideoPlayerHandle* const out_player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_player == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_create: out_player is null.");
+        }
+        *out_player = CNA_INVALID_HANDLE;
+        return VideoPlayerCreate(game, out_player);
+    });
+}
+
+CNA_Result cna_video_player_get_video(
+    const CNA_VideoPlayerHandle player,
+    CNA_VideoHandle* const out_video,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_video == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_get_video: out_video is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_get_video: out_available is null.");
+        }
+        *out_video = CNA_INVALID_HANDLE;
+        return VideoPlayerGetVideo(player, out_video, out_available);
+    });
+}
+
+CNA_Result cna_video_player_get_texture(
+    const CNA_VideoPlayerHandle player,
+    CNA_Handle* const out_texture,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_get_texture: out_texture is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_get_texture: out_available is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return VideoPlayerGetTexture(player, out_texture, out_available);
+    });
+}
+
+CNA_Result cna_video_get_info(
+    const CNA_VideoHandle video,
+    CNA_VideoInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_get_info: out_info is null.");
+        }
+        return VideoGetInfo(video, out_info);
+    });
+}
+
+CNA_Result cna_video_player_get_frame_ext(
+    const CNA_VideoPlayerHandle player,
+    CNA_VideoFrameEXT* const out_frame)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_frame == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_video_player_get_frame_ext: out_frame is null.");
+        }
+        return VideoPlayerGetFrameExt(player, out_frame);
+    });
+}
+
+CNA_Result cna_video_player_play(
+    const CNA_VideoPlayerHandle player,
+    const CNA_VideoHandle video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VideoPlayerPlay(player, video);
+    });
+}

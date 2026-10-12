@@ -805,3 +805,241 @@ CNA_Result cna_audio_category_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_audio_engine_renderers_equal(
+    const CNA_Handle engine,
+    const uint64_t renderer_index,
+    const uint64_t other_renderer_index,
+    CNA_Bool* const out_equals)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equals == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_renderers_equal: out_equals is null.");
+        }
+        return AudioEngineRenderersEqual(engine, renderer_index, other_renderer_index, out_equals);
+    });
+}
+
+CNA_Result cna_audio_engine_subscribe_disposing_ext(
+    const CNA_Handle engine,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_subscribe_disposing_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return AudioEngineSubscribeDisposingExt(engine, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_audio_engine_get_category(
+    const CNA_Handle engine,
+    const CNA_StringView name,
+    CNA_Handle* const out_category)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_category == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_category: out_category is null.");
+        }
+        *out_category = CNA_INVALID_HANDLE;
+        return AudioEngineGetCategory(engine, name, out_category);
+    });
+}
+
+CNA_Result cna_wave_bank_create(
+    const CNA_Handle engine,
+    const CNA_StringView filename,
+    CNA_Handle* const out_wave_bank)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_wave_bank == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_wave_bank_create: out_wave_bank is null.");
+        }
+        *out_wave_bank = CNA_INVALID_HANDLE;
+        return WaveBankCreate(engine, filename, out_wave_bank);
+    });
+}
+
+CNA_Result cna_wave_bank_create_streaming(
+    const CNA_Handle engine,
+    const CNA_StringView filename,
+    const int32_t offset,
+    const int16_t packet_size,
+    CNA_Handle* const out_wave_bank)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_wave_bank == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_wave_bank_create_streaming: out_wave_bank is null.");
+        }
+        *out_wave_bank = CNA_INVALID_HANDLE;
+        return WaveBankCreateStreaming(engine, filename, offset, packet_size, out_wave_bank);
+    });
+}
+
+CNA_Result cna_wave_bank_subscribe_disposing_ext(
+    const CNA_Handle wave_bank,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_wave_bank_subscribe_disposing_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return WaveBankSubscribeDisposingExt(wave_bank, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_sound_bank_create(
+    const CNA_Handle engine,
+    const CNA_StringView filename,
+    CNA_Handle* const out_sound_bank)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_bank == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_bank_create: out_sound_bank is null.");
+        }
+        *out_sound_bank = CNA_INVALID_HANDLE;
+        return SoundBankCreate(engine, filename, out_sound_bank);
+    });
+}
+
+CNA_Result cna_sound_bank_get_cue(
+    const CNA_Handle sound_bank,
+    const CNA_StringView name,
+    CNA_Handle* const out_cue)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_cue == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_bank_get_cue: out_cue is null.");
+        }
+        *out_cue = CNA_INVALID_HANDLE;
+        return SoundBankGetCue(sound_bank, name, out_cue);
+    });
+}
+
+CNA_Result cna_sound_bank_subscribe_disposing_ext(
+    const CNA_Handle sound_bank,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_bank_subscribe_disposing_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SoundBankSubscribeDisposingExt(sound_bank, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_cue_subscribe_disposing_ext(
+    const CNA_Handle cue,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cue_subscribe_disposing_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return CueSubscribeDisposingExt(cue, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_audio_engine_create(
+    const CNA_Handle game,
+    const CNA_StringView settings_file,
+    CNA_Handle* const out_engine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_engine != nullptr) {
+            *out_engine = CNA_INVALID_HANDLE;
+        }
+        return AudioEngineCreate(game, settings_file, out_engine);
+    });
+}
+
+CNA_Result cna_audio_engine_destroy(
+    const CNA_Handle engine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AudioEngineDestroy(engine);
+    });
+}
+
+CNA_Result cna_audio_category_destroy(
+    const CNA_Handle category)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AudioCategoryDestroy(category);
+    });
+}
+
+CNA_Result cna_audio_category_stop(
+    const CNA_Handle category,
+    const CNA_AudioStopOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AudioCategoryStop(category, options);
+    });
+}
+
+CNA_Result cna_wave_bank_destroy(
+    const CNA_Handle wave_bank)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return WaveBankDestroy(wave_bank);
+    });
+}
+
+CNA_Result cna_sound_bank_destroy(
+    const CNA_Handle sound_bank)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundBankDestroy(sound_bank);
+    });
+}
+
+CNA_Result cna_sound_bank_play_cue_3d(
+    const CNA_Handle sound_bank,
+    const CNA_StringView name,
+    const CNA_AudioListener* const listener,
+    const CNA_AudioEmitter* const emitter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundBankPlayCue3d(sound_bank, name, listener, emitter);
+    });
+}
+
+CNA_Result cna_cue_destroy(
+    const CNA_Handle cue)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CueDestroy(cue);
+    });
+}
+
+CNA_Result cna_cue_apply_3d(
+    const CNA_Handle cue,
+    const CNA_AudioListener* const listener,
+    const CNA_AudioEmitter* const emitter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CueApply3d(cue, listener, emitter);
+    });
+}
+
+CNA_Result cna_cue_stop(
+    const CNA_Handle cue,
+    const CNA_AudioStopOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CueStop(cue, options);
+    });
+}

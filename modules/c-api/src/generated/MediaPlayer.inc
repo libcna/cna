@@ -533,3 +533,92 @@ CNA_Result cna_media_queue_add(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_media_player_get_queue(
+    const CNA_Handle game,
+    CNA_MediaQueueHandle* const out_queue)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_queue == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_player_get_queue: out_queue is null.");
+        }
+        *out_queue = CNA_INVALID_HANDLE;
+        return MediaPlayerGetQueue(game, out_queue);
+    });
+}
+
+CNA_Result cna_media_queue_get_active_song(
+    const CNA_MediaQueueHandle queue,
+    CNA_SongHandle* const out_song,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_queue_get_active_song: out_song is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_queue_get_active_song: out_available is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return MediaQueueGetActiveSong(queue, out_song, out_available);
+    });
+}
+
+CNA_Result cna_media_queue_get_at(
+    const CNA_MediaQueueHandle queue,
+    const int32_t index,
+    CNA_SongHandle* const out_song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_song == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_queue_get_at: out_song is null.");
+        }
+        *out_song = CNA_INVALID_HANDLE;
+        return MediaQueueGetAt(queue, index, out_song);
+    });
+}
+
+CNA_Result cna_media_player_get_visualization_data(
+    const CNA_Handle game,
+    CNA_VisualizationData* const data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MediaPlayerGetVisualizationData(game, data);
+    });
+}
+
+CNA_Result cna_media_player_play_song(
+    const CNA_Handle game,
+    const CNA_SongHandle song)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MediaPlayerPlaySong(game, song);
+    });
+}
+
+CNA_Result cna_media_player_play_songs(
+    const CNA_Handle game,
+    const CNA_SongCollectionHandle songs)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MediaPlayerPlaySongs(game, songs);
+    });
+}
+
+CNA_Result cna_media_player_play_songs_from(
+    const CNA_Handle game,
+    const CNA_SongCollectionHandle songs,
+    const int32_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MediaPlayerPlaySongsFrom(game, songs, index);
+    });
+}
+
+CNA_Result cna_media_player_unsubscribe_ext(
+    const CNA_MediaPlayerEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MediaPlayerUnsubscribeExt(registration);
+    });
+}

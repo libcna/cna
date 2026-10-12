@@ -226,208 +226,183 @@ CNA_Result CreateOwnedSoundEffect(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_audio_get_capabilities(
+namespace {
+
+[[nodiscard]] CNA_Result AudioGetCapabilities(
     const CNA_Handle gameHandle,
     CNA_AudioCapabilities* const outCapabilities)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outCapabilities, "The audio-capabilities output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outCapabilities, "The audio-capabilities output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        CNA_Bool isPlaybackAvailable = CNA_TRUE;
-        try {
-            static_cast<void>(SoundEffect::getMasterVolumeProperty());
-        } catch (const NoAudioHardwareException&) {
-            isPlaybackAvailable = CNA_FALSE;
-        }
+    CNA_Bool isPlaybackAvailable = CNA_TRUE;
+    try {
+        static_cast<void>(SoundEffect::getMasterVolumeProperty());
+    } catch (const NoAudioHardwareException&) {
+        isPlaybackAvailable = CNA_FALSE;
+    }
 
-        const CNA_AudioCapabilities capabilities = {
-            sizeof(CNA_AudioCapabilities),
-            StructureVersion,
-            isPlaybackAvailable,
-            {0U, 0U, 0U},
-            0U
-        };
-        *outCapabilities = capabilities;
-        return CNA_RESULT_SUCCESS;
-    });
+    const CNA_AudioCapabilities capabilities = {
+        sizeof(CNA_AudioCapabilities),
+        StructureVersion,
+        isPlaybackAvailable,
+        {0U, 0U, 0U},
+        0U
+    };
+    *outCapabilities = capabilities;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_create_pcm16(
+[[nodiscard]] CNA_Result SoundEffectCreatePcm16(
     const CNA_Handle gameHandle,
     const CNA_SoundEffectCreateInfo* const createInfo,
     const uint8_t* const pcmBytes,
     const uint64_t byteCount,
     CNA_Handle* const outSoundEffect)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outSoundEffect == nullptr) {
-            return InvalidArgument("The SoundEffect output handle is null.");
-        }
-        *outSoundEffect = CNA_INVALID_HANDLE;
+    AudioChannels nativeChannels = AudioChannels::Mono;
+    if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
+        createInfo->sample_rate == 0U ||
+        createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        !TryMapChannels(createInfo->channels, &nativeChannels)) {
+        return InvalidArgument("The SoundEffect PCM creation configuration is invalid.");
+    }
 
-        AudioChannels nativeChannels = AudioChannels::Mono;
-        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
-            createInfo->sample_rate == 0U ||
-            createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
-            !TryMapChannels(createInfo->channels, &nativeChannels)) {
-            return InvalidArgument("The SoundEffect PCM creation configuration is invalid.");
-        }
-
-        std::size_t nativeByteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                pcmBytes,
-                byteCount,
-                sizeof(uint8_t),
-                &nativeByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The SoundEffect PCM byte range is invalid.");
-        }
-        const uint64_t frameByteCount = UINT64_C(2) * createInfo->channels;
-        if (byteCount == 0U || byteCount > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
-            byteCount % frameByteCount != 0U) {
-            return InvalidArgument(
-                "The SoundEffect PCM data must contain complete nonempty channel frames.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const std::vector<SharpRuntime::bytecs> pcm(
+    std::size_t nativeByteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
             pcmBytes,
-            pcmBytes + nativeByteCount);
-        std::shared_ptr<SoundEffect> nativeSoundEffect;
-        try {
-            nativeSoundEffect = std::make_shared<SoundEffect>(
-                pcm,
-                static_cast<int32_t>(createInfo->sample_rate),
-                nativeChannels);
-        } catch (const NoAudioHardwareException& exception) {
-            return NotSupported(exception.what());
-        }
+            byteCount,
+            sizeof(uint8_t),
+            &nativeByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The SoundEffect PCM byte range is invalid.");
+    }
+    const uint64_t frameByteCount = UINT64_C(2) * createInfo->channels;
+    if (byteCount == 0U || byteCount > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
+        byteCount % frameByteCount != 0U) {
+        return InvalidArgument(
+            "The SoundEffect PCM data must contain complete nonempty channel frames.");
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto resource = std::make_shared<SoundEffectResource>(
-            SoundEffectResource{nativeSoundEffect, gameHandle, 0U});
-        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffect,
-            resource,
-            outSoundEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    const std::vector<SharpRuntime::bytecs> pcm(
+        pcmBytes,
+        pcmBytes + nativeByteCount);
+    std::shared_ptr<SoundEffect> nativeSoundEffect;
+    try {
+        nativeSoundEffect = std::make_shared<SoundEffect>(
+            pcm,
+            static_cast<int32_t>(createInfo->sample_rate),
+            nativeChannels);
+    } catch (const NoAudioHardwareException& exception) {
+        return NotSupported(exception.what());
+    }
+
+    const auto resource = std::make_shared<SoundEffectResource>(
+        SoundEffectResource{nativeSoundEffect, gameHandle, 0U});
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffect,
+        resource,
+        outSoundEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_create_instance(
+[[nodiscard]] CNA_Result SoundEffectCreateInstance(
     const CNA_Handle soundEffectHandle,
     CNA_Handle* const outInstance)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outInstance == nullptr) {
-            return InvalidArgument("The SoundEffectInstance output handle is null.");
-        }
-        *outInstance = CNA_INVALID_HANDLE;
-
-        std::shared_ptr<SoundEffectResource> soundEffect;
-        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto nativeInstance = std::make_shared<SoundEffectInstance>(
-            soundEffect->value->CreateInstance());
-        const auto resource = std::make_shared<SoundEffectInstanceResource>(
-            SoundEffectInstanceResource{nativeInstance, soundEffect});
-        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
-            resource,
-            outInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ++soundEffect->instanceCount;
-        AddOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SoundEffectResource> soundEffect;
+    if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto nativeInstance = std::make_shared<SoundEffectInstance>(
+        soundEffect->value->CreateInstance());
+    const auto resource = std::make_shared<SoundEffectInstanceResource>(
+        SoundEffectInstanceResource{nativeInstance, soundEffect});
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
+        resource,
+        outInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ++soundEffect->instanceCount;
+    AddOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_destroy(const CNA_Handle soundEffectHandle)
+[[nodiscard]] CNA_Result SoundEffectDestroy(const CNA_Handle soundEffectHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<SoundEffectResource> soundEffect;
-        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (soundEffect->instanceCount != 0U) {
-            return InvalidState(
-                "All C SoundEffectInstance children must be destroyed before their SoundEffect.");
-        }
-        soundEffect->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(soundEffectHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SoundEffectResource> soundEffect;
+    if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (soundEffect->instanceCount != 0U) {
+        return InvalidState(
+            "All C SoundEffectInstance children must be destroyed before their SoundEffect.");
+    }
+    soundEffect->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(soundEffectHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_instance_set_is_looped(
+[[nodiscard]] CNA_Result SoundEffectInstanceSetIsLooped(
     const CNA_Handle instanceHandle,
     const CNA_Bool isLooped)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (isLooped != CNA_FALSE && isLooped != CNA_TRUE) {
-            return InvalidArgument("The SoundEffectInstance loop flag is invalid.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        try {
-            instance->value->setIsLoopedProperty(isLooped == CNA_TRUE);
-        } catch (const System::InvalidOperationException& exception) {
-            return InvalidState(exception.what());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    try {
+        instance->value->setIsLoopedProperty(isLooped == CNA_TRUE);
+    } catch (const System::InvalidOperationException& exception) {
+        return InvalidState(exception.what());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_instance_destroy(const CNA_Handle instanceHandle)
+[[nodiscard]] CNA_Result SoundEffectInstanceDestroy(const CNA_Handle instanceHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(instanceHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // A streaming instance has no parent effect, so there is no instance count to decrement.
-        if (instance->parent && instance->parent->instanceCount != 0U) {
-            --instance->parent->instanceCount;
-        }
-        RemoveOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    instance->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(instanceHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // A streaming instance has no parent effect, so there is no instance count to decrement.
+    if (instance->parent && instance->parent->instanceCount != 0U) {
+        --instance->parent->instanceCount;
+    }
+    RemoveOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 // Every creation route publishes its handle the same way, so the ownership bookkeeping stays in one
 // place: the effect is a child of the game and the game refuses to be destroyed while one is alive.
@@ -448,9 +423,7 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_sound_effect_create_pcm16_range_ext(
+[[nodiscard]] CNA_Result SoundEffectCreatePcm16RangeExt(
     const CNA_Handle gameHandle,
     const CNA_SoundEffectCreateInfo* const createInfo,
     const uint8_t* const pcmBytes,
@@ -461,163 +434,133 @@ CNA_Result cna_sound_effect_create_pcm16_range_ext(
     const int32_t loopLength,
     CNA_Handle* const outSoundEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSoundEffect == nullptr) {
-            return InvalidArgument("The SoundEffect output handle is null.");
-        }
-        *outSoundEffect = CNA_INVALID_HANDLE;
-        AudioChannels nativeChannels = AudioChannels::Mono;
-        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
-            createInfo->sample_rate == 0U ||
-            createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
-            !TryMapChannels(createInfo->channels, &nativeChannels)) {
-            return InvalidArgument("The SoundEffect PCM creation configuration is invalid.");
-        }
-        std::size_t nativeByteCount = 0U;
-        if (const CNA_Result result =
-                CheckedElementByteCount(pcmBytes, byteCount, sizeof(uint8_t), &nativeByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The SoundEffect PCM byte range is invalid.");
-        }
-        // The canonical constructor takes the range as signed offsets into the buffer, so the range
-        // is checked here rather than left to it: a negative or overrunning range would otherwise
-        // reach the decoder as a length nobody validated.
-        if (offset < 0 || count <= 0 || loopStart < 0 || loopLength < 0 ||
-            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
-            return InvalidArgument("The SoundEffect PCM range lies outside the buffer.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<SharpRuntime::bytecs> pcm(pcmBytes, pcmBytes + nativeByteCount);
-        auto nativeSoundEffect = std::make_shared<SoundEffect>(
-            pcm,
-            static_cast<SharpRuntime::intcs>(offset),
-            static_cast<SharpRuntime::intcs>(count),
-            static_cast<SharpRuntime::intcs>(createInfo->sample_rate),
-            nativeChannels,
-            static_cast<SharpRuntime::intcs>(loopStart),
-            static_cast<SharpRuntime::intcs>(loopLength));
-        return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
-    });
+    AudioChannels nativeChannels = AudioChannels::Mono;
+    if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U ||
+        createInfo->sample_rate == 0U ||
+        createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        !TryMapChannels(createInfo->channels, &nativeChannels)) {
+        return InvalidArgument("The SoundEffect PCM creation configuration is invalid.");
+    }
+    std::size_t nativeByteCount = 0U;
+    if (const CNA_Result result =
+            CheckedElementByteCount(pcmBytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The SoundEffect PCM byte range is invalid.");
+    }
+    // The canonical constructor takes the range as signed offsets into the buffer, so the range
+    // is checked here rather than left to it: a negative or overrunning range would otherwise
+    // reach the decoder as a length nobody validated.
+    if (offset < 0 || count <= 0 || loopStart < 0 || loopLength < 0 ||
+        static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
+        return InvalidArgument("The SoundEffect PCM range lies outside the buffer.");
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<SharpRuntime::bytecs> pcm(pcmBytes, pcmBytes + nativeByteCount);
+    auto nativeSoundEffect = std::make_shared<SoundEffect>(
+        pcm,
+        static_cast<SharpRuntime::intcs>(offset),
+        static_cast<SharpRuntime::intcs>(count),
+        static_cast<SharpRuntime::intcs>(createInfo->sample_rate),
+        nativeChannels,
+        static_cast<SharpRuntime::intcs>(loopStart),
+        static_cast<SharpRuntime::intcs>(loopLength));
+    return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
 }
 
-CNA_Result cna_sound_effect_create_from_encoded_ext(
+[[nodiscard]] CNA_Result SoundEffectCreateFromEncodedExt(
     const CNA_Handle gameHandle,
     const uint8_t* const bytes,
     const uint64_t byteCount,
     CNA_Handle* const outSoundEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSoundEffect == nullptr) {
-            return InvalidArgument("The SoundEffect output handle is null.");
-        }
-        *outSoundEffect = CNA_INVALID_HANDLE;
-        std::size_t nativeByteCount = 0U;
-        if (const CNA_Result result =
-                CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The encoded audio byte range is invalid.");
-        }
-        if (byteCount == UINT64_C(0)) {
-            return InvalidArgument("The encoded audio data is empty.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical factory reads a C++ stream to the end, so C hands it the bytes it would
-        // have read. It answers a raw owning pointer, which this handle adopts immediately.
-        std::string encoded(reinterpret_cast<const char*>(bytes), nativeByteCount);
-        std::istringstream stream(std::move(encoded), std::ios::binary);
-        const std::shared_ptr<SoundEffect> nativeSoundEffect(SoundEffect::FromStream(stream));
-        if (!nativeSoundEffect) {
-            return NotSupported("The encoded audio could not be decoded by this build.");
-        }
-        return PublishSoundEffect(nativeSoundEffect, gameHandle, outSoundEffect);
-    });
+    std::size_t nativeByteCount = 0U;
+    if (const CNA_Result result =
+            CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The encoded audio byte range is invalid.");
+    }
+    if (byteCount == UINT64_C(0)) {
+        return InvalidArgument("The encoded audio data is empty.");
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical factory reads a C++ stream to the end, so C hands it the bytes it would
+    // have read. It answers a raw owning pointer, which this handle adopts immediately.
+    std::string encoded(reinterpret_cast<const char*>(bytes), nativeByteCount);
+    std::istringstream stream(std::move(encoded), std::ios::binary);
+    const std::shared_ptr<SoundEffect> nativeSoundEffect(SoundEffect::FromStream(stream));
+    if (!nativeSoundEffect) {
+        return NotSupported("The encoded audio could not be decoded by this build.");
+    }
+    return PublishSoundEffect(nativeSoundEffect, gameHandle, outSoundEffect);
 }
 
-CNA_Result cna_sound_effect_create_from_asset_ext(
+[[nodiscard]] CNA_Result SoundEffectCreateFromAssetExt(
     const CNA_Handle gameHandle,
     const CNA_StringView assetName,
     CNA_Handle* const outSoundEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSoundEffect == nullptr) {
-            return InvalidArgument("The SoundEffect output handle is null.");
-        }
-        *outSoundEffect = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string path;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                assetName, "The audio asset name is not valid UTF-8.", &path);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // An empty path is not an error: the canonical constructor answers an effect with no audio.
-        auto nativeSoundEffect = std::make_shared<SoundEffect>(path);
-        return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
-    });
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string path;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            assetName, "The audio asset name is not valid UTF-8.", &path);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // An empty path is not an error: the canonical constructor answers an effect with no audio.
+    auto nativeSoundEffect = std::make_shared<SoundEffect>(path);
+    return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
 }
 
-CNA_Result cna_sound_effect_get_sample_duration_ticks(
+[[nodiscard]] CNA_Result SoundEffectGetSampleDurationTicks(
     const int32_t sizeInBytes,
     const int32_t sampleRate,
     const CNA_AudioChannels channels,
     int64_t* const outTicks)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTicks == nullptr) {
-            return InvalidArgument("The sample duration output is null.");
-        }
-        AudioChannels nativeChannels = AudioChannels::Mono;
-        if (!TryMapChannels(channels, &nativeChannels)) {
-            return InvalidArgument("The audio channel count is not a defined identity.");
-        }
-        *outTicks = static_cast<int64_t>(
-            SoundEffect::GetSampleDuration(
-                static_cast<SharpRuntime::intcs>(sizeInBytes),
-                static_cast<SharpRuntime::intcs>(sampleRate),
-                nativeChannels)
-                .getTicksProperty());
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioChannels nativeChannels = AudioChannels::Mono;
+    if (!TryMapChannels(channels, &nativeChannels)) {
+        return InvalidArgument("The audio channel count is not a defined identity.");
+    }
+    *outTicks = static_cast<int64_t>(
+        SoundEffect::GetSampleDuration(
+            static_cast<SharpRuntime::intcs>(sizeInBytes),
+            static_cast<SharpRuntime::intcs>(sampleRate),
+            nativeChannels)
+            .getTicksProperty());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_get_sample_size_in_bytes(
+[[nodiscard]] CNA_Result SoundEffectGetSampleSizeInBytes(
     const int64_t durationTicks,
     const int32_t sampleRate,
     const CNA_AudioChannels channels,
     int32_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The sample size output is null.");
-        }
-        AudioChannels nativeChannels = AudioChannels::Mono;
-        if (!TryMapChannels(channels, &nativeChannels)) {
-            return InvalidArgument("The audio channel count is not a defined identity.");
-        }
-        *outBytes = static_cast<int32_t>(SoundEffect::GetSampleSizeInBytes(
-            System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks)),
-            static_cast<SharpRuntime::intcs>(sampleRate),
-            nativeChannels));
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioChannels nativeChannels = AudioChannels::Mono;
+    if (!TryMapChannels(channels, &nativeChannels)) {
+        return InvalidArgument("The audio channel count is not a defined identity.");
+    }
+    *outBytes = static_cast<int32_t>(SoundEffect::GetSampleSizeInBytes(
+        System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks)),
+        static_cast<SharpRuntime::intcs>(sampleRate),
+        nativeChannels));
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -662,337 +605,302 @@ using Microsoft::Xna::Framework::Audio::MicrophoneState;
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_dynamic_sound_effect_instance_create(
+[[nodiscard]] CNA_Result DynamicSoundEffectInstanceCreate(
     const CNA_Handle gameHandle,
     const int32_t sampleRate,
     const CNA_AudioChannels channels,
     CNA_Handle* const outInstance)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInstance == nullptr) {
-            return InvalidArgument("The streaming instance output handle is null.");
-        }
-        *outInstance = CNA_INVALID_HANDLE;
-        AudioChannels nativeChannels = AudioChannels::Mono;
-        if (!TryMapChannels(channels, &nativeChannels)) {
-            return InvalidArgument("The audio channel count is not a defined identity.");
-        }
-        if (sampleRate <= 0) {
-            return InvalidArgument("The sample rate must be positive.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto nativeInstance = std::make_shared<DynamicSoundEffectInstance>(
-            static_cast<SharpRuntime::intcs>(sampleRate),
-            nativeChannels);
-        // No parent sound effect: the caller is the source of every sample, so the instance-count
-        // bookkeeping a SoundEffect child carries has nothing to point at here.
-        const auto resource = std::make_shared<SoundEffectInstanceResource>(
-            SoundEffectInstanceResource{std::move(nativeInstance), nullptr});
-        if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
-            resource,
-            outInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedAudioResource();
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioChannels nativeChannels = AudioChannels::Mono;
+    if (!TryMapChannels(channels, &nativeChannels)) {
+        return InvalidArgument("The audio channel count is not a defined identity.");
+    }
+    if (sampleRate <= 0) {
+        return InvalidArgument("The sample rate must be positive.");
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto nativeInstance = std::make_shared<DynamicSoundEffectInstance>(
+        static_cast<SharpRuntime::intcs>(sampleRate),
+        nativeChannels);
+    // No parent sound effect: the caller is the source of every sample, so the instance-count
+    // bookkeeping a SoundEffect child carries has nothing to point at here.
+    const auto resource = std::make_shared<SoundEffectInstanceResource>(
+        SoundEffectInstanceResource{std::move(nativeInstance), nullptr});
+    if (const CNA_Result result = CreateHandle(ObjectKind::SoundEffectInstance,
+        resource,
+        outInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_dynamic_sound_effect_instance_submit_buffer(
+[[nodiscard]] CNA_Result DynamicSoundEffectInstanceSubmitBuffer(
     const CNA_Handle instanceHandle,
     const uint8_t* const bytes,
     const uint64_t byteCount,
     const int32_t offset,
     const int32_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t nativeByteCount = 0U;
-        if (const CNA_Result result =
-                CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The submitted audio byte range is invalid.");
-        }
-        if (offset < 0 || count <= 0 ||
-            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
-            return InvalidArgument("The submitted audio range lies outside the buffer.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The bytes are copied here, which is what lets a producer thread reuse its buffer the
-        // moment this returns.
-        const std::vector<SharpRuntime::bytecs> pcm(bytes, bytes + nativeByteCount);
-        dynamicInstance->SubmitBuffer(
-            pcm,
-            static_cast<SharpRuntime::intcs>(offset),
-            static_cast<SharpRuntime::intcs>(count));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t nativeByteCount = 0U;
+    if (const CNA_Result result =
+            CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The submitted audio byte range is invalid.");
+    }
+    if (offset < 0 || count <= 0 ||
+        static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
+        return InvalidArgument("The submitted audio range lies outside the buffer.");
+    }
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    DynamicSoundEffectInstance* dynamicInstance = nullptr;
+    if (const CNA_Result result =
+            BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The bytes are copied here, which is what lets a producer thread reuse its buffer the
+    // moment this returns.
+    const std::vector<SharpRuntime::bytecs> pcm(bytes, bytes + nativeByteCount);
+    dynamicInstance->SubmitBuffer(
+        pcm,
+        static_cast<SharpRuntime::intcs>(offset),
+        static_cast<SharpRuntime::intcs>(count));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_dynamic_sound_effect_instance_submit_float_buffer_ext(
+[[nodiscard]] CNA_Result DynamicSoundEffectInstanceSubmitFloatBufferExt(
     const CNA_Handle instanceHandle,
     const float* const samples,
     const uint64_t sampleCount,
     const int32_t offset,
     const int32_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t nativeByteCount = 0U;
-        if (const CNA_Result result =
-                CheckedElementByteCount(samples, sampleCount, sizeof(float), &nativeByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The submitted float sample range is invalid.");
-        }
-        if (offset < 0 || count <= 0 ||
-            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > sampleCount) {
-            return InvalidArgument("The submitted float range lies outside the buffer.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<float> buffer(samples, samples + sampleCount);
-        dynamicInstance->SubmitFloatBufferEXT(
-            buffer,
-            static_cast<SharpRuntime::intcs>(offset),
-            static_cast<SharpRuntime::intcs>(count));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t nativeByteCount = 0U;
+    if (const CNA_Result result =
+            CheckedElementByteCount(samples, sampleCount, sizeof(float), &nativeByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The submitted float sample range is invalid.");
+    }
+    if (offset < 0 || count <= 0 ||
+        static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > sampleCount) {
+        return InvalidArgument("The submitted float range lies outside the buffer.");
+    }
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    DynamicSoundEffectInstance* dynamicInstance = nullptr;
+    if (const CNA_Result result =
+            BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<float> buffer(samples, samples + sampleCount);
+    dynamicInstance->SubmitFloatBufferEXT(
+        buffer,
+        static_cast<SharpRuntime::intcs>(offset),
+        static_cast<SharpRuntime::intcs>(count));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
+[[nodiscard]] CNA_Result DynamicSoundEffectInstanceSubscribeBufferNeeded(
     const CNA_Handle instanceHandle,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        DynamicSoundEffectInstance* dynamicInstance = nullptr;
-        if (const CNA_Result result =
-                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const source = &dynamicInstance->BufferNeeded;
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return PublishAudioRegistration(
-            std::make_shared<AudioRegistration>(instance, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    DynamicSoundEffectInstance* dynamicInstance = nullptr;
+    if (const CNA_Result result =
+            BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const source = &dynamicInstance->BufferNeeded;
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return PublishAudioRegistration(
+        std::make_shared<AudioRegistration>(instance, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_audio_unsubscribe_ext(const CNA_Handle registration)
+[[nodiscard]] CNA_Result AudioUnsubscribeExt(const CNA_Handle registration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AudioRegistrationBase> value;
-        if (const CNA_Result result =
-                LookupHandle(registration, ObjectKind::AudioEventRegistration, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(registration);
-    });
+    std::shared_ptr<AudioRegistrationBase> value;
+    if (const CNA_Result result =
+            LookupHandle(registration, ObjectKind::AudioEventRegistration, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReleaseHandle(registration);
 }
 
-CNA_Result cna_microphone_get_default_index_ext(
+[[nodiscard]] CNA_Result MicrophoneGetDefaultIndexExt(
     const CNA_Handle gameHandle,
     uint64_t* const outIndex,
     CNA_Bool* const outAvailable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr || outAvailable == nullptr) {
-            return InvalidArgument("The default microphone outputs are invalid.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAvailable = CNA_FALSE;
-        const Microphone* const preferred = Microphone::getDefaultProperty();
-        if (preferred == nullptr) {
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outAvailable = CNA_FALSE;
+    const Microphone* const preferred = Microphone::getDefaultProperty();
+    if (preferred == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const auto& microphones = Microphone::getAllProperty();
+    for (std::size_t index = 0U; index < microphones.size(); ++index) {
+        if (microphones[index] == preferred) {
+            *outIndex = static_cast<uint64_t>(index);
+            *outAvailable = CNA_TRUE;
             return CNA_RESULT_SUCCESS;
         }
-        const auto& microphones = Microphone::getAllProperty();
-        for (std::size_t index = 0U; index < microphones.size(); ++index) {
-            if (microphones[index] == preferred) {
-                *outIndex = static_cast<uint64_t>(index);
-                *outAvailable = CNA_TRUE;
-                return CNA_RESULT_SUCCESS;
-            }
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_microphone_get_data_at(
+[[nodiscard]] CNA_Result MicrophoneGetDataAt(
     const CNA_Handle gameHandle,
     const uint64_t index,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The capture read output is invalid.");
-        }
-        Microphone* microphone = nullptr;
-        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = UINT64_C(0);
-        if (capacity == UINT64_C(0)) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return InvalidArgument("The capture destination is larger than the canonical limit.");
-        }
-        // A short read is the canonical answer rather than a failure: capture is a stream, so the
-        // route reports how much arrived instead of refusing a buffer it could not fill.
-        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity), 0U);
-        const auto read = static_cast<uint64_t>(microphone->GetData(buffer));
-        const uint64_t copied = read < capacity ? read : capacity;
-        if (copied != UINT64_C(0)) {
-            std::memcpy(destination, buffer.data(), static_cast<std::size_t>(copied));
-        }
-        *outBytes = copied;
+    if ((destination == nullptr && capacity != UINT64_C(0))) {
+        return InvalidArgument("The capture read output is invalid.");
+    }
+    Microphone* microphone = nullptr;
+    if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = UINT64_C(0);
+    if (capacity == UINT64_C(0)) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return InvalidArgument("The capture destination is larger than the canonical limit.");
+    }
+    // A short read is the canonical answer rather than a failure: capture is a stream, so the
+    // route reports how much arrived instead of refusing a buffer it could not fill.
+    std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity), 0U);
+    const auto read = static_cast<uint64_t>(microphone->GetData(buffer));
+    const uint64_t copied = read < capacity ? read : capacity;
+    if (copied != UINT64_C(0)) {
+        std::memcpy(destination, buffer.data(), static_cast<std::size_t>(copied));
+    }
+    *outBytes = copied;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_microphone_subscribe_buffer_ready_at(
+[[nodiscard]] CNA_Result MicrophoneSubscribeBufferReadyAt(
     const CNA_Handle gameHandle,
     const uint64_t index,
     const CNA_AudioEventCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The audio registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The audio event callback is null.");
-        }
-        Microphone* microphone = nullptr;
-        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const source = &microphone->BufferReady;
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        // The runtime owns every microphone and outlives each registration, so this one needs no
-        // owner reference of its own.
-        return PublishAudioRegistration(
-            std::make_shared<AudioRegistration>(nullptr, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The audio event callback is null.");
+    }
+    Microphone* microphone = nullptr;
+    if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const source = &microphone->BufferReady;
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    // The runtime owns every microphone and outlives each registration, so this one needs no
+    // owner reference of its own.
+    return PublishAudioRegistration(
+        std::make_shared<AudioRegistration>(nullptr, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_sound_effect_instance_apply_3d(
+[[nodiscard]] CNA_Result SoundEffectInstanceApply3d(
     const CNA_Handle instanceHandle,
     const CNA_AudioListener* const listener,
     const CNA_AudioEmitter* const emitter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        AudioListener nativeListener;
-        AudioEmitter nativeEmitter;
-        if (const CNA_Result result = ToNativeListener(listener, &nativeListener);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToNativeEmitter(emitter, &nativeEmitter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        instance->value->Apply3D(nativeListener, nativeEmitter);
-        return CNA_RESULT_SUCCESS;
-    });
+    AudioListener nativeListener;
+    AudioEmitter nativeEmitter;
+    if (const CNA_Result result = ToNativeListener(listener, &nativeListener);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToNativeEmitter(emitter, &nativeEmitter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    instance->value->Apply3D(nativeListener, nativeEmitter);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
+[[nodiscard]] CNA_Result SoundEffectInstanceApply3dMultiExt(
     const CNA_Handle instanceHandle,
     const CNA_AudioListener* const listeners,
     const uint64_t listenerCount,
     const CNA_AudioEmitter* const emitter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (listeners == nullptr) {
-            return InvalidArgument("The AudioListener array is null.");
-        }
-        if (listenerCount >
-            static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument("The AudioListener count is too large.");
-        }
-        // At least one element, so the pointer handed to the canonical overload is never null even
-        // for an empty array: a count of zero reaches the canonical count check and is refused
-        // there, not mistaken for a null array. CABI-6: the canonical overload now accepts any
-        // count of one or more, matching XNA, which hands its whole listener array to XACT.
-        std::vector<AudioListener> nativeListeners(
-            static_cast<std::size_t>(listenerCount == 0U ? 1U : listenerCount));
-        for (uint64_t index = 0U; index < listenerCount; ++index) {
-            if (const CNA_Result result =
-                    ToNativeListener(&listeners[index], &nativeListeners[static_cast<std::size_t>(index)]);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        AudioEmitter nativeEmitter;
-        if (const CNA_Result result = ToNativeEmitter(emitter, &nativeEmitter);
+    if (listeners == nullptr) {
+        return InvalidArgument("The AudioListener array is null.");
+    }
+    if (listenerCount >
+        static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The AudioListener count is too large.");
+    }
+    // At least one element, so the pointer handed to the canonical overload is never null even
+    // for an empty array: a count of zero reaches the canonical count check and is refused
+    // there, not mistaken for a null array. CABI-6: the canonical overload now accepts any
+    // count of one or more, matching XNA, which hands its whole listener array to XACT.
+    std::vector<AudioListener> nativeListeners(
+        static_cast<std::size_t>(listenerCount == 0U ? 1U : listenerCount));
+    for (uint64_t index = 0U; index < listenerCount; ++index) {
+        if (const CNA_Result result =
+                ToNativeListener(&listeners[index], &nativeListeners[static_cast<std::size_t>(index)]);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<SoundEffectInstanceResource> instance;
-        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical overload evaluates every listener and applies the dominant one, and the
-        // empty array reaches it too, so a count of zero is refused by the canonical rule rather
-        // than by an early return invented here.
-        instance->value->Apply3D(
-            nativeListeners.data(),
-            static_cast<int>(listenerCount),
-            nativeEmitter);
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    AudioEmitter nativeEmitter;
+    if (const CNA_Result result = ToNativeEmitter(emitter, &nativeEmitter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SoundEffectInstanceResource> instance;
+    if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical overload evaluates every listener and applies the dominant one, and the
+    // empty array reaches it too, so a count of zero is refused by the canonical rule rather
+    // than by an early return invented here.
+    instance->value->Apply3D(
+        nativeListeners.data(),
+        static_cast<int>(listenerCount),
+        nativeEmitter);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Audio.toml.
 #include "generated/Audio.inc"

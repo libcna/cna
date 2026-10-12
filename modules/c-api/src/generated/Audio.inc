@@ -935,3 +935,280 @@ CNA_Result cna_audio_listener_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_sound_effect_create_pcm16(
+    const CNA_Handle game,
+    const CNA_SoundEffectCreateInfo* const create_info,
+    const uint8_t* const pcm_bytes,
+    const uint64_t byte_count,
+    CNA_Handle* const out_sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_create_pcm16: out_sound_effect is null.");
+        }
+        *out_sound_effect = CNA_INVALID_HANDLE;
+        return SoundEffectCreatePcm16(game, create_info, pcm_bytes, byte_count, out_sound_effect);
+    });
+}
+
+CNA_Result cna_sound_effect_create_instance(
+    const CNA_Handle sound_effect,
+    CNA_Handle* const out_instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_instance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_create_instance: out_instance is null.");
+        }
+        *out_instance = CNA_INVALID_HANDLE;
+        return SoundEffectCreateInstance(sound_effect, out_instance);
+    });
+}
+
+CNA_Result cna_sound_effect_instance_set_is_looped(
+    const CNA_Handle instance,
+    const CNA_Bool is_looped)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_looped, "is_looped");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SoundEffectInstanceSetIsLooped(instance, is_looped);
+    });
+}
+
+CNA_Result cna_sound_effect_create_pcm16_range_ext(
+    const CNA_Handle game,
+    const CNA_SoundEffectCreateInfo* const create_info,
+    const uint8_t* const pcm_bytes,
+    const uint64_t byte_count,
+    const int32_t offset,
+    const int32_t count,
+    const int32_t loop_start,
+    const int32_t loop_length,
+    CNA_Handle* const out_sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_create_pcm16_range_ext: out_sound_effect is null.");
+        }
+        *out_sound_effect = CNA_INVALID_HANDLE;
+        return SoundEffectCreatePcm16RangeExt(game, create_info, pcm_bytes, byte_count, offset, count, loop_start, loop_length, out_sound_effect);
+    });
+}
+
+CNA_Result cna_sound_effect_create_from_encoded_ext(
+    const CNA_Handle game,
+    const uint8_t* const bytes,
+    const uint64_t byte_count,
+    CNA_Handle* const out_sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_create_from_encoded_ext: out_sound_effect is null.");
+        }
+        *out_sound_effect = CNA_INVALID_HANDLE;
+        return SoundEffectCreateFromEncodedExt(game, bytes, byte_count, out_sound_effect);
+    });
+}
+
+CNA_Result cna_sound_effect_create_from_asset_ext(
+    const CNA_Handle game,
+    const CNA_StringView asset_name,
+    CNA_Handle* const out_sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_create_from_asset_ext: out_sound_effect is null.");
+        }
+        *out_sound_effect = CNA_INVALID_HANDLE;
+        return SoundEffectCreateFromAssetExt(game, asset_name, out_sound_effect);
+    });
+}
+
+CNA_Result cna_sound_effect_get_sample_duration_ticks(
+    const int32_t size_in_bytes,
+    const int32_t sample_rate,
+    const CNA_AudioChannels channels,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_get_sample_duration_ticks: out_ticks is null.");
+        }
+        return SoundEffectGetSampleDurationTicks(size_in_bytes, sample_rate, channels, out_ticks);
+    });
+}
+
+CNA_Result cna_sound_effect_get_sample_size_in_bytes(
+    const int64_t duration_ticks,
+    const int32_t sample_rate,
+    const CNA_AudioChannels channels,
+    int32_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sound_effect_get_sample_size_in_bytes: out_bytes is null.");
+        }
+        return SoundEffectGetSampleSizeInBytes(duration_ticks, sample_rate, channels, out_bytes);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_create(
+    const CNA_Handle game,
+    const int32_t sample_rate,
+    const CNA_AudioChannels channels,
+    CNA_Handle* const out_instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_instance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_create: out_instance is null.");
+        }
+        *out_instance = CNA_INVALID_HANDLE;
+        return DynamicSoundEffectInstanceCreate(game, sample_rate, channels, out_instance);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
+    const CNA_Handle instance,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_AudioEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dynamic_sound_effect_instance_subscribe_buffer_needed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return DynamicSoundEffectInstanceSubscribeBufferNeeded(instance, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_microphone_get_default_index_ext(
+    const CNA_Handle game,
+    uint64_t* const out_index,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_default_index_ext: out_index is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_default_index_ext: out_available is null.");
+        }
+        return MicrophoneGetDefaultIndexExt(game, out_index, out_available);
+    });
+}
+
+CNA_Result cna_microphone_get_data_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_data_at: out_bytes is null.");
+        }
+        return MicrophoneGetDataAt(game, index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_microphone_subscribe_buffer_ready_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_AudioEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_subscribe_buffer_ready_at: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return MicrophoneSubscribeBufferReadyAt(game, index, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_audio_get_capabilities(
+    const CNA_Handle game,
+    CNA_AudioCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_get_capabilities: out_capabilities is null.");
+        }
+        return AudioGetCapabilities(game, out_capabilities);
+    });
+}
+
+CNA_Result cna_sound_effect_destroy(
+    const CNA_Handle sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundEffectDestroy(sound_effect);
+    });
+}
+
+CNA_Result cna_sound_effect_instance_destroy(
+    const CNA_Handle instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundEffectInstanceDestroy(instance);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_submit_buffer(
+    const CNA_Handle instance,
+    const uint8_t* const bytes,
+    const uint64_t byte_count,
+    const int32_t offset,
+    const int32_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DynamicSoundEffectInstanceSubmitBuffer(instance, bytes, byte_count, offset, count);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_submit_float_buffer_ext(
+    const CNA_Handle instance,
+    const float* const samples,
+    const uint64_t sample_count,
+    const int32_t offset,
+    const int32_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DynamicSoundEffectInstanceSubmitFloatBufferExt(instance, samples, sample_count, offset, count);
+    });
+}
+
+CNA_Result cna_audio_unsubscribe_ext(
+    const CNA_AudioEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AudioUnsubscribeExt(registration);
+    });
+}
+
+CNA_Result cna_sound_effect_instance_apply_3d(
+    const CNA_Handle instance,
+    const CNA_AudioListener* const listener,
+    const CNA_AudioEmitter* const emitter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundEffectInstanceApply3d(instance, listener, emitter);
+    });
+}
+
+CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
+    const CNA_Handle instance,
+    const CNA_AudioListener* const listeners,
+    const uint64_t listener_count,
+    const CNA_AudioEmitter* const emitter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SoundEffectInstanceApply3dMultiExt(instance, listeners, listener_count, emitter);
+    });
+}

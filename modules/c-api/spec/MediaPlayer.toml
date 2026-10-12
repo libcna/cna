@@ -65,3 +65,19 @@ other = { lookup = "BorrowSong", object = "std::shared_ptr<SongResource>" }
 # away without leaving the caller a stale handle, so C appends a copy -- which is exactly
 # what the canonical player does when it enqueues a song.
 cna_media_queue_add = { call = "object->value->Add(new Song(other->value->getHandle(), other->value->getNameProperty()))" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_media_player_get_queue = { result = "MediaPlayerGetQueue(game, out_queue)" }
+cna_media_queue_get_active_song = { result = "MediaQueueGetActiveSong(queue, out_song, out_available)" }
+cna_media_queue_get_at = { result = "MediaQueueGetAt(queue, index, out_song)" }
+cna_media_player_get_visualization_data = { result = "MediaPlayerGetVisualizationData(game, data)" }
+cna_media_player_play_song = { result = "MediaPlayerPlaySong(game, song)" }
+cna_media_player_play_songs = { result = "MediaPlayerPlaySongs(game, songs)" }
+cna_media_player_play_songs_from = { result = "MediaPlayerPlaySongsFrom(game, songs, index)" }
+cna_media_player_unsubscribe_ext = { result = "MediaPlayerUnsubscribeExt(registration)" }

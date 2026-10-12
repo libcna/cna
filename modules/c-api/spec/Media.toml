@@ -63,3 +63,19 @@ lookup = "ValidateActiveGameHandle"
 
 [active_game_handle.routes]
 cna_media_source_get_available_count = { get = "OwnedMediaSources().Count()" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_visualization_data_init = { result = "VisualizationDataInit(out_data)" }
+cna_media_source_copy_name_at = { result = "MediaSourceCopyNameAt(game, index, destination, capacity, out_bytes)" }
+cna_media_source_copy_type_name_at = { result = "MediaSourceCopyTypeNameAt(game, index, destination, capacity, out_bytes)" }
+cna_song_create = { result = "SongCreate(game, file_name, name, out_song)" }
+cna_song_create_with_duration = { result = "SongCreateWithDuration(game, file_name, asset_name, duration_milliseconds, out_song)" }
+cna_song_create_from_uri = { result = "SongCreateFromUri(game, name, uri, out_song)" }
+cna_song_collection_create = { result = "SongCollectionCreate(game, songs, count, out_collection)" }
+cna_song_collection_get_at = { result = "SongCollectionGetAt(collection, index, out_song)" }
