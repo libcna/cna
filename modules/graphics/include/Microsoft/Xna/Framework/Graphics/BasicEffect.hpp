@@ -39,6 +39,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] Effect* Clone() override;
 
+        /** @brief True: this is one of XNA's stock effects (Effect::IsStockEffectEXT). */
+        CNAEXT [[nodiscard]] bool IsStockEffectEXT() const noexcept override
+        {
+            return true;
+        }
+
         /** @brief The world matrix applied to drawn geometry. */
         Matrix World      = Matrix::getIdentityProperty();
         /** @brief The view matrix representing the camera transform. */

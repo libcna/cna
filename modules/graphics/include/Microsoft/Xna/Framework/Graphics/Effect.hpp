@@ -207,6 +207,22 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Whether this is one of XNA's five stock effects -- BasicEffect, AlphaTestEffect,
+         *        DualTextureEffect, EnvironmentMapEffect, SkinnedEffect -- or derives from one.
+         *
+         * SpriteBatch asks it of a custom effect: a stock effect's vertex shader places sprites
+         * with World*View*Projection. A virtual rather than dynamic_cast for the same reason as
+         * IsExactStockSpriteEffectEXT(): a dynamic_cast to each stock type made every SpriteBatch
+         * user link all five of them.
+         *
+         * @return False here; true in the five stock effects.
+         */
+        CNAEXT [[nodiscard]] virtual bool IsStockEffectEXT() const noexcept
+        {
+            return false;
+        }
+
+        /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Called by GraphicsDevice before every draw call so the renderer can select the

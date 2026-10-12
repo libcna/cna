@@ -38,6 +38,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] Effect* Clone() override;
 
+        /** @brief True: this is one of XNA's stock effects (Effect::IsStockEffectEXT). */
+        CNAEXT [[nodiscard]] bool IsStockEffectEXT() const noexcept override
+        {
+            return true;
+        }
+
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
