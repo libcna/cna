@@ -62,3 +62,102 @@ CNA_Result cna_graphics_resource_set_name(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_graphics_resource_get_graphics_device(
+    const CNA_Handle resource,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_resource_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        return GraphicsResourceGetGraphicsDevice(resource, out_graphics_device);
+    });
+}
+
+CNA_Result cna_graphics_resource_get_is_disposed(
+    const CNA_Handle resource,
+    CNA_Bool* const out_is_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_resource_get_is_disposed: out_is_disposed is null.");
+        }
+        return GraphicsResourceGetIsDisposed(resource, out_is_disposed);
+    });
+}
+
+CNA_Result cna_graphics_resource_get_tag(
+    const CNA_Handle resource,
+    CNA_GraphicsResourceTag* const out_tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_resource_get_tag: out_tag is null.");
+        }
+        return GraphicsResourceGetTag(resource, out_tag);
+    });
+}
+
+CNA_Result cna_graphics_resource_subscribe_disposing(
+    const CNA_Handle resource,
+    const CNA_GraphicsResourceDisposingCallback callback,
+    void* const context,
+    CNA_GraphicsResourceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_resource_subscribe_disposing: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GraphicsResourceSubscribeDisposing(resource, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_resource_copy_name(
+    const CNA_Handle resource,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsResourceCopyName(resource, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_graphics_resource_copy_string(
+    const CNA_Handle resource,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsResourceCopyString(resource, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_graphics_resource_set_tag(
+    const CNA_Handle resource,
+    const CNA_GraphicsResourceTag tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsResourceSetTag(resource, tag);
+    });
+}
+
+CNA_Result cna_graphics_resource_dispose(
+    const CNA_Handle resource)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsResourceDispose(resource);
+    });
+}
+
+CNA_Result cna_graphics_resource_unsubscribe_disposing(
+    const CNA_GraphicsResourceEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsResourceUnsubscribeDisposing(registration);
+    });
+}

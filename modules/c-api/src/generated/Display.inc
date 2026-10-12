@@ -297,3 +297,142 @@ CNA_Result cna_graphics_adapter_get_info(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_display_mode_equals(
+    const CNA_DisplayMode* const left,
+    const CNA_DisplayMode* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_equals: out_equal is null.");
+        }
+        return DisplayModeEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_graphics_adapter_get_display_mode_count(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_Bool filter_by_format,
+    const CNA_SurfaceFormat format,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_get_display_mode_count: out_count is null.");
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(filter_by_format, "filter_by_format");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GraphicsAdapterGetDisplayModeCount(graphics_device, adapter_index, filter_by_format, format, out_count);
+    });
+}
+
+CNA_Result cna_graphics_adapter_copy_display_modes(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_Bool filter_by_format,
+    const CNA_SurfaceFormat format,
+    CNA_DisplayMode* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_copy_display_modes: out_count is null.");
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(filter_by_format, "filter_by_format");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GraphicsAdapterCopyDisplayModes(graphics_device, adapter_index, filter_by_format, format, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_graphics_adapter_set_device_preferences(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    const CNA_Bool use_null_device,
+    const CNA_Bool use_reference_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(use_null_device, "use_null_device");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(use_reference_device, "use_reference_device");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GraphicsAdapterSetDevicePreferences(graphics_device, adapter_index, use_null_device, use_reference_device);
+    });
+}
+
+CNA_Result cna_graphics_adapter_get_native_monitor_handle(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    CNA_NativeHandleValue* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_get_native_monitor_handle: out_value is null.");
+        }
+        return GraphicsAdapterGetNativeMonitorHandle(graphics_device, adapter_index, out_value);
+    });
+}
+
+CNA_Result cna_graphics_device_get_native_window_handle(
+    const CNA_Handle graphics_device,
+    CNA_NativeHandleValue* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_native_window_handle: out_value is null.");
+        }
+        return GraphicsDeviceGetNativeWindowHandle(graphics_device, out_value);
+    });
+}
+
+CNA_Result cna_graphics_device_create(
+    const uint32_t adapter_index,
+    const uint32_t graphics_profile,
+    const CNA_PresentationParameters* const parameters,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_create: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        return GraphicsDeviceCreate(adapter_index, graphics_profile, parameters, out_graphics_device);
+    });
+}
+
+CNA_Result cna_graphics_device_set_presentation_parameters(
+    const CNA_Handle graphics_device,
+    const CNA_PresentationParameters* const parameters)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetPresentationParameters(graphics_device, parameters);
+    });
+}
+
+CNA_Result cna_graphics_device_destroy(
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceDestroy(graphics_device);
+    });
+}
+
+CNA_Result cna_graphics_device_reset_with_parameters(
+    const CNA_Handle graphics_device,
+    const CNA_PresentationParameters* const parameters,
+    const uint32_t* const adapter_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceResetWithParameters(graphics_device, parameters, adapter_index);
+    });
+}

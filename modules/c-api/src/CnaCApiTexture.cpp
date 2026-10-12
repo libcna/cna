@@ -632,72 +632,56 @@ void DispatchGetData(
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_texture_validate_format(const CNA_SurfaceFormat format)
+[[nodiscard]] CNA_Result TextureValidateFormat(const CNA_SurfaceFormat format)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsSurfaceFormat(format)) {
-            return InvalidArgument("The texture surface-format identity is invalid.");
-        }
-        if (format != CNA_SURFACE_FORMAT_COLOR) {
-            return NotSupported("The base Texture contract supports only Color on every renderer.");
-        }
-        Texture::ValidateFormat(SurfaceFormat::Color);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsSurfaceFormat(format)) {
+        return InvalidArgument("The texture surface-format identity is invalid.");
+    }
+    if (format != CNA_SURFACE_FORMAT_COLOR) {
+        return NotSupported("The base Texture contract supports only Color on every renderer.");
+    }
+    Texture::ValidateFormat(SurfaceFormat::Color);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_create_from_file(
+[[nodiscard]] CNA_Result Texture2dCreateFromFile(
     const CNA_StringView path,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The standalone file Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::string copiedPath;
-        if (const CNA_Result result = ReadText(
-                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateStandaloneTexture2D(
-            std::make_shared<Texture2D>(copiedPath), outTexture);
-    });
+    std::string copiedPath;
+    if (const CNA_Result result = ReadText(
+            path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateStandaloneTexture2D(
+        std::make_shared<Texture2D>(copiedPath), outTexture);
 }
 
-CNA_Result cna_texture2d_create_from_file_with_device(
+[[nodiscard]] CNA_Result Texture2dCreateFromFileWithDevice(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_StringView path,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The file Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::string copiedPath;
-        if (const CNA_Result result = ReadText(
-                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateOwnedTexture2D(
-            std::make_shared<Texture2D>(copiedPath, *graphicsDevice->value),
-            graphicsDevice->parentGame,
-            outTexture);
-    });
+    std::string copiedPath;
+    if (const CNA_Result result = ReadText(
+            path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateOwnedTexture2D(
+        std::make_shared<Texture2D>(copiedPath, *graphicsDevice->value),
+        graphicsDevice->parentGame,
+        outTexture);
 }
 
-CNA_Result cna_texture2d_create_from_rgba8(
+[[nodiscard]] CNA_Result Texture2dCreateFromRgba8(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t width,
     const uint32_t height,
@@ -705,42 +689,36 @@ CNA_Result cna_texture2d_create_from_rgba8(
     const uint64_t pixelCount,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The RGBA8 Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        uint64_t required = 0U;
-        if (const CNA_Result result = ValidateDimensions(width, height, &required);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (pixels == nullptr || pixelCount != required) {
-            return InvalidArgument("The RGBA8 Texture2D pixel array has the wrong size.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> rgba(static_cast<std::size_t>(required) * 4U);
-        for (uint64_t index = 0U; index < required; ++index) {
-            rgba[index * 4U] = pixels[index].r;
-            rgba[index * 4U + 1U] = pixels[index].g;
-            rgba[index * 4U + 2U] = pixels[index].b;
-            rgba[index * 4U + 3U] = pixels[index].a;
-        }
-        auto texture = std::make_shared<Texture2D>(Texture2D::CreateFromPixels(
-            *graphicsDevice->value,
-            static_cast<int>(width),
-            static_cast<int>(height),
-            rgba));
-        return CreateOwnedTexture2D(texture, graphicsDevice->parentGame, outTexture);
-    });
+    uint64_t required = 0U;
+    if (const CNA_Result result = ValidateDimensions(width, height, &required);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (pixels == nullptr || pixelCount != required) {
+        return InvalidArgument("The RGBA8 Texture2D pixel array has the wrong size.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> rgba(static_cast<std::size_t>(required) * 4U);
+    for (uint64_t index = 0U; index < required; ++index) {
+        rgba[index * 4U] = pixels[index].r;
+        rgba[index * 4U + 1U] = pixels[index].g;
+        rgba[index * 4U + 2U] = pixels[index].b;
+        rgba[index * 4U + 3U] = pixels[index].a;
+    }
+    auto texture = std::make_shared<Texture2D>(Texture2D::CreateFromPixels(
+        *graphicsDevice->value,
+        static_cast<int>(width),
+        static_cast<int>(height),
+        rgba));
+    return CreateOwnedTexture2D(texture, graphicsDevice->parentGame, outTexture);
 }
 
-CNA_Result cna_texture2d_create_cpu_only_rgba8(
+[[nodiscard]] CNA_Result Texture2dCreateCpuOnlyRgba8(
     const uint32_t width,
     const uint32_t height,
     const CNA_SurfaceFormat format,
@@ -748,97 +726,87 @@ CNA_Result cna_texture2d_create_cpu_only_rgba8(
     const uint64_t pixelCount,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CPU-only Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        uint64_t required = 0U;
-        if (const CNA_Result result = ValidateDimensions(width, height, &required);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!IsSurfaceFormat(format) || pixels == nullptr || pixelCount != required) {
-            return InvalidArgument("The CPU-only Texture2D configuration is invalid.");
-        }
-        std::vector<Color> nativePixels;
-        nativePixels.reserve(static_cast<std::size_t>(required));
-        for (uint64_t index = 0U; index < required; ++index) {
-            nativePixels.emplace_back(
-                pixels[index].r, pixels[index].g, pixels[index].b, pixels[index].a);
-        }
-        auto texture = std::make_shared<Texture2D>(Texture2D::CreateCpuOnlyForTests(
-            static_cast<int>(width),
-            static_cast<int>(height),
-            static_cast<SurfaceFormat>(format),
-            nativePixels));
-        return CreateStandaloneTexture2D(texture, outTexture);
-    });
+    uint64_t required = 0U;
+    if (const CNA_Result result = ValidateDimensions(width, height, &required);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsSurfaceFormat(format) || pixels == nullptr || pixelCount != required) {
+        return InvalidArgument("The CPU-only Texture2D configuration is invalid.");
+    }
+    std::vector<Color> nativePixels;
+    nativePixels.reserve(static_cast<std::size_t>(required));
+    for (uint64_t index = 0U; index < required; ++index) {
+        nativePixels.emplace_back(
+            pixels[index].r, pixels[index].g, pixels[index].b, pixels[index].a);
+    }
+    auto texture = std::make_shared<Texture2D>(Texture2D::CreateCpuOnlyForTests(
+        static_cast<int>(width),
+        static_cast<int>(height),
+        static_cast<SurfaceFormat>(format),
+        nativePixels));
+    return CreateStandaloneTexture2D(texture, outTexture);
 }
 
-CNA_Result cna_texture2d_set_data_rgba8_bytes(
+[[nodiscard]] CNA_Result Texture2dSetDataRgba8Bytes(
     const CNA_Handle textureHandle,
     const uint8_t* const rgbaBytes,
     const uint64_t pixelCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t required =
-            static_cast<uint64_t>(texture->value->getWidthProperty()) *
-            static_cast<uint64_t>(texture->value->getHeightProperty());
-        if (rgbaBytes == nullptr || pixelCount != required ||
-            pixelCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument(
-                "The raw RGBA8 Texture2D upload must exactly match its dimensions.");
-        }
-        texture->value->SetDataRGBA(rgbaBytes, static_cast<int>(pixelCount));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t required =
+        static_cast<uint64_t>(texture->value->getWidthProperty()) *
+        static_cast<uint64_t>(texture->value->getHeightProperty());
+    if (rgbaBytes == nullptr || pixelCount != required ||
+        pixelCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument(
+            "The raw RGBA8 Texture2D upload must exactly match its dimensions.");
+    }
+    texture->value->SetDataRGBA(rgbaBytes, static_cast<int>(pixelCount));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_set_data(
+[[nodiscard]] CNA_Result Texture2dSetData(
     const CNA_Handle textureHandle,
     const CNA_TextureDataType dataType,
     const CNA_Texture2DTransfer* const transfer,
     const void* const data,
     const uint64_t dataCapacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                *texture->value, dataType, transfer, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateArrayWindow(
-                data, dataCapacity, view, "The Texture2D upload array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            *texture->value, dataType, transfer, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateArrayWindow(
+            data, dataCapacity, view, "The Texture2D upload array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 #ifdef CNA_RENDERER_SDL_RENDERER
-        if (view.level > 0) {
-            if (!IsTransferTypeCompatible(texture->value->getFormatProperty(), dataType)) {
-                return InvalidArgument(
-                    "The Texture2D upload element type does not match its surface format.");
-            }
-            return NotSupported("SDL_RENDERER does not support mip-level Texture2D uploads.");
+    if (view.level > 0) {
+        if (!IsTransferTypeCompatible(texture->value->getFormatProperty(), dataType)) {
+            return InvalidArgument(
+                "The Texture2D upload element type does not match its surface format.");
         }
+        return NotSupported("SDL_RENDERER does not support mip-level Texture2D uploads.");
+    }
 #endif
-        DispatchSetData(*texture->value, dataType, view, data);
-        return CNA_RESULT_SUCCESS;
-    });
+    DispatchSetData(*texture->value, dataType, view, data);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_get_data(
+[[nodiscard]] CNA_Result Texture2dGetData(
     const CNA_Handle textureHandle,
     const CNA_TextureDataType dataType,
     const CNA_Texture2DTransfer* const transfer,
@@ -846,132 +814,116 @@ CNA_Result cna_texture2d_get_data(
     const uint64_t destinationCapacity,
     uint64_t* const outRequiredElements)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRequiredElements == nullptr) {
-            return InvalidArgument("The Texture2D required-element output is null.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        const CNA_Result validated = ValidateTransfer(*texture->value, dataType, transfer, &view);
-        if (view.requiredElements != 0U) {
-            *outRequiredElements = view.requiredElements;
-        }
-        if (validated != CNA_RESULT_SUCCESS) {
-            return validated;
-        }
-        if (const CNA_Result result = ValidateArrayWindow(
-                destination,
-                destinationCapacity,
-                view,
-                "The Texture2D readback array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        DispatchGetData(*texture->value, dataType, view, destination);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    const CNA_Result validated = ValidateTransfer(*texture->value, dataType, transfer, &view);
+    if (view.requiredElements != 0U) {
+        *outRequiredElements = view.requiredElements;
+    }
+    if (validated != CNA_RESULT_SUCCESS) {
+        return validated;
+    }
+    if (const CNA_Result result = ValidateArrayWindow(
+            destination,
+            destinationCapacity,
+            view,
+            "The Texture2D readback array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    DispatchGetData(*texture->value, dataType, view, destination);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_create_from_encoded_memory(
+[[nodiscard]] CNA_Result Texture2dCreateFromEncodedMemory(
     const CNA_Handle graphicsDeviceHandle,
     const uint8_t* const encodedData,
     const uint64_t encodedByteCount,
     const CNA_Texture2DDecodeInfo* const decodeInfo,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The decoded Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        if (encodedData == nullptr || encodedByteCount == 0U ||
-            encodedByteCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument("The encoded Texture2D source buffer is invalid.");
-        }
-        if (decodeInfo != nullptr &&
-            (!IsVersionedStructure(decodeInfo) || decodeInfo->width == 0U ||
-             decodeInfo->height == 0U ||
-             decodeInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-             decodeInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-             (decodeInfo->zoom != CNA_FALSE && decodeInfo->zoom != CNA_TRUE) ||
-             std::any_of(
-                 std::begin(decodeInfo->reserved),
-                 std::end(decodeInfo->reserved),
-                 [](const uint8_t value) { return value != 0U; }))) {
-            return InvalidArgument("The Texture2D decode configuration is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::MemoryStream stream(
-            encodedData, static_cast<int>(encodedByteCount), false);
-        const bool isDds = encodedByteCount >= 4U
-            && encodedData[0] == 'D' && encodedData[1] == 'D'
-            && encodedData[2] == 'S' && encodedData[3] == ' ';
-        Texture2D decoded = [&]() -> Texture2D
+    if (encodedData == nullptr || encodedByteCount == 0U ||
+        encodedByteCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The encoded Texture2D source buffer is invalid.");
+    }
+    if (decodeInfo != nullptr &&
+        (!IsVersionedStructure(decodeInfo) || decodeInfo->width == 0U ||
+         decodeInfo->height == 0U ||
+         decodeInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+         decodeInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+         (decodeInfo->zoom != CNA_FALSE && decodeInfo->zoom != CNA_TRUE) ||
+         std::any_of(
+             std::begin(decodeInfo->reserved),
+             std::end(decodeInfo->reserved),
+             [](const uint8_t value) { return value != 0U; }))) {
+        return InvalidArgument("The Texture2D decode configuration is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::MemoryStream stream(
+        encodedData, static_cast<int>(encodedByteCount), false);
+    const bool isDds = encodedByteCount >= 4U
+        && encodedData[0] == 'D' && encodedData[1] == 'D'
+        && encodedData[2] == 'S' && encodedData[3] == ' ';
+    Texture2D decoded = [&]() -> Texture2D
+    {
+        if (decodeInfo == nullptr)
         {
-            if (decodeInfo == nullptr)
-            {
-                return isDds
-                    ? Texture2D::DDSFromStreamEXT(*graphicsDevice->value, stream)
-                    : Texture2D::FromStream(*graphicsDevice->value, stream);
-            }
             return isDds
-                ? Texture2D::DDSFromStreamEXT(
-                    *graphicsDevice->value,
-                    stream,
-                    static_cast<int>(decodeInfo->width),
-                    static_cast<int>(decodeInfo->height),
-                    decodeInfo->zoom == CNA_TRUE)
-                : Texture2D::FromStream(
-                    *graphicsDevice->value,
-                    stream,
-                    static_cast<int>(decodeInfo->width),
-                    static_cast<int>(decodeInfo->height),
-                    decodeInfo->zoom == CNA_TRUE);
-        }();
-        return CreateOwnedTexture2D(
-            std::make_shared<Texture2D>(std::move(decoded)),
-            graphicsDevice->parentGame,
-            outTexture);
-    });
+                ? Texture2D::DDSFromStreamEXT(*graphicsDevice->value, stream)
+                : Texture2D::FromStream(*graphicsDevice->value, stream);
+        }
+        return isDds
+            ? Texture2D::DDSFromStreamEXT(
+                *graphicsDevice->value,
+                stream,
+                static_cast<int>(decodeInfo->width),
+                static_cast<int>(decodeInfo->height),
+                decodeInfo->zoom == CNA_TRUE)
+            : Texture2D::FromStream(
+                *graphicsDevice->value,
+                stream,
+                static_cast<int>(decodeInfo->width),
+                static_cast<int>(decodeInfo->height),
+                decodeInfo->zoom == CNA_TRUE);
+    }();
+    return CreateOwnedTexture2D(
+        std::make_shared<Texture2D>(std::move(decoded)),
+        graphicsDevice->parentGame,
+        outTexture);
 }
 
-CNA_Result cna_texture2d_get_encoded_byte_count(
+[[nodiscard]] CNA_Result Texture2dGetEncodedByteCount(
     const CNA_Handle textureHandle,
     const CNA_TextureImageFormat imageFormat,
     const uint32_t targetWidth,
     const uint32_t targetHeight,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The encoded Texture2D byte-count output is null.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> encoded;
-        if (const CNA_Result result = EncodeTexture(
-                *texture->value, imageFormat, targetWidth, targetHeight, &encoded);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = encoded.size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> encoded;
+    if (const CNA_Result result = EncodeTexture(
+            *texture->value, imageFormat, targetWidth, targetHeight, &encoded);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = encoded.size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_copy_encoded(
+[[nodiscard]] CNA_Result Texture2dCopyEncoded(
     const CNA_Handle textureHandle,
     const CNA_TextureImageFormat imageFormat,
     const uint32_t targetWidth,
@@ -980,60 +932,58 @@ CNA_Result cna_texture2d_copy_encoded(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded Texture2D output buffer is invalid.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> encoded;
-        if (const CNA_Result result = EncodeTexture(
-                *texture->value, imageFormat, targetWidth, targetHeight, &encoded);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = encoded.size();
-        if (capacity < encoded.size()) {
-            return BufferTooSmall("The encoded Texture2D output buffer is too small.");
-        }
-        if (!encoded.empty()) {
-            std::memcpy(destination, encoded.data(), encoded.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The encoded Texture2D output buffer is invalid.");
+    }
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> encoded;
+    if (const CNA_Result result = EncodeTexture(
+            *texture->value, imageFormat, targetWidth, targetHeight, &encoded);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = encoded.size();
+    if (capacity < encoded.size()) {
+        return BufferTooSmall("The encoded Texture2D output buffer is too small.");
+    }
+    if (!encoded.empty()) {
+        std::memcpy(destination, encoded.data(), encoded.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_save_file(
+[[nodiscard]] CNA_Result Texture2dSaveFile(
     const CNA_Handle textureHandle,
     const CNA_TextureImageFormat imageFormat,
     const CNA_StringView path)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsImageFormat(imageFormat)) {
-            return InvalidArgument("The encoded Texture2D image format is invalid.");
-        }
-        std::string copiedPath;
-        if (const CNA_Result result = ReadText(
-                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (imageFormat == CNA_TEXTURE_IMAGE_FORMAT_PNG) {
-            texture->value->SaveAsPng(copiedPath);
-        } else {
-            texture->value->SaveAsJpeg(copiedPath);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsImageFormat(imageFormat)) {
+        return InvalidArgument("The encoded Texture2D image format is invalid.");
+    }
+    std::string copiedPath;
+    if (const CNA_Result result = ReadText(
+            path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (imageFormat == CNA_TEXTURE_IMAGE_FORMAT_PNG) {
+        texture->value->SaveAsPng(copiedPath);
+    } else {
+        texture->value->SaveAsJpeg(copiedPath);
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Texture.toml.
 #include "generated/Texture.inc"

@@ -62,3 +62,77 @@ CNA_Result cna_sprite_font_set_spacing(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_sprite_font_create(
+    const CNA_SpriteFontCreateInfo* const create_info,
+    CNA_Handle* const out_sprite_font)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sprite_font == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_create: out_sprite_font is null.");
+        }
+        *out_sprite_font = CNA_INVALID_HANDLE;
+        return SpriteFontCreate(create_info, out_sprite_font);
+    });
+}
+
+CNA_Result cna_sprite_font_copy_characters(
+    const CNA_Handle sprite_font,
+    CNA_Char16* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_copy_characters: out_count is null.");
+        }
+        return SpriteFontCopyCharacters(sprite_font, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_sprite_font_copy_glyphs(
+    const CNA_Handle sprite_font,
+    CNA_SpriteFontGlyph* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_copy_glyphs: out_count is null.");
+        }
+        return SpriteFontCopyGlyphs(sprite_font, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_sprite_font_measure_utf8(
+    const CNA_Handle sprite_font,
+    const CNA_StringView text,
+    CNA_Vector2* const out_size)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_size == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_measure_utf8: out_size is null.");
+        }
+        return SpriteFontMeasureUtf8(sprite_font, text, out_size);
+    });
+}
+
+CNA_Result cna_sprite_font_get_info(
+    const CNA_Handle sprite_font,
+    CNA_SpriteFontInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sprite_font_get_info: out_info is null.");
+        }
+        return SpriteFontGetInfo(sprite_font, out_info);
+    });
+}
+
+CNA_Result cna_sprite_font_destroy(
+    const CNA_Handle sprite_font)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SpriteFontDestroy(sprite_font);
+    });
+}

@@ -432,362 +432,328 @@ CNA_Result CreateOwnedTextureCube(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_texture3d_create(
+namespace {
+
+[[nodiscard]] CNA_Result Texture3dCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Texture3DCreateInfo* const createInfo,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The Texture3D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) ||
-            !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
-            createInfo->reserved1 != 0U || !IsSurfaceFormat(createInfo->format)) {
-            return InvalidArgument("The Texture3D creation configuration is invalid.");
-        }
-        if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
-            return NotSupported(
-                "The Texture3D surface format is unsupported by the native contract.");
-        }
-        if (const CNA_Result result = ValidatePositiveDimensions(
-                createInfo->width, createInfo->height, createInfo->depth,
-                "The Texture3D dimensions are invalid or too large.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto texture = std::make_shared<Texture3D>(
-            *graphicsDevice->value,
-            static_cast<int>(createInfo->width),
-            static_cast<int>(createInfo->height),
-            static_cast<int>(createInfo->depth),
-            createInfo->mip_map == CNA_TRUE,
-            SurfaceFormat::Color);
-        return CreateTexture3DHandle(texture, graphicsDevice->parentGame, outTexture);
-    });
+    if (!IsVersionedStructure(createInfo) ||
+        !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
+        createInfo->reserved1 != 0U || !IsSurfaceFormat(createInfo->format)) {
+        return InvalidArgument("The Texture3D creation configuration is invalid.");
+    }
+    if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
+        return NotSupported(
+            "The Texture3D surface format is unsupported by the native contract.");
+    }
+    if (const CNA_Result result = ValidatePositiveDimensions(
+            createInfo->width, createInfo->height, createInfo->depth,
+            "The Texture3D dimensions are invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto texture = std::make_shared<Texture3D>(
+        *graphicsDevice->value,
+        static_cast<int>(createInfo->width),
+        static_cast<int>(createInfo->height),
+        static_cast<int>(createInfo->depth),
+        createInfo->mip_map == CNA_TRUE,
+        SurfaceFormat::Color);
+    return CreateTexture3DHandle(texture, graphicsDevice->parentGame, outTexture);
 }
 
-CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
+[[nodiscard]] CNA_Result Texture3dDestroy(const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (texture->activeEffectReferenceCount != 0U) {
-            return InvalidState("The Texture3D is retained by an EffectParameter.");
-        }
-        if (const CNA_Result result = ReleaseHandle(textureHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedGraphicsResourceFor(texture->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture3DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (texture->activeEffectReferenceCount != 0U) {
+        return InvalidState("The Texture3D is retained by an EffectParameter.");
+    }
+    if (const CNA_Result result = ReleaseHandle(textureHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedGraphicsResourceFor(texture->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture3d_set_data(
+[[nodiscard]] CNA_Result Texture3dSetData(
     const CNA_Handle textureHandle,
     const CNA_Texture3DTransfer* const transfer,
     const CNA_Color* const data,
     const uint64_t dataCapacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Texture3DTransferView view{};
-        if (const CNA_Result result = ValidateTexture3DTransfer(
-                *texture->value, transfer, true, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateArrayWindow(
-                data, dataCapacity, view.startIndex, view.elementCount,
-                "The Texture3D upload array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<Color> native;
-        CopyColorsToNative(
-            data,
-            static_cast<uint64_t>(view.startIndex),
-            view.requiredElements,
-            &native);
-        texture->value->SetData(
-            view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
-            native.data(), view.startIndex, view.elementCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture3DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Texture3DTransferView view{};
+    if (const CNA_Result result = ValidateTexture3DTransfer(
+            *texture->value, transfer, true, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateArrayWindow(
+            data, dataCapacity, view.startIndex, view.elementCount,
+            "The Texture3D upload array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Color> native;
+    CopyColorsToNative(
+        data,
+        static_cast<uint64_t>(view.startIndex),
+        view.requiredElements,
+        &native);
+    texture->value->SetData(
+        view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
+        native.data(), view.startIndex, view.elementCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture3d_get_data(
+[[nodiscard]] CNA_Result Texture3dGetData(
     const CNA_Handle textureHandle,
     const CNA_Texture3DTransfer* const transfer,
     CNA_Color* const destination,
     const uint64_t destinationCapacity,
     uint64_t* const outRequiredElements)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRequiredElements == nullptr) {
-            return InvalidArgument("The Texture3D required-element output is null.");
-        }
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Texture3DTransferView view{};
-        if (const CNA_Result result = ValidateTexture3DTransfer(
-                *texture->value, transfer, true, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRequiredElements = view.requiredElements;
-        if (const CNA_Result result = ValidateArrayWindow(
-                destination, destinationCapacity, view.startIndex, view.elementCount,
-                "The Texture3D readback array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Color zero(
-            static_cast<uint8_t>(0U), static_cast<uint8_t>(0U),
-            static_cast<uint8_t>(0U), static_cast<uint8_t>(0U));
-        std::vector<Color> native(
-            static_cast<std::size_t>(view.startIndex + view.elementCount), zero);
-        texture->value->GetData(
-            view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
-            native.data(), view.startIndex, view.elementCount);
-        CopyColorsFromNative(
-            native,
-            static_cast<uint64_t>(view.startIndex),
-            view.requiredElements,
-            destination);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture3DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Texture3DTransferView view{};
+    if (const CNA_Result result = ValidateTexture3DTransfer(
+            *texture->value, transfer, true, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outRequiredElements = view.requiredElements;
+    if (const CNA_Result result = ValidateArrayWindow(
+            destination, destinationCapacity, view.startIndex, view.elementCount,
+            "The Texture3D readback array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Color zero(
+        static_cast<uint8_t>(0U), static_cast<uint8_t>(0U),
+        static_cast<uint8_t>(0U), static_cast<uint8_t>(0U));
+    std::vector<Color> native(
+        static_cast<std::size_t>(view.startIndex + view.elementCount), zero);
+    texture->value->GetData(
+        view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
+        native.data(), view.startIndex, view.elementCount);
+    CopyColorsFromNative(
+        native,
+        static_cast<uint64_t>(view.startIndex),
+        view.requiredElements,
+        destination);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture3d_set_data_bytes(
+[[nodiscard]] CNA_Result Texture3dSetDataBytes(
     const CNA_Handle textureHandle,
     const CNA_Texture3DTransfer* const transfer,
     const uint8_t* const data,
     const uint64_t dataByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Texture3DTransferView view{};
-        if (const CNA_Result result = ValidateTexture3DTransfer(
-                *texture->value, transfer, false, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t requiredBytes = view.requiredElements * 4U;
-        if (transfer->start_index != 0U || data == nullptr || dataByteCount != requiredBytes ||
-            requiredBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument("The raw Texture3D upload buffer is invalid.");
-        }
-        texture->value->SetDataPointerEXT(
-            view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
-            data, static_cast<int>(dataByteCount));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture3DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Texture3DTransferView view{};
+    if (const CNA_Result result = ValidateTexture3DTransfer(
+            *texture->value, transfer, false, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t requiredBytes = view.requiredElements * 4U;
+    if (transfer->start_index != 0U || data == nullptr || dataByteCount != requiredBytes ||
+        requiredBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The raw Texture3D upload buffer is invalid.");
+    }
+    texture->value->SetDataPointerEXT(
+        view.level, view.left, view.top, view.right, view.bottom, view.front, view.back,
+        data, static_cast<int>(dataByteCount));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texturecube_create(
+[[nodiscard]] CNA_Result TexturecubeCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_TextureCubeCreateInfo* const createInfo,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The TextureCube output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) ||
-            !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
-            !IsSurfaceFormat(createInfo->format) || createInfo->reserved1 != 0U) {
-            return InvalidArgument("The TextureCube creation configuration is invalid.");
-        }
-        if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
-            return NotSupported(
-                "The TextureCube surface format is unsupported by the native contract.");
-        }
-        if (const CNA_Result result = ValidatePositiveDimensions(
-                createInfo->size, createInfo->size, 1U,
-                "The TextureCube face size is invalid or too large.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto texture = std::make_shared<TextureCube>(
-            *graphicsDevice->value,
-            static_cast<int>(createInfo->size),
-            createInfo->mip_map == CNA_TRUE,
-            SurfaceFormat::Color);
-        return CreateTextureCubeHandle(texture, graphicsDevice->parentGame, outTexture);
-    });
+    if (!IsVersionedStructure(createInfo) ||
+        !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
+        !IsSurfaceFormat(createInfo->format) || createInfo->reserved1 != 0U) {
+        return InvalidArgument("The TextureCube creation configuration is invalid.");
+    }
+    if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
+        return NotSupported(
+            "The TextureCube surface format is unsupported by the native contract.");
+    }
+    if (const CNA_Result result = ValidatePositiveDimensions(
+            createInfo->size, createInfo->size, 1U,
+            "The TextureCube face size is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto texture = std::make_shared<TextureCube>(
+        *graphicsDevice->value,
+        static_cast<int>(createInfo->size),
+        createInfo->mip_map == CNA_TRUE,
+        SurfaceFormat::Color);
+    return CreateTextureCubeHandle(texture, graphicsDevice->parentGame, outTexture);
 }
 
-CNA_Result cna_texturecube_create_from_dds_memory(
+[[nodiscard]] CNA_Result TexturecubeCreateFromDdsMemory(
     const CNA_Handle graphicsDeviceHandle,
     const uint8_t* const ddsData,
     const uint64_t ddsByteCount,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The decoded TextureCube output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        if (ddsData == nullptr || ddsByteCount == 0U ||
-            ddsByteCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument("The TextureCube DDS source buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::MemoryStream stream(ddsData, static_cast<int>(ddsByteCount), false);
-        TextureCube decoded = TextureCube::DDSFromStreamEXT(*graphicsDevice->value, stream);
-        return CreateTextureCubeHandle(
-            std::make_shared<TextureCube>(std::move(decoded)),
-            graphicsDevice->parentGame,
-            outTexture);
-    });
+    if (ddsData == nullptr || ddsByteCount == 0U ||
+        ddsByteCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The TextureCube DDS source buffer is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::MemoryStream stream(ddsData, static_cast<int>(ddsByteCount), false);
+    TextureCube decoded = TextureCube::DDSFromStreamEXT(*graphicsDevice->value, stream);
+    return CreateTextureCubeHandle(
+        std::make_shared<TextureCube>(std::move(decoded)),
+        graphicsDevice->parentGame,
+        outTexture);
 }
 
-CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
+[[nodiscard]] CNA_Result TexturecubeDestroy(const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<TextureCubeResource> texture;
-        if (const CNA_Result result =
-                LookupHandle(textureHandle, ObjectKind::TextureCube, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (texture->activeEffectReferenceCount != 0U) {
-            return InvalidState("The TextureCube is retained by an EffectParameter.");
-        }
-        if (const CNA_Result result = ReleaseHandle(textureHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedGraphicsResourceFor(texture->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<TextureCubeResource> texture;
+    if (const CNA_Result result =
+            LookupHandle(textureHandle, ObjectKind::TextureCube, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (texture->activeEffectReferenceCount != 0U) {
+        return InvalidState("The TextureCube is retained by an EffectParameter.");
+    }
+    if (const CNA_Result result = ReleaseHandle(textureHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedGraphicsResourceFor(texture->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texturecube_set_data(
+[[nodiscard]] CNA_Result TexturecubeSetData(
     const CNA_Handle textureHandle,
     const CNA_TextureCubeTransfer* const transfer,
     const CNA_Color* const data,
     const uint64_t dataCapacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureCubeTransferView view{};
-        if (const CNA_Result result = ValidateTextureCubeTransfer(
-                *texture.value, transfer, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateArrayWindow(
-                data, dataCapacity, view.startIndex, view.elementCount,
-                "The TextureCube upload array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<Color> native;
-        CopyColorsToNative(
-            data,
-            static_cast<uint64_t>(view.startIndex),
-            view.requiredElements,
-            &native);
-        texture.value->SetData(
-            view.face,
-            view.level,
-            view.hasRectangle ? &view.rectangle : nullptr,
-            native.data(),
-            view.startIndex,
-            view.elementCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    TextureCubeResourceView texture;
+    if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TextureCubeTransferView view{};
+    if (const CNA_Result result = ValidateTextureCubeTransfer(
+            *texture.value, transfer, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateArrayWindow(
+            data, dataCapacity, view.startIndex, view.elementCount,
+            "The TextureCube upload array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Color> native;
+    CopyColorsToNative(
+        data,
+        static_cast<uint64_t>(view.startIndex),
+        view.requiredElements,
+        &native);
+    texture.value->SetData(
+        view.face,
+        view.level,
+        view.hasRectangle ? &view.rectangle : nullptr,
+        native.data(),
+        view.startIndex,
+        view.elementCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texturecube_get_data(
+[[nodiscard]] CNA_Result TexturecubeGetData(
     const CNA_Handle textureHandle,
     const CNA_TextureCubeTransfer* const transfer,
     CNA_Color* const destination,
     const uint64_t destinationCapacity,
     uint64_t* const outRequiredElements)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRequiredElements == nullptr) {
-            return InvalidArgument("The TextureCube required-element output is null.");
-        }
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureCubeTransferView view{};
-        if (const CNA_Result result = ValidateTextureCubeTransfer(
-                *texture.value, transfer, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRequiredElements = view.requiredElements;
-        if (const CNA_Result result = ValidateArrayWindow(
-                destination, destinationCapacity, view.startIndex, view.elementCount,
-                "The TextureCube readback array is too small or null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Color zero(
-            static_cast<uint8_t>(0U), static_cast<uint8_t>(0U),
-            static_cast<uint8_t>(0U), static_cast<uint8_t>(0U));
-        std::vector<Color> native(
-            static_cast<std::size_t>(view.startIndex + view.elementCount), zero);
-        texture.value->GetData(
-            view.face,
-            view.level,
-            view.hasRectangle ? &view.rectangle : nullptr,
-            native.data(),
-            view.startIndex,
-            view.elementCount);
-        CopyColorsFromNative(
-            native,
-            static_cast<uint64_t>(view.startIndex),
-            view.requiredElements,
-            destination);
-        return CNA_RESULT_SUCCESS;
-    });
+    TextureCubeResourceView texture;
+    if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TextureCubeTransferView view{};
+    if (const CNA_Result result = ValidateTextureCubeTransfer(
+            *texture.value, transfer, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outRequiredElements = view.requiredElements;
+    if (const CNA_Result result = ValidateArrayWindow(
+            destination, destinationCapacity, view.startIndex, view.elementCount,
+            "The TextureCube readback array is too small or null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Color zero(
+        static_cast<uint8_t>(0U), static_cast<uint8_t>(0U),
+        static_cast<uint8_t>(0U), static_cast<uint8_t>(0U));
+    std::vector<Color> native(
+        static_cast<std::size_t>(view.startIndex + view.elementCount), zero);
+    texture.value->GetData(
+        view.face,
+        view.level,
+        view.hasRectangle ? &view.rectangle : nullptr,
+        native.data(),
+        view.startIndex,
+        view.elementCount);
+    CopyColorsFromNative(
+        native,
+        static_cast<uint64_t>(view.startIndex),
+        view.requiredElements,
+        destination);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/TextureVolume.toml.
 #include "generated/TextureVolume.inc"

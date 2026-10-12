@@ -66,3 +66,202 @@ CNA_Result cna_ascii_post_process_effect_get_quantize_mode(
     return ExtensionUnavailable();
 }
 #endif
+
+CNA_Result cna_indirect_draw_arguments_init(
+    CNA_IndirectDrawArguments* const out_arguments)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_arguments == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_indirect_draw_arguments_init: out_arguments is null.");
+        }
+        return IndirectDrawArgumentsInit(out_arguments);
+    });
+}
+
+CNA_Result cna_indirect_draw_indexed_arguments_init(
+    CNA_IndirectDrawIndexedArguments* const out_arguments)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_arguments == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_indirect_draw_indexed_arguments_init: out_arguments is null.");
+        }
+        return IndirectDrawIndexedArgumentsInit(out_arguments);
+    });
+}
+
+CNA_Result cna_image_based_light_ext_init(
+    CNA_ImageBasedLightEXT* const out_light)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_light == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_image_based_light_ext_init: out_light is null.");
+        }
+        return ImageBasedLightExtInit(out_light);
+    });
+}
+
+CNA_Result cna_image_based_light_ext_is_valid(
+    const CNA_ImageBasedLightEXT* const light,
+    CNA_Bool* const out_valid)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ImageBasedLightExtIsValid(light, out_valid);
+    });
+}
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_AsciiPostProcessEffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ascii_post_process_effect_create: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return AsciiPostProcessEffectCreate(graphics_device, out_effect);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_create(
+    const CNA_Handle graphics_device,
+    CNA_AsciiPostProcessEffectHandle* const out_effect)
+{
+    (void)graphics_device;
+    (void)out_effect;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_get_cell_size(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    int32_t* const out_width,
+    int32_t* const out_height)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ascii_post_process_effect_get_cell_size: out_width is null.");
+        }
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ascii_post_process_effect_get_cell_size: out_height is null.");
+        }
+        return AsciiPostProcessEffectGetCellSize(effect, out_width, out_height);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_get_cell_size(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    int32_t* const out_width,
+    int32_t* const out_height)
+{
+    (void)effect;
+    (void)out_width;
+    (void)out_height;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    const CNA_AsciiQuantizeMode mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AsciiPostProcessEffectSetQuantizeMode(effect, mode);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    const CNA_AsciiQuantizeMode mode)
+{
+    (void)effect;
+    (void)mode;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_draw(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    const CNA_Handle source,
+    const CNA_Rectangle* const destination_rectangle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AsciiPostProcessEffectDraw(effect, source, destination_rectangle);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_draw(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    const CNA_Handle source,
+    const CNA_Rectangle* const destination_rectangle)
+{
+    (void)effect;
+    (void)source;
+    (void)destination_rectangle;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    int32_t* const out_columns,
+    int32_t* const out_rows)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_columns == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ascii_post_process_effect_get_last_grid_dimensions: out_columns is null.");
+        }
+        if (out_rows == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ascii_post_process_effect_get_last_grid_dimensions: out_rows is null.");
+        }
+        return AsciiPostProcessEffectGetLastGridDimensions(effect, out_columns, out_rows);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
+    const CNA_AsciiPostProcessEffectHandle effect,
+    int32_t* const out_columns,
+    int32_t* const out_rows)
+{
+    (void)effect;
+    (void)out_columns;
+    (void)out_rows;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_ascii_post_process_effect_destroy(
+    const CNA_AsciiPostProcessEffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AsciiPostProcessEffectDestroy(effect);
+    });
+}
+#else
+CNA_Result cna_ascii_post_process_effect_destroy(
+    const CNA_AsciiPostProcessEffectHandle effect)
+{
+    (void)effect;
+    return ExtensionUnavailable();
+}
+#endif
+
+CNA_Result cna_graphics_ext_is_available(
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_ext_is_available: out_available is null.");
+        }
+        *out_available = CNA::C::Detail::ToCBool(GraphicsExtBuilt);
+        return CNA_RESULT_SUCCESS;
+    });
+}

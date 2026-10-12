@@ -465,3 +465,92 @@ owner = "std::shared_ptr<EffectResource>"
 
 [skinned_effect_resource.routes]
 cna_skinned_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_effect_annotation_create = { result = "EffectAnnotationCreate(create_info, out_annotation)" }
+cna_effect_annotation_collection_find = { result = "EffectAnnotationCollectionFind(collection, name, out_found, out_annotation)" }
+cna_effect_parameter_get_elements = { result = "EffectParameterGetElements(parameter, out_collection)" }
+cna_effect_parameter_get_structure_members = { result = "EffectParameterGetStructureMembers(parameter, out_collection)" }
+cna_effect_parameter_get_value = { result = "EffectParameterGetValue(parameter, value_type, out_value)" }
+cna_effect_parameter_get_values = { result = "EffectParameterGetValues(parameter, value_type, requested_count, destination, capacity, out_count)" }
+cna_effect_parameter_get_value_texture = { result = "EffectParameterGetValueTexture(parameter, texture_type, out_texture)" }
+cna_effect_parameter_collection_create = { result = "EffectParameterCollectionCreate(out_collection)" }
+cna_effect_parameter_collection_add_create = { result = "EffectParameterCollectionAddCreate(collection, create_info, out_parameter)" }
+cna_effect_parameter_collection_find_name = { result = "EffectParameterCollectionFindName(collection, name, out_found, out_parameter)" }
+cna_effect_parameter_collection_find_semantic = { result = "EffectParameterCollectionFindSemantic(collection, semantic, out_found, out_parameter)" }
+cna_effect_pass_create = { result = "EffectPassCreate(name, technique_identity, out_pass)" }
+cna_effect_pass_create_indexed_ext = { result = "EffectPassCreateIndexedExt(name, technique_identity, pass_index, out_pass)" }
+cna_effect_pass_collection_create = { result = "EffectPassCollectionCreate(out_collection)" }
+cna_effect_pass_collection_add_create = { result = "EffectPassCollectionAddCreate(collection, name, technique_identity, out_pass)" }
+cna_effect_pass_collection_find = { result = "EffectPassCollectionFind(collection, name, out_found, out_pass)" }
+cna_effect_technique_create_named = { result = "EffectTechniqueCreateNamed(name, out_technique)" }
+cna_effect_technique_create_reflected_ext = { result = "EffectTechniqueCreateReflectedExt(name, technique_index, add_default_pass, out_technique)" }
+cna_effect_technique_get_passes = { result = "EffectTechniqueGetPasses(technique, out_collection)" }
+cna_effect_technique_collection_create = { result = "EffectTechniqueCollectionCreate(out_collection)" }
+cna_effect_technique_collection_add_default = { result = "EffectTechniqueCollectionAddDefault(collection, out_technique)" }
+cna_effect_technique_collection_add_named = { result = "EffectTechniqueCollectionAddNamed(collection, name, out_technique)" }
+cna_effect_technique_collection_find = { result = "EffectTechniqueCollectionFind(collection, name, out_found, out_technique)" }
+cna_effect_create_compiled = { result = "EffectCreateCompiled(graphics_device, effect_code, effect_code_count, out_effect)" }
+cna_content_manager_load_effect = { result = "ContentManagerLoadEffect(content_manager, asset_name, out_effect)" }
+cna_shader_effect_create = { result = "ShaderEffectCreate(graphics_device, vertex_source, fragment_source, out_effect)" }
+cna_effect_clone = { result = "EffectClone(effect, out_clone)" }
+cna_effect_get_current_technique = { result = "EffectGetCurrentTechnique(effect, out_technique)" }
+cna_effect_get_graphics_device = { result = "EffectGetGraphicsDevice(effect, out_graphics_device)" }
+cna_effect_lights_get_directional_light = { result = "EffectLightsGetDirectionalLight(effect, index, out_light)" }
+cna_effect_lights_set_enabled = { result = "EffectLightsSetEnabled(effect, value)" }
+cna_basic_effect_get_texture = { result = "BasicEffectGetTexture(effect, out_has_texture, out_texture)" }
+cna_dual_texture_effect_get_texture = { result = "DualTextureEffectGetTexture(effect, texture_index, out_has_texture, out_texture)" }
+cna_skinned_effect_copy_bone_transforms = { result = "SkinnedEffectCopyBoneTransforms(effect, requested_count, destination, capacity, out_count)" }
+cna_pbr_effect_get_texture_coordinate_set_ext = { result = "PbrEffectGetTextureCoordinateSetExt(effect, slot, out_value)" }
+cna_pbr_effect_get_texture_is_srgb_ext = { result = "PbrEffectGetTextureIsSrgbExt(effect, slot, out_value)" }
+cna_pbr_effect_set_texture_is_srgb_ext = { result = "PbrEffectSetTextureIsSrgbExt(effect, slot, value)" }
+cna_skinned_pbr_effect_copy_bone_transforms = { result = "SkinnedPbrEffectCopyBoneTransforms(effect, requested_count, destination, capacity, out_count)" }
+cna_pbr_effect_get_texture_transform_ext = { result = "PbrEffectGetTextureTransformExt(effect, slot, out_transform)", optional = ["out_transform"] }
+cna_effect_parameter_set_value = { result = "EffectParameterSetValue(parameter, value_type, value)" }
+cna_effect_parameter_set_values = { result = "EffectParameterSetValues(parameter, value_type, values, count)" }
+cna_effect_parameter_set_value_texture = { result = "EffectParameterSetValueTexture(parameter, texture_type, texture)" }
+cna_effect_set_current_technique = { result = "EffectSetCurrentTechnique(effect, technique)" }
+cna_shader_effect_set_uniform_matrix = { result = "ShaderEffectSetUniformMatrix(effect, name, value)" }
+cna_shader_effect_declare_uniform_block_ext = { result = "ShaderEffectDeclareUniformBlockExt(effect, block_size_bytes, names, offsets, count)" }
+cna_shader_effect_set_uniform_float_array = { result = "ShaderEffectSetUniformFloatArray(effect, name, values, count)" }
+cna_shader_effect_set_uniform_vector2_array = { result = "ShaderEffectSetUniformVector2Array(effect, name, values, count)" }
+cna_shader_effect_set_texture2d = { result = "ShaderEffectSetTexture2d(effect, unit, texture)" }
+cna_shader_effect_set_texture_cube = { result = "ShaderEffectSetTextureCube(effect, unit, texture)" }
+cna_shader_effect_set_texture3d = { result = "ShaderEffectSetTexture3d(effect, unit, texture)" }
+cna_basic_effect_set_texture = { result = "BasicEffectSetTexture(effect, texture)" }
+cna_alpha_test_effect_set_texture = { result = "AlphaTestEffectSetTexture(effect, texture)" }
+cna_dual_texture_effect_set_texture = { result = "DualTextureEffectSetTexture(effect, texture_index, texture)" }
+cna_environment_map_effect_set_texture = { result = "EnvironmentMapEffectSetTexture(effect, texture)" }
+cna_environment_map_effect_set_environment_map = { result = "EnvironmentMapEffectSetEnvironmentMap(effect, environment_map)" }
+cna_skinned_effect_set_texture = { result = "SkinnedEffectSetTexture(effect, texture)" }
+cna_skinned_effect_set_bone_transforms = { result = "SkinnedEffectSetBoneTransforms(effect, transforms, transform_count)" }
+cna_pbr_effect_set_texture = { result = "PbrEffectSetTexture(effect, slot, texture)" }
+cna_pbr_effect_set_texture_coordinate_set_ext = { result = "PbrEffectSetTextureCoordinateSetExt(effect, slot, value)" }
+cna_pbr_effect_set_texture_transform_ext = { result = "PbrEffectSetTextureTransformExt(effect, slot, transform)" }
+cna_pbr_effect_set_alpha_mode_ext = { result = "PbrEffectSetAlphaModeExt(effect, value)" }
+cna_skinned_pbr_effect_set_bone_transforms = { result = "SkinnedPbrEffectSetBoneTransforms(effect, transforms, transform_count)" }
+cna_shader_effect_set_uniform_vec3_array = { result = "ShaderEffectSetUniformVec3Array(effect, name, values, count)" }
+cna_shader_effect_set_uniform_mat4_array = { result = "ShaderEffectSetUniformMat4Array(effect, name, matrices, count)" }
+cna_effect_material_retain_parameter_texture_ext = { result = "EffectMaterialRetainParameterTextureExt(effect, texture_type, texture)" }
+
+# Helper routes that exist only in builds with CNA_CNAEXT; without it each answers
+# ExtensionEffectUnavailable().
+[helpers_cnaext]
+raw = true
+feature = "CNA_CNAEXT"
+unavailable = "ExtensionEffectUnavailable()"
+
+[helpers_cnaext.routes]
+cna_crt_effect_set_scanline_intensity = { result = "CrtEffectSetScanlineIntensity(effect, value)" }
+cna_crt_effect_set_curvature = { result = "CrtEffectSetCurvature(effect, value)" }
+cna_crt_effect_set_vignette_intensity = { result = "CrtEffectSetVignetteIntensity(effect, value)" }
+cna_crt_effect_set_mask_intensity = { result = "CrtEffectSetMaskIntensity(effect, value)" }
+cna_crt_effect_set_mask_type = { result = "CrtEffectSetMaskType(effect, mask_type)" }
+cna_depth_effect_set_mode = { result = "DepthEffectSetMode(effect, mode)" }
+cna_depth_effect_set_dither_mode = { result = "DepthEffectSetDitherMode(effect, dither_mode)" }

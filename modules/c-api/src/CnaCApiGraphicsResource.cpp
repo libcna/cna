@@ -271,67 +271,54 @@ template<typename TCallable>
     });
 }
 
-} // namespace
-
-CNA_Result cna_graphics_resource_get_graphics_device(
+[[nodiscard]] CNA_Result GraphicsResourceGetGraphicsDevice(
     const CNA_Handle resourceHandle,
     CNA_Handle* const outGraphicsDevice)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The graphics-device output handle is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (resource.value->getGraphicsDeviceProperty() == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (resource.parentGame == CNA_INVALID_HANDLE) {
-            return NotSupported(
-                "The resource's graphics-device owner cannot be represented by a C handle.");
-        }
-        CNA_Handle borrowedHandle = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = BorrowGameGraphicsDevice(
-                resource.parentGame, &borrowedHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> borrowed;
-        const CNA_Result lookupResult = GetRuntimeHandles().Get(
-            borrowedHandle, ObjectKind::GraphicsDevice, &borrowed);
-        if (lookupResult != CNA_RESULT_SUCCESS ||
-            borrowed->value != resource.value->getGraphicsDeviceProperty()) {
-            return InternalError("The resource and borrowed graphics-device owners disagree.");
-        }
-        *outGraphicsDevice = borrowedHandle;
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (resource.value->getGraphicsDeviceProperty() == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (resource.parentGame == CNA_INVALID_HANDLE) {
+        return NotSupported(
+            "The resource's graphics-device owner cannot be represented by a C handle.");
+    }
+    CNA_Handle borrowedHandle = CNA_INVALID_HANDLE;
+    if (const CNA_Result result = BorrowGameGraphicsDevice(
+            resource.parentGame, &borrowedHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> borrowed;
+    const CNA_Result lookupResult = GetRuntimeHandles().Get(
+        borrowedHandle, ObjectKind::GraphicsDevice, &borrowed);
+    if (lookupResult != CNA_RESULT_SUCCESS ||
+        borrowed->value != resource.value->getGraphicsDeviceProperty()) {
+        return InternalError("The resource and borrowed graphics-device owners disagree.");
+    }
+    *outGraphicsDevice = borrowedHandle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_resource_get_is_disposed(
+[[nodiscard]] CNA_Result GraphicsResourceGetIsDisposed(
     const CNA_Handle resourceHandle,
     CNA_Bool* const outIsDisposed)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIsDisposed == nullptr) {
-            return InvalidArgument("The disposal-state output is null.");
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Bool disposed = ToCBool(resource.value->getIsDisposedProperty());
-        *outIsDisposed = disposed;
-        return CNA_RESULT_SUCCESS;
-    });
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA_Bool disposed = ToCBool(resource.value->getIsDisposedProperty());
+    *outIsDisposed = disposed;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_resource_copy_name(
+[[nodiscard]] CNA_Result GraphicsResourceCopyName(
     const CNA_Handle resourceHandle,
     char* const destination,
     const uint64_t capacity,
@@ -345,7 +332,7 @@ CNA_Result cna_graphics_resource_copy_name(
         [](GraphicsResource& resource) { return resource.getNameProperty(); });
 }
 
-CNA_Result cna_graphics_resource_copy_string(
+[[nodiscard]] CNA_Result GraphicsResourceCopyString(
     const CNA_Handle resourceHandle,
     char* const destination,
     const uint64_t capacity,
@@ -359,113 +346,98 @@ CNA_Result cna_graphics_resource_copy_string(
         [](GraphicsResource& resource) { return resource.ToString(); });
 }
 
-CNA_Result cna_graphics_resource_get_tag(
+[[nodiscard]] CNA_Result GraphicsResourceGetTag(
     const CNA_Handle resourceHandle,
     CNA_GraphicsResourceTag* const outTag)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTag == nullptr) {
-            return InvalidArgument("The graphics-resource tag output is null.");
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        uint64_t tag = 0U;
-        const CNA_Result result = GetRuntimeHandles().GetUserTag(resourceHandle, &tag);
-        if (result != CNA_RESULT_SUCCESS) {
-            return InvalidResource(result);
-        }
-        *outTag = tag;
-        return CNA_RESULT_SUCCESS;
-    });
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    uint64_t tag = 0U;
+    const CNA_Result result = GetRuntimeHandles().GetUserTag(resourceHandle, &tag);
+    if (result != CNA_RESULT_SUCCESS) {
+        return InvalidResource(result);
+    }
+    *outTag = tag;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_resource_set_tag(
+[[nodiscard]] CNA_Result GraphicsResourceSetTag(
     const CNA_Handle resourceHandle,
     const CNA_GraphicsResourceTag tag)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().SetUserTag(resourceHandle, tag);
-        return result == CNA_RESULT_SUCCESS ? CNA_RESULT_SUCCESS : InvalidResource(result);
-    });
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA_Result result = GetRuntimeHandles().SetUserTag(resourceHandle, tag);
+    return result == CNA_RESULT_SUCCESS ? CNA_RESULT_SUCCESS : InvalidResource(result);
 }
 
-CNA_Result cna_graphics_resource_dispose(const CNA_Handle resourceHandle)
+[[nodiscard]] CNA_Result GraphicsResourceDispose(const CNA_Handle resourceHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = EnsureDisposable(resource); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource.value->Dispose();
-        return CNA_RESULT_SUCCESS;
-    });
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = EnsureDisposable(resource); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource.value->Dispose();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_resource_subscribe_disposing(
+[[nodiscard]] CNA_Result GraphicsResourceSubscribeDisposing(
     const CNA_Handle resourceHandle,
     const CNA_GraphicsResourceDisposingCallback callback,
     void* const context,
     CNA_GraphicsResourceEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The disposing-registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The disposing callback is null.");
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto token = resource.value->Disposing.Add(
-            [resourceHandle, callback, context](System::Object*, const System::EventArgs&) {
-                callback(resourceHandle, context);
-            });
-        const auto registration = std::make_shared<DisposingRegistration>(resource.value, token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::EventRegistration,
-            registration,
-            outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The disposing-registration handle could not be created.");
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The disposing callback is null.");
+    }
+    GraphicsResourceView resource;
+    if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto token = resource.value->Disposing.Add(
+        [resourceHandle, callback, context](System::Object*, const System::EventArgs&) {
+            callback(resourceHandle, context);
+        });
+    const auto registration = std::make_shared<DisposingRegistration>(resource.value, token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The disposing-registration handle could not be created.");
 }
 
-CNA_Result cna_graphics_resource_unsubscribe_disposing(
+[[nodiscard]] CNA_Result GraphicsResourceUnsubscribeDisposing(
     const CNA_GraphicsResourceEventRegistrationHandle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DisposingRegistration> registration;
-        const CNA_Result getResult =
-                LookupHandle(registrationHandle, ObjectKind::EventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<DisposingRegistration> registration;
+    const CNA_Result getResult =
+            LookupHandle(registrationHandle, ObjectKind::EventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/GraphicsResource.toml.
 #include "generated/GraphicsResource.inc"

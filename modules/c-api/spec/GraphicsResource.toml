@@ -9,3 +9,20 @@ object = "GraphicsResourceView"
 cna_graphics_resource_get_name_byte_count = { size = "object.value->getNameProperty()" }
 cna_graphics_resource_get_string_byte_count = { size = "object.value->ToString()" }
 cna_graphics_resource_set_name = { call = "object.value->setNameProperty(name)", refuse_nul = ["name"] }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_graphics_resource_get_graphics_device = { result = "GraphicsResourceGetGraphicsDevice(resource, out_graphics_device)" }
+cna_graphics_resource_get_is_disposed = { result = "GraphicsResourceGetIsDisposed(resource, out_is_disposed)" }
+cna_graphics_resource_get_tag = { result = "GraphicsResourceGetTag(resource, out_tag)" }
+cna_graphics_resource_subscribe_disposing = { result = "GraphicsResourceSubscribeDisposing(resource, callback, context, out_registration)" }
+cna_graphics_resource_copy_name = { result = "GraphicsResourceCopyName(resource, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_graphics_resource_copy_string = { result = "GraphicsResourceCopyString(resource, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_graphics_resource_set_tag = { result = "GraphicsResourceSetTag(resource, tag)" }
+cna_graphics_resource_dispose = { result = "GraphicsResourceDispose(resource)" }
+cna_graphics_resource_unsubscribe_disposing = { result = "GraphicsResourceUnsubscribeDisposing(registration)" }

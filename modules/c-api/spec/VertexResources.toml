@@ -14,3 +14,15 @@ cna_vertex_declaration_destroy = { release = "object->Dispose()" }
 [calls]
 [calls.routes]
 cna_vertex_declaration_create_empty = { result = "RegisterDeclaration(std::make_shared<VertexDeclaration>(), out_declaration)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_vertex_declaration_create = { result = "VertexDeclarationCreate(elements, element_count, out_declaration)" }
+cna_vertex_declaration_create_with_stride = { result = "VertexDeclarationCreateWithStride(vertex_stride, elements, element_count, out_declaration)" }
+cna_vertex_declaration_copy_elements = { result = "VertexDeclarationCopyElements(declaration, destination, capacity, out_element_count)" }
+cna_vertex_buffer_binding_init = { result = "VertexBufferBindingInit(vertex_buffer, vertex_offset, instance_frequency, out_binding)" }

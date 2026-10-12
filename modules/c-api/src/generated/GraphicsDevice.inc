@@ -1102,3 +1102,255 @@ CNA_Result cna_occlusion_query_has_renderer(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_graphics_device_get_adapter_index(
+    const CNA_Handle graphics_device,
+    uint32_t* const out_adapter_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_adapter_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_adapter_index: out_adapter_index is null.");
+        }
+        return GraphicsDeviceGetAdapterIndex(graphics_device, out_adapter_index);
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_event(
+    const CNA_Handle graphics_device,
+    const CNA_GraphicsDeviceEvent device_event,
+    const CNA_GraphicsDeviceEventCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_subscribe_event: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GraphicsDeviceSubscribeEvent(graphics_device, device_event, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_device_copy_vertex_buffers(
+    const CNA_Handle graphics_device,
+    CNA_VertexBufferBinding* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_copy_vertex_buffers: out_count is null.");
+        }
+        return GraphicsDeviceCopyVertexBuffers(graphics_device, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_occlusion_query_create(
+    const CNA_Handle graphics_device,
+    CNA_OcclusionQueryHandle* const out_occlusion_query)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_occlusion_query == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_occlusion_query_create: out_occlusion_query is null.");
+        }
+        *out_occlusion_query = CNA_INVALID_HANDLE;
+        return OcclusionQueryCreate(graphics_device, out_occlusion_query);
+    });
+}
+
+CNA_Result cna_graphics_device_get_texture(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderStage stage,
+    const uint32_t slot,
+    CNA_TextureSlotInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_texture: out_info is null.");
+        }
+        return GraphicsDeviceGetTexture(graphics_device, stage, slot, out_info);
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_resource_created(
+    const CNA_Handle graphics_device,
+    const CNA_GraphicsDeviceResourceCreatedCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return GraphicsDeviceSubscribeResourceCreated(graphics_device, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_resource_destroyed(
+    const CNA_Handle graphics_device,
+    const CNA_GraphicsDeviceResourceDestroyedCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return GraphicsDeviceSubscribeResourceDestroyed(graphics_device, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_viewport_set_bounds(
+    CNA_Viewport* const viewport,
+    const CNA_Rectangle bounds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ViewportSetBounds(viewport, bounds);
+    });
+}
+
+CNA_Result cna_graphics_device_unsubscribe(
+    const CNA_GraphicsDeviceEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceUnsubscribe(registration);
+    });
+}
+
+CNA_Result cna_graphics_device_set_texture(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderStage stage,
+    const uint32_t slot,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetTexture(graphics_device, stage, slot, texture);
+    });
+}
+
+CNA_Result cna_graphics_device_unbind_texture(
+    const CNA_Handle graphics_device,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceUnbindTexture(graphics_device, texture);
+    });
+}
+
+CNA_Result cna_graphics_device_get_backbuffer_data_window(
+    const CNA_Handle graphics_device,
+    const CNA_BackBufferReadback* const readback,
+    CNA_Color* const destination,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceGetBackbufferDataWindow(graphics_device, readback, destination, capacity);
+    });
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffer(
+    const CNA_Handle graphics_device,
+    const CNA_VertexBufferHandle vertex_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetVertexBuffer(graphics_device, vertex_buffer);
+    });
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffer_offset(
+    const CNA_Handle graphics_device,
+    const CNA_VertexBufferHandle vertex_buffer,
+    const int32_t vertex_offset)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetVertexBufferOffset(graphics_device, vertex_buffer, vertex_offset);
+    });
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffers(
+    const CNA_Handle graphics_device,
+    const CNA_VertexBufferBinding* const bindings,
+    const uint64_t binding_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetVertexBuffers(graphics_device, bindings, binding_count);
+    });
+}
+
+CNA_Result cna_graphics_device_get_vertex_buffer(
+    const CNA_Handle graphics_device,
+    CNA_VertexBufferHandle* const out_vertex_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_vertex_buffer != nullptr) {
+            *out_vertex_buffer = CNA_INVALID_HANDLE;
+        }
+        return GraphicsDeviceGetVertexBuffer(graphics_device, out_vertex_buffer);
+    });
+}
+
+CNA_Result cna_graphics_device_set_index_buffer(
+    const CNA_Handle graphics_device,
+    const CNA_IndexBufferHandle index_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetIndexBuffer(graphics_device, index_buffer);
+    });
+}
+
+CNA_Result cna_graphics_device_get_index_buffer(
+    const CNA_Handle graphics_device,
+    CNA_IndexBufferHandle* const out_index_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index_buffer != nullptr) {
+            *out_index_buffer = CNA_INVALID_HANDLE;
+        }
+        return GraphicsDeviceGetIndexBuffer(graphics_device, out_index_buffer);
+    });
+}
+
+CNA_Result cna_graphics_device_draw_user_primitives(
+    const CNA_Handle graphics_device,
+    const CNA_UserPrimitives* const primitives)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceDrawUserPrimitives(graphics_device, primitives);
+    });
+}
+
+CNA_Result cna_graphics_device_draw_user_indexed_primitives(
+    const CNA_Handle graphics_device,
+    const CNA_UserPrimitives* const primitives,
+    const CNA_UserIndices* const indices)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceDrawUserIndexedPrimitives(graphics_device, primitives, indices);
+    });
+}
+
+CNA_Result cna_graphics_device_set_current_effect(
+    const CNA_Handle graphics_device,
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetCurrentEffect(graphics_device, effect);
+    });
+}
+
+CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
+    const CNA_Handle graphics_device,
+    const int32_t multi_sample_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceRecreateRendererForMultiSampleCountExt(graphics_device, multi_sample_count);
+    });
+}
+
+CNA_Result cna_occlusion_query_destroy(
+    const CNA_OcclusionQueryHandle occlusion_query)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return OcclusionQueryDestroy(occlusion_query);
+    });
+}

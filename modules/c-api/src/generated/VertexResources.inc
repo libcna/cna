@@ -89,3 +89,60 @@ CNA_Result cna_vertex_declaration_create_empty(
         return RegisterDeclaration(std::make_shared<VertexDeclaration>(), out_declaration);
     });
 }
+
+CNA_Result cna_vertex_declaration_create(
+    const CNA_VertexElement* const elements,
+    const uint64_t element_count,
+    CNA_VertexDeclarationHandle* const out_declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_declaration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_create: out_declaration is null.");
+        }
+        *out_declaration = CNA_INVALID_HANDLE;
+        return VertexDeclarationCreate(elements, element_count, out_declaration);
+    });
+}
+
+CNA_Result cna_vertex_declaration_create_with_stride(
+    const int32_t vertex_stride,
+    const CNA_VertexElement* const elements,
+    const uint64_t element_count,
+    CNA_VertexDeclarationHandle* const out_declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_declaration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_create_with_stride: out_declaration is null.");
+        }
+        *out_declaration = CNA_INVALID_HANDLE;
+        return VertexDeclarationCreateWithStride(vertex_stride, elements, element_count, out_declaration);
+    });
+}
+
+CNA_Result cna_vertex_declaration_copy_elements(
+    const CNA_VertexDeclarationHandle declaration,
+    CNA_VertexElement* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_element_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_element_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_copy_elements: out_element_count is null.");
+        }
+        return VertexDeclarationCopyElements(declaration, destination, capacity, out_element_count);
+    });
+}
+
+CNA_Result cna_vertex_buffer_binding_init(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const int32_t vertex_offset,
+    const int32_t instance_frequency,
+    CNA_VertexBufferBinding* const out_binding)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_binding == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_binding_init: out_binding is null.");
+        }
+        return VertexBufferBindingInit(vertex_buffer, vertex_offset, instance_frequency, out_binding);
+    });
+}

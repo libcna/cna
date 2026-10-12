@@ -541,3 +541,82 @@ CNA_Result cna_graphics_device_information_copy_type_name(
         return GraphicsDeviceInformation().GetTypeName();
     });
 }
+
+CNA_Result cna_graphics_device_information_clone(
+    const CNA_GraphicsDeviceInformation* const information,
+    CNA_GraphicsDeviceInformation* const out_information)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_information == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_clone: out_information is null.");
+        }
+        return GraphicsDeviceInformationClone(information, out_information);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_create(
+    const CNA_Handle game,
+    CNA_GraphicsDeviceManagerHandle* const out_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_create: out_manager is null.");
+        }
+        *out_manager = CNA_INVALID_HANDLE;
+        return GraphicsDeviceManagerCreate(game, out_manager);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_subscribe(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_GraphicsDeviceManagerEvent event,
+    const CNA_GameEventCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_subscribe: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GraphicsDeviceManagerSubscribe(manager, event, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_PreparingDeviceSettingsCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_subscribe_preparing_device_settings: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GraphicsDeviceManagerSubscribePreparingDeviceSettings(manager, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    const CNA_PreparingDeviceSettingsMutatorEXT callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_subscribe_preparing_device_settings_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GraphicsDeviceManagerSubscribePreparingDeviceSettingsExt(manager, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_graphics_device_manager_destroy(
+    const CNA_GraphicsDeviceManagerHandle manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceManagerDestroy(manager);
+    });
+}

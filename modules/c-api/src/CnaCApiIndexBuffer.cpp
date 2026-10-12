@@ -197,94 +197,82 @@ private:
     bool subscribed_ = true;
 };
 
-} // namespace
-
-CNA_Result cna_index_buffer_create(
+[[nodiscard]] CNA_Result IndexBufferCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_IndexBufferCreateInfo* const createInfo,
     CNA_IndexBufferHandle* const outIndexBuffer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndexBuffer == nullptr) {
-            return InvalidArgument("The IndexBuffer output handle is null.");
-        }
-        *outIndexBuffer = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) ||
-            createInfo->index_count <= 0 ||
-            createInfo->index_element_size > CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS ||
-            createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
-            !IsCanonicalBool(createInfo->dynamic) ||
-            !IsZero(createInfo->reserved, 3U)) {
-            return InvalidArgument("The IndexBuffer creation configuration is invalid.");
-        }
+    if (!IsVersionedStructure(createInfo) ||
+        createInfo->index_count <= 0 ||
+        createInfo->index_element_size > CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS ||
+        createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
+        !IsCanonicalBool(createInfo->dynamic) ||
+        !IsZero(createInfo->reserved, 3U)) {
+        return InvalidArgument("The IndexBuffer creation configuration is invalid.");
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-            return NotSupported("The selected graphics backend does not support index buffers.");
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
+        return NotSupported("The selected graphics backend does not support index buffers.");
+    }
 
-        const auto elementSize =
-            static_cast<IndexElementSize>(createInfo->index_element_size);
-        const auto usage = static_cast<BufferUsage>(createInfo->buffer_usage);
-        const bool dynamic = createInfo->dynamic == CNA_TRUE;
-        std::shared_ptr<IndexBuffer> native;
-        if (dynamic) {
-            native = std::make_shared<DynamicIndexBuffer>(
-                *graphicsDevice->value,
-                elementSize,
-                createInfo->index_count,
-                usage);
-        } else if (
-            elementSize == IndexElementSize::SixteenBits && usage == BufferUsage::None) {
-            native = std::make_shared<IndexBuffer>(
-                *graphicsDevice->value,
-                createInfo->index_count);
-        } else {
-            native = std::make_shared<IndexBuffer>(
-                *graphicsDevice->value,
-                elementSize,
-                createInfo->index_count,
-                usage);
-        }
+    const auto elementSize =
+        static_cast<IndexElementSize>(createInfo->index_element_size);
+    const auto usage = static_cast<BufferUsage>(createInfo->buffer_usage);
+    const bool dynamic = createInfo->dynamic == CNA_TRUE;
+    std::shared_ptr<IndexBuffer> native;
+    if (dynamic) {
+        native = std::make_shared<DynamicIndexBuffer>(
+            *graphicsDevice->value,
+            elementSize,
+            createInfo->index_count,
+            usage);
+    } else if (
+        elementSize == IndexElementSize::SixteenBits && usage == BufferUsage::None) {
+        native = std::make_shared<IndexBuffer>(
+            *graphicsDevice->value,
+            createInfo->index_count);
+    } else {
+        native = std::make_shared<IndexBuffer>(
+            *graphicsDevice->value,
+            elementSize,
+            createInfo->index_count,
+            usage);
+    }
 
-        const auto resource = std::make_shared<IndexBufferResource>(
-            IndexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        if (const CNA_Result result =
-                CreateHandle(ObjectKind::IndexBuffer, resource, outIndexBuffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto resource = std::make_shared<IndexBufferResource>(
+        IndexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
+    if (const CNA_Result result =
+            CreateHandle(ObjectKind::IndexBuffer, resource, outIndexBuffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandle)
+[[nodiscard]] CNA_Result IndexBufferDestroy(const CNA_IndexBufferHandle indexBufferHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (buffer->activeModelReferenceCount != 0U) {
-            return InvalidState("The IndexBuffer is retained by a ModelMeshPart.");
-        }
-        if (const CNA_Result result = ReleaseHandle(indexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedGraphicsResourceFor(buffer->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (buffer->activeModelReferenceCount != 0U) {
+        return InvalidState("The IndexBuffer is retained by a ModelMeshPart.");
+    }
+    if (const CNA_Result result = ReleaseHandle(indexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedGraphicsResourceFor(buffer->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 /// Applies one windowed upload, in the element width the transfer selected.
 template<typename TIndex>
@@ -313,192 +301,175 @@ template<typename TIndex>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_index_buffer_set_data_at(
+[[nodiscard]] CNA_Result IndexBufferSetDataAt(
     const CNA_IndexBufferHandle indexBufferHandle,
     const uint64_t bufferOffsetInBytes,
     const CNA_IndexBufferTransfer* const transfer,
     const void* const data,
     const uint64_t capacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (bufferOffsetInBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument(
-                "The IndexBuffer destination offset is outside the native range.");
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                transfer, capacity, data, false, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
-            return InvalidArgument(
-                "The source index width does not match the IndexBuffer element size.");
-        }
-        // A windowed upload rewrites part of the buffer's own contents, which is the one thing a
-        // streaming hint cannot describe: Discard means "the old contents are gone", and that is
-        // exactly what this route promises not to do.
-        if (view.options != SetDataOptions::None) {
-            return NotSupported(
-                "A windowed upload preserves the rest of the buffer, so it accepts no "
-                "SetDataOptions other than None.");
-        }
-        if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
-            return SetTypedAt<uint32_t>(*buffer, bufferOffsetInBytes, view, data);
-        }
-        return SetTypedAt<uint16_t>(*buffer, bufferOffsetInBytes, view, data);
-    });
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (bufferOffsetInBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument(
+            "The IndexBuffer destination offset is outside the native range.");
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            transfer, capacity, data, false, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
+        return InvalidArgument(
+            "The source index width does not match the IndexBuffer element size.");
+    }
+    // A windowed upload rewrites part of the buffer's own contents, which is the one thing a
+    // streaming hint cannot describe: Discard means "the old contents are gone", and that is
+    // exactly what this route promises not to do.
+    if (view.options != SetDataOptions::None) {
+        return NotSupported(
+            "A windowed upload preserves the rest of the buffer, so it accepts no "
+            "SetDataOptions other than None.");
+    }
+    if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
+        return SetTypedAt<uint32_t>(*buffer, bufferOffsetInBytes, view, data);
+    }
+    return SetTypedAt<uint16_t>(*buffer, bufferOffsetInBytes, view, data);
 }
 
-CNA_Result cna_index_buffer_set_data(
+[[nodiscard]] CNA_Result IndexBufferSetData(
     const CNA_IndexBufferHandle indexBufferHandle,
     const CNA_IndexBufferTransfer* const transfer,
     const void* const data,
     const uint64_t capacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                transfer, capacity, data, false, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
-            return InvalidArgument(
-                "The source index width does not match the IndexBuffer element size.");
-        }
-        if (view.options != SetDataOptions::None && !buffer->dynamic) {
-            return NotSupported("SetDataOptions other than None require DynamicIndexBuffer.");
-        }
-        if (view.count >
-            static_cast<uint64_t>(buffer->value->getIndexCountProperty())) {
-            return OutOfRange("The upload exceeds the IndexBuffer's logical capacity.");
-        }
-        if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
-            return SetTyped<uint32_t>(*buffer, view, data);
-        }
-        return SetTyped<uint16_t>(*buffer, view, data);
-    });
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            transfer, capacity, data, false, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
+        return InvalidArgument(
+            "The source index width does not match the IndexBuffer element size.");
+    }
+    if (view.options != SetDataOptions::None && !buffer->dynamic) {
+        return NotSupported("SetDataOptions other than None require DynamicIndexBuffer.");
+    }
+    if (view.count >
+        static_cast<uint64_t>(buffer->value->getIndexCountProperty())) {
+        return OutOfRange("The upload exceeds the IndexBuffer's logical capacity.");
+    }
+    if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
+        return SetTyped<uint32_t>(*buffer, view, data);
+    }
+    return SetTyped<uint16_t>(*buffer, view, data);
 }
 
-CNA_Result cna_index_buffer_get_data(
+[[nodiscard]] CNA_Result IndexBufferGetData(
     const CNA_IndexBufferHandle indexBufferHandle,
     const CNA_IndexBufferTransfer* const transfer,
     void* const destination,
     const uint64_t capacity,
     uint64_t* const outElementCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outElementCount == nullptr) {
-            return InvalidArgument("The IndexBuffer required-element output is null.");
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            transfer, capacity, destination, true, &view);
+        result != CNA_RESULT_SUCCESS) {
+        if (IsVersionedStructure(transfer)) {
+            *outElementCount = transfer->element_count;
         }
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                transfer, capacity, destination, true, &view);
-            result != CNA_RESULT_SUCCESS) {
-            if (IsVersionedStructure(transfer)) {
-                *outElementCount = transfer->element_count;
-            }
-            return result;
-        }
-        *outElementCount = view.count;
-        if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
-            return InvalidArgument(
-                "The destination index width does not match the IndexBuffer element size.");
-        }
-        if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
-            return GetTyped<uint32_t>(*buffer, view, destination);
-        }
-        return GetTyped<uint16_t>(*buffer, view, destination);
-    });
+        return result;
+    }
+    *outElementCount = view.count;
+    if (view.elementSize != buffer->value->getIndexElementSizeProperty()) {
+        return InvalidArgument(
+            "The destination index width does not match the IndexBuffer element size.");
+    }
+    if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
+        return GetTyped<uint32_t>(*buffer, view, destination);
+    }
+    return GetTyped<uint16_t>(*buffer, view, destination);
 }
 
-CNA_Result cna_index_buffer_subscribe_content_lost(
+[[nodiscard]] CNA_Result IndexBufferSubscribeContentLost(
     const CNA_IndexBufferHandle indexBufferHandle,
     const CNA_IndexBufferContentLostCallback callback,
     void* const context,
     CNA_IndexBufferEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The ContentLost registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The ContentLost callback is null.");
-        }
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!buffer->dynamic) {
-            return NotSupported("ContentLost exists only on DynamicIndexBuffer.");
-        }
-        const auto dynamic = std::static_pointer_cast<DynamicIndexBuffer>(buffer->value);
-        const auto token = dynamic->ContentLost.Add(
-            [indexBufferHandle, callback, context](System::Object*, const System::EventArgs&) {
-                callback(indexBufferHandle, context);
-            });
-        const auto registration = std::make_shared<ContentLostRegistration>(dynamic, token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::IndexBufferEventRegistration,
-            registration,
-            outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The ContentLost registration handle could not be created.");
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The ContentLost callback is null.");
+    }
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(indexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!buffer->dynamic) {
+        return NotSupported("ContentLost exists only on DynamicIndexBuffer.");
+    }
+    const auto dynamic = std::static_pointer_cast<DynamicIndexBuffer>(buffer->value);
+    const auto token = dynamic->ContentLost.Add(
+        [indexBufferHandle, callback, context](System::Object*, const System::EventArgs&) {
+            callback(indexBufferHandle, context);
+        });
+    const auto registration = std::make_shared<ContentLostRegistration>(dynamic, token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::IndexBufferEventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The ContentLost registration handle could not be created.");
 }
 
-CNA_Result cna_index_buffer_unsubscribe_content_lost(
+[[nodiscard]] CNA_Result IndexBufferUnsubscribeContentLost(
     const CNA_IndexBufferEventRegistrationHandle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::IndexBufferEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<ContentLostRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::IndexBufferEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/IndexBuffer.toml.
 #include "generated/IndexBuffer.inc"

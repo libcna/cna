@@ -20,3 +20,13 @@ cna_vertex_element_not_equals = { value = "ToNativeElement(left) != ToNativeElem
 cna_vertex_element_get_hash_code = { value = "ToNativeElement(value).GetHashCode()", validate = "ValidateVertexElement(value)" }
 cna_vertex_element_get_string_byte_count = { size = "ToNativeElement(value).ToString()", validate = "ValidateVertexElement(value)" }
 cna_vertex_element_copy_string = { copy = "ToNativeElement(value).ToString()", validate = "ValidateVertexElement(value)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_vertex_type_get_stride = { result = "VertexTypeGetStride(type, out_stride)" }
+cna_vertex_type_copy_elements = { result = "VertexTypeCopyElements(type, destination, capacity, out_element_count)" }

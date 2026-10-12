@@ -161,3 +161,168 @@ CNA_Result cna_texture_get_info(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_texture2d_create_from_file(
+    const CNA_StringView path,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_from_file: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture2dCreateFromFile(path, out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_create_from_file_with_device(
+    const CNA_Handle graphics_device,
+    const CNA_StringView path,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_from_file_with_device: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture2dCreateFromFileWithDevice(graphics_device, path, out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_create_from_rgba8(
+    const CNA_Handle graphics_device,
+    const uint32_t width,
+    const uint32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixel_count,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_from_rgba8: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture2dCreateFromRgba8(graphics_device, width, height, pixels, pixel_count, out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_create_cpu_only_rgba8(
+    const uint32_t width,
+    const uint32_t height,
+    const CNA_SurfaceFormat format,
+    const CNA_Color* const pixels,
+    const uint64_t pixel_count,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_cpu_only_rgba8: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture2dCreateCpuOnlyRgba8(width, height, format, pixels, pixel_count, out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_get_data(
+    const CNA_Handle texture,
+    const CNA_TextureDataType data_type,
+    const CNA_Texture2DTransfer* const transfer,
+    void* const destination,
+    const uint64_t destination_capacity,
+    uint64_t* const out_required_elements)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_required_elements == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_get_data: out_required_elements is null.");
+        }
+        return Texture2dGetData(texture, data_type, transfer, destination, destination_capacity, out_required_elements);
+    });
+}
+
+CNA_Result cna_texture2d_create_from_encoded_memory(
+    const CNA_Handle graphics_device,
+    const uint8_t* const encoded_data,
+    const uint64_t encoded_byte_count,
+    const CNA_Texture2DDecodeInfo* const decode_info,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_create_from_encoded_memory: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture2dCreateFromEncodedMemory(graphics_device, encoded_data, encoded_byte_count, decode_info, out_texture);
+    });
+}
+
+CNA_Result cna_texture2d_get_encoded_byte_count(
+    const CNA_Handle texture,
+    const CNA_TextureImageFormat image_format,
+    const uint32_t target_width,
+    const uint32_t target_height,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_get_encoded_byte_count: out_byte_count is null.");
+        }
+        return Texture2dGetEncodedByteCount(texture, image_format, target_width, target_height, out_byte_count);
+    });
+}
+
+CNA_Result cna_texture2d_copy_encoded(
+    const CNA_Handle texture,
+    const CNA_TextureImageFormat image_format,
+    const uint32_t target_width,
+    const uint32_t target_height,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture2d_copy_encoded: out_byte_count is null.");
+        }
+        return Texture2dCopyEncoded(texture, image_format, target_width, target_height, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_texture_validate_format(
+    const CNA_SurfaceFormat format)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TextureValidateFormat(format);
+    });
+}
+
+CNA_Result cna_texture2d_set_data_rgba8_bytes(
+    const CNA_Handle texture,
+    const uint8_t* const rgba_bytes,
+    const uint64_t pixel_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture2dSetDataRgba8Bytes(texture, rgba_bytes, pixel_count);
+    });
+}
+
+CNA_Result cna_texture2d_set_data(
+    const CNA_Handle texture,
+    const CNA_TextureDataType data_type,
+    const CNA_Texture2DTransfer* const transfer,
+    const void* const data,
+    const uint64_t data_capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture2dSetData(texture, data_type, transfer, data, data_capacity);
+    });
+}
+
+CNA_Result cna_texture2d_save_file(
+    const CNA_Handle texture,
+    const CNA_TextureImageFormat image_format,
+    const CNA_StringView path)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture2dSaveFile(texture, image_format, path);
+    });
+}

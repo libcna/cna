@@ -789,504 +789,472 @@ void ResetGraphicsDeviceAdapterState() noexcept
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_viewport_set_bounds(
+namespace {
+
+[[nodiscard]] CNA_Result ViewportSetBounds(
     CNA_Viewport* const viewport,
     const CNA_Rectangle bounds)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (viewport == nullptr) {
-            return InvalidArgument("The viewport is null.");
-        }
-        Viewport native = ToNative(*viewport);
-        native.setBoundsProperty(ToNative(bounds));
-        *viewport = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (viewport == nullptr) {
+        return InvalidArgument("The viewport is null.");
+    }
+    Viewport native = ToNative(*viewport);
+    native.setBoundsProperty(ToNative(bounds));
+    *viewport = ToC(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_adapter_index(
+[[nodiscard]] CNA_Result GraphicsDeviceGetAdapterIndex(
     const CNA_Handle graphicsDeviceHandle,
     uint32_t* const outAdapterIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAdapterIndex == nullptr) {
-            return InvalidArgument("The adapter-index output is null.");
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GraphicsAdapter* const adapter = &graphicsDevice->value->getAdapterProperty();
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    for (std::size_t index = 0U; index < adapters.size(); ++index) {
+        if (adapters[index].get() == adapter) {
+            *outAdapterIndex = static_cast<uint32_t>(index);
+            return CNA_RESULT_SUCCESS;
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GraphicsAdapter* const adapter = &graphicsDevice->value->getAdapterProperty();
-        const auto& adapters = GraphicsAdapter::getAdaptersProperty();
-        for (std::size_t index = 0U; index < adapters.size(); ++index) {
-            if (adapters[index].get() == adapter) {
-                *outAdapterIndex = static_cast<uint32_t>(index);
-                return CNA_RESULT_SUCCESS;
-            }
-        }
-        return InvalidState(
-            "The device's graphics adapter is no longer one of the enumerated adapters.");
-    });
+    }
+    return InvalidState(
+        "The device's graphics adapter is no longer one of the enumerated adapters.");
 }
 
-CNA_Result cna_graphics_device_subscribe_event(
+[[nodiscard]] CNA_Result GraphicsDeviceSubscribeEvent(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsDeviceEvent deviceEvent,
     const CNA_GraphicsDeviceEventCallback callback,
     void* const context,
     CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The device event-registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The device event callback is null.");
-        }
-        if (deviceEvent > CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING) {
-            return InvalidArgument("The graphics-device event identity is not recognized.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (callback == nullptr) {
+        return InvalidArgument("The device event callback is null.");
+    }
+    if (deviceEvent > CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING) {
+        return InvalidArgument("The graphics-device event identity is not recognized.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        GraphicsDevice& device = *graphicsDevice->value;
-        System::EventHandler<System::EventArgs>& source =
-            deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DISPOSING ? device.Disposing
-            : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST ? device.DeviceLost
-            : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET ? device.DeviceReset
-                                                                    : device.DeviceResetting;
-        const auto token = source.Add(
-            [graphicsDeviceHandle, callback, context](System::Object*, const System::EventArgs&) {
-                callback(graphicsDeviceHandle, context);
-            });
-        return StoreRegistration(
-            std::make_shared<DeviceEventRegistration>(&source, token),
-            outRegistration);
-    });
+    GraphicsDevice& device = *graphicsDevice->value;
+    System::EventHandler<System::EventArgs>& source =
+        deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DISPOSING ? device.Disposing
+        : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST ? device.DeviceLost
+        : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET ? device.DeviceReset
+                                                                : device.DeviceResetting;
+    const auto token = source.Add(
+        [graphicsDeviceHandle, callback, context](System::Object*, const System::EventArgs&) {
+            callback(graphicsDeviceHandle, context);
+        });
+    return StoreRegistration(
+        std::make_shared<DeviceEventRegistration>(&source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_subscribe_resource_created(
+[[nodiscard]] CNA_Result GraphicsDeviceSubscribeResourceCreated(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsDeviceResourceCreatedCallback callback,
     void* const context,
     CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        auto& source = graphicsDevice->value->ResourceCreated;
-        const auto token = source.Add(
-            [graphicsDeviceHandle, callback, context](
-                System::Object*, const ResourceCreatedEventArgs& args) {
-                // The canonical event fires from the GraphicsResource base constructor, so the
-                // reported object has no concrete type yet: querying any virtual member of it
-                // here would be a pure-virtual call. Only its presence is reported.
-                CNA_ResourceCreatedEventInfo info = {};
-                info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceCreatedEventInfo));
-                info.struct_version = StructureVersion;
-                info.has_resource =
-                    ToCBool(args.getResourceProperty() != nullptr);
-                callback(graphicsDeviceHandle, &info, context);
-            });
-        return StoreRegistration(
-            std::make_shared<ResourceCreatedRegistration>(&source, token),
-            outRegistration);
-    });
+    auto& source = graphicsDevice->value->ResourceCreated;
+    const auto token = source.Add(
+        [graphicsDeviceHandle, callback, context](
+            System::Object*, const ResourceCreatedEventArgs& args) {
+            // The canonical event fires from the GraphicsResource base constructor, so the
+            // reported object has no concrete type yet: querying any virtual member of it
+            // here would be a pure-virtual call. Only its presence is reported.
+            CNA_ResourceCreatedEventInfo info = {};
+            info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceCreatedEventInfo));
+            info.struct_version = StructureVersion;
+            info.has_resource =
+                ToCBool(args.getResourceProperty() != nullptr);
+            callback(graphicsDeviceHandle, &info, context);
+        });
+    return StoreRegistration(
+        std::make_shared<ResourceCreatedRegistration>(&source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_subscribe_resource_destroyed(
+[[nodiscard]] CNA_Result GraphicsDeviceSubscribeResourceDestroyed(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsDeviceResourceDestroyedCallback callback,
     void* const context,
     CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        auto& source = graphicsDevice->value->ResourceDestroyed;
-        const auto token = source.Add(
-            [graphicsDeviceHandle, callback, context](
-                System::Object*, const ResourceDestroyedEventArgs& args) {
-                // The tag is caller-owned native state of unknown liveness, so its presence is
-                // reported without dereferencing it.
-                CNA_ResourceDestroyedEventInfo info = {};
-                info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceDestroyedEventInfo));
-                info.struct_version = StructureVersion;
-                info.has_tag = ToCBool(args.getTagProperty() != nullptr);
-                info.name = ToStringView(&args.getNameProperty());
-                callback(graphicsDeviceHandle, &info, context);
-            });
-        return StoreRegistration(
-            std::make_shared<ResourceDestroyedRegistration>(&source, token),
-            outRegistration);
-    });
+    auto& source = graphicsDevice->value->ResourceDestroyed;
+    const auto token = source.Add(
+        [graphicsDeviceHandle, callback, context](
+            System::Object*, const ResourceDestroyedEventArgs& args) {
+            // The tag is caller-owned native state of unknown liveness, so its presence is
+            // reported without dereferencing it.
+            CNA_ResourceDestroyedEventInfo info = {};
+            info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceDestroyedEventInfo));
+            info.struct_version = StructureVersion;
+            info.has_tag = ToCBool(args.getTagProperty() != nullptr);
+            info.name = ToStringView(&args.getNameProperty());
+            callback(graphicsDeviceHandle, &info, context);
+        });
+    return StoreRegistration(
+        std::make_shared<ResourceDestroyedRegistration>(&source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_unsubscribe(
+[[nodiscard]] CNA_Result GraphicsDeviceUnsubscribe(
     const CNA_GraphicsDeviceEventRegistrationHandle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DeviceRegistration> registration;
-        const CNA_Result result = LookupHandle(
-            registrationHandle, ObjectKind::GraphicsDeviceEventRegistration, &registration);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<DeviceRegistration> registration;
+    const CNA_Result result = LookupHandle(
+        registrationHandle, ObjectKind::GraphicsDeviceEventRegistration, &registration);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
 
-CNA_Result cna_graphics_device_get_texture(
+[[nodiscard]] CNA_Result GraphicsDeviceGetTexture(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_ShaderStage stage,
     const uint32_t slot,
     CNA_TextureSlotInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outInfo, "The texture-slot output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateTextureSlot(stage, slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outInfo, "The texture-slot output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateTextureSlot(stage, slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
-        const Texture* const nativeTexture = collection[static_cast<int>(slot)];
-        outInfo->struct_size = static_cast<uint32_t>(sizeof(CNA_TextureSlotInfo));
-        outInfo->struct_version = StructureVersion;
-        outInfo->bound = ToCBool(nativeTexture != nullptr);
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        outInfo->texture = CNA_INVALID_HANDLE;
-        if (nativeTexture == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-
-        CNA_Handle recordedHandle = CNA_INVALID_HANDLE;
-        {
-            TextureSlotState& slots = GetTextureSlotState();
-            std::lock_guard lock(slots.mutex);
-            const BoundTextureSlot& recorded = *RecordedSlot(stage, slot);
-            if (recorded.nativePointer == nativeTexture) {
-                recordedHandle = recorded.handle;
-            }
-        }
-        if (recordedHandle == CNA_INVALID_HANDLE) {
-            return CNA_RESULT_SUCCESS;
-        }
-
-        // The record only names a candidate; the handle must still resolve to that exact object.
-        TextureResourceView texture;
-        if (GetOwnedTexture(recordedHandle, &texture) == CNA_RESULT_SUCCESS &&
-            texture.value.get() == nativeTexture) {
-            outInfo->texture = recordedHandle;
-        }
+    const TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
+    const Texture* const nativeTexture = collection[static_cast<int>(slot)];
+    outInfo->struct_size = static_cast<uint32_t>(sizeof(CNA_TextureSlotInfo));
+    outInfo->struct_version = StructureVersion;
+    outInfo->bound = ToCBool(nativeTexture != nullptr);
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    outInfo->texture = CNA_INVALID_HANDLE;
+    if (nativeTexture == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+
+    CNA_Handle recordedHandle = CNA_INVALID_HANDLE;
+    {
+        TextureSlotState& slots = GetTextureSlotState();
+        std::lock_guard lock(slots.mutex);
+        const BoundTextureSlot& recorded = *RecordedSlot(stage, slot);
+        if (recorded.nativePointer == nativeTexture) {
+            recordedHandle = recorded.handle;
+        }
+    }
+    if (recordedHandle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+
+    // The record only names a candidate; the handle must still resolve to that exact object.
+    TextureResourceView texture;
+    if (GetOwnedTexture(recordedHandle, &texture) == CNA_RESULT_SUCCESS &&
+        texture.value.get() == nativeTexture) {
+        outInfo->texture = recordedHandle;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_set_texture(
+[[nodiscard]] CNA_Result GraphicsDeviceSetTexture(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_ShaderStage stage,
     const uint32_t slot,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateTextureSlot(stage, slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateTextureSlot(stage, slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        TextureResourceView texture;
-        if (textureHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-
-        TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
-        collection(static_cast<int>(slot), texture.value.get());
-
-        TextureSlotState& slots = GetTextureSlotState();
-        std::lock_guard lock(slots.mutex);
-        *RecordedSlot(stage, slot) = BoundTextureSlot{textureHandle, texture.value.get()};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_unbind_texture(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Handle textureHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureResourceView texture;
+    TextureResourceView texture;
+    if (textureHandle != CNA_INVALID_HANDLE) {
         if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+    }
 
-        const Texture* const nativeTexture = texture.value.get();
-        graphicsDevice->value->getTexturesProperty().RemoveDisposedTexture(nativeTexture);
-        graphicsDevice->value->getVertexTexturesProperty().RemoveDisposedTexture(nativeTexture);
+    TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
+    collection(static_cast<int>(slot), texture.value.get());
 
-        TextureSlotState& slots = GetTextureSlotState();
-        std::lock_guard lock(slots.mutex);
-        for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
-            if (slots.pixel[slot].nativePointer == nativeTexture) {
-                slots.pixel[slot] = BoundTextureSlot{};
-            }
-            if (slots.vertex[slot].nativePointer == nativeTexture) {
-                slots.vertex[slot] = BoundTextureSlot{};
-            }
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    TextureSlotState& slots = GetTextureSlotState();
+    std::lock_guard lock(slots.mutex);
+    *RecordedSlot(stage, slot) = BoundTextureSlot{textureHandle, texture.value.get()};
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_backbuffer_data_window(
+[[nodiscard]] CNA_Result GraphicsDeviceUnbindTexture(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Handle textureHandle)
+{
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TextureResourceView texture;
+    if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    const Texture* const nativeTexture = texture.value.get();
+    graphicsDevice->value->getTexturesProperty().RemoveDisposedTexture(nativeTexture);
+    graphicsDevice->value->getVertexTexturesProperty().RemoveDisposedTexture(nativeTexture);
+
+    TextureSlotState& slots = GetTextureSlotState();
+    std::lock_guard lock(slots.mutex);
+    for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
+        if (slots.pixel[slot].nativePointer == nativeTexture) {
+            slots.pixel[slot] = BoundTextureSlot{};
+        }
+        if (slots.vertex[slot].nativePointer == nativeTexture) {
+            slots.vertex[slot] = BoundTextureSlot{};
+        }
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GraphicsDeviceGetBackbufferDataWindow(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_BackBufferReadback* const readback,
     CNA_Color* const destination,
     const uint64_t capacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsVersionedStructure(readback) ||
-            (readback->has_source_rectangle != CNA_TRUE &&
-             readback->has_source_rectangle != CNA_FALSE) ||
-            readback->reserved[0] != 0U || readback->reserved[1] != 0U ||
-            readback->reserved[2] != 0U) {
-            return InvalidArgument("The back-buffer readback structure is invalid.");
-        }
-        if (destination == nullptr && capacity != 0U) {
-            return InvalidArgument("The back-buffer destination is invalid.");
-        }
-        if (readback->start_index > static_cast<uint64_t>(INT32_MAX) ||
-            readback->element_count > static_cast<uint64_t>(INT32_MAX)) {
-            return Overflow("The back-buffer readback window exceeds the native element range.");
-        }
-        if (readback->start_index + readback->element_count > capacity) {
-            return BufferTooSmall("The destination cannot hold the requested back-buffer window.");
-        }
+    if (!IsVersionedStructure(readback) ||
+        (readback->has_source_rectangle != CNA_TRUE &&
+         readback->has_source_rectangle != CNA_FALSE) ||
+        readback->reserved[0] != 0U || readback->reserved[1] != 0U ||
+        readback->reserved[2] != 0U) {
+        return InvalidArgument("The back-buffer readback structure is invalid.");
+    }
+    if (destination == nullptr && capacity != 0U) {
+        return InvalidArgument("The back-buffer destination is invalid.");
+    }
+    if (readback->start_index > static_cast<uint64_t>(INT32_MAX) ||
+        readback->element_count > static_cast<uint64_t>(INT32_MAX)) {
+        return Overflow("The back-buffer readback window exceeds the native element range.");
+    }
+    if (readback->start_index + readback->element_count > capacity) {
+        return BufferTooSmall("The destination cannot hold the requested back-buffer window.");
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        // The canonical routine reports an undersized element count as a generic native failure.
-        // Deciding it here keeps the C contract deterministic: a window smaller than its region is
-        // a capacity error, reported before any native read begins.
-        const uint64_t regionPixels = RequestedRegionPixels(*graphicsDevice->value, *readback);
-        if (readback->element_count < regionPixels) {
-            return BufferTooSmall(
-                "The requested element count is smaller than the selected back-buffer region.");
-        }
+    // The canonical routine reports an undersized element count as a generic native failure.
+    // Deciding it here keeps the C contract deterministic: a window smaller than its region is
+    // a capacity error, reported before any native read begins.
+    const uint64_t regionPixels = RequestedRegionPixels(*graphicsDevice->value, *readback);
+    if (readback->element_count < regionPixels) {
+        return BufferTooSmall(
+            "The requested element count is smaller than the selected back-buffer region.");
+    }
 
-        // Read into scratch storage first so a native failure cannot leave the caller's array
-        // partially overwritten.
-        std::vector<Color> scratch;
-        scratch.reserve(static_cast<std::size_t>(readback->element_count));
-        for (uint64_t index = 0U; index < readback->element_count; ++index) {
-            scratch.emplace_back(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
-        }
-        const Rectangle sourceRectangle = ToNative(readback->source_rectangle);
-        graphicsDevice->value->GetBackBufferData(
-            readback->has_source_rectangle == CNA_TRUE ? &sourceRectangle : nullptr,
-            scratch.empty() ? nullptr : scratch.data(),
-            0,
-            static_cast<int>(readback->element_count));
-        for (std::size_t index = 0U; index < scratch.size(); ++index) {
-            const Color& pixel = scratch[index];
-            destination[readback->start_index + index] = CNA_Color{
-                pixel.getRProperty(),
-                pixel.getGProperty(),
-                pixel.getBProperty(),
-                pixel.getAProperty()};
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    // Read into scratch storage first so a native failure cannot leave the caller's array
+    // partially overwritten.
+    std::vector<Color> scratch;
+    scratch.reserve(static_cast<std::size_t>(readback->element_count));
+    for (uint64_t index = 0U; index < readback->element_count; ++index) {
+        scratch.emplace_back(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+    }
+    const Rectangle sourceRectangle = ToNative(readback->source_rectangle);
+    graphicsDevice->value->GetBackBufferData(
+        readback->has_source_rectangle == CNA_TRUE ? &sourceRectangle : nullptr,
+        scratch.empty() ? nullptr : scratch.data(),
+        0,
+        static_cast<int>(readback->element_count));
+    for (std::size_t index = 0U; index < scratch.size(); ++index) {
+        const Color& pixel = scratch[index];
+        destination[readback->start_index + index] = CNA_Color{
+            pixel.getRProperty(),
+            pixel.getGProperty(),
+            pixel.getBProperty(),
+            pixel.getAProperty()};
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_set_vertex_buffer(
+[[nodiscard]] CNA_Result GraphicsDeviceSetVertexBuffer(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_VertexBufferHandle vertexBuffer)
 {
     return cna_graphics_device_set_vertex_buffer_offset(graphicsDeviceHandle, vertexBuffer, 0);
 }
 
-CNA_Result cna_graphics_device_set_vertex_buffer_offset(
+[[nodiscard]] CNA_Result GraphicsDeviceSetVertexBufferOffset(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_VertexBufferHandle vertexBufferHandle,
     const int32_t vertexOffset)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (vertexOffset < 0) {
-            return OutOfRange("The vertex offset must not be negative.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+    if (vertexOffset < 0) {
+        return OutOfRange("The vertex offset must not be negative.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (vertexBufferHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = GetVertexBuffer(vertexBufferHandle, &buffer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (vertexBufferHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = GetVertexBuffer(vertexBufferHandle, &buffer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
+    }
 
-        VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
-        graphicsDevice->value->SetVertexBuffer(native, vertexOffset);
+    VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+    graphicsDevice->value->SetVertexBuffer(native, vertexOffset);
 
-        DeviceBindingState& state = GetDeviceBindingState();
-        std::lock_guard lock(state.mutex);
-        state.vertexBindings.clear();
-        if (native != nullptr) {
-            state.vertexBindings.push_back(BoundBufferSlot{vertexBufferHandle, native});
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    DeviceBindingState& state = GetDeviceBindingState();
+    std::lock_guard lock(state.mutex);
+    state.vertexBindings.clear();
+    if (native != nullptr) {
+        state.vertexBindings.push_back(BoundBufferSlot{vertexBufferHandle, native});
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_set_vertex_buffers(
+[[nodiscard]] CNA_Result GraphicsDeviceSetVertexBuffers(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_VertexBufferBinding* const bindings,
     const uint64_t bindingCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (bindings == nullptr && bindingCount != 0U) {
-            return InvalidArgument("The vertex-buffer binding array is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (bindings == nullptr && bindingCount != 0U) {
+        return InvalidArgument("The vertex-buffer binding array is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        // Everything is validated and resolved before a single native binding is applied.
-        std::vector<VertexBufferBinding> nativeBindings;
-        std::vector<BoundBufferSlot> recorded;
-        nativeBindings.reserve(static_cast<std::size_t>(bindingCount));
-        recorded.reserve(static_cast<std::size_t>(bindingCount));
-        for (uint64_t index = 0U; index < bindingCount; ++index) {
-            const CNA_VertexBufferBinding& binding = bindings[index];
-            if (binding.vertex_offset < 0 || binding.instance_frequency < 0) {
-                return OutOfRange("A vertex-buffer binding offset or frequency is negative.");
+    // Everything is validated and resolved before a single native binding is applied.
+    std::vector<VertexBufferBinding> nativeBindings;
+    std::vector<BoundBufferSlot> recorded;
+    nativeBindings.reserve(static_cast<std::size_t>(bindingCount));
+    recorded.reserve(static_cast<std::size_t>(bindingCount));
+    for (uint64_t index = 0U; index < bindingCount; ++index) {
+        const CNA_VertexBufferBinding& binding = bindings[index];
+        if (binding.vertex_offset < 0 || binding.instance_frequency < 0) {
+            return OutOfRange("A vertex-buffer binding offset or frequency is negative.");
+        }
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (binding.vertex_buffer != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetVertexBuffer(binding.vertex_buffer, &buffer);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
             }
-            std::shared_ptr<VertexBufferResource> buffer;
-            if (binding.vertex_buffer != CNA_INVALID_HANDLE) {
-                if (const CNA_Result result = GetVertexBuffer(binding.vertex_buffer, &buffer);
-                    result != CNA_RESULT_SUCCESS) {
-                    return result;
-                }
-            }
-            VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
-            nativeBindings.push_back(
-                native == nullptr
-                    ? VertexBufferBinding()
-                    : VertexBufferBinding(
-                          native, binding.vertex_offset, binding.instance_frequency));
-            recorded.push_back(BoundBufferSlot{binding.vertex_buffer, native});
         }
+        VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+        nativeBindings.push_back(
+            native == nullptr
+                ? VertexBufferBinding()
+                : VertexBufferBinding(
+                      native, binding.vertex_offset, binding.instance_frequency));
+        recorded.push_back(BoundBufferSlot{binding.vertex_buffer, native});
+    }
 
-        graphicsDevice->value->SetVertexBuffers(nativeBindings);
+    graphicsDevice->value->SetVertexBuffers(nativeBindings);
 
-        DeviceBindingState& state = GetDeviceBindingState();
-        std::lock_guard lock(state.mutex);
-        state.vertexBindings = std::move(recorded);
-        return CNA_RESULT_SUCCESS;
-    });
+    DeviceBindingState& state = GetDeviceBindingState();
+    std::lock_guard lock(state.mutex);
+    state.vertexBindings = std::move(recorded);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_copy_vertex_buffers(
+[[nodiscard]] CNA_Result GraphicsDeviceCopyVertexBuffers(
     const CNA_Handle graphicsDeviceHandle,
     CNA_VertexBufferBinding* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument(
-                "The vertex-buffer binding destination or count output is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The vertex-buffer binding destination or count output is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const std::vector<VertexBufferBinding> nativeBindings =
-            graphicsDevice->value->GetVertexBuffers();
-        *outCount = static_cast<uint64_t>(nativeBindings.size());
-        if (capacity < nativeBindings.size()) {
-            return BufferTooSmall(
-                "The destination cannot hold every active vertex-buffer binding.");
-        }
-        for (std::size_t index = 0U; index < nativeBindings.size(); ++index) {
-            const VertexBufferBinding& binding = nativeBindings[index];
-            destination[index] = CNA_VertexBufferBinding{
-                RecordedVertexBufferHandle(binding.getVertexBufferProperty()),
-                binding.getVertexOffsetProperty(),
-                binding.getInstanceFrequencyProperty()};
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    const std::vector<VertexBufferBinding> nativeBindings =
+        graphicsDevice->value->GetVertexBuffers();
+    *outCount = static_cast<uint64_t>(nativeBindings.size());
+    if (capacity < nativeBindings.size()) {
+        return BufferTooSmall(
+            "The destination cannot hold every active vertex-buffer binding.");
+    }
+    for (std::size_t index = 0U; index < nativeBindings.size(); ++index) {
+        const VertexBufferBinding& binding = nativeBindings[index];
+        destination[index] = CNA_VertexBufferBinding{
+            RecordedVertexBufferHandle(binding.getVertexBufferProperty()),
+            binding.getVertexOffsetProperty(),
+            binding.getInstanceFrequencyProperty()};
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_vertex_buffer(
+[[nodiscard]] CNA_Result GraphicsDeviceGetVertexBuffer(
     const CNA_Handle graphicsDeviceHandle,
     CNA_VertexBufferHandle* const outVertexBuffer)
 {
@@ -1295,37 +1263,35 @@ CNA_Result cna_graphics_device_get_vertex_buffer(
     });
 }
 
-CNA_Result cna_graphics_device_set_index_buffer(
+[[nodiscard]] CNA_Result GraphicsDeviceSetIndexBuffer(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_IndexBufferHandle indexBufferHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (indexBufferHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = GetIndexBuffer(indexBufferHandle, &buffer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<IndexBufferResource> buffer;
-        if (indexBufferHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = GetIndexBuffer(indexBufferHandle, &buffer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
+    }
 
-        const IndexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
-        graphicsDevice->value->SetIndexBuffer(native);
+    const IndexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+    graphicsDevice->value->SetIndexBuffer(native);
 
-        DeviceBindingState& state = GetDeviceBindingState();
-        std::lock_guard lock(state.mutex);
-        state.indexBuffer = native == nullptr ? CNA_INVALID_HANDLE : indexBufferHandle;
-        state.indexNativePointer = native;
-        return CNA_RESULT_SUCCESS;
-    });
+    DeviceBindingState& state = GetDeviceBindingState();
+    std::lock_guard lock(state.mutex);
+    state.indexBuffer = native == nullptr ? CNA_INVALID_HANDLE : indexBufferHandle;
+    state.indexNativePointer = native;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_index_buffer(
+[[nodiscard]] CNA_Result GraphicsDeviceGetIndexBuffer(
     const CNA_Handle graphicsDeviceHandle,
     CNA_IndexBufferHandle* const outIndexBuffer)
 {
@@ -1334,138 +1300,124 @@ CNA_Result cna_graphics_device_get_index_buffer(
     });
 }
 
-CNA_Result cna_graphics_device_draw_user_primitives(
+[[nodiscard]] CNA_Result GraphicsDeviceDrawUserPrimitives(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_UserPrimitives* const primitives)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        UserPrimitiveRequest request;
-        if (const CNA_Result result = ResolveUserPrimitives(
-                graphicsDeviceHandle, primitives, false, &request);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        DrawUserPrimitivesNative(request);
-        return CNA_RESULT_SUCCESS;
-    });
+    UserPrimitiveRequest request;
+    if (const CNA_Result result = ResolveUserPrimitives(
+            graphicsDeviceHandle, primitives, false, &request);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    DrawUserPrimitivesNative(request);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_draw_user_indexed_primitives(
+[[nodiscard]] CNA_Result GraphicsDeviceDrawUserIndexedPrimitives(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_UserPrimitives* const primitives,
     const CNA_UserIndices* const indices)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsVersionedStructure(indices) || indices->index_data == nullptr ||
-            indices->index_offset < 0 ||
-            (indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS &&
-             indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS)) {
-            return InvalidArgument("The user index description is invalid.");
-        }
-        UserPrimitiveRequest request;
-        if (const CNA_Result result = ResolveUserPrimitives(
-                graphicsDeviceHandle, primitives, true, &request);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        DrawUserIndexedPrimitivesNative(request, *indices);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsVersionedStructure(indices) || indices->index_data == nullptr ||
+        indices->index_offset < 0 ||
+        (indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS &&
+         indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS)) {
+        return InvalidArgument("The user index description is invalid.");
+    }
+    UserPrimitiveRequest request;
+    if (const CNA_Result result = ResolveUserPrimitives(
+            graphicsDeviceHandle, primitives, true, &request);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    DrawUserIndexedPrimitivesNative(request, *indices);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_set_current_effect(
+[[nodiscard]] CNA_Result GraphicsDeviceSetCurrentEffect(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_EffectHandle effectHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EffectResource> effect;
+    if (effectHandle != CNA_INVALID_HANDLE) {
+        const CNA_Result result = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
+        if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<EffectResource> effect;
-        if (effectHandle != CNA_INVALID_HANDLE) {
-            const CNA_Result result = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
-            if (result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
+    }
 
-        Effect* const native = effect == nullptr ? nullptr : effect->value.get();
-        graphicsDevice->value->SetCurrentEffect(native);
+    Effect* const native = effect == nullptr ? nullptr : effect->value.get();
+    graphicsDevice->value->SetCurrentEffect(native);
 
-        DeviceBindingState& state = GetDeviceBindingState();
-        std::lock_guard lock(state.mutex);
-        state.currentEffect = effect == nullptr ? nullptr : effect->value;
-        return CNA_RESULT_SUCCESS;
-    });
+    DeviceBindingState& state = GetDeviceBindingState();
+    std::lock_guard lock(state.mutex);
+    state.currentEffect = effect == nullptr ? nullptr : effect->value;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
+[[nodiscard]] CNA_Result GraphicsDeviceRecreateRendererForMultiSampleCountExt(
     const CNA_Handle graphicsDeviceHandle,
     const int32_t multiSampleCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (multiSampleCount < 0) {
-            return OutOfRange("The multisample count must not be negative.");
-        }
-        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.RecreateRendererForMultiSampleCount(multiSampleCount);
-        });
+    if (multiSampleCount < 0) {
+        return OutOfRange("The multisample count must not be negative.");
+    }
+    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        device.RecreateRendererForMultiSampleCount(multiSampleCount);
     });
 }
 
-CNA_Result cna_occlusion_query_create(
+[[nodiscard]] CNA_Result OcclusionQueryCreate(
     const CNA_Handle graphicsDeviceHandle,
     CNA_OcclusionQueryHandle* const outOcclusionQuery)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOcclusionQuery == nullptr) {
-            return InvalidArgument("The occlusion-query output handle is null.");
-        }
-        *outOcclusionQuery = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery)) {
-            return NotSupported(
-                "The selected graphics backend does not support occlusion queries.");
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery)) {
+        return NotSupported(
+            "The selected graphics backend does not support occlusion queries.");
+    }
 
-        auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);
-        const auto resource = std::make_shared<OcclusionQueryResource>(
-            OcclusionQueryResource{std::move(native), graphicsDevice->parentGame});
-        if (const CNA_Result result =
-                CreateHandle(ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);
+    const auto resource = std::make_shared<OcclusionQueryResource>(
+        OcclusionQueryResource{std::move(native), graphicsDevice->parentGame});
+    if (const CNA_Result result =
+            CreateHandle(ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQueryHandle)
+[[nodiscard]] CNA_Result OcclusionQueryDestroy(const CNA_OcclusionQueryHandle occlusionQueryHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<OcclusionQueryResource> query;
-        if (const CNA_Result result = GetOcclusionQuery(occlusionQueryHandle, &query);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        static_cast<System::IDisposable*>(query->value.get())->Dispose();
-        if (const CNA_Result releaseResult = ReleaseHandle(occlusionQueryHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        RemoveOwnedGraphicsResourceFor(query->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<OcclusionQueryResource> query;
+    if (const CNA_Result result = GetOcclusionQuery(occlusionQueryHandle, &query);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    static_cast<System::IDisposable*>(query->value.get())->Dispose();
+    if (const CNA_Result releaseResult = ReleaseHandle(occlusionQueryHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    RemoveOwnedGraphicsResourceFor(query->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // CBIND-093. The GraphicsDevice EXT surface: ten queries and one command that the engine-layer
 // slices needed but never bound, because each is a method on the always-compiled device rather

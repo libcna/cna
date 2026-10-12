@@ -8,3 +8,24 @@ object = "std::shared_ptr<VertexBufferResource>"
 [buffer.routes]
 cna_vertex_buffer_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
 cna_vertex_buffer_copy_type_name = { copy = "object->value->GetTypeName()" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_vertex_buffer_create = { result = "VertexBufferCreate(graphics_device, create_info, out_vertex_buffer)" }
+cna_vertex_buffer_copy_declaration_elements = { result = "VertexBufferCopyDeclarationElements(vertex_buffer, destination, capacity, out_element_count)" }
+cna_vertex_buffer_get_data = { result = "VertexBufferGetData(vertex_buffer, transfer, destination, capacity, out_element_count)" }
+cna_vertex_buffer_subscribe_content_lost = { result = "VertexBufferSubscribeContentLost(vertex_buffer, callback, context, out_registration)" }
+cna_vertex_buffer_get_info = { result = "VertexBufferGetInfo(vertex_buffer, out_info)" }
+cna_vertex_buffer_destroy = { result = "VertexBufferDestroy(vertex_buffer)" }
+cna_vertex_buffer_set_data = { result = "VertexBufferSetData(vertex_buffer, transfer, data, capacity)" }
+cna_vertex_buffer_set_data_raw = { result = "VertexBufferSetDataRaw(vertex_buffer, data, data_byte_count, vertex_count, vertex_stride)" }
+cna_vertex_buffer_set_data_raw_at = { result = "VertexBufferSetDataRawAt(vertex_buffer, buffer_offset_in_bytes, data, data_byte_count, vertex_count, vertex_stride)" }
+cna_vertex_buffer_get_data_raw = { result = "VertexBufferGetDataRaw(vertex_buffer, buffer_offset_in_bytes, destination, destination_byte_count, vertex_count, vertex_stride)" }
+cna_vertex_buffer_unsubscribe_content_lost = { result = "VertexBufferUnsubscribeContentLost(registration)" }
+cna_vertex_buffer_set_data_raw_with_options = { result = "VertexBufferSetDataRawWithOptions(vertex_buffer, data, data_byte_count, vertex_count, vertex_stride, options)" }
+cna_vertex_buffer_set_data_raw_at_with_options = { result = "VertexBufferSetDataRawAtWithOptions(vertex_buffer, buffer_offset_in_bytes, data, data_byte_count, vertex_count, vertex_stride, options)" }

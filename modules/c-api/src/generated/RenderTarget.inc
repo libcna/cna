@@ -68,3 +68,101 @@ CNA_Result cna_render_target_cube_create(
         return CreateRenderTargetCubeHandle((std::make_shared<RenderTargetCube>(*object->value, static_cast<int>(create_info->size), create_info->mip_map == CNA_TRUE, static_cast<SurfaceFormat>(create_info->format), static_cast<DepthFormat>(create_info->depth_format), create_info->multi_sample_count, static_cast<RenderTargetUsage>(create_info->usage))), object->parentGame, out_render_target);
     });
 }
+
+CNA_Result cna_graphics_device_get_render_target_count(
+    const CNA_Handle graphics_device,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_render_target_count: out_count is null.");
+        }
+        return GraphicsDeviceGetRenderTargetCount(graphics_device, out_count);
+    });
+}
+
+CNA_Result cna_graphics_device_copy_render_targets(
+    const CNA_Handle graphics_device,
+    CNA_RenderTargetBinding* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_copy_render_targets: out_count is null.");
+        }
+        return GraphicsDeviceCopyRenderTargets(graphics_device, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_render_target_subscribe_content_lost(
+    const CNA_Handle render_target,
+    const CNA_RenderTargetContentLostCallback callback,
+    void* const context,
+    CNA_RenderTargetEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target_subscribe_content_lost: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return RenderTargetSubscribeContentLost(render_target, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_render_target_get_info(
+    const CNA_Handle render_target,
+    CNA_RenderTargetInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target_get_info: out_info is null.");
+        }
+        return RenderTargetGetInfo(render_target, out_info);
+    });
+}
+
+CNA_Result cna_graphics_device_set_render_targets(
+    const CNA_Handle graphics_device,
+    const CNA_RenderTargetBinding* const bindings,
+    const uint64_t binding_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetRenderTargets(graphics_device, bindings, binding_count);
+    });
+}
+
+CNA_Result cna_graphics_device_set_render_target2d(
+    const CNA_Handle graphics_device,
+    const CNA_Handle render_target)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetRenderTarget2d(graphics_device, render_target);
+    });
+}
+
+CNA_Result cna_graphics_device_set_render_target_cube(
+    const CNA_Handle graphics_device,
+    const CNA_Handle render_target,
+    const CNA_CubeMapFace cube_map_face)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetRenderTargetCube(graphics_device, render_target, cube_map_face);
+    });
+}
+
+CNA_Result cna_render_target_unsubscribe_content_lost(
+    const CNA_RenderTargetEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RenderTargetUnsubscribeContentLost(registration);
+    });
+}
+
+CNA_Result cna_render_target_destroy(
+    const CNA_Handle render_target)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RenderTargetDestroy(render_target);
+    });
+}

@@ -221,59 +221,47 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_display_mode_equals(
+[[nodiscard]] CNA_Result DisplayModeEquals(
     const CNA_DisplayMode* const left,
     const CNA_DisplayMode* const right,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (!IsDisplayMode(left) || !IsDisplayMode(right) || outEqual == nullptr) {
-            return InvalidArgument("The DisplayMode comparison arguments are invalid.");
-        }
-        const DisplayMode nativeLeft(left->width, left->height, static_cast<SurfaceFormat>(left->format));
-        const DisplayMode nativeRight(
-            right->width, right->height, static_cast<SurfaceFormat>(right->format));
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsDisplayMode(left) || !IsDisplayMode(right)) {
+        return InvalidArgument("The DisplayMode comparison arguments are invalid.");
+    }
+    const DisplayMode nativeLeft(
+        left->width, left->height, static_cast<SurfaceFormat>(left->format));
+    const DisplayMode nativeRight(
+        right->width, right->height, static_cast<SurfaceFormat>(right->format));
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_adapter_get_display_mode_count(
+[[nodiscard]] CNA_Result GraphicsAdapterGetDisplayModeCount(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
     const CNA_Bool filterByFormat,
     const CNA_SurfaceFormat format,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr) {
-            return InvalidArgument("The display-mode count output is null.");
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(filterByFormat, "filter_by_format");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<DisplayMode> modes;
-        if (const CNA_Result result = CollectDisplayModes(
-                *adapter, filterByFormat, format, &modes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = modes.size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<void> context;
+    GraphicsAdapter* adapter = nullptr;
+    if (const CNA_Result result = GetAdapter(
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<DisplayMode> modes;
+    if (const CNA_Result result = CollectDisplayModes(
+            *adapter, filterByFormat, format, &modes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCount = modes.size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_adapter_copy_display_modes(
+[[nodiscard]] CNA_Result GraphicsAdapterCopyDisplayModes(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
     const CNA_Bool filterByFormat,
@@ -282,226 +270,198 @@ CNA_Result cna_graphics_adapter_copy_display_modes(
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The display-mode output buffer is invalid.");
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(filterByFormat, "filter_by_format");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<DisplayMode> modes;
-        if (const CNA_Result result = CollectDisplayModes(
-                *adapter, filterByFormat, format, &modes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = modes.size();
-        if (capacity < modes.size()) {
-            return BufferTooSmall("The display-mode output buffer is too small.");
-        }
-        for (std::size_t index = 0U; index < modes.size(); ++index) {
-            destination[index] = ToCDisplayMode(modes[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The display-mode output buffer is invalid.");
+    }
+    std::shared_ptr<void> context;
+    GraphicsAdapter* adapter = nullptr;
+    if (const CNA_Result result = GetAdapter(
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<DisplayMode> modes;
+    if (const CNA_Result result = CollectDisplayModes(
+            *adapter, filterByFormat, format, &modes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCount = modes.size();
+    if (capacity < modes.size()) {
+        return BufferTooSmall("The display-mode output buffer is too small.");
+    }
+    for (std::size_t index = 0U; index < modes.size(); ++index) {
+        destination[index] = ToCDisplayMode(modes[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_adapter_set_device_preferences(
+[[nodiscard]] CNA_Result GraphicsAdapterSetDevicePreferences(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
     const CNA_Bool useNullDevice,
     const CNA_Bool useReferenceDevice)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (!IsCanonicalBool(useNullDevice) || !IsCanonicalBool(useReferenceDevice)) {
-            return InvalidArgument("The graphics-adapter device preference is invalid.");
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        adapter->setUseNullDeviceProperty(useNullDevice == CNA_TRUE);
-        adapter->setUseReferenceDeviceProperty(useReferenceDevice == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsCanonicalBool(useNullDevice) || !IsCanonicalBool(useReferenceDevice)) {
+        return InvalidArgument("The graphics-adapter device preference is invalid.");
+    }
+    std::shared_ptr<void> context;
+    GraphicsAdapter* adapter = nullptr;
+    if (const CNA_Result result = GetAdapter(
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    adapter->setUseNullDeviceProperty(useNullDevice == CNA_TRUE);
+    adapter->setUseReferenceDeviceProperty(useReferenceDevice == CNA_TRUE);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_adapter_get_native_monitor_handle(
+[[nodiscard]] CNA_Result GraphicsAdapterGetNativeMonitorHandle(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
     CNA_NativeHandleValue* const outValue)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outValue == nullptr) {
-            return InvalidArgument("The native monitor-handle output is null.");
-        }
-        *outValue = UINT64_C(0);
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        static_cast<void>(adapter);
-        return NotSupported("Native monitor handles do not cross the stable CNA C ABI.");
-    });
+    *outValue = UINT64_C(0);
+    std::shared_ptr<void> context;
+    GraphicsAdapter* adapter = nullptr;
+    if (const CNA_Result result = GetAdapter(
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    static_cast<void>(adapter);
+    return NotSupported("Native monitor handles do not cross the stable CNA C ABI.");
 }
 
-CNA_Result cna_graphics_device_set_presentation_parameters(
+[[nodiscard]] CNA_Result GraphicsDeviceSetPresentationParameters(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_PresentationParameters* const parameters)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (!IsPresentationParameters(parameters)) {
-            return InvalidArgument("The PresentationParameters source structure is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        PresentationParameters nativeParameters =
-            graphicsDevice->value->getPresentationParametersProperty().Clone();
-        const PresentationParameters::IntPtr windowHandle =
-            graphicsDevice->value->getPresentationParametersProperty()
-                .getDeviceWindowHandleProperty();
-        ApplyPresentationParameters(*parameters, &nativeParameters);
-        nativeParameters.setDeviceWindowHandleProperty(windowHandle);
-        graphicsDevice->value->SetPresentationParameters(nativeParameters);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsPresentationParameters(parameters)) {
+        return InvalidArgument("The PresentationParameters source structure is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    PresentationParameters nativeParameters =
+        graphicsDevice->value->getPresentationParametersProperty().Clone();
+    const PresentationParameters::IntPtr windowHandle =
+        graphicsDevice->value->getPresentationParametersProperty()
+            .getDeviceWindowHandleProperty();
+    ApplyPresentationParameters(*parameters, &nativeParameters);
+    nativeParameters.setDeviceWindowHandleProperty(windowHandle);
+    graphicsDevice->value->SetPresentationParameters(nativeParameters);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_native_window_handle(
+[[nodiscard]] CNA_Result GraphicsDeviceGetNativeWindowHandle(
     const CNA_Handle graphicsDeviceHandle,
     CNA_NativeHandleValue* const outValue)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outValue == nullptr) {
-            return InvalidArgument("The native window-handle output is null.");
-        }
-        *outValue = UINT64_C(0);
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NotSupported("Native window handles do not cross the stable CNA C ABI.");
-    });
+    *outValue = UINT64_C(0);
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return NotSupported("Native window handles do not cross the stable CNA C ABI.");
 }
 
-CNA_Result cna_graphics_device_create(
+[[nodiscard]] CNA_Result GraphicsDeviceCreate(
     const uint32_t adapterIndex,
     const uint32_t graphicsProfile,
     const CNA_PresentationParameters* const parameters,
     CNA_Handle* const outGraphicsDevice)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The GraphicsDevice output handle is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        if (!IsPresentationParameters(parameters)) {
-            return InvalidArgument("The PresentationParameters source structure is invalid.");
-        }
-        if (graphicsProfile != CNA_GRAPHICS_PROFILE_REACH &&
-            graphicsProfile != CNA_GRAPHICS_PROFILE_HI_DEF) {
-            return InvalidArgument("The graphics profile is not a public CNA profile identity.");
-        }
-        const auto& adapters = GraphicsAdapter::getAdaptersProperty();
-        if (adapterIndex >= adapters.size()) {
-            return InvalidArgument("The graphics adapter index is out of range.");
-        }
+    if (!IsPresentationParameters(parameters)) {
+        return InvalidArgument("The PresentationParameters source structure is invalid.");
+    }
+    if (graphicsProfile != CNA_GRAPHICS_PROFILE_REACH &&
+        graphicsProfile != CNA_GRAPHICS_PROFILE_HI_DEF) {
+        return InvalidArgument("The graphics profile is not a public CNA profile identity.");
+    }
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    if (adapterIndex >= adapters.size()) {
+        return InvalidArgument("The graphics adapter index is out of range.");
+    }
 
-        const PresentationParameters nativeParameters = ToNativePresentationParameters(*parameters);
+    const PresentationParameters nativeParameters = ToNativePresentationParameters(*parameters);
 
-        auto owned = std::make_shared<CNA::C::Detail::OwnedGraphicsDevice>();
-        // Construction is what acquires the platform video subsystem and the renderer, so it is
-        // also what can fail. Letting it throw into the barrier keeps the failure a documented
-        // result rather than a half-registered handle.
-        owned->value = std::make_unique<GraphicsDevice>(
-            *adapters[adapterIndex],
-            static_cast<GraphicsProfile>(graphicsProfile),
-            nativeParameters);
+    auto owned = std::make_shared<CNA::C::Detail::OwnedGraphicsDevice>();
+    // Construction is what acquires the platform video subsystem and the renderer, so it is
+    // also what can fail. Letting it throw into the barrier keeps the failure a documented
+    // result rather than a half-registered handle.
+    owned->value = std::make_unique<GraphicsDevice>(
+        *adapters[adapterIndex],
+        static_cast<GraphicsProfile>(graphicsProfile),
+        nativeParameters);
 
-        if (const CNA_Result result = CreateHandle(
-                CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The owner token is the device's own handle, so resources created on it are as
-        // distinguishable from another device's as two games' resources are from each other.
-        owned->view = std::make_shared<BorrowedGraphicsDevice>(
-            BorrowedGraphicsDevice{owned->value.get(), *outGraphicsDevice});
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = CreateHandle(
+            CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The owner token is the device's own handle, so resources created on it are as
+    // distinguishable from another device's as two games' resources are from each other.
+    owned->view = std::make_shared<BorrowedGraphicsDevice>(
+        BorrowedGraphicsDevice{owned->value.get(), *outGraphicsDevice});
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_destroy(const CNA_Handle graphicsDeviceHandle)
+[[nodiscard]] CNA_Result GraphicsDeviceDestroy(const CNA_Handle graphicsDeviceHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<CNA::C::Detail::OwnedGraphicsDevice> owned;
-        const CNA_Result getResult = LookupHandle(
-            graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        owned->value->Dispose();
-        return ReleaseHandle(graphicsDeviceHandle);
-    });
+    std::shared_ptr<CNA::C::Detail::OwnedGraphicsDevice> owned;
+    const CNA_Result getResult = LookupHandle(
+        graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    owned->value->Dispose();
+    return ReleaseHandle(graphicsDeviceHandle);
 }
 
-CNA_Result cna_graphics_device_reset_with_parameters(
+[[nodiscard]] CNA_Result GraphicsDeviceResetWithParameters(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_PresentationParameters* const parameters,
     const uint32_t* const adapterIndex)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (!IsPresentationParameters(parameters)) {
-            return InvalidArgument("The PresentationParameters source structure is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (!IsPresentationParameters(parameters)) {
+        return InvalidArgument("The PresentationParameters source structure is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        GraphicsAdapter* adapter = nullptr;
-        if (adapterIndex != nullptr) {
-            const auto& adapters = GraphicsAdapter::getAdaptersProperty();
-            if (*adapterIndex >= adapters.size()) {
-                return InvalidArgument("The graphics adapter index is out of range.");
-            }
-            adapter = adapters[*adapterIndex].get();
+    GraphicsAdapter* adapter = nullptr;
+    if (adapterIndex != nullptr) {
+        const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+        if (*adapterIndex >= adapters.size()) {
+            return InvalidArgument("The graphics adapter index is out of range.");
         }
+        adapter = adapters[*adapterIndex].get();
+    }
 
-        // The canonical window handle is renderer-private state that a C caller never supplies,
-        // so it is preserved across the reset exactly as the set-parameters route does.
-        PresentationParameters nativeParameters =
-            graphicsDevice->value->getPresentationParametersProperty().Clone();
-        const PresentationParameters::IntPtr windowHandle =
-            nativeParameters.getDeviceWindowHandleProperty();
-        ApplyPresentationParameters(*parameters, &nativeParameters);
-        nativeParameters.setDeviceWindowHandleProperty(windowHandle);
-        graphicsDevice->value->Reset(nativeParameters, adapter);
-        return CNA_RESULT_SUCCESS;
-    });
+    // The canonical window handle is renderer-private state that a C caller never supplies,
+    // so it is preserved across the reset exactly as the set-parameters route does.
+    PresentationParameters nativeParameters =
+        graphicsDevice->value->getPresentationParametersProperty().Clone();
+    const PresentationParameters::IntPtr windowHandle =
+        nativeParameters.getDeviceWindowHandleProperty();
+    ApplyPresentationParameters(*parameters, &nativeParameters);
+    nativeParameters.setDeviceWindowHandleProperty(windowHandle);
+    graphicsDevice->value->Reset(nativeParameters, adapter);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Display.toml.
 #include "generated/Display.inc"

@@ -130,111 +130,92 @@ static_assert(sizeof(int) == sizeof(int32_t));
     return CreateHandle(ObjectKind::VertexDeclaration, std::move(declaration), outDeclaration);
 }
 
-} // namespace
-
-CNA_Result cna_vertex_declaration_create(
+[[nodiscard]] CNA_Result VertexDeclarationCreate(
     const CNA_VertexElement* const elements,
     const uint64_t elementCount,
     CNA_VertexDeclarationHandle* const outDeclaration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDeclaration == nullptr) {
-            return InvalidArgument("The VertexDeclaration output handle is null.");
-        }
-        *outDeclaration = CNA_INVALID_HANDLE;
-        std::vector<VertexElement> nativeElements;
-        int32_t computedStride = 0;
-        if (const CNA_Result result = CopyNativeElements(
-                elements, elementCount, true, &nativeElements, &computedStride);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RegisterDeclaration(
-            std::make_shared<VertexDeclaration>(
-                computedStride, std::move(nativeElements)),
-            outDeclaration);
-    });
+    std::vector<VertexElement> nativeElements;
+    int32_t computedStride = 0;
+    if (const CNA_Result result = CopyNativeElements(
+            elements, elementCount, true, &nativeElements, &computedStride);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return RegisterDeclaration(
+        std::make_shared<VertexDeclaration>(
+            computedStride, std::move(nativeElements)),
+        outDeclaration);
 }
 
-CNA_Result cna_vertex_declaration_create_with_stride(
+[[nodiscard]] CNA_Result VertexDeclarationCreateWithStride(
     const int32_t vertexStride,
     const CNA_VertexElement* const elements,
     const uint64_t elementCount,
     CNA_VertexDeclarationHandle* const outDeclaration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDeclaration == nullptr) {
-            return InvalidArgument("The VertexDeclaration output handle is null.");
-        }
-        *outDeclaration = CNA_INVALID_HANDLE;
-        if (vertexStride <= 0) {
-            return OutOfRange("The explicit vertex stride must be positive.");
-        }
-        std::vector<VertexElement> nativeElements;
-        int32_t ignoredStride = 0;
-        if (const CNA_Result result = CopyNativeElements(
-                elements, elementCount, false, &nativeElements, &ignoredStride);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return RegisterDeclaration(
-            std::make_shared<VertexDeclaration>(
-                vertexStride, std::move(nativeElements)),
-            outDeclaration);
-    });
+    if (vertexStride <= 0) {
+        return OutOfRange("The explicit vertex stride must be positive.");
+    }
+    std::vector<VertexElement> nativeElements;
+    int32_t ignoredStride = 0;
+    if (const CNA_Result result = CopyNativeElements(
+            elements, elementCount, false, &nativeElements, &ignoredStride);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return RegisterDeclaration(
+        std::make_shared<VertexDeclaration>(
+            vertexStride, std::move(nativeElements)),
+        outDeclaration);
 }
 
-CNA_Result cna_vertex_declaration_copy_elements(
+[[nodiscard]] CNA_Result VertexDeclarationCopyElements(
     const CNA_VertexDeclarationHandle declarationHandle,
     CNA_VertexElement* const destination,
     const uint64_t capacity,
     uint64_t* const outElementCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outElementCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The vertex-element output buffer is invalid.");
-        }
-        std::shared_ptr<VertexDeclaration> declaration;
-        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& elements = declaration->GetVertexElements();
-        const uint64_t required = static_cast<uint64_t>(elements.size());
-        *outElementCount = required;
-        if (capacity < required) {
-            return BufferTooSmall("The vertex-element output buffer is too small.");
-        }
-        for (uint64_t index = 0U; index < required; ++index) {
-            destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The vertex-element output buffer is invalid.");
+    }
+    std::shared_ptr<VertexDeclaration> declaration;
+    if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& elements = declaration->GetVertexElements();
+    const uint64_t required = static_cast<uint64_t>(elements.size());
+    *outElementCount = required;
+    if (capacity < required) {
+        return BufferTooSmall("The vertex-element output buffer is too small.");
+    }
+    for (uint64_t index = 0U; index < required; ++index) {
+        destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_binding_init(
+[[nodiscard]] CNA_Result VertexBufferBindingInit(
     const CNA_VertexBufferHandle vertexBuffer,
     const int32_t vertexOffset,
     const int32_t instanceFrequency,
     CNA_VertexBufferBinding* const outBinding)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBinding == nullptr) {
-            return InvalidArgument("The vertex-buffer binding output is null.");
-        }
-        if (vertexBuffer == CNA_INVALID_HANDLE) {
-            return InvalidArgument(
-                "A non-default vertex-buffer binding requires a nonzero handle token.");
-        }
-        if (vertexOffset < 0 || instanceFrequency < 0) {
-            return OutOfRange("The vertex offset and instance frequency must be nonnegative.");
-        }
-        const CNA_VertexBufferBinding binding{
-            vertexBuffer, vertexOffset, instanceFrequency};
-        *outBinding = binding;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (vertexBuffer == CNA_INVALID_HANDLE) {
+        return InvalidArgument(
+            "A non-default vertex-buffer binding requires a nonzero handle token.");
+    }
+    if (vertexOffset < 0 || instanceFrequency < 0) {
+        return OutOfRange("The vertex offset and instance frequency must be nonnegative.");
+    }
+    const CNA_VertexBufferBinding binding{
+        vertexBuffer, vertexOffset, instanceFrequency};
+    *outBinding = binding;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/VertexResources.toml.
 #include "generated/VertexResources.inc"

@@ -13,3 +13,19 @@ cna_graphics_device_get_sampler_state = { versioned = true, invalid_if = ["stage
 ToCSamplerState(stage == CNA_SHADER_STAGE_PIXEL
     ? object->value->getSamplerStatesProperty()[static_cast<int>(slot)]
     : object->value->getVertexSamplerStatesProperty()[static_cast<int>(slot)])''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_blend_state_init = { result = "BlendStateInit(preset, out_state)" }
+cna_depth_stencil_state_init = { result = "DepthStencilStateInit(preset, out_state)" }
+cna_rasterizer_state_init = { result = "RasterizerStateInit(preset, out_state)" }
+cna_sampler_state_init = { result = "SamplerStateInit(preset, out_state)" }
+cna_graphics_device_set_blend_state = { result = "GraphicsDeviceSetBlendState(graphics_device, state)" }
+cna_graphics_device_set_depth_stencil_state = { result = "GraphicsDeviceSetDepthStencilState(graphics_device, state)" }
+cna_graphics_device_set_rasterizer_state = { result = "GraphicsDeviceSetRasterizerState(graphics_device, state)" }
+cna_graphics_device_set_sampler_state = { result = "GraphicsDeviceSetSamplerState(graphics_device, stage, slot, state)" }

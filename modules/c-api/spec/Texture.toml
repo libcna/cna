@@ -40,3 +40,23 @@ CNA_TextureInfo{
     static_cast<uint32_t>(object.value->getLevelCountProperty()),
     static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty())
 }''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_texture2d_create_from_file = { result = "Texture2dCreateFromFile(path, out_texture)" }
+cna_texture2d_create_from_file_with_device = { result = "Texture2dCreateFromFileWithDevice(graphics_device, path, out_texture)" }
+cna_texture2d_create_from_rgba8 = { result = "Texture2dCreateFromRgba8(graphics_device, width, height, pixels, pixel_count, out_texture)" }
+cna_texture2d_create_cpu_only_rgba8 = { result = "Texture2dCreateCpuOnlyRgba8(width, height, format, pixels, pixel_count, out_texture)" }
+cna_texture2d_get_data = { result = "Texture2dGetData(texture, data_type, transfer, destination, destination_capacity, out_required_elements)" }
+cna_texture2d_create_from_encoded_memory = { result = "Texture2dCreateFromEncodedMemory(graphics_device, encoded_data, encoded_byte_count, decode_info, out_texture)" }
+cna_texture2d_get_encoded_byte_count = { result = "Texture2dGetEncodedByteCount(texture, image_format, target_width, target_height, out_byte_count)" }
+cna_texture2d_copy_encoded = { result = "Texture2dCopyEncoded(texture, image_format, target_width, target_height, destination, capacity, out_byte_count)" }
+cna_texture_validate_format = { result = "TextureValidateFormat(format)" }
+cna_texture2d_set_data_rgba8_bytes = { result = "Texture2dSetDataRgba8Bytes(texture, rgba_bytes, pixel_count)" }
+cna_texture2d_set_data = { result = "Texture2dSetData(texture, data_type, transfer, data, data_capacity)" }
+cna_texture2d_save_file = { result = "Texture2dSaveFile(texture, image_format, path)" }

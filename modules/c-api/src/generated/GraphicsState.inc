@@ -94,3 +94,89 @@ CNA_Result cna_graphics_device_get_sampler_state(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_blend_state_init(
+    const CNA_BlendStatePreset preset,
+    CNA_BlendState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_blend_state_init: out_state is null.");
+        }
+        return BlendStateInit(preset, out_state);
+    });
+}
+
+CNA_Result cna_depth_stencil_state_init(
+    const CNA_DepthStencilStatePreset preset,
+    CNA_DepthStencilState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_depth_stencil_state_init: out_state is null.");
+        }
+        return DepthStencilStateInit(preset, out_state);
+    });
+}
+
+CNA_Result cna_rasterizer_state_init(
+    const CNA_RasterizerStatePreset preset,
+    CNA_RasterizerState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rasterizer_state_init: out_state is null.");
+        }
+        return RasterizerStateInit(preset, out_state);
+    });
+}
+
+CNA_Result cna_sampler_state_init(
+    const CNA_SamplerStatePreset preset,
+    CNA_SamplerState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sampler_state_init: out_state is null.");
+        }
+        return SamplerStateInit(preset, out_state);
+    });
+}
+
+CNA_Result cna_graphics_device_set_blend_state(
+    const CNA_Handle graphics_device,
+    const CNA_BlendState* const state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetBlendState(graphics_device, state);
+    });
+}
+
+CNA_Result cna_graphics_device_set_depth_stencil_state(
+    const CNA_Handle graphics_device,
+    const CNA_DepthStencilState* const state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetDepthStencilState(graphics_device, state);
+    });
+}
+
+CNA_Result cna_graphics_device_set_rasterizer_state(
+    const CNA_Handle graphics_device,
+    const CNA_RasterizerState* const state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetRasterizerState(graphics_device, state);
+    });
+}
+
+CNA_Result cna_graphics_device_set_sampler_state(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderStage stage,
+    const uint32_t slot,
+    const CNA_SamplerState* const state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceSetSamplerState(graphics_device, stage, slot, state);
+    });
+}

@@ -143,3 +143,256 @@ CNA_Result cna_debug_draw_get_line_count(
     return CNA_RESULT_NOT_SUPPORTED;
 }
 #endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_create(
+    const CNA_Handle graphics_device,
+    CNA_DebugDrawHandle* const out_debug)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_debug == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_debug_draw_create: out_debug is null.");
+        }
+        *out_debug = CNA_INVALID_HANDLE;
+        return DebugDrawCreate(graphics_device, out_debug);
+    });
+}
+#else
+CNA_Result cna_debug_draw_create(
+    const CNA_Handle graphics_device,
+    CNA_DebugDrawHandle* const out_debug)
+{
+    (void)graphics_device;
+    (void)out_debug;
+    if (out_debug != nullptr) {
+        *out_debug = CNA_INVALID_HANDLE;
+    }
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_destroy(
+    const CNA_DebugDrawHandle debug)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawDestroy(debug);
+    });
+}
+#else
+CNA_Result cna_debug_draw_destroy(
+    const CNA_DebugDrawHandle debug)
+{
+    (void)debug;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_begin(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawBegin(debug, view, projection);
+    });
+}
+#else
+CNA_Result cna_debug_draw_begin(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection)
+{
+    (void)debug;
+    (void)view;
+    (void)projection;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_line(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const from,
+    const CNA_Vector3* const to,
+    const CNA_Color colour)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddLine(debug, from, to, colour);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_line(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const from,
+    const CNA_Vector3* const to,
+    const CNA_Color colour)
+{
+    (void)debug;
+    (void)from;
+    (void)to;
+    (void)colour;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_box(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingBox* const bounds,
+    const CNA_Color colour)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddBox(debug, bounds, colour);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_box(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingBox* const bounds,
+    const CNA_Color colour)
+{
+    (void)debug;
+    (void)bounds;
+    (void)colour;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_sphere(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const centre,
+    const float radius,
+    const CNA_Color colour,
+    const int32_t segments)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddSphere(debug, centre, radius, colour, segments);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_sphere(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const centre,
+    const float radius,
+    const CNA_Color colour,
+    const int32_t segments)
+{
+    (void)debug;
+    (void)centre;
+    (void)radius;
+    (void)colour;
+    (void)segments;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_bounding_sphere(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingSphere* const sphere,
+    const CNA_Color colour,
+    const int32_t segments)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddBoundingSphere(debug, sphere, colour, segments);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_bounding_sphere(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingSphere* const sphere,
+    const CNA_Color colour,
+    const int32_t segments)
+{
+    (void)debug;
+    (void)sphere;
+    (void)colour;
+    (void)segments;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_frustum(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingFrustum frustum,
+    const CNA_Color colour)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddFrustum(debug, frustum, colour);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_frustum(
+    const CNA_DebugDrawHandle debug,
+    const CNA_BoundingFrustum frustum,
+    const CNA_Color colour)
+{
+    (void)debug;
+    (void)frustum;
+    (void)colour;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_add_cross(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const position,
+    const float size,
+    const CNA_Color colour)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DebugDrawAddCross(debug, position, size, colour);
+    });
+}
+#else
+CNA_Result cna_debug_draw_add_cross(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Vector3* const position,
+    const float size,
+    const CNA_Color colour)
+{
+    (void)debug;
+    (void)position;
+    (void)size;
+    (void)colour;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_debug_draw_copy_vertices(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Bool depth_tested,
+    CNA_VertexPositionColor* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(depth_tested, "depth_tested");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return DebugDrawCopyVertices(debug, depth_tested, destination, capacity, out_count);
+    });
+}
+#else
+CNA_Result cna_debug_draw_copy_vertices(
+    const CNA_DebugDrawHandle debug,
+    const CNA_Bool depth_tested,
+    CNA_VertexPositionColor* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    (void)debug;
+    (void)depth_tested;
+    (void)destination;
+    (void)capacity;
+    (void)out_count;
+    return CNA_RESULT_NOT_SUPPORTED;
+}
+#endif

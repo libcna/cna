@@ -4225,3 +4225,966 @@ CNA_Result cna_skinned_effect_get_texture(
         return GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture);
     });
 }
+
+CNA_Result cna_effect_annotation_create(
+    const CNA_EffectAnnotationCreateInfo* const create_info,
+    CNA_EffectAnnotationHandle* const out_annotation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_annotation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_annotation_create: out_annotation is null.");
+        }
+        *out_annotation = CNA_INVALID_HANDLE;
+        return EffectAnnotationCreate(create_info, out_annotation);
+    });
+}
+
+CNA_Result cna_effect_annotation_collection_find(
+    const CNA_EffectAnnotationCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_EffectAnnotationHandle* const out_annotation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_annotation_collection_find: out_found is null.");
+        }
+        if (out_annotation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_annotation_collection_find: out_annotation is null.");
+        }
+        *out_annotation = CNA_INVALID_HANDLE;
+        return EffectAnnotationCollectionFind(collection, name, out_found, out_annotation);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_elements(
+    const CNA_EffectParameterHandle parameter,
+    CNA_EffectParameterCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_elements: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectParameterGetElements(parameter, out_collection);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_structure_members(
+    const CNA_EffectParameterHandle parameter,
+    CNA_EffectParameterCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_structure_members: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectParameterGetStructureMembers(parameter, out_collection);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_value(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectValueType value_type,
+    void* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_value: out_value is null.");
+        }
+        return EffectParameterGetValue(parameter, value_type, out_value);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_values(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectValueType value_type,
+    const uint64_t requested_count,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_values: out_count is null.");
+        }
+        return EffectParameterGetValues(parameter, value_type, requested_count, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_value_texture(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectTextureType texture_type,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_value_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return EffectParameterGetValueTexture(parameter, texture_type, out_texture);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_create(
+    CNA_EffectParameterCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectParameterCollectionCreate(out_collection);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_add_create(
+    const CNA_EffectParameterCollectionHandle collection,
+    const CNA_EffectParameterCreateInfo* const create_info,
+    CNA_EffectParameterHandle* const out_parameter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parameter == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_add_create: out_parameter is null.");
+        }
+        *out_parameter = CNA_INVALID_HANDLE;
+        return EffectParameterCollectionAddCreate(collection, create_info, out_parameter);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_find_name(
+    const CNA_EffectParameterCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_EffectParameterHandle* const out_parameter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_find_name: out_found is null.");
+        }
+        if (out_parameter == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_find_name: out_parameter is null.");
+        }
+        *out_parameter = CNA_INVALID_HANDLE;
+        return EffectParameterCollectionFindName(collection, name, out_found, out_parameter);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_find_semantic(
+    const CNA_EffectParameterCollectionHandle collection,
+    const CNA_StringView semantic,
+    CNA_Bool* const out_found,
+    CNA_EffectParameterHandle* const out_parameter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_find_semantic: out_found is null.");
+        }
+        if (out_parameter == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_find_semantic: out_parameter is null.");
+        }
+        *out_parameter = CNA_INVALID_HANDLE;
+        return EffectParameterCollectionFindSemantic(collection, semantic, out_found, out_parameter);
+    });
+}
+
+CNA_Result cna_effect_pass_create(
+    const CNA_StringView name,
+    const uint64_t technique_identity,
+    CNA_EffectPassHandle* const out_pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pass == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_create: out_pass is null.");
+        }
+        *out_pass = CNA_INVALID_HANDLE;
+        return EffectPassCreate(name, technique_identity, out_pass);
+    });
+}
+
+CNA_Result cna_effect_pass_create_indexed_ext(
+    const CNA_StringView name,
+    const uint64_t technique_identity,
+    const uint32_t pass_index,
+    CNA_EffectPassHandle* const out_pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pass == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_create_indexed_ext: out_pass is null.");
+        }
+        *out_pass = CNA_INVALID_HANDLE;
+        return EffectPassCreateIndexedExt(name, technique_identity, pass_index, out_pass);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_create(
+    CNA_EffectPassCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectPassCollectionCreate(out_collection);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_add_create(
+    const CNA_EffectPassCollectionHandle collection,
+    const CNA_StringView name,
+    const uint64_t technique_identity,
+    CNA_EffectPassHandle* const out_pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pass == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_collection_add_create: out_pass is null.");
+        }
+        *out_pass = CNA_INVALID_HANDLE;
+        return EffectPassCollectionAddCreate(collection, name, technique_identity, out_pass);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_find(
+    const CNA_EffectPassCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_EffectPassHandle* const out_pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_collection_find: out_found is null.");
+        }
+        if (out_pass == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_collection_find: out_pass is null.");
+        }
+        *out_pass = CNA_INVALID_HANDLE;
+        return EffectPassCollectionFind(collection, name, out_found, out_pass);
+    });
+}
+
+CNA_Result cna_effect_technique_create_named(
+    const CNA_StringView name,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_create_named: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        return EffectTechniqueCreateNamed(name, out_technique);
+    });
+}
+
+CNA_Result cna_effect_technique_create_reflected_ext(
+    const CNA_StringView name,
+    const uint32_t technique_index,
+    const CNA_Bool add_default_pass,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_create_reflected_ext: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(add_default_pass, "add_default_pass");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return EffectTechniqueCreateReflectedExt(name, technique_index, add_default_pass, out_technique);
+    });
+}
+
+CNA_Result cna_effect_technique_get_passes(
+    const CNA_EffectTechniqueHandle technique,
+    CNA_EffectPassCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_get_passes: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectTechniqueGetPasses(technique, out_collection);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_create(
+    CNA_EffectTechniqueCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return EffectTechniqueCollectionCreate(out_collection);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_add_default(
+    const CNA_EffectTechniqueCollectionHandle collection,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_add_default: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        return EffectTechniqueCollectionAddDefault(collection, out_technique);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_add_named(
+    const CNA_EffectTechniqueCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_add_named: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        return EffectTechniqueCollectionAddNamed(collection, name, out_technique);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_find(
+    const CNA_EffectTechniqueCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_find: out_found is null.");
+        }
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_find: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        return EffectTechniqueCollectionFind(collection, name, out_found, out_technique);
+    });
+}
+
+CNA_Result cna_effect_create_compiled(
+    const CNA_Handle graphics_device,
+    const uint8_t* const effect_code,
+    const uint64_t effect_code_count,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_create_compiled: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return EffectCreateCompiled(graphics_device, effect_code, effect_code_count, out_effect);
+    });
+}
+
+CNA_Result cna_content_manager_load_effect(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_effect: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return ContentManagerLoadEffect(content_manager, asset_name, out_effect);
+    });
+}
+
+CNA_Result cna_shader_effect_create(
+    const CNA_Handle graphics_device,
+    const CNA_StringView vertex_source,
+    const CNA_StringView fragment_source,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_create: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return ShaderEffectCreate(graphics_device, vertex_source, fragment_source, out_effect);
+    });
+}
+
+CNA_Result cna_effect_clone(
+    const CNA_EffectHandle effect,
+    CNA_EffectHandle* const out_clone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_clone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_clone: out_clone is null.");
+        }
+        *out_clone = CNA_INVALID_HANDLE;
+        return EffectClone(effect, out_clone);
+    });
+}
+
+CNA_Result cna_effect_get_current_technique(
+    const CNA_EffectHandle effect,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_get_current_technique: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        return EffectGetCurrentTechnique(effect, out_technique);
+    });
+}
+
+CNA_Result cna_effect_get_graphics_device(
+    const CNA_EffectHandle effect,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        return EffectGetGraphicsDevice(effect, out_graphics_device);
+    });
+}
+
+CNA_Result cna_effect_lights_get_directional_light(
+    const CNA_EffectHandle effect,
+    const uint32_t index,
+    CNA_DirectionalLightHandle* const out_light)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_light == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_lights_get_directional_light: out_light is null.");
+        }
+        *out_light = CNA_INVALID_HANDLE;
+        return EffectLightsGetDirectionalLight(effect, index, out_light);
+    });
+}
+
+CNA_Result cna_effect_lights_set_enabled(
+    const CNA_EffectHandle effect,
+    const CNA_Bool value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return EffectLightsSetEnabled(effect, value);
+    });
+}
+
+CNA_Result cna_basic_effect_get_texture(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_basic_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_basic_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return BasicEffectGetTexture(effect, out_has_texture, out_texture);
+    });
+}
+
+CNA_Result cna_dual_texture_effect_get_texture(
+    const CNA_EffectHandle effect,
+    const uint32_t texture_index,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dual_texture_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_dual_texture_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return DualTextureEffectGetTexture(effect, texture_index, out_has_texture, out_texture);
+    });
+}
+
+CNA_Result cna_skinned_effect_copy_bone_transforms(
+    const CNA_EffectHandle effect,
+    const uint64_t requested_count,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_effect_copy_bone_transforms: out_count is null.");
+        }
+        return SkinnedEffectCopyBoneTransforms(effect, requested_count, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_coordinate_set_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_texture_coordinate_set_ext: out_value is null.");
+        }
+        return PbrEffectGetTextureCoordinateSetExt(effect, slot, out_value);
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_is_srgb_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_texture_is_srgb_ext: out_value is null.");
+        }
+        return PbrEffectGetTextureIsSrgbExt(effect, slot, out_value);
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    const CNA_Bool value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(value, "value");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return PbrEffectSetTextureIsSrgbExt(effect, slot, value);
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
+    const CNA_EffectHandle effect,
+    const uint64_t requested_count,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_pbr_effect_copy_bone_transforms: out_count is null.");
+        }
+        return SkinnedPbrEffectCopyBoneTransforms(effect, requested_count, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture_transform_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    CNA_TextureTransformEXT* const out_transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PbrEffectGetTextureTransformExt(effect, slot, out_transform);
+    });
+}
+
+CNA_Result cna_effect_parameter_set_value(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectValueType value_type,
+    const void* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EffectParameterSetValue(parameter, value_type, value);
+    });
+}
+
+CNA_Result cna_effect_parameter_set_values(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectValueType value_type,
+    const void* const values,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EffectParameterSetValues(parameter, value_type, values, count);
+    });
+}
+
+CNA_Result cna_effect_parameter_set_value_texture(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_EffectTextureType texture_type,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EffectParameterSetValueTexture(parameter, texture_type, texture);
+    });
+}
+
+CNA_Result cna_effect_set_current_technique(
+    const CNA_EffectHandle effect,
+    const CNA_EffectTechniqueHandle technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EffectSetCurrentTechnique(effect, technique);
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_matrix(
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    const CNA_Matrix value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetUniformMatrix(effect, name, value);
+    });
+}
+
+CNA_Result cna_shader_effect_declare_uniform_block_ext(
+    const CNA_EffectHandle effect,
+    const int32_t block_size_bytes,
+    const CNA_StringView* const names,
+    const int32_t* const offsets,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectDeclareUniformBlockExt(effect, block_size_bytes, names, offsets, count);
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_float_array(
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    const float* const values,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetUniformFloatArray(effect, name, values, count);
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector2_array(
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    const CNA_Vector2* const values,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetUniformVector2Array(effect, name, values, count);
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture2d(
+    const CNA_EffectHandle effect,
+    const int32_t unit,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetTexture2d(effect, unit, texture);
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture_cube(
+    const CNA_EffectHandle effect,
+    const int32_t unit,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetTextureCube(effect, unit, texture);
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture3d(
+    const CNA_EffectHandle effect,
+    const int32_t unit,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetTexture3d(effect, unit, texture);
+    });
+}
+
+CNA_Result cna_basic_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BasicEffectSetTexture(effect, texture);
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AlphaTestEffectSetTexture(effect, texture);
+    });
+}
+
+CNA_Result cna_dual_texture_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const uint32_t texture_index,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DualTextureEffectSetTexture(effect, texture_index, texture);
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EnvironmentMapEffectSetTexture(effect, texture);
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_environment_map(
+    const CNA_EffectHandle effect,
+    const CNA_Handle environment_map)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EnvironmentMapEffectSetEnvironmentMap(effect, environment_map);
+    });
+}
+
+CNA_Result cna_skinned_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedEffectSetTexture(effect, texture);
+    });
+}
+
+CNA_Result cna_skinned_effect_set_bone_transforms(
+    const CNA_EffectHandle effect,
+    const CNA_Matrix* const transforms,
+    const uint64_t transform_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedEffectSetBoneTransforms(effect, transforms, transform_count);
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PbrEffectSetTexture(effect, slot, texture);
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_coordinate_set_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PbrEffectSetTextureCoordinateSetExt(effect, slot, value);
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture_transform_ext(
+    const CNA_EffectHandle effect,
+    const CNA_PbrTextureSlot slot,
+    const CNA_TextureTransformEXT* const transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PbrEffectSetTextureTransformExt(effect, slot, transform);
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha_mode_ext(
+    const CNA_EffectHandle effect,
+    const CNA_AlphaModeEXT value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PbrEffectSetAlphaModeExt(effect, value);
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_set_bone_transforms(
+    const CNA_EffectHandle effect,
+    const CNA_Matrix* const transforms,
+    const uint64_t transform_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedPbrEffectSetBoneTransforms(effect, transforms, transform_count);
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vec3_array(
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    const float* const values,
+    const int32_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetUniformVec3Array(effect, name, values, count);
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_mat4_array(
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    const float* const matrices,
+    const int32_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ShaderEffectSetUniformMat4Array(effect, name, matrices, count);
+    });
+}
+
+CNA_Result cna_effect_material_retain_parameter_texture_ext(
+    const CNA_EffectHandle effect,
+    const CNA_EffectTextureType texture_type,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EffectMaterialRetainParameterTextureExt(effect, texture_type, texture);
+    });
+}
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_set_scanline_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CrtEffectSetScanlineIntensity(effect, value);
+    });
+}
+#else
+CNA_Result cna_crt_effect_set_scanline_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    (void)effect;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_set_curvature(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CrtEffectSetCurvature(effect, value);
+    });
+}
+#else
+CNA_Result cna_crt_effect_set_curvature(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    (void)effect;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_set_vignette_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CrtEffectSetVignetteIntensity(effect, value);
+    });
+}
+#else
+CNA_Result cna_crt_effect_set_vignette_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    (void)effect;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_set_mask_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CrtEffectSetMaskIntensity(effect, value);
+    });
+}
+#else
+CNA_Result cna_crt_effect_set_mask_intensity(
+    const CNA_EffectHandle effect,
+    const float value)
+{
+    (void)effect;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_crt_effect_set_mask_type(
+    const CNA_EffectHandle effect,
+    const CNA_CRTMaskType mask_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CrtEffectSetMaskType(effect, mask_type);
+    });
+}
+#else
+CNA_Result cna_crt_effect_set_mask_type(
+    const CNA_EffectHandle effect,
+    const CNA_CRTMaskType mask_type)
+{
+    (void)effect;
+    (void)mask_type;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_depth_effect_set_mode(
+    const CNA_EffectHandle effect,
+    const CNA_DepthEffectMode mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DepthEffectSetMode(effect, mode);
+    });
+}
+#else
+CNA_Result cna_depth_effect_set_mode(
+    const CNA_EffectHandle effect,
+    const CNA_DepthEffectMode mode)
+{
+    (void)effect;
+    (void)mode;
+    return ExtensionEffectUnavailable();
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_depth_effect_set_dither_mode(
+    const CNA_EffectHandle effect,
+    const CNA_DitherMode dither_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DepthEffectSetDitherMode(effect, dither_mode);
+    });
+}
+#else
+CNA_Result cna_depth_effect_set_dither_mode(
+    const CNA_EffectHandle effect,
+    const CNA_DitherMode dither_mode)
+{
+    (void)effect;
+    (void)dither_mode;
+    return ExtensionEffectUnavailable();
+}
+#endif

@@ -235,3 +235,29 @@ CNA_Result cna_vertex_element_copy_string(
         return CNA::C::Detail::CopyText(ToNativeElement(value).ToString(), destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_vertex_type_get_stride(
+    const CNA_VertexType type,
+    uint32_t* const out_stride)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stride == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_type_get_stride: out_stride is null.");
+        }
+        return VertexTypeGetStride(type, out_stride);
+    });
+}
+
+CNA_Result cna_vertex_type_copy_elements(
+    const CNA_VertexType type,
+    CNA_VertexElement* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_element_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_element_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_type_copy_elements: out_element_count is null.");
+        }
+        return VertexTypeCopyElements(type, destination, capacity, out_element_count);
+    });
+}

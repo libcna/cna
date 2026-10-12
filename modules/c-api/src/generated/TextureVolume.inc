@@ -134,3 +134,125 @@ CNA_Result cna_texturecube_get_info(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_texture3d_create(
+    const CNA_Handle graphics_device,
+    const CNA_Texture3DCreateInfo* const create_info,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture3d_create: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return Texture3dCreate(graphics_device, create_info, out_texture);
+    });
+}
+
+CNA_Result cna_texture3d_get_data(
+    const CNA_Handle texture,
+    const CNA_Texture3DTransfer* const transfer,
+    CNA_Color* const destination,
+    const uint64_t destination_capacity,
+    uint64_t* const out_required_elements)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_required_elements == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture3d_get_data: out_required_elements is null.");
+        }
+        return Texture3dGetData(texture, transfer, destination, destination_capacity, out_required_elements);
+    });
+}
+
+CNA_Result cna_texturecube_create(
+    const CNA_Handle graphics_device,
+    const CNA_TextureCubeCreateInfo* const create_info,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texturecube_create: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return TexturecubeCreate(graphics_device, create_info, out_texture);
+    });
+}
+
+CNA_Result cna_texturecube_create_from_dds_memory(
+    const CNA_Handle graphics_device,
+    const uint8_t* const dds_data,
+    const uint64_t dds_byte_count,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texturecube_create_from_dds_memory: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return TexturecubeCreateFromDdsMemory(graphics_device, dds_data, dds_byte_count, out_texture);
+    });
+}
+
+CNA_Result cna_texturecube_get_data(
+    const CNA_Handle texture,
+    const CNA_TextureCubeTransfer* const transfer,
+    CNA_Color* const destination,
+    const uint64_t destination_capacity,
+    uint64_t* const out_required_elements)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_required_elements == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texturecube_get_data: out_required_elements is null.");
+        }
+        return TexturecubeGetData(texture, transfer, destination, destination_capacity, out_required_elements);
+    });
+}
+
+CNA_Result cna_texture3d_destroy(
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture3dDestroy(texture);
+    });
+}
+
+CNA_Result cna_texture3d_set_data(
+    const CNA_Handle texture,
+    const CNA_Texture3DTransfer* const transfer,
+    const CNA_Color* const data,
+    const uint64_t data_capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture3dSetData(texture, transfer, data, data_capacity);
+    });
+}
+
+CNA_Result cna_texture3d_set_data_bytes(
+    const CNA_Handle texture,
+    const CNA_Texture3DTransfer* const transfer,
+    const uint8_t* const data,
+    const uint64_t data_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Texture3dSetDataBytes(texture, transfer, data, data_byte_count);
+    });
+}
+
+CNA_Result cna_texturecube_destroy(
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TexturecubeDestroy(texture);
+    });
+}
+
+CNA_Result cna_texturecube_set_data(
+    const CNA_Handle texture,
+    const CNA_TextureCubeTransfer* const transfer,
+    const CNA_Color* const data,
+    const uint64_t data_capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TexturecubeSetData(texture, transfer, data, data_capacity);
+    });
+}

@@ -309,116 +309,114 @@ CNA_Result ResolveRenderTargetScopeReference(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_render_target_get_info(
+namespace {
+
+[[nodiscard]] CNA_Result RenderTargetGetInfo(
     const CNA_Handle renderTargetHandle,
     CNA_RenderTargetInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outInfo, "The render-target output structure is invalid.");
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outInfo, "The render-target output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ObjectKind kind = ObjectKind::Unknown;
+    if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The render-target handle is invalid for this call.");
+    }
+
+    if (kind == ObjectKind::RenderTarget2D) {
+        std::shared_ptr<Texture2DResource> resource;
+        if (const CNA_Result result = GetRenderTarget2D(renderTargetHandle, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        ObjectKind kind = ObjectKind::Unknown;
-        if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+        const auto target = std::static_pointer_cast<RenderTarget2D>(resource->value);
+        *outInfo = CNA_RenderTargetInfo{
+            .struct_size = sizeof(CNA_RenderTargetInfo),
+            .struct_version = StructureVersion,
+            .kind = CNA_RENDER_TARGET_KIND_2D,
+            .width = static_cast<uint32_t>(target->getWidthProperty()),
+            .height = static_cast<uint32_t>(target->getHeightProperty()),
+            .level_count = static_cast<uint32_t>(target->getLevelCountProperty()),
+            .format = static_cast<CNA_SurfaceFormat>(target->getFormatProperty()),
+            .depth_format = static_cast<CNA_DepthFormat>(
+                target->getDepthStencilFormatProperty()),
+            .multi_sample_count = target->getMultiSampleCountProperty(),
+            .usage = static_cast<CNA_RenderTargetUsage>(
+                target->getRenderTargetUsageProperty()),
+            .is_content_lost = ToCBool(target->getIsContentLostProperty()),
+            .renderer_available = ToCBool(target->GetRenderTargetRenderer() != nullptr),
+            .reserved = {0U, 0U}};
+        return CNA_RESULT_SUCCESS;
+    }
+    if (kind == ObjectKind::RenderTargetCube) {
+        std::shared_ptr<RenderTargetCubeResource> resource;
+        if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The render-target handle is invalid for this call.");
+            return result;
         }
-
-        if (kind == ObjectKind::RenderTarget2D) {
-            std::shared_ptr<Texture2DResource> resource;
-            if (const CNA_Result result = GetRenderTarget2D(renderTargetHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            const auto target = std::static_pointer_cast<RenderTarget2D>(resource->value);
-            *outInfo = CNA_RenderTargetInfo{
-                .struct_size = sizeof(CNA_RenderTargetInfo),
-                .struct_version = StructureVersion,
-                .kind = CNA_RENDER_TARGET_KIND_2D,
-                .width = static_cast<uint32_t>(target->getWidthProperty()),
-                .height = static_cast<uint32_t>(target->getHeightProperty()),
-                .level_count = static_cast<uint32_t>(target->getLevelCountProperty()),
-                .format = static_cast<CNA_SurfaceFormat>(target->getFormatProperty()),
-                .depth_format = static_cast<CNA_DepthFormat>(
-                    target->getDepthStencilFormatProperty()),
-                .multi_sample_count = target->getMultiSampleCountProperty(),
-                .usage = static_cast<CNA_RenderTargetUsage>(
-                    target->getRenderTargetUsageProperty()),
-                .is_content_lost = ToCBool(target->getIsContentLostProperty()),
-                .renderer_available = ToCBool(target->GetRenderTargetRenderer() != nullptr),
-                .reserved = {0U, 0U}};
-            return CNA_RESULT_SUCCESS;
-        }
-        if (kind == ObjectKind::RenderTargetCube) {
-            std::shared_ptr<RenderTargetCubeResource> resource;
-            if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            const RenderTargetCube& target = *resource->value;
-            *outInfo = CNA_RenderTargetInfo{
-                .struct_size = sizeof(CNA_RenderTargetInfo),
-                .struct_version = StructureVersion,
-                .kind = CNA_RENDER_TARGET_KIND_CUBE,
-                .width = static_cast<uint32_t>(target.getWidthProperty()),
-                .height = static_cast<uint32_t>(target.getHeightProperty()),
-                .level_count = static_cast<uint32_t>(target.getLevelCountProperty()),
-                .format = static_cast<CNA_SurfaceFormat>(target.getFormatProperty()),
-                .depth_format = static_cast<CNA_DepthFormat>(
-                    target.getDepthStencilFormatProperty()),
-                .multi_sample_count = target.getMultiSampleCountProperty(),
-                .usage = static_cast<CNA_RenderTargetUsage>(
-                    target.getRenderTargetUsageProperty()),
-                .is_content_lost = ToCBool(target.getIsContentLostProperty()),
-                .renderer_available = ToCBool(target.GetRenderTargetCubeRenderer() != nullptr),
-                .reserved = {0U, 0U}};
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            CNA_RESULT_INVALID_HANDLE,
-            CNA_ERROR_CATEGORY_HANDLE,
-            "The handle does not refer to a render target.");
-    });
+        const RenderTargetCube& target = *resource->value;
+        *outInfo = CNA_RenderTargetInfo{
+            .struct_size = sizeof(CNA_RenderTargetInfo),
+            .struct_version = StructureVersion,
+            .kind = CNA_RENDER_TARGET_KIND_CUBE,
+            .width = static_cast<uint32_t>(target.getWidthProperty()),
+            .height = static_cast<uint32_t>(target.getHeightProperty()),
+            .level_count = static_cast<uint32_t>(target.getLevelCountProperty()),
+            .format = static_cast<CNA_SurfaceFormat>(target.getFormatProperty()),
+            .depth_format = static_cast<CNA_DepthFormat>(
+                target.getDepthStencilFormatProperty()),
+            .multi_sample_count = target.getMultiSampleCountProperty(),
+            .usage = static_cast<CNA_RenderTargetUsage>(
+                target.getRenderTargetUsageProperty()),
+            .is_content_lost = ToCBool(target.getIsContentLostProperty()),
+            .renderer_available = ToCBool(target.GetRenderTargetCubeRenderer() != nullptr),
+            .reserved = {0U, 0U}};
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_HANDLE,
+        CNA_ERROR_CATEGORY_HANDLE,
+        "The handle does not refer to a render target.");
 }
 
-CNA_Result cna_graphics_device_set_render_targets(
+[[nodiscard]] CNA_Result GraphicsDeviceSetRenderTargets(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_RenderTargetBinding* const bindings,
     const uint64_t bindingCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<RenderTargetBinding> nativeBindings;
-        std::vector<CNA_RenderTargetBinding> normalizedBindings;
-        if (const CNA_Result result = ResolveBindings(
-                graphicsDevice->parentGame,
-                bindings,
-                bindingCount,
-                &nativeBindings,
-                &normalizedBindings);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        graphicsDevice->value->SetRenderTargets(nativeBindings);
-        if (normalizedBindings.empty()) {
-            activeBindings.erase(graphicsDevice->value);
-        } else {
-            activeBindings[graphicsDevice->value] = std::move(normalizedBindings);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<RenderTargetBinding> nativeBindings;
+    std::vector<CNA_RenderTargetBinding> normalizedBindings;
+    if (const CNA_Result result = ResolveBindings(
+            graphicsDevice->parentGame,
+            bindings,
+            bindingCount,
+            &nativeBindings,
+            &normalizedBindings);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    graphicsDevice->value->SetRenderTargets(nativeBindings);
+    if (normalizedBindings.empty()) {
+        activeBindings.erase(graphicsDevice->value);
+    } else {
+        activeBindings[graphicsDevice->value] = std::move(normalizedBindings);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_set_render_target2d(
+[[nodiscard]] CNA_Result GraphicsDeviceSetRenderTarget2d(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Handle renderTargetHandle)
 {
@@ -434,7 +432,7 @@ CNA_Result cna_graphics_device_set_render_target2d(
     return cna_graphics_device_set_render_targets(graphicsDeviceHandle, &binding, 1U);
 }
 
-CNA_Result cna_graphics_device_set_render_target_cube(
+[[nodiscard]] CNA_Result GraphicsDeviceSetRenderTargetCube(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Handle renderTargetHandle,
     const CNA_CubeMapFace cubeMapFace)
@@ -454,59 +452,50 @@ CNA_Result cna_graphics_device_set_render_target_cube(
     return cna_graphics_device_set_render_targets(graphicsDeviceHandle, &binding, 1U);
 }
 
-CNA_Result cna_graphics_device_get_render_target_count(
+[[nodiscard]] CNA_Result GraphicsDeviceGetRenderTargetCount(
     const CNA_Handle graphicsDeviceHandle,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr) {
-            return InvalidArgument("The render-target count output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto found = activeBindings.find(graphicsDevice->value);
-        *outCount = found == activeBindings.end() ? 0U : found->second.size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto found = activeBindings.find(graphicsDevice->value);
+    *outCount = found == activeBindings.end() ? 0U : found->second.size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_copy_render_targets(
+[[nodiscard]] CNA_Result GraphicsDeviceCopyRenderTargets(
     const CNA_Handle graphicsDeviceHandle,
     CNA_RenderTargetBinding* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The render-target binding output buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto found = activeBindings.find(graphicsDevice->value);
-        const uint64_t count = found == activeBindings.end() ? 0U : found->second.size();
-        *outCount = count;
-        if (capacity < count) {
-            return BufferTooSmall("The render-target binding output buffer is too small.");
-        }
-        if (count != 0U) {
-            std::memcpy(
-                destination,
-                found->second.data(),
-                static_cast<std::size_t>(count) * sizeof(CNA_RenderTargetBinding));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The render-target binding output buffer is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto found = activeBindings.find(graphicsDevice->value);
+    const uint64_t count = found == activeBindings.end() ? 0U : found->second.size();
+    *outCount = count;
+    if (capacity < count) {
+        return BufferTooSmall("The render-target binding output buffer is too small.");
+    }
+    if (count != 0U) {
+        std::memcpy(
+            destination,
+            found->second.data(),
+            static_cast<std::size_t>(count) * sizeof(CNA_RenderTargetBinding));
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 /// Keeps one render target's ContentLost subscription, and detaches it exactly once. Weak, so a
 /// registration outliving its target unsubscribes from nothing rather than from freed memory.
@@ -548,137 +537,127 @@ private:
     bool detached_ = false;
 };
 
-} // namespace
-
-CNA_Result cna_render_target_subscribe_content_lost(
+[[nodiscard]] CNA_Result RenderTargetSubscribeContentLost(
     const CNA_Handle renderTargetHandle,
     const CNA_RenderTargetContentLostCallback callback,
     void* const context,
     CNA_RenderTargetEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The ContentLost registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The ContentLost callback is null.");
-        }
+    if (callback == nullptr) {
+        return InvalidArgument("The ContentLost callback is null.");
+    }
 
-        ObjectKind kind = ObjectKind::Unknown;
-        if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The render-target handle is invalid for this call.");
-        }
-
-        std::shared_ptr<CNA::Internal::Graphics::IContentLosable> losable;
-        RenderTargetContentLostRegistration::Token token{};
-        if (kind == ObjectKind::RenderTarget2D) {
-            std::shared_ptr<Texture2DResource> texture;
-            if (const CNA_Result result = GetOwnedTexture2D(renderTargetHandle, &texture);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            const auto target = std::static_pointer_cast<RenderTarget2D>(texture->value);
-            token = target->ContentLost.Add(
-                [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
-                    callback(renderTargetHandle, context);
-                });
-            losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
-                target, static_cast<CNA::Internal::Graphics::IContentLosable*>(target.get()));
-        } else if (kind == ObjectKind::RenderTargetCube) {
-            std::shared_ptr<RenderTargetCubeResource> resource;
-            if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            token = resource->value->ContentLost.Add(
-                [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
-                    callback(renderTargetHandle, context);
-                });
-            losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
-                resource->value,
-                static_cast<CNA::Internal::Graphics::IContentLosable*>(resource->value.get()));
-        } else {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE,
-                CNA_ERROR_CATEGORY_HANDLE,
-                "The handle does not refer to a render target.");
-        }
-
-        const auto registration =
-            std::make_shared<RenderTargetContentLostRegistration>(losable, token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::RenderTargetEventRegistration, registration, outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
+    ObjectKind kind = ObjectKind::Unknown;
+    if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+        result != CNA_RESULT_SUCCESS) {
         return Fail(
             result,
             ErrorCategoryForResult(result),
-            "The ContentLost registration handle could not be created.");
-    });
-}
+            "The render-target handle is invalid for this call.");
+    }
 
-CNA_Result cna_render_target_unsubscribe_content_lost(
-    const CNA_RenderTargetEventRegistrationHandle registrationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<RenderTargetContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
-}
-
-CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        ObjectKind kind = ObjectKind::Unknown;
-        if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+    std::shared_ptr<CNA::Internal::Graphics::IContentLosable> losable;
+    RenderTargetContentLostRegistration::Token token{};
+    if (kind == ObjectKind::RenderTarget2D) {
+        std::shared_ptr<Texture2DResource> texture;
+        if (const CNA_Result result = GetOwnedTexture2D(renderTargetHandle, &texture);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The render-target handle is invalid for destruction.");
+            return result;
         }
-        if (kind == ObjectKind::RenderTarget2D) {
-            return cna_texture2d_destroy(renderTargetHandle);
-        }
-        if (kind != ObjectKind::RenderTargetCube) {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE,
-                CNA_ERROR_CATEGORY_HANDLE,
-                "The handle does not refer to a render target.");
-        }
-
+        const auto target = std::static_pointer_cast<RenderTarget2D>(texture->value);
+        token = target->ContentLost.Add(
+            [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
+                callback(renderTargetHandle, context);
+            });
+        losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
+            target, static_cast<CNA::Internal::Graphics::IContentLosable*>(target.get()));
+    } else if (kind == ObjectKind::RenderTargetCube) {
         std::shared_ptr<RenderTargetCubeResource> resource;
         if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (resource->activeEffectReferenceCount != 0U ||
-            resource->activeScopeReferenceCount != 0U) {
-            return InvalidState(
-                "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
-        }
-        resource->value->Dispose();
-        if (const CNA_Result releaseResult = ReleaseHandle(renderTargetHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        RemoveOwnedGraphicsResourceFor(resource->parentGame);
+        token = resource->value->ContentLost.Add(
+            [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
+                callback(renderTargetHandle, context);
+            });
+        losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
+            resource->value,
+            static_cast<CNA::Internal::Graphics::IContentLosable*>(resource->value.get()));
+    } else {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The handle does not refer to a render target.");
+    }
+
+    const auto registration =
+        std::make_shared<RenderTargetContentLostRegistration>(losable, token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::RenderTargetEventRegistration, registration, outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The ContentLost registration handle could not be created.");
 }
+
+[[nodiscard]] CNA_Result RenderTargetUnsubscribeContentLost(
+    const CNA_RenderTargetEventRegistrationHandle registrationHandle)
+{
+    std::shared_ptr<RenderTargetContentLostRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
+}
+
+[[nodiscard]] CNA_Result RenderTargetDestroy(const CNA_Handle renderTargetHandle)
+{
+    ObjectKind kind = ObjectKind::Unknown;
+    if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The render-target handle is invalid for destruction.");
+    }
+    if (kind == ObjectKind::RenderTarget2D) {
+        return cna_texture2d_destroy(renderTargetHandle);
+    }
+    if (kind != ObjectKind::RenderTargetCube) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The handle does not refer to a render target.");
+    }
+
+    std::shared_ptr<RenderTargetCubeResource> resource;
+    if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (resource->activeEffectReferenceCount != 0U ||
+        resource->activeScopeReferenceCount != 0U) {
+        return InvalidState(
+            "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
+    }
+    resource->value->Dispose();
+    if (const CNA_Result releaseResult = ReleaseHandle(renderTargetHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    RemoveOwnedGraphicsResourceFor(resource->parentGame);
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/RenderTarget.toml.
 #include "generated/RenderTarget.inc"

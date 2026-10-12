@@ -10,3 +10,34 @@ unavailable = "ExtensionUnavailable()"
 [ascii_effect.routes]
 cna_ascii_post_process_effect_set_cell_size = { call = "object->value->setCellSize(static_cast<int>(width), static_cast<int>(height))" }
 cna_ascii_post_process_effect_get_quantize_mode = { get = "NativeOrdinal(object->value->getQuantizeMode())" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_indirect_draw_arguments_init = { result = "IndirectDrawArgumentsInit(out_arguments)" }
+cna_indirect_draw_indexed_arguments_init = { result = "IndirectDrawIndexedArgumentsInit(out_arguments)" }
+cna_image_based_light_ext_init = { result = "ImageBasedLightExtInit(out_light)" }
+cna_image_based_light_ext_is_valid = { result = "ImageBasedLightExtIsValid(light, out_valid)", optional = ["out_valid"] }
+
+# Helper routes that exist only in builds with CNA_CNAEXT; without it each answers
+# ExtensionUnavailable().
+[helpers_cnaext]
+raw = true
+feature = "CNA_CNAEXT"
+unavailable = "ExtensionUnavailable()"
+
+[helpers_cnaext.routes]
+cna_ascii_post_process_effect_create = { result = "AsciiPostProcessEffectCreate(graphics_device, out_effect)" }
+cna_ascii_post_process_effect_get_cell_size = { result = "AsciiPostProcessEffectGetCellSize(effect, out_width, out_height)" }
+cna_ascii_post_process_effect_set_quantize_mode = { result = "AsciiPostProcessEffectSetQuantizeMode(effect, mode)" }
+cna_ascii_post_process_effect_draw = { result = "AsciiPostProcessEffectDraw(effect, source, destination_rectangle)" }
+cna_ascii_post_process_effect_get_last_grid_dimensions = { result = "AsciiPostProcessEffectGetLastGridDimensions(effect, out_columns, out_rows)" }
+cna_ascii_post_process_effect_destroy = { result = "AsciiPostProcessEffectDestroy(effect)" }
+
+[values]
+[values.routes]
+cna_graphics_ext_is_available = { value = "GraphicsExtBuilt" }

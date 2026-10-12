@@ -224,53 +224,46 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
         value.usage_index);
 }
 
-} // namespace
-
-CNA_Result cna_vertex_type_get_stride(
+[[nodiscard]] CNA_Result VertexTypeGetStride(
     const CNA_VertexType type,
     uint32_t* const outStride)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outStride == nullptr) {
-            return InvalidArgument("The vertex-stride output is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int nativeStride = DeclarationForType(type).getVertexStrideProperty();
-        if (nativeStride < 0) {
-            return InternalError("The native vertex declaration reported a negative stride.");
-        }
-        *outStride = static_cast<uint32_t>(nativeStride);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const int nativeStride = DeclarationForType(type).getVertexStrideProperty();
+    if (nativeStride < 0) {
+        return InternalError("The native vertex declaration reported a negative stride.");
+    }
+    *outStride = static_cast<uint32_t>(nativeStride);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_type_copy_elements(
+[[nodiscard]] CNA_Result VertexTypeCopyElements(
     const CNA_VertexType type,
     CNA_VertexElement* const destination,
     const uint64_t capacity,
     uint64_t* const outElementCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outElementCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The vertex-element output buffer is invalid.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& elements = DeclarationForType(type).GetVertexElements();
-        const uint64_t required = static_cast<uint64_t>(elements.size());
-        *outElementCount = required;
-        if (capacity < required) {
-            return BufferTooSmall("The vertex-element output buffer is too small.");
-        }
-        for (uint64_t index = 0U; index < required; ++index) {
-            destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The vertex-element output buffer is invalid.");
+    }
+    if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& elements = DeclarationForType(type).GetVertexElements();
+    const uint64_t required = static_cast<uint64_t>(elements.size());
+    *outElementCount = required;
+    if (capacity < required) {
+        return BufferTooSmall("The vertex-element output buffer is too small.");
+    }
+    for (uint64_t index = 0U; index < required; ++index) {
+        destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/VertexValues.toml.
 #include "generated/VertexValues.inc"

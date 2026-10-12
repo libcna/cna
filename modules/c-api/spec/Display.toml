@@ -54,3 +54,21 @@ CNA_GraphicsAdapterInfo{
     .description_byte_length = object->getDescriptionProperty().size(),
     .device_name_byte_length = object->getDeviceNameProperty().size()
 }''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_display_mode_equals = { result = "DisplayModeEquals(left, right, out_equal)" }
+cna_graphics_adapter_get_display_mode_count = { result = "GraphicsAdapterGetDisplayModeCount(graphics_device, adapter_index, filter_by_format, format, out_count)" }
+cna_graphics_adapter_copy_display_modes = { result = "GraphicsAdapterCopyDisplayModes(graphics_device, adapter_index, filter_by_format, format, destination, capacity, out_count)" }
+cna_graphics_adapter_set_device_preferences = { result = "GraphicsAdapterSetDevicePreferences(graphics_device, adapter_index, use_null_device, use_reference_device)" }
+cna_graphics_adapter_get_native_monitor_handle = { result = "GraphicsAdapterGetNativeMonitorHandle(graphics_device, adapter_index, out_value)" }
+cna_graphics_device_get_native_window_handle = { result = "GraphicsDeviceGetNativeWindowHandle(graphics_device, out_value)" }
+cna_graphics_device_create = { result = "GraphicsDeviceCreate(adapter_index, graphics_profile, parameters, out_graphics_device)" }
+cna_graphics_device_set_presentation_parameters = { result = "GraphicsDeviceSetPresentationParameters(graphics_device, parameters)" }
+cna_graphics_device_destroy = { result = "GraphicsDeviceDestroy(graphics_device)" }
+cna_graphics_device_reset_with_parameters = { result = "GraphicsDeviceResetWithParameters(graphics_device, parameters, adapter_index)" }

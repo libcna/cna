@@ -83,3 +83,34 @@ cna_occlusion_query_get_pixel_count = { get = "object->value->getPixelCountPrope
 # count is 1/area rather than a fraction, so a caller that divides has to be able to ask first.
 cna_occlusion_query_get_is_pixel_count_precise_ext = { get = "object->value->isPixelCountPreciseEXT()" }
 cna_occlusion_query_has_renderer = { get = "object->value->HasRenderer()" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_graphics_device_get_adapter_index = { result = "GraphicsDeviceGetAdapterIndex(graphics_device, out_adapter_index)" }
+cna_graphics_device_subscribe_event = { result = "GraphicsDeviceSubscribeEvent(graphics_device, device_event, callback, context, out_registration)" }
+cna_graphics_device_copy_vertex_buffers = { result = "GraphicsDeviceCopyVertexBuffers(graphics_device, destination, capacity, out_count)" }
+cna_occlusion_query_create = { result = "OcclusionQueryCreate(graphics_device, out_occlusion_query)" }
+cna_graphics_device_get_texture = { result = "GraphicsDeviceGetTexture(graphics_device, stage, slot, out_info)" }
+cna_graphics_device_subscribe_resource_created = { result = "GraphicsDeviceSubscribeResourceCreated(graphics_device, callback, context, out_registration)", optional = ["out_registration"] }
+cna_graphics_device_subscribe_resource_destroyed = { result = "GraphicsDeviceSubscribeResourceDestroyed(graphics_device, callback, context, out_registration)", optional = ["out_registration"] }
+cna_viewport_set_bounds = { result = "ViewportSetBounds(viewport, bounds)" }
+cna_graphics_device_unsubscribe = { result = "GraphicsDeviceUnsubscribe(registration)" }
+cna_graphics_device_set_texture = { result = "GraphicsDeviceSetTexture(graphics_device, stage, slot, texture)" }
+cna_graphics_device_unbind_texture = { result = "GraphicsDeviceUnbindTexture(graphics_device, texture)" }
+cna_graphics_device_get_backbuffer_data_window = { result = "GraphicsDeviceGetBackbufferDataWindow(graphics_device, readback, destination, capacity)" }
+cna_graphics_device_set_vertex_buffer = { result = "GraphicsDeviceSetVertexBuffer(graphics_device, vertex_buffer)" }
+cna_graphics_device_set_vertex_buffer_offset = { result = "GraphicsDeviceSetVertexBufferOffset(graphics_device, vertex_buffer, vertex_offset)" }
+cna_graphics_device_set_vertex_buffers = { result = "GraphicsDeviceSetVertexBuffers(graphics_device, bindings, binding_count)" }
+cna_graphics_device_get_vertex_buffer = { result = "GraphicsDeviceGetVertexBuffer(graphics_device, out_vertex_buffer)", optional = ["out_vertex_buffer"] }
+cna_graphics_device_set_index_buffer = { result = "GraphicsDeviceSetIndexBuffer(graphics_device, index_buffer)" }
+cna_graphics_device_get_index_buffer = { result = "GraphicsDeviceGetIndexBuffer(graphics_device, out_index_buffer)", optional = ["out_index_buffer"] }
+cna_graphics_device_draw_user_primitives = { result = "GraphicsDeviceDrawUserPrimitives(graphics_device, primitives)" }
+cna_graphics_device_draw_user_indexed_primitives = { result = "GraphicsDeviceDrawUserIndexedPrimitives(graphics_device, primitives, indices)" }
+cna_graphics_device_set_current_effect = { result = "GraphicsDeviceSetCurrentEffect(graphics_device, effect)" }
+cna_graphics_device_recreate_renderer_for_multi_sample_count_ext = { result = "GraphicsDeviceRecreateRendererForMultiSampleCountExt(graphics_device, multi_sample_count)" }
+cna_occlusion_query_destroy = { result = "OcclusionQueryDestroy(occlusion_query)" }

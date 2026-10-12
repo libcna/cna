@@ -314,266 +314,241 @@ private:
     bool subscribed_ = true;
 };
 
-} // namespace
-
-CNA_Result cna_vertex_buffer_create(
+[[nodiscard]] CNA_Result VertexBufferCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_VertexBufferCreateInfo* const createInfo,
     CNA_VertexBufferHandle* const outVertexBuffer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVertexBuffer == nullptr) {
-            return InvalidArgument("The VertexBuffer output handle is null.");
-        }
-        *outVertexBuffer = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) ||
-            createInfo->vertex_count <= 0 ||
-            createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
-            !IsCanonicalBool(createInfo->dynamic) ||
-            !IsZero(createInfo->reserved, 7U)) {
-            return InvalidArgument("The VertexBuffer creation configuration is invalid.");
-        }
-        const bool dynamic = createInfo->dynamic == CNA_TRUE;
-        if (createInfo->vertex_declaration == CNA_INVALID_HANDLE &&
-            (dynamic || createInfo->buffer_usage != CNA_BUFFER_USAGE_NONE)) {
-            return InvalidArgument(
-                "The empty-declaration VertexBuffer extension must be static with BufferUsage.None.");
-        }
+    if (!IsVersionedStructure(createInfo) ||
+        createInfo->vertex_count <= 0 ||
+        createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
+        !IsCanonicalBool(createInfo->dynamic) ||
+        !IsZero(createInfo->reserved, 7U)) {
+        return InvalidArgument("The VertexBuffer creation configuration is invalid.");
+    }
+    const bool dynamic = createInfo->dynamic == CNA_TRUE;
+    if (createInfo->vertex_declaration == CNA_INVALID_HANDLE &&
+        (dynamic || createInfo->buffer_usage != CNA_BUFFER_USAGE_NONE)) {
+        return InvalidArgument(
+            "The empty-declaration VertexBuffer extension must be static with BufferUsage.None.");
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-            return NotSupported("The selected graphics backend does not support vertex buffers.");
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
+        return NotSupported("The selected graphics backend does not support vertex buffers.");
+    }
 
-        std::shared_ptr<VertexBuffer> native;
-        if (createInfo->vertex_declaration == CNA_INVALID_HANDLE) {
-            native = std::make_shared<VertexBuffer>(
-                *graphicsDevice->value, createInfo->vertex_count);
+    std::shared_ptr<VertexBuffer> native;
+    if (createInfo->vertex_declaration == CNA_INVALID_HANDLE) {
+        native = std::make_shared<VertexBuffer>(
+            *graphicsDevice->value, createInfo->vertex_count);
+    } else {
+        std::shared_ptr<VertexDeclaration> declaration;
+        const CNA_Result declarationResult = LookupHandle(
+            createInfo->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
+        if (declarationResult != CNA_RESULT_SUCCESS) {
+            return declarationResult;
+        }
+        const auto usage = static_cast<BufferUsage>(createInfo->buffer_usage);
+        if (dynamic) {
+            native = std::make_shared<DynamicVertexBuffer>(
+                *graphicsDevice->value,
+                *declaration,
+                createInfo->vertex_count,
+                usage);
         } else {
-            std::shared_ptr<VertexDeclaration> declaration;
-            const CNA_Result declarationResult = LookupHandle(
-                createInfo->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
-            if (declarationResult != CNA_RESULT_SUCCESS) {
-                return declarationResult;
-            }
-            const auto usage = static_cast<BufferUsage>(createInfo->buffer_usage);
-            if (dynamic) {
-                native = std::make_shared<DynamicVertexBuffer>(
-                    *graphicsDevice->value,
-                    *declaration,
-                    createInfo->vertex_count,
-                    usage);
-            } else {
-                native = std::make_shared<VertexBuffer>(
-                    *graphicsDevice->value,
-                    *declaration,
-                    createInfo->vertex_count,
-                    usage);
-            }
+            native = std::make_shared<VertexBuffer>(
+                *graphicsDevice->value,
+                *declaration,
+                createInfo->vertex_count,
+                usage);
         }
+    }
 
-        const auto resource = std::make_shared<VertexBufferResource>(
-            VertexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        if (const CNA_Result result =
-                CreateHandle(ObjectKind::VertexBuffer, resource, outVertexBuffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto resource = std::make_shared<VertexBufferResource>(
+        VertexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
+    if (const CNA_Result result =
+            CreateHandle(ObjectKind::VertexBuffer, resource, outVertexBuffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_destroy(const CNA_VertexBufferHandle vertexBufferHandle)
+[[nodiscard]] CNA_Result VertexBufferDestroy(const CNA_VertexBufferHandle vertexBufferHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (buffer->activeModelReferenceCount != 0U) {
-            return InvalidState("The VertexBuffer is retained by a ModelMeshPart.");
-        }
-        if (const CNA_Result result = ReleaseHandle(vertexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RemoveOwnedGraphicsResourceFor(buffer->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (buffer->activeModelReferenceCount != 0U) {
+        return InvalidState("The VertexBuffer is retained by a ModelMeshPart.");
+    }
+    if (const CNA_Result result = ReleaseHandle(vertexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RemoveOwnedGraphicsResourceFor(buffer->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_get_info(
+[[nodiscard]] CNA_Result VertexBufferGetInfo(
     const CNA_VertexBufferHandle vertexBufferHandle,
     CNA_VertexBufferInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outInfo, "The VertexBuffer info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& declaration = buffer->value->getVertexDeclarationProperty();
-        *outInfo = CNA_VertexBufferInfo{
-            sizeof(CNA_VertexBufferInfo),
-            StructureVersion,
-            buffer->value->getVertexCountProperty(),
-            static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
-            ToCBool(buffer->dynamic),
-            CNA_FALSE,
-            ToCBool(buffer->value->HasRenderer()),
-            0U,
-            declaration.getVertexStrideProperty(),
-            static_cast<uint64_t>(declaration.GetVertexElements().size())};
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outInfo, "The VertexBuffer info output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& declaration = buffer->value->getVertexDeclarationProperty();
+    *outInfo = CNA_VertexBufferInfo{
+        sizeof(CNA_VertexBufferInfo),
+        StructureVersion,
+        buffer->value->getVertexCountProperty(),
+        static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
+        ToCBool(buffer->dynamic),
+        CNA_FALSE,
+        ToCBool(buffer->value->HasRenderer()),
+        0U,
+        declaration.getVertexStrideProperty(),
+        static_cast<uint64_t>(declaration.GetVertexElements().size())};
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_copy_declaration_elements(
+[[nodiscard]] CNA_Result VertexBufferCopyDeclarationElements(
     const CNA_VertexBufferHandle vertexBufferHandle,
     CNA_VertexElement* const destination,
     const uint64_t capacity,
     uint64_t* const outElementCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outElementCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The VertexBuffer declaration output is invalid.");
-        }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& elements =
-            buffer->value->getVertexDeclarationProperty().GetVertexElements();
-        *outElementCount = static_cast<uint64_t>(elements.size());
-        if (capacity < elements.size()) {
-            return BufferTooSmall("The destination cannot hold the complete VertexDeclaration.");
-        }
-        for (std::size_t index = 0U; index < elements.size(); ++index) {
-            destination[index] = ToC(elements[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The VertexBuffer declaration output is invalid.");
+    }
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& elements =
+        buffer->value->getVertexDeclarationProperty().GetVertexElements();
+    *outElementCount = static_cast<uint64_t>(elements.size());
+    if (capacity < elements.size()) {
+        return BufferTooSmall("The destination cannot hold the complete VertexDeclaration.");
+    }
+    for (std::size_t index = 0U; index < elements.size(); ++index) {
+        destination[index] = ToC(elements[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_set_data(
+[[nodiscard]] CNA_Result VertexBufferSetData(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_VertexBufferTransfer* const transfer,
     const void* const data,
     const uint64_t capacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                transfer, capacity, data, false, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (view.options != SetDataOptions::None &&
-            (!buffer->dynamic || !SupportsDynamicOptions(view.type))) {
-            return NotSupported(
-                "The selected VertexBuffer kind/type has no SetDataOptions overload.");
-        }
-        if (view.count >
-            static_cast<uint64_t>(buffer->value->getVertexCountProperty())) {
-            return OutOfRange("The upload exceeds the VertexBuffer's logical capacity.");
-        }
-        return DispatchSet(*buffer, view, data);
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            transfer, capacity, data, false, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (view.options != SetDataOptions::None &&
+        (!buffer->dynamic || !SupportsDynamicOptions(view.type))) {
+        return NotSupported(
+            "The selected VertexBuffer kind/type has no SetDataOptions overload.");
+    }
+    if (view.count >
+        static_cast<uint64_t>(buffer->value->getVertexCountProperty())) {
+        return OutOfRange("The upload exceeds the VertexBuffer's logical capacity.");
+    }
+    return DispatchSet(*buffer, view, data);
 }
 
-CNA_Result cna_vertex_buffer_get_data(
+[[nodiscard]] CNA_Result VertexBufferGetData(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_VertexBufferTransfer* const transfer,
     void* const destination,
     const uint64_t capacity,
     uint64_t* const outElementCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outElementCount == nullptr) {
-            return InvalidArgument("The VertexBuffer required-element output is null.");
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TransferView view{};
+    if (const CNA_Result result = ValidateTransfer(
+            transfer, capacity, destination, true, &view);
+        result != CNA_RESULT_SUCCESS) {
+        if (IsVersionedStructure(transfer)) {
+            *outElementCount = transfer->element_count;
         }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                transfer, capacity, destination, true, &view);
-            result != CNA_RESULT_SUCCESS) {
-            if (IsVersionedStructure(transfer)) {
-                *outElementCount = transfer->element_count;
-            }
-            return result;
-        }
-        *outElementCount = view.count;
-        return DispatchGet(*buffer, view, destination);
-    });
+        return result;
+    }
+    *outElementCount = view.count;
+    return DispatchGet(*buffer, view, destination);
 }
 
-CNA_Result cna_vertex_buffer_set_data_raw(
+[[nodiscard]] CNA_Result VertexBufferSetDataRaw(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const void* const data,
     const uint64_t dataByteCount,
     const uint64_t vertexCount,
     const uint32_t vertexStride)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (vertexStride == 0U ||
-            vertexStride > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-            vertexCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return InvalidArgument("The raw VertexBuffer count or stride is invalid.");
-        }
-        if (vertexCount > std::numeric_limits<uint64_t>::max() / vertexStride) {
-            return Overflow("The raw VertexBuffer byte count overflows UInt64.");
-        }
-        const uint64_t requiredBytes = vertexCount * vertexStride;
-        if (dataByteCount < requiredBytes ||
-            (data == nullptr && (dataByteCount != 0U || vertexCount != 0U))) {
-            return InvalidArgument("The raw VertexBuffer source buffer is too small or null.");
-        }
-        buffer->value->SetDataRaw(
-            data, static_cast<int>(vertexCount), static_cast<int>(vertexStride));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (vertexStride == 0U ||
+        vertexStride > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        vertexCount > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return InvalidArgument("The raw VertexBuffer count or stride is invalid.");
+    }
+    if (vertexCount > std::numeric_limits<uint64_t>::max() / vertexStride) {
+        return Overflow("The raw VertexBuffer byte count overflows UInt64.");
+    }
+    const uint64_t requiredBytes = vertexCount * vertexStride;
+    if (dataByteCount < requiredBytes ||
+        (data == nullptr && (dataByteCount != 0U || vertexCount != 0U))) {
+        return InvalidArgument("The raw VertexBuffer source buffer is too small or null.");
+    }
+    buffer->value->SetDataRaw(
+        data, static_cast<int>(vertexCount), static_cast<int>(vertexStride));
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 /// Validates the count/stride/byte-count triple every raw window route repeats.
 [[nodiscard]] CNA_Result ValidateRawWindow(
@@ -650,9 +625,7 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_vertex_buffer_set_data_raw_at(
+[[nodiscard]] CNA_Result VertexBufferSetDataRawAt(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const uint64_t bufferOffsetInBytes,
     const void* const data,
@@ -660,36 +633,34 @@ CNA_Result cna_vertex_buffer_set_data_raw_at(
     const uint64_t vertexCount,
     const uint32_t vertexStride)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        uint64_t requiredBytes = 0U;
-        if (const CNA_Result result = ValidateRawWindow(
-                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        buffer->value->SetDataRawAtEXT(
-            static_cast<int>(bufferOffsetInBytes),
-            data,
-            static_cast<int>(vertexCount),
-            static_cast<int>(vertexStride));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    uint64_t requiredBytes = 0U;
+    if (const CNA_Result result = ValidateRawWindow(
+            vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    buffer->value->SetDataRawAtEXT(
+        static_cast<int>(bufferOffsetInBytes),
+        data,
+        static_cast<int>(vertexCount),
+        static_cast<int>(vertexStride));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_get_data_raw(
+[[nodiscard]] CNA_Result VertexBufferGetDataRaw(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const uint64_t bufferOffsetInBytes,
     void* const destination,
@@ -697,94 +668,84 @@ CNA_Result cna_vertex_buffer_get_data_raw(
     const uint64_t vertexCount,
     const uint32_t vertexStride)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        uint64_t requiredBytes = 0U;
-        if (const CNA_Result result = ValidateRawWindow(
-                vertexCount, vertexStride, destinationByteCount, destination, &requiredBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        buffer->value->GetDataRawEXT(
-            static_cast<int>(bufferOffsetInBytes),
-            destination,
-            static_cast<int>(vertexCount),
-            static_cast<int>(vertexStride));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    uint64_t requiredBytes = 0U;
+    if (const CNA_Result result = ValidateRawWindow(
+            vertexCount, vertexStride, destinationByteCount, destination, &requiredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    buffer->value->GetDataRawEXT(
+        static_cast<int>(bufferOffsetInBytes),
+        destination,
+        static_cast<int>(vertexCount),
+        static_cast<int>(vertexStride));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_subscribe_content_lost(
+[[nodiscard]] CNA_Result VertexBufferSubscribeContentLost(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_VertexBufferContentLostCallback callback,
     void* const context,
     CNA_VertexBufferEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The ContentLost registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The ContentLost callback is null.");
-        }
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!buffer->dynamic) {
-            return NotSupported("ContentLost exists only on DynamicVertexBuffer.");
-        }
-        const auto dynamic = std::static_pointer_cast<DynamicVertexBuffer>(buffer->value);
-        const auto token = dynamic->ContentLost.Add(
-            [vertexBufferHandle, callback, context](System::Object*, const System::EventArgs&) {
-                callback(vertexBufferHandle, context);
-            });
-        const auto registration = std::make_shared<ContentLostRegistration>(dynamic, token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::VertexBufferEventRegistration,
-            registration,
-            outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The ContentLost registration handle could not be created.");
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The ContentLost callback is null.");
+    }
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!buffer->dynamic) {
+        return NotSupported("ContentLost exists only on DynamicVertexBuffer.");
+    }
+    const auto dynamic = std::static_pointer_cast<DynamicVertexBuffer>(buffer->value);
+    const auto token = dynamic->ContentLost.Add(
+        [vertexBufferHandle, callback, context](System::Object*, const System::EventArgs&) {
+            callback(vertexBufferHandle, context);
+        });
+    const auto registration = std::make_shared<ContentLostRegistration>(dynamic, token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::VertexBufferEventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The ContentLost registration handle could not be created.");
 }
 
-CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
+[[nodiscard]] CNA_Result VertexBufferUnsubscribeContentLost(
     const CNA_VertexBufferEventRegistrationHandle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::VertexBufferEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<ContentLostRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::VertexBufferEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
 
-CNA_Result cna_vertex_buffer_set_data_raw_with_options(
+[[nodiscard]] CNA_Result VertexBufferSetDataRawWithOptions(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const void* const data,
     const uint64_t dataByteCount,
@@ -792,41 +753,39 @@ CNA_Result cna_vertex_buffer_set_data_raw_with_options(
     const uint32_t vertexStride,
     const CNA_SetDataOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateSetDataOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
-        if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        uint64_t requiredBytes = 0U;
-        if (const CNA_Result result = ValidateRawWindow(
-                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dynamic->SetDataRawWithOptionsEXT(
-            data,
-            static_cast<int>(vertexCount),
-            static_cast<int>(vertexStride),
-            static_cast<SetDataOptions>(options));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateSetDataOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
+    if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    uint64_t requiredBytes = 0U;
+    if (const CNA_Result result = ValidateRawWindow(
+            vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    dynamic->SetDataRawWithOptionsEXT(
+        data,
+        static_cast<int>(vertexCount),
+        static_cast<int>(vertexStride),
+        static_cast<SetDataOptions>(options));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
+[[nodiscard]] CNA_Result VertexBufferSetDataRawAtWithOptions(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const uint64_t bufferOffsetInBytes,
     const void* const data,
@@ -835,44 +794,44 @@ CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
     const uint32_t vertexStride,
     const CNA_SetDataOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexBufferResource> buffer;
-        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateUsable(*buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateSetDataOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
-        if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        uint64_t requiredBytes = 0U;
-        if (const CNA_Result result = ValidateRawWindow(
-                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        dynamic->SetDataRawAtWithOptionsEXT(
-            static_cast<int>(bufferOffsetInBytes),
-            data,
-            static_cast<int>(vertexCount),
-            static_cast<int>(vertexStride),
-            static_cast<SetDataOptions>(options));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateUsable(*buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateSetDataOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
+    if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    uint64_t requiredBytes = 0U;
+    if (const CNA_Result result = ValidateRawWindow(
+            vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    dynamic->SetDataRawAtWithOptionsEXT(
+        static_cast<int>(bufferOffsetInBytes),
+        data,
+        static_cast<int>(vertexCount),
+        static_cast<int>(vertexStride),
+        static_cast<SetDataOptions>(options));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/VertexBuffer.toml.
 #include "generated/VertexBuffer.inc"

@@ -36,3 +36,21 @@ CNA_TextureCubeInfo{
     static_cast<CNA_SurfaceFormat>(object.value->getFormatProperty()),
     0U
 }''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_texture3d_create = { result = "Texture3dCreate(graphics_device, create_info, out_texture)" }
+cna_texture3d_get_data = { result = "Texture3dGetData(texture, transfer, destination, destination_capacity, out_required_elements)" }
+cna_texturecube_create = { result = "TexturecubeCreate(graphics_device, create_info, out_texture)" }
+cna_texturecube_create_from_dds_memory = { result = "TexturecubeCreateFromDdsMemory(graphics_device, dds_data, dds_byte_count, out_texture)" }
+cna_texturecube_get_data = { result = "TexturecubeGetData(texture, transfer, destination, destination_capacity, out_required_elements)" }
+cna_texture3d_destroy = { result = "Texture3dDestroy(texture)" }
+cna_texture3d_set_data = { result = "Texture3dSetData(texture, transfer, data, data_capacity)" }
+cna_texture3d_set_data_bytes = { result = "Texture3dSetDataBytes(texture, transfer, data, data_byte_count)" }
+cna_texturecube_destroy = { result = "TexturecubeDestroy(texture)" }
+cna_texturecube_set_data = { result = "TexturecubeSetData(texture, transfer, data, data_capacity)" }

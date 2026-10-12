@@ -34,3 +34,31 @@ CNA_Texture2DInfo{
     .level_count = static_cast<uint32_t>(object->value->getLevelCountProperty()),
     .format = MapSurfaceFormat(object->value->getFormatProperty())
 }''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_graphics_device_supports_capability = { result = "GraphicsDeviceSupportsCapability(graphics_device, capability, out_supported)" }
+cna_graphics_device_get_renderer_feature_support_ext = { result = "GraphicsDeviceGetRendererFeatureSupportExt(graphics_device, feature, out_support)" }
+cna_graphics_device_get_renderer_limit_ext = { result = "GraphicsDeviceGetRendererLimitExt(graphics_device, limit, out_known, out_value)" }
+cna_graphics_device_get_surface_format_support_ext = { result = "GraphicsDeviceGetSurfaceFormatSupportExt(graphics_device, format, out_known_usages, out_supported_usages)" }
+cna_graphics_device_get_backbuffer_data_rgba8 = { result = "GraphicsDeviceGetBackbufferDataRgba8(graphics_device, destination, capacity, out_pixels)" }
+cna_texture2d_create = { result = "Texture2dCreate(graphics_device, create_info, out_texture)" }
+cna_texture2d_get_data_rgba8 = { result = "Texture2dGetDataRgba8(texture, destination, capacity, out_pixels)" }
+cna_sprite_batch_create = { result = "SpriteBatchCreate(graphics_device, out_sprite_batch)" }
+cna_graphics_device_get_renderer_info = { result = "GraphicsDeviceGetRendererInfo(graphics_device, out_info)" }
+cna_graphics_device_get_backbuffer_info = { result = "GraphicsDeviceGetBackbufferInfo(graphics_device, out_info)" }
+cna_texture2d_set_data_rgba8 = { result = "Texture2dSetDataRgba8(texture, pixels, pixel_count)" }
+cna_texture2d_destroy = { result = "Texture2dDestroy(texture)" }
+cna_sprite_batch_begin = { result = "SpriteBatchBegin(sprite_batch, begin_info)" }
+cna_sprite_batch_begin_with_states = { result = "SpriteBatchBeginWithStates(sprite_batch, sort_mode, blend_state, sampler_state, depth_stencil_state, rasterizer_state)" }
+cna_sprite_batch_begin_with_effect = { result = "SpriteBatchBeginWithEffect(sprite_batch, sort_mode, blend_state, sampler_state, depth_stencil_state, rasterizer_state, effect, transform_matrix)" }
+cna_sprite_batch_submit_many = { result = "SpriteBatchSubmitMany(sprite_batch, commands, command_count)" }
+cna_sprite_batch_submit_scaled_many = { result = "SpriteBatchSubmitScaledMany(sprite_batch, commands, command_count)" }
+cna_sprite_batch_end = { result = "SpriteBatchEnd(sprite_batch)" }
+cna_sprite_batch_destroy = { result = "SpriteBatchDestroy(sprite_batch)" }
+cna_sprite_batch_draw_string = { result = "SpriteBatchDrawString(sprite_batch, command)" }

@@ -260,3 +260,106 @@ other = { lookup = "GetSkinningData", object = "std::shared_ptr<SkinningDataReso
 
 [model_and_skinning_data.routes]
 cna_model_apply_bind_pose_bone_transforms_ext = { get = "ApplyBindPoseBoneTransformsEXT(*object->value, *other->value)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_model_bone_create_default = { result = "ModelBoneCreateDefault(out_bone)" }
+cna_model_bone_create = { result = "ModelBoneCreate(index, name, out_bone)" }
+cna_model_bone_get_parent = { result = "ModelBoneGetParent(bone, out_has_parent, out_parent)" }
+cna_model_bone_collection_get_at = { result = "ModelBoneCollectionGetAt(collection, index, out_bone)" }
+cna_model_bone_collection_find = { result = "ModelBoneCollectionFind(collection, name, out_found, out_bone)" }
+cna_model_mesh_part_create = { result = "ModelMeshPartCreate(vertex_buffer, index_buffer, num_vertices, primitive_count, start_index, vertex_offset, out_part)" }
+cna_model_mesh_part_get_effect = { result = "ModelMeshPartGetEffect(part, out_has_effect, out_effect)" }
+cna_model_mesh_part_get_vertex_buffer = { result = "ModelMeshPartGetVertexBuffer(part, out_has_buffer, out_buffer)" }
+cna_model_mesh_part_get_index_buffer = { result = "ModelMeshPartGetIndexBuffer(part, out_has_buffer, out_buffer)" }
+cna_model_mesh_part_collection_create = { result = "ModelMeshPartCollectionCreate(parts, part_count, out_collection)" }
+cna_model_mesh_part_collection_get_at = { result = "ModelMeshPartCollectionGetAt(collection, index, out_part)" }
+cna_model_mesh_create_named = { result = "ModelMeshCreateNamed(graphics_device, name, parts, part_count, out_mesh)" }
+cna_model_mesh_get_mesh_parts = { result = "ModelMeshGetMeshParts(mesh, out_parts)" }
+cna_model_mesh_get_parent_bone = { result = "ModelMeshGetParentBone(mesh, out_has_parent, out_parent)" }
+cna_model_mesh_collection_create = { result = "ModelMeshCollectionCreate(meshes, mesh_count, out_collection)" }
+cna_model_mesh_collection_find = { result = "ModelMeshCollectionFind(collection, name, out_found, out_mesh)" }
+cna_model_effect_collection_get_at = { result = "ModelEffectCollectionGetAt(collection, index, out_effect)" }
+cna_model_create_default = { result = "ModelCreateDefault(out_model)" }
+cna_model_get_bones = { result = "ModelGetBones(model, out_bones)" }
+cna_model_get_meshes = { result = "ModelGetMeshes(model, out_meshes)" }
+cna_model_get_root = { result = "ModelGetRoot(model, out_has_root, out_root)" }
+cna_model_copy_absolute_bone_transforms = { result = "ModelCopyAbsoluteBoneTransforms(model, destination, capacity, out_count)" }
+cna_model_copy_bone_transforms = { result = "ModelCopyBoneTransforms(model, destination, capacity, out_count)" }
+cna_morph_target_data_ext_create = { result = "MorphTargetDataExtCreate(descriptor, out_data)" }
+cna_morph_target_data_ext_get_weight_track_info = { result = "MorphTargetDataExtGetWeightTrackInfo(data, out_keyframe_count, out_step_interpolation, out_cubic_spline)" }
+cna_morph_target_data_ext_blend = { result = "MorphTargetDataExtBlend(data, weights, weight_count, destination, capacity, out_byte_count)" }
+cna_morph_weight_track_ext_evaluate = { result = "MorphWeightTrackExtEvaluate(track, time_seconds, destination, capacity, out_weight_count)" }
+cna_model_mesh_part_get_morph_target_data_ext = { result = "ModelMeshPartGetMorphTargetDataExt(part, out_has_data, out_data)" }
+cna_skinned_model_ext_create = { result = "SkinnedModelExtCreate(descriptor, out_model)" }
+cna_skinned_model_ext_create_move = { result = "SkinnedModelExtCreateMove(source, out_model)" }
+cna_skinned_model_ext_get_clip_name_byte_count_at = { result = "SkinnedModelExtGetClipNameByteCountAt(model, clip_index, out_byte_count)" }
+cna_skinned_model_ext_get_clip_info = { result = "SkinnedModelExtGetClipInfo(model, name, out_found, out_duration_seconds, out_track_count)" }
+cna_skinned_model_ext_copy_clip_track = { result = "SkinnedModelExtCopyClipTrack(model, name, track_index, out_bone_index, destination, capacity, out_keyframe_count)" }
+cna_skinned_model_ext_compute_bone_transforms = { result = "SkinnedModelExtComputeBoneTransforms(model, clip_name, position_seconds, loop, destination, capacity, out_bone_count)" }
+cna_skinned_model_ext_get_part_at = { result = "SkinnedModelExtGetPartAt(model, part_index, out_part, out_has_texture, out_texture)" }
+cna_skinned_model_ext_get_owned_resource_counts = { result = "SkinnedModelExtGetOwnedResourceCounts(model, out_vertex_buffers, out_index_buffers, out_parts, out_textures)" }
+cna_skinning_data_create = { result = "SkinningDataCreate(descriptor, out_data)" }
+cna_skinning_data_get_clip_name_byte_count_at = { result = "SkinningDataGetClipNameByteCountAt(data, clip_index, out_byte_count)" }
+cna_skinning_data_get_clip_info = { result = "SkinningDataGetClipInfo(data, name, out_found, out_duration_seconds, out_track_count)" }
+cna_skinning_data_copy_clip_track = { result = "SkinningDataCopyClipTrack(data, name, track_index, out_bone_index, destination, capacity, out_keyframe_count)" }
+cna_animation_player_create = { result = "AnimationPlayerCreate(data, out_player)" }
+cna_animation_player_update = { result = "AnimationPlayerUpdate(player, time_seconds, relative_to_current_time, loop)" }
+cna_animation_player_get_current_clip_info = { result = "AnimationPlayerGetCurrentClipInfo(player, out_has_clip, out_duration_seconds, out_track_count)" }
+cna_skinning_data_get_clip_target_space_ext = { result = "SkinningDataGetClipTargetSpaceExt(data, clip_index, out_value)" }
+cna_model_get_skin_ext = { result = "ModelGetSkinExt(model, index, out_has_data, out_mesh_count)" }
+cna_model_create_skin_skeleton_handle_ext = { result = "ModelCreateSkinSkeletonHandleExt(model, index, out_data)" }
+cna_model_get_skin_mesh_index_ext = { result = "ModelGetSkinMeshIndexExt(model, index, mesh_index, out_model_mesh_index)" }
+cna_model_get_bounding_sphere_ext = { result = "ModelGetBoundingSphereExt(model, out_has_value, out_sphere)" }
+cna_model_animations_ext_create = { result = "ModelAnimationsExtCreate(clips, clip_count, out_animations)" }
+cna_model_animations_ext_get_clip_name_byte_count_at = { result = "ModelAnimationsExtGetClipNameByteCountAt(animations, clip_index, out_byte_count)" }
+cna_model_animations_ext_get_clip_info_at = { result = "ModelAnimationsExtGetClipInfoAt(animations, clip_index, out_duration_seconds, out_track_count, out_target_space)" }
+cna_content_manager_load_model = { result = "ContentManagerLoadModel(content_manager, asset_name, out_model)" }
+cna_model_get_content_tag_dictionary_ext = { result = "ModelGetContentTagDictionaryExt(model, out_has_tag, out_dictionary)" }
+cna_model_get_content_tag_foreign_object_ext = { result = "ModelGetContentTagForeignObjectExt(model, out_has_tag, out_object)" }
+cna_model_get_gltf_import_report_ext = { result = "ModelGetGltfImportReportExt(model, out_report)" }
+cna_model_get_gltf_import_diagnostic_ext = { result = "ModelGetGltfImportDiagnosticExt(model, index, out_diagnostic)" }
+cna_skinned_model_ext_copy_clip_name_at = { result = "SkinnedModelExtCopyClipNameAt(model, clip_index, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_skinning_data_copy_clip_name_at = { result = "SkinningDataCopyClipNameAt(data, clip_index, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_morph_target_data_ext_copy_tangent_deltas = { result = "MorphTargetDataExtCopyTangentDeltas(data, target_index, destination, capacity, out_delta_count)", optional = ["out_delta_count"] }
+cna_model_get_camera_ext = { result = "ModelGetCameraExt(model, index, out_camera)", optional = ["out_camera"] }
+cna_model_animations_ext_copy_clip_name_at = { result = "ModelAnimationsExtCopyClipNameAt(animations, clip_index, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_morph_target_data_ext_copy_weight_keyframe = { result = "MorphTargetDataExtCopyWeightKeyframe(data, keyframe_index, out_time_seconds, weights, weight_capacity, out_weight_count, in_tangents, in_tangent_capacity, out_in_tangent_count, out_tangents, out_tangent_capacity, out_out_tangent_count)", optional = ["out_tangents"] }
+cna_model_bone_add_child = { result = "ModelBoneAddChild(bone, child)" }
+cna_model_mesh_part_set_num_vertices = { result = "ModelMeshPartSetNumVertices(part, value)" }
+cna_model_mesh_part_set_primitive_count = { result = "ModelMeshPartSetPrimitiveCount(part, value)" }
+cna_model_mesh_part_set_start_index = { result = "ModelMeshPartSetStartIndex(part, value)" }
+cna_model_mesh_part_set_vertex_offset = { result = "ModelMeshPartSetVertexOffset(part, value)" }
+cna_model_mesh_set_parent_bone = { result = "ModelMeshSetParentBone(mesh, parent)" }
+cna_model_effect_collection_add = { result = "ModelEffectCollectionAdd(collection, effect)" }
+cna_model_effect_collection_remove = { result = "ModelEffectCollectionRemove(collection, effect)" }
+cna_model_destroy = { result = "ModelDestroy(model)" }
+cna_model_set_owned_resources = { result = "ModelSetOwnedResources(model, context, release)" }
+cna_model_set_bone_transforms = { result = "ModelSetBoneTransforms(model, source, count)" }
+cna_model_set_gltf_import_report_ext = { result = "ModelSetGltfImportReportExt(model, report)" }
+cna_model_add_gltf_import_diagnostic_ext = { result = "ModelAddGltfImportDiagnosticExt(model, descriptor)" }
+cna_morph_target_data_ext_set_weights = { result = "MorphTargetDataExtSetWeights(data, weights, weight_count)" }
+cna_morph_target_data_ext_set_weight_track = { result = "MorphTargetDataExtSetWeightTrack(data, track)" }
+cna_model_mesh_part_set_morph_target_data_ext = { result = "ModelMeshPartSetMorphTargetDataExt(part, data)" }
+cna_model_mesh_part_set_morph_weights_ext = { result = "ModelMeshPartSetMorphWeightsExt(part, weights, weight_count)" }
+cna_skinned_model_ext_move_assign = { result = "SkinnedModelExtMoveAssign(destination, source)" }
+cna_skinned_model_ext_set_skeleton = { result = "SkinnedModelExtSetSkeleton(model, bone_count, parent_bone_indices, bind_pose_local, inverse_bind_pose_global)" }
+cna_skinned_model_ext_set_clip = { result = "SkinnedModelExtSetClip(model, name, clip)" }
+cna_skinned_model_ext_add_part = { result = "SkinnedModelExtAddPart(model, name, vertex_buffer, index_buffer, part, texture)" }
+cna_skinned_model_ext_remove_part = { result = "SkinnedModelExtRemovePart(model, name)" }
+cna_animation_player_start_clip = { result = "AnimationPlayerStartClip(player, clip_name)" }
+cna_model_mesh_part_set_sampler_state_ext = { result = "ModelMeshPartSetSamplerStateExt(part, slot, state)" }
+cna_skinning_data_set_clip_target_space_ext = { result = "SkinningDataSetClipTargetSpaceExt(data, clip_index, value)" }
+cna_morph_target_data_ext_set_triangle_indices_ext = { result = "MorphTargetDataExtSetTriangleIndicesExt(data, indices, index_count)" }
+cna_morph_target_data_ext_set_tangent_deltas = { result = "MorphTargetDataExtSetTangentDeltas(data, target_index, deltas, delta_count)" }
+cna_model_add_camera_ext = { result = "ModelAddCameraExt(model, descriptor)" }
+cna_model_clear_skins_ext = { result = "ModelClearSkinsExt(model)" }
+cna_model_add_skin_ext = { result = "ModelAddSkinExt(model, name, data, mesh_indices, mesh_index_count)" }
+cna_model_animations_ext_set_clip_target_space_at = { result = "ModelAnimationsExtSetClipTargetSpaceAt(animations, clip_index, value)" }
+cna_model_apply_clip_to_bones_ext = { result = "ModelApplyClipToBonesExt(model, animations, clip_index, time_seconds)" }
+cna_skinned_model_ext_attach_parts = { result = "SkinnedModelExtAttachParts(model, other)" }

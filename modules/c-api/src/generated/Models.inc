@@ -2192,3 +2192,1299 @@ CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_model_bone_create_default(
+    CNA_ModelBoneHandle* const out_bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_create_default: out_bone is null.");
+        }
+        *out_bone = CNA_INVALID_HANDLE;
+        return ModelBoneCreateDefault(out_bone);
+    });
+}
+
+CNA_Result cna_model_bone_create(
+    const int32_t index,
+    const CNA_StringView name,
+    CNA_ModelBoneHandle* const out_bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_create: out_bone is null.");
+        }
+        *out_bone = CNA_INVALID_HANDLE;
+        return ModelBoneCreate(index, name, out_bone);
+    });
+}
+
+CNA_Result cna_model_bone_get_parent(
+    const CNA_ModelBoneHandle bone,
+    CNA_Bool* const out_has_parent,
+    CNA_ModelBoneHandle* const out_parent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_parent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_get_parent: out_has_parent is null.");
+        }
+        if (out_parent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_get_parent: out_parent is null.");
+        }
+        *out_parent = CNA_INVALID_HANDLE;
+        return ModelBoneGetParent(bone, out_has_parent, out_parent);
+    });
+}
+
+CNA_Result cna_model_bone_collection_get_at(
+    const CNA_ModelBoneCollectionHandle collection,
+    const uint64_t index,
+    CNA_ModelBoneHandle* const out_bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_collection_get_at: out_bone is null.");
+        }
+        *out_bone = CNA_INVALID_HANDLE;
+        return ModelBoneCollectionGetAt(collection, index, out_bone);
+    });
+}
+
+CNA_Result cna_model_bone_collection_find(
+    const CNA_ModelBoneCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_ModelBoneHandle* const out_bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_collection_find: out_found is null.");
+        }
+        if (out_bone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_bone_collection_find: out_bone is null.");
+        }
+        *out_bone = CNA_INVALID_HANDLE;
+        return ModelBoneCollectionFind(collection, name, out_found, out_bone);
+    });
+}
+
+CNA_Result cna_model_mesh_part_create(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const CNA_IndexBufferHandle index_buffer,
+    const int32_t num_vertices,
+    const int32_t primitive_count,
+    const int32_t start_index,
+    const int32_t vertex_offset,
+    CNA_ModelMeshPartHandle* const out_part)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_part == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_create: out_part is null.");
+        }
+        *out_part = CNA_INVALID_HANDLE;
+        return ModelMeshPartCreate(vertex_buffer, index_buffer, num_vertices, primitive_count, start_index, vertex_offset, out_part);
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_effect(
+    const CNA_ModelMeshPartHandle part,
+    CNA_Bool* const out_has_effect,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_effect: out_has_effect is null.");
+        }
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_effect: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return ModelMeshPartGetEffect(part, out_has_effect, out_effect);
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_vertex_buffer(
+    const CNA_ModelMeshPartHandle part,
+    CNA_Bool* const out_has_buffer,
+    CNA_VertexBufferHandle* const out_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_vertex_buffer: out_has_buffer is null.");
+        }
+        if (out_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_vertex_buffer: out_buffer is null.");
+        }
+        *out_buffer = CNA_INVALID_HANDLE;
+        return ModelMeshPartGetVertexBuffer(part, out_has_buffer, out_buffer);
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_index_buffer(
+    const CNA_ModelMeshPartHandle part,
+    CNA_Bool* const out_has_buffer,
+    CNA_IndexBufferHandle* const out_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_index_buffer: out_has_buffer is null.");
+        }
+        if (out_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_index_buffer: out_buffer is null.");
+        }
+        *out_buffer = CNA_INVALID_HANDLE;
+        return ModelMeshPartGetIndexBuffer(part, out_has_buffer, out_buffer);
+    });
+}
+
+CNA_Result cna_model_mesh_part_collection_create(
+    const CNA_ModelMeshPartHandle* const parts,
+    const uint64_t part_count,
+    CNA_ModelMeshPartCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return ModelMeshPartCollectionCreate(parts, part_count, out_collection);
+    });
+}
+
+CNA_Result cna_model_mesh_part_collection_get_at(
+    const CNA_ModelMeshPartCollectionHandle collection,
+    const uint64_t index,
+    CNA_ModelMeshPartHandle* const out_part)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_part == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_collection_get_at: out_part is null.");
+        }
+        *out_part = CNA_INVALID_HANDLE;
+        return ModelMeshPartCollectionGetAt(collection, index, out_part);
+    });
+}
+
+CNA_Result cna_model_mesh_create_named(
+    const CNA_Handle graphics_device,
+    const CNA_StringView name,
+    const CNA_ModelMeshPartHandle* const parts,
+    const uint64_t part_count,
+    CNA_ModelMeshHandle* const out_mesh)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_mesh == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_create_named: out_mesh is null.");
+        }
+        *out_mesh = CNA_INVALID_HANDLE;
+        return ModelMeshCreateNamed(graphics_device, name, parts, part_count, out_mesh);
+    });
+}
+
+CNA_Result cna_model_mesh_get_mesh_parts(
+    const CNA_ModelMeshHandle mesh,
+    CNA_ModelMeshPartCollectionHandle* const out_parts)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parts == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_get_mesh_parts: out_parts is null.");
+        }
+        *out_parts = CNA_INVALID_HANDLE;
+        return ModelMeshGetMeshParts(mesh, out_parts);
+    });
+}
+
+CNA_Result cna_model_mesh_get_parent_bone(
+    const CNA_ModelMeshHandle mesh,
+    CNA_Bool* const out_has_parent,
+    CNA_ModelBoneHandle* const out_parent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_parent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_get_parent_bone: out_has_parent is null.");
+        }
+        if (out_parent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_get_parent_bone: out_parent is null.");
+        }
+        *out_parent = CNA_INVALID_HANDLE;
+        return ModelMeshGetParentBone(mesh, out_has_parent, out_parent);
+    });
+}
+
+CNA_Result cna_model_mesh_collection_create(
+    const CNA_ModelMeshHandle* const meshes,
+    const uint64_t mesh_count,
+    CNA_ModelMeshCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return ModelMeshCollectionCreate(meshes, mesh_count, out_collection);
+    });
+}
+
+CNA_Result cna_model_mesh_collection_find(
+    const CNA_ModelMeshCollectionHandle collection,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    CNA_ModelMeshHandle* const out_mesh)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_collection_find: out_found is null.");
+        }
+        if (out_mesh == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_collection_find: out_mesh is null.");
+        }
+        *out_mesh = CNA_INVALID_HANDLE;
+        return ModelMeshCollectionFind(collection, name, out_found, out_mesh);
+    });
+}
+
+CNA_Result cna_model_effect_collection_get_at(
+    const CNA_ModelEffectCollectionHandle collection,
+    const uint64_t index,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_effect_collection_get_at: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return ModelEffectCollectionGetAt(collection, index, out_effect);
+    });
+}
+
+CNA_Result cna_model_create_default(
+    CNA_ModelHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_create_default: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return ModelCreateDefault(out_model);
+    });
+}
+
+CNA_Result cna_model_get_bones(
+    const CNA_ModelHandle model,
+    CNA_ModelBoneCollectionHandle* const out_bones)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bones == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_bones: out_bones is null.");
+        }
+        *out_bones = CNA_INVALID_HANDLE;
+        return ModelGetBones(model, out_bones);
+    });
+}
+
+CNA_Result cna_model_get_meshes(
+    const CNA_ModelHandle model,
+    CNA_ModelMeshCollectionHandle* const out_meshes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_meshes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_meshes: out_meshes is null.");
+        }
+        *out_meshes = CNA_INVALID_HANDLE;
+        return ModelGetMeshes(model, out_meshes);
+    });
+}
+
+CNA_Result cna_model_get_root(
+    const CNA_ModelHandle model,
+    CNA_Bool* const out_has_root,
+    CNA_ModelBoneHandle* const out_root)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_root == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_root: out_has_root is null.");
+        }
+        if (out_root == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_root: out_root is null.");
+        }
+        *out_root = CNA_INVALID_HANDLE;
+        return ModelGetRoot(model, out_has_root, out_root);
+    });
+}
+
+CNA_Result cna_model_copy_absolute_bone_transforms(
+    const CNA_ModelHandle model,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_copy_absolute_bone_transforms: out_count is null.");
+        }
+        return ModelCopyAbsoluteBoneTransforms(model, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_model_copy_bone_transforms(
+    const CNA_ModelHandle model,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_copy_bone_transforms: out_count is null.");
+        }
+        return ModelCopyBoneTransforms(model, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_create(
+    const CNA_MorphTargetDataEXTDescriptor* const descriptor,
+    CNA_MorphTargetDataEXTHandle* const out_data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_create: out_data is null.");
+        }
+        *out_data = CNA_INVALID_HANDLE;
+        return MorphTargetDataExtCreate(descriptor, out_data);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_weight_track_info(
+    const CNA_MorphTargetDataEXTHandle data,
+    uint64_t* const out_keyframe_count,
+    CNA_Bool* const out_step_interpolation,
+    CNA_Bool* const out_cubic_spline)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_keyframe_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_get_weight_track_info: out_keyframe_count is null.");
+        }
+        if (out_step_interpolation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_get_weight_track_info: out_step_interpolation is null.");
+        }
+        if (out_cubic_spline == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_get_weight_track_info: out_cubic_spline is null.");
+        }
+        return MorphTargetDataExtGetWeightTrackInfo(data, out_keyframe_count, out_step_interpolation, out_cubic_spline);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_blend(
+    const CNA_MorphTargetDataEXTHandle data,
+    const float* const weights,
+    const uint64_t weight_count,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_blend: out_byte_count is null.");
+        }
+        return MorphTargetDataExtBlend(data, weights, weight_count, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_morph_weight_track_ext_evaluate(
+    const CNA_MorphWeightTrackEXTDescriptor* const track,
+    const double time_seconds,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_weight_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_weight_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_weight_track_ext_evaluate: out_weight_count is null.");
+        }
+        return MorphWeightTrackExtEvaluate(track, time_seconds, destination, capacity, out_weight_count);
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_morph_target_data_ext(
+    const CNA_ModelMeshPartHandle part,
+    CNA_Bool* const out_has_data,
+    CNA_MorphTargetDataEXTHandle* const out_data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_morph_target_data_ext: out_has_data is null.");
+        }
+        if (out_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_morph_target_data_ext: out_data is null.");
+        }
+        *out_data = CNA_INVALID_HANDLE;
+        return ModelMeshPartGetMorphTargetDataExt(part, out_has_data, out_data);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create(
+    const CNA_SkinnedModelEXTDescriptor* const descriptor,
+    CNA_SkinnedModelEXTHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_create: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return SkinnedModelExtCreate(descriptor, out_model);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create_move(
+    const CNA_SkinnedModelEXTHandle source,
+    CNA_SkinnedModelEXTHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_create_move: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return SkinnedModelExtCreateMove(source, out_model);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_clip_name_byte_count_at(
+    const CNA_SkinnedModelEXTHandle model,
+    const uint64_t clip_index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_clip_name_byte_count_at: out_byte_count is null.");
+        }
+        return SkinnedModelExtGetClipNameByteCountAt(model, clip_index, out_byte_count);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_clip_info(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_clip_info: out_found is null.");
+        }
+        if (out_duration_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_clip_info: out_duration_seconds is null.");
+        }
+        if (out_track_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_clip_info: out_track_count is null.");
+        }
+        return SkinnedModelExtGetClipInfo(model, name, out_found, out_duration_seconds, out_track_count);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_clip_track(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView name,
+    const uint64_t track_index,
+    int32_t* const out_bone_index,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_keyframe_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_copy_clip_track: out_bone_index is null.");
+        }
+        if (out_keyframe_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_copy_clip_track: out_keyframe_count is null.");
+        }
+        return SkinnedModelExtCopyClipTrack(model, name, track_index, out_bone_index, destination, capacity, out_keyframe_count);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_compute_bone_transforms(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView clip_name,
+    const double position_seconds,
+    const CNA_Bool loop,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bone_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_compute_bone_transforms: out_bone_count is null.");
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(loop, "loop");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SkinnedModelExtComputeBoneTransforms(model, clip_name, position_seconds, loop, destination, capacity, out_bone_count);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_part_at(
+    const CNA_SkinnedModelEXTHandle model,
+    const uint64_t part_index,
+    CNA_ModelMeshPartHandle* const out_part,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_part == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_part_at: out_part is null.");
+        }
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_part_at: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_part_at: out_texture is null.");
+        }
+        *out_part = CNA_INVALID_HANDLE;
+        *out_texture = CNA_INVALID_HANDLE;
+        return SkinnedModelExtGetPartAt(model, part_index, out_part, out_has_texture, out_texture);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
+    const CNA_SkinnedModelEXTHandle model,
+    uint64_t* const out_vertex_buffers,
+    uint64_t* const out_index_buffers,
+    uint64_t* const out_parts,
+    uint64_t* const out_textures)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_vertex_buffers == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_owned_resource_counts: out_vertex_buffers is null.");
+        }
+        if (out_index_buffers == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_owned_resource_counts: out_index_buffers is null.");
+        }
+        if (out_parts == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_owned_resource_counts: out_parts is null.");
+        }
+        if (out_textures == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_owned_resource_counts: out_textures is null.");
+        }
+        return SkinnedModelExtGetOwnedResourceCounts(model, out_vertex_buffers, out_index_buffers, out_parts, out_textures);
+    });
+}
+
+CNA_Result cna_skinning_data_create(
+    const CNA_SkinningDataDescriptor* const descriptor,
+    CNA_SkinningDataHandle* const out_data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_create: out_data is null.");
+        }
+        *out_data = CNA_INVALID_HANDLE;
+        return SkinningDataCreate(descriptor, out_data);
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
+    const CNA_SkinningDataHandle data,
+    const uint64_t clip_index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_get_clip_name_byte_count_at: out_byte_count is null.");
+        }
+        return SkinningDataGetClipNameByteCountAt(data, clip_index, out_byte_count);
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_info(
+    const CNA_SkinningDataHandle data,
+    const CNA_StringView name,
+    CNA_Bool* const out_found,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_get_clip_info: out_found is null.");
+        }
+        if (out_duration_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_get_clip_info: out_duration_seconds is null.");
+        }
+        if (out_track_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_get_clip_info: out_track_count is null.");
+        }
+        return SkinningDataGetClipInfo(data, name, out_found, out_duration_seconds, out_track_count);
+    });
+}
+
+CNA_Result cna_skinning_data_copy_clip_track(
+    const CNA_SkinningDataHandle data,
+    const CNA_StringView name,
+    const uint64_t track_index,
+    int32_t* const out_bone_index,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_keyframe_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_clip_track: out_bone_index is null.");
+        }
+        if (out_keyframe_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_copy_clip_track: out_keyframe_count is null.");
+        }
+        return SkinningDataCopyClipTrack(data, name, track_index, out_bone_index, destination, capacity, out_keyframe_count);
+    });
+}
+
+CNA_Result cna_animation_player_create(
+    const CNA_SkinningDataHandle data,
+    CNA_AnimationPlayerHandle* const out_player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_player == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_create: out_player is null.");
+        }
+        *out_player = CNA_INVALID_HANDLE;
+        return AnimationPlayerCreate(data, out_player);
+    });
+}
+
+CNA_Result cna_animation_player_update(
+    const CNA_AnimationPlayerHandle player,
+    const double time_seconds,
+    const CNA_Bool relative_to_current_time,
+    const CNA_Bool loop)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(relative_to_current_time, "relative_to_current_time");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(loop, "loop");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return AnimationPlayerUpdate(player, time_seconds, relative_to_current_time, loop);
+    });
+}
+
+CNA_Result cna_animation_player_get_current_clip_info(
+    const CNA_AnimationPlayerHandle player,
+    CNA_Bool* const out_has_clip,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_clip == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_get_current_clip_info: out_has_clip is null.");
+        }
+        if (out_duration_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_get_current_clip_info: out_duration_seconds is null.");
+        }
+        if (out_track_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_animation_player_get_current_clip_info: out_track_count is null.");
+        }
+        return AnimationPlayerGetCurrentClipInfo(player, out_has_clip, out_duration_seconds, out_track_count);
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_target_space_ext(
+    const CNA_SkinningDataHandle data,
+    const uint64_t clip_index,
+    CNA_ClipTargetSpaceEXT* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinning_data_get_clip_target_space_ext: out_value is null.");
+        }
+        return SkinningDataGetClipTargetSpaceExt(data, clip_index, out_value);
+    });
+}
+
+CNA_Result cna_model_get_skin_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    CNA_Bool* const out_has_data,
+    uint64_t* const out_mesh_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_skin_ext: out_has_data is null.");
+        }
+        if (out_mesh_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_skin_ext: out_mesh_count is null.");
+        }
+        return ModelGetSkinExt(model, index, out_has_data, out_mesh_count);
+    });
+}
+
+CNA_Result cna_model_create_skin_skeleton_handle_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    CNA_SkinningDataHandle* const out_data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_data == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_create_skin_skeleton_handle_ext: out_data is null.");
+        }
+        *out_data = CNA_INVALID_HANDLE;
+        return ModelCreateSkinSkeletonHandleExt(model, index, out_data);
+    });
+}
+
+CNA_Result cna_model_get_skin_mesh_index_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    const uint64_t mesh_index,
+    uint64_t* const out_model_mesh_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model_mesh_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_skin_mesh_index_ext: out_model_mesh_index is null.");
+        }
+        return ModelGetSkinMeshIndexExt(model, index, mesh_index, out_model_mesh_index);
+    });
+}
+
+CNA_Result cna_model_get_bounding_sphere_ext(
+    const CNA_ModelHandle model,
+    CNA_Bool* const out_has_value,
+    CNA_BoundingSphere* const out_sphere)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_bounding_sphere_ext: out_has_value is null.");
+        }
+        if (out_sphere == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_bounding_sphere_ext: out_sphere is null.");
+        }
+        return ModelGetBoundingSphereExt(model, out_has_value, out_sphere);
+    });
+}
+
+CNA_Result cna_model_animations_ext_create(
+    const CNA_NamedAnimationClipEXTDescriptor* const clips,
+    const uint64_t clip_count,
+    CNA_ModelAnimationsEXTHandle* const out_animations)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_animations == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_animations_ext_create: out_animations is null.");
+        }
+        *out_animations = CNA_INVALID_HANDLE;
+        return ModelAnimationsExtCreate(clips, clip_count, out_animations);
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_clip_name_byte_count_at(
+    const CNA_ModelAnimationsEXTHandle animations,
+    const uint64_t clip_index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_animations_ext_get_clip_name_byte_count_at: out_byte_count is null.");
+        }
+        return ModelAnimationsExtGetClipNameByteCountAt(animations, clip_index, out_byte_count);
+    });
+}
+
+CNA_Result cna_model_animations_ext_get_clip_info_at(
+    const CNA_ModelAnimationsEXTHandle animations,
+    const uint64_t clip_index,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count,
+    CNA_ClipTargetSpaceEXT* const out_target_space)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_duration_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_animations_ext_get_clip_info_at: out_duration_seconds is null.");
+        }
+        if (out_track_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_animations_ext_get_clip_info_at: out_track_count is null.");
+        }
+        if (out_target_space == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_animations_ext_get_clip_info_at: out_target_space is null.");
+        }
+        return ModelAnimationsExtGetClipInfoAt(animations, clip_index, out_duration_seconds, out_track_count, out_target_space);
+    });
+}
+
+CNA_Result cna_content_manager_load_model(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_ModelHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_model: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return ContentManagerLoadModel(content_manager, asset_name, out_model);
+    });
+}
+
+CNA_Result cna_model_get_content_tag_dictionary_ext(
+    const CNA_ModelHandle model,
+    CNA_Bool* const out_has_tag,
+    CNA_ObjectDictionaryHandle* const out_dictionary)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_content_tag_dictionary_ext: out_has_tag is null.");
+        }
+        if (out_dictionary == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_content_tag_dictionary_ext: out_dictionary is null.");
+        }
+        *out_dictionary = CNA_INVALID_HANDLE;
+        return ModelGetContentTagDictionaryExt(model, out_has_tag, out_dictionary);
+    });
+}
+
+CNA_Result cna_model_get_content_tag_foreign_object_ext(
+    const CNA_ModelHandle model,
+    CNA_Bool* const out_has_tag,
+    void** const out_object)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_content_tag_foreign_object_ext: out_has_tag is null.");
+        }
+        if (out_object == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_content_tag_foreign_object_ext: out_object is null.");
+        }
+        return ModelGetContentTagForeignObjectExt(model, out_has_tag, out_object);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_report_ext(
+    const CNA_ModelHandle model,
+    CNA_GltfImportReportEXT* const out_report)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_report == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_gltf_import_report_ext: out_report is null.");
+        }
+        return ModelGetGltfImportReportExt(model, out_report);
+    });
+}
+
+CNA_Result cna_model_get_gltf_import_diagnostic_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    CNA_GltfImportDiagnosticEXT* const out_diagnostic)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_diagnostic == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_get_gltf_import_diagnostic_ext: out_diagnostic is null.");
+        }
+        return ModelGetGltfImportDiagnosticExt(model, index, out_diagnostic);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_clip_name_at(
+    const CNA_SkinnedModelEXTHandle model,
+    const uint64_t clip_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtCopyClipNameAt(model, clip_index, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_skinning_data_copy_clip_name_at(
+    const CNA_SkinningDataHandle data,
+    const uint64_t clip_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinningDataCopyClipNameAt(data, clip_index, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
+    const CNA_MorphTargetDataEXTHandle data,
+    const uint64_t target_index,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_delta_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MorphTargetDataExtCopyTangentDeltas(data, target_index, destination, capacity, out_delta_count);
+    });
+}
+
+CNA_Result cna_model_get_camera_ext(
+    const CNA_ModelHandle model,
+    const uint64_t index,
+    CNA_ModelCameraEXT* const out_camera)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelGetCameraExt(model, index, out_camera);
+    });
+}
+
+CNA_Result cna_model_animations_ext_copy_clip_name_at(
+    const CNA_ModelAnimationsEXTHandle animations,
+    const uint64_t clip_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelAnimationsExtCopyClipNameAt(animations, clip_index, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_weight_keyframe(
+    const CNA_MorphTargetDataEXTHandle data,
+    const uint64_t keyframe_index,
+    double* const out_time_seconds,
+    float* const weights,
+    const uint64_t weight_capacity,
+    uint64_t* const out_weight_count,
+    float* const in_tangents,
+    const uint64_t in_tangent_capacity,
+    uint64_t* const out_in_tangent_count,
+    float* const out_tangents,
+    const uint64_t out_tangent_capacity,
+    uint64_t* const out_out_tangent_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_time_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_weight_keyframe: out_time_seconds is null.");
+        }
+        if (out_weight_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_weight_keyframe: out_weight_count is null.");
+        }
+        if (out_in_tangent_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_weight_keyframe: out_in_tangent_count is null.");
+        }
+        if (out_out_tangent_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_morph_target_data_ext_copy_weight_keyframe: out_out_tangent_count is null.");
+        }
+        return MorphTargetDataExtCopyWeightKeyframe(data, keyframe_index, out_time_seconds, weights, weight_capacity, out_weight_count, in_tangents, in_tangent_capacity, out_in_tangent_count, out_tangents, out_tangent_capacity, out_out_tangent_count);
+    });
+}
+
+CNA_Result cna_model_bone_add_child(
+    const CNA_ModelBoneHandle bone,
+    const CNA_ModelBoneHandle child)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelBoneAddChild(bone, child);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_num_vertices(
+    const CNA_ModelMeshPartHandle part,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetNumVertices(part, value);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_primitive_count(
+    const CNA_ModelMeshPartHandle part,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetPrimitiveCount(part, value);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_start_index(
+    const CNA_ModelMeshPartHandle part,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetStartIndex(part, value);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_vertex_offset(
+    const CNA_ModelMeshPartHandle part,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetVertexOffset(part, value);
+    });
+}
+
+CNA_Result cna_model_mesh_set_parent_bone(
+    const CNA_ModelMeshHandle mesh,
+    const CNA_ModelBoneHandle parent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshSetParentBone(mesh, parent);
+    });
+}
+
+CNA_Result cna_model_effect_collection_add(
+    const CNA_ModelEffectCollectionHandle collection,
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelEffectCollectionAdd(collection, effect);
+    });
+}
+
+CNA_Result cna_model_effect_collection_remove(
+    const CNA_ModelEffectCollectionHandle collection,
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelEffectCollectionRemove(collection, effect);
+    });
+}
+
+CNA_Result cna_model_destroy(
+    const CNA_ModelHandle model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelDestroy(model);
+    });
+}
+
+CNA_Result cna_model_set_owned_resources(
+    const CNA_ModelHandle model,
+    void* const context,
+    const CNA_ModelOwnedResourcesReleaseCallback release)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelSetOwnedResources(model, context, release);
+    });
+}
+
+CNA_Result cna_model_set_bone_transforms(
+    const CNA_ModelHandle model,
+    const CNA_Matrix* const source,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelSetBoneTransforms(model, source, count);
+    });
+}
+
+CNA_Result cna_model_set_gltf_import_report_ext(
+    const CNA_ModelHandle model,
+    const CNA_GltfImportReportEXT* const report)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelSetGltfImportReportExt(model, report);
+    });
+}
+
+CNA_Result cna_model_add_gltf_import_diagnostic_ext(
+    const CNA_ModelHandle model,
+    const CNA_GltfImportDiagnosticDescriptorEXT* const descriptor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelAddGltfImportDiagnosticExt(model, descriptor);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_weights(
+    const CNA_MorphTargetDataEXTHandle data,
+    const float* const weights,
+    const uint64_t weight_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MorphTargetDataExtSetWeights(data, weights, weight_count);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_weight_track(
+    const CNA_MorphTargetDataEXTHandle data,
+    const CNA_MorphWeightTrackEXTDescriptor* const track)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MorphTargetDataExtSetWeightTrack(data, track);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_morph_target_data_ext(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_MorphTargetDataEXTHandle data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetMorphTargetDataExt(part, data);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_morph_weights_ext(
+    const CNA_ModelMeshPartHandle part,
+    const float* const weights,
+    const uint64_t weight_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetMorphWeightsExt(part, weights, weight_count);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_move_assign(
+    const CNA_SkinnedModelEXTHandle destination,
+    const CNA_SkinnedModelEXTHandle source)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtMoveAssign(destination, source);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_set_skeleton(
+    const CNA_SkinnedModelEXTHandle model,
+    const int32_t bone_count,
+    const int32_t* const parent_bone_indices,
+    const CNA_Matrix* const bind_pose_local,
+    const CNA_Matrix* const inverse_bind_pose_global)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtSetSkeleton(model, bone_count, parent_bone_indices, bind_pose_local, inverse_bind_pose_global);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_set_clip(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView name,
+    const CNA_AnimationClipEXTDescriptor* const clip)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtSetClip(model, name, clip);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_add_part(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView name,
+    const CNA_VertexBufferHandle vertex_buffer,
+    const CNA_IndexBufferHandle index_buffer,
+    const CNA_ModelMeshPartHandle part,
+    const CNA_Handle texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtAddPart(model, name, vertex_buffer, index_buffer, part, texture);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_remove_part(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtRemovePart(model, name);
+    });
+}
+
+CNA_Result cna_animation_player_start_clip(
+    const CNA_AnimationPlayerHandle player,
+    const CNA_StringView clip_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AnimationPlayerStartClip(player, clip_name);
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_sampler_state_ext(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_PbrTextureSlot slot,
+    const CNA_SamplerState* const state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelMeshPartSetSamplerStateExt(part, slot, state);
+    });
+}
+
+CNA_Result cna_skinning_data_set_clip_target_space_ext(
+    const CNA_SkinningDataHandle data,
+    const uint64_t clip_index,
+    const CNA_ClipTargetSpaceEXT value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinningDataSetClipTargetSpaceExt(data, clip_index, value);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_triangle_indices_ext(
+    const CNA_MorphTargetDataEXTHandle data,
+    const uint32_t* const indices,
+    const uint64_t index_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MorphTargetDataExtSetTriangleIndicesExt(data, indices, index_count);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
+    const CNA_MorphTargetDataEXTHandle data,
+    const uint64_t target_index,
+    const CNA_Vector3* const deltas,
+    const uint64_t delta_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MorphTargetDataExtSetTangentDeltas(data, target_index, deltas, delta_count);
+    });
+}
+
+CNA_Result cna_model_add_camera_ext(
+    const CNA_ModelHandle model,
+    const CNA_ModelCameraDescriptorEXT* const descriptor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelAddCameraExt(model, descriptor);
+    });
+}
+
+CNA_Result cna_model_clear_skins_ext(
+    const CNA_ModelHandle model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelClearSkinsExt(model);
+    });
+}
+
+CNA_Result cna_model_add_skin_ext(
+    const CNA_ModelHandle model,
+    const CNA_StringView name,
+    const CNA_SkinningDataHandle data,
+    const uint64_t* const mesh_indices,
+    const uint64_t mesh_index_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelAddSkinExt(model, name, data, mesh_indices, mesh_index_count);
+    });
+}
+
+CNA_Result cna_model_animations_ext_set_clip_target_space_at(
+    const CNA_ModelAnimationsEXTHandle animations,
+    const uint64_t clip_index,
+    const CNA_ClipTargetSpaceEXT value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelAnimationsExtSetClipTargetSpaceAt(animations, clip_index, value);
+    });
+}
+
+CNA_Result cna_model_apply_clip_to_bones_ext(
+    const CNA_ModelHandle model,
+    const CNA_ModelAnimationsEXTHandle animations,
+    const uint64_t clip_index,
+    const double time_seconds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelApplyClipToBonesExt(model, animations, clip_index, time_seconds);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_attach_parts(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_SkinnedModelEXTHandle other)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SkinnedModelExtAttachParts(model, other);
+    });
+}

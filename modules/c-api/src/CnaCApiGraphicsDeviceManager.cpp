@@ -205,203 +205,172 @@ private:
         outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_graphics_device_information_clone(
+[[nodiscard]] CNA_Result GraphicsDeviceInformationClone(
     const CNA_GraphicsDeviceInformation* const information,
     CNA_GraphicsDeviceInformation* const outInformation)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInformation == nullptr) {
-            return InvalidArgument("The device configuration output is null.");
-        }
-        if (!IsDeviceInformation(information)) {
-            return InvalidArgument("The device configuration is not a valid structure.");
-        }
-        GraphicsDeviceInformation canonical;
-        ApplyDeviceInformation(*information, &canonical);
-        *outInformation = ToCDeviceInformation(canonical.Clone());
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsDeviceInformation(information)) {
+        return InvalidArgument("The device configuration is not a valid structure.");
+    }
+    GraphicsDeviceInformation canonical;
+    ApplyDeviceInformation(*information, &canonical);
+    *outInformation = ToCDeviceInformation(canonical.Clone());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_manager_create(
+[[nodiscard]] CNA_Result GraphicsDeviceManagerCreate(
     const CNA_Handle gameHandle,
     CNA_GraphicsDeviceManagerHandle* const outManager)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outManager == nullptr) {
-            return InvalidArgument("The manager output is null.");
-        }
-        *outManager = CNA_INVALID_HANDLE;
-        Game* game = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<ManagerResource>();
-        resource->game = gameHandle;
-        resource->value = std::make_unique<GraphicsDeviceManager>(game);
-        if (const CNA_Result result = CreateHandle(ObjectKind::GraphicsDeviceManager,
-            std::move(resource),
-            outManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::C::Detail::AddOwnedGameComponent();
-        return CNA_RESULT_SUCCESS;
-    });
+    Game* game = nullptr;
+    if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<ManagerResource>();
+    resource->game = gameHandle;
+    resource->value = std::make_unique<GraphicsDeviceManager>(game);
+    if (const CNA_Result result = CreateHandle(ObjectKind::GraphicsDeviceManager,
+        std::move(resource),
+        outManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::C::Detail::AddOwnedGameComponent();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_manager_subscribe(
+[[nodiscard]] CNA_Result GraphicsDeviceManagerSubscribe(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_GraphicsDeviceManagerEvent event,
     const CNA_GameEventCallback callback,
     void* const context,
     CNA_GameEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The manager registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The manager event callback is null.");
-        }
-        if (event > CNA_GRAPHICS_DEVICE_MANAGER_EVENT_MAXIMUM) {
-            return InvalidArgument("The manager event is not a defined identity.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::EventHandler<System::EventArgs>* source = nullptr;
-        switch (event) {
-        case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DISPOSED:
-            source = &resource->value->Disposed;
-            break;
-        case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_CREATED:
-            source = &resource->value->getDeviceCreatedEvent();
-            break;
-        case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_DISPOSING:
-            source = &resource->value->getDeviceDisposingEvent();
-            break;
-        case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_RESET:
-            source = &resource->value->getDeviceResetEvent();
-            break;
-        default:
-            source = &resource->value->getDeviceResettingEvent();
-            break;
-        }
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return PublishRegistration(
-            std::make_shared<ManagerRegistration<System::EventArgs>>(resource, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The manager event callback is null.");
+    }
+    if (event > CNA_GRAPHICS_DEVICE_MANAGER_EVENT_MAXIMUM) {
+        return InvalidArgument("The manager event is not a defined identity.");
+    }
+    std::shared_ptr<ManagerResource> resource;
+    if (const CNA_Result result = BorrowManager(manager, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::EventHandler<System::EventArgs>* source = nullptr;
+    switch (event) {
+    case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DISPOSED:
+        source = &resource->value->Disposed;
+        break;
+    case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_CREATED:
+        source = &resource->value->getDeviceCreatedEvent();
+        break;
+    case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_DISPOSING:
+        source = &resource->value->getDeviceDisposingEvent();
+        break;
+    case CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_RESET:
+        source = &resource->value->getDeviceResetEvent();
+        break;
+    default:
+        source = &resource->value->getDeviceResettingEvent();
+        break;
+    }
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return PublishRegistration(
+        std::make_shared<ManagerRegistration<System::EventArgs>>(resource, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
+[[nodiscard]] CNA_Result GraphicsDeviceManagerSubscribePreparingDeviceSettings(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_PreparingDeviceSettingsCallback callback,
     void* const context,
     CNA_GameEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The manager registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The device settings callback is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const source = &resource->value->PreparingDeviceSettings;
-        // The canonical handler collection delivers a const reference, so a subscriber -- in C++ as
-        // much as in C -- can read the candidate settings and not change them. The C callback is
-        // const for that reason rather than by choice.
-        const auto token = source->Add(
-            [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
-                const CNA_GraphicsDeviceInformation mapped =
-                    ToCDeviceInformation(args.getGraphicsDeviceInformationProperty());
-                callback(&mapped, context);
-            });
-        return PublishRegistration(
-            std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(
-                resource, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The device settings callback is null.");
+    }
+    std::shared_ptr<ManagerResource> resource;
+    if (const CNA_Result result = BorrowManager(manager, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const source = &resource->value->PreparingDeviceSettings;
+    // The canonical handler collection delivers a const reference, so a subscriber -- in C++ as
+    // much as in C -- can read the candidate settings and not change them. The C callback is
+    // const for that reason rather than by choice.
+    const auto token = source->Add(
+        [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
+            const CNA_GraphicsDeviceInformation mapped =
+                ToCDeviceInformation(args.getGraphicsDeviceInformationProperty());
+            callback(&mapped, context);
+        });
+    return PublishRegistration(
+        std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(
+            resource, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
+[[nodiscard]] CNA_Result GraphicsDeviceManagerSubscribePreparingDeviceSettingsExt(
     const CNA_GraphicsDeviceManagerHandle manager,
     const CNA_PreparingDeviceSettingsMutatorEXT callback,
     void* const context,
     CNA_GameEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The manager registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The device settings callback is null.");
-        }
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const source = &resource->value->PreparingDeviceSettings;
-        const auto token = source->Add(
-            [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
-                // The settings are held by pointer, so the const argument the handler collection
-                // delivers never made them const. This accessor is what lets the canonical event
-                // do in this runtime what it does in XNA.
-                GraphicsDeviceInformation& canonical = args.getGraphicsDeviceInformationEXT();
-                CNA_GraphicsDeviceInformation mapped = ToCDeviceInformation(canonical);
-                callback(&mapped, context);
-                if (!IsDeviceInformation(&mapped)) {
-                    // A handler that corrupted the structure or wrote an undefined identity is
-                    // ignored rather than obeyed: half-applying it would fail device creation
-                    // later, for a reason with no visible connection to what was written.
-                    return;
-                }
-                ApplyDeviceInformation(mapped, &canonical);
-            });
-        return PublishRegistration(
-            std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(
-                resource, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The device settings callback is null.");
+    }
+    std::shared_ptr<ManagerResource> resource;
+    if (const CNA_Result result = BorrowManager(manager, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const source = &resource->value->PreparingDeviceSettings;
+    const auto token = source->Add(
+        [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
+            // The settings are held by pointer, so the const argument the handler collection
+            // delivers never made them const. This accessor is what lets the canonical event
+            // do in this runtime what it does in XNA.
+            GraphicsDeviceInformation& canonical = args.getGraphicsDeviceInformationEXT();
+            CNA_GraphicsDeviceInformation mapped = ToCDeviceInformation(canonical);
+            callback(&mapped, context);
+            if (!IsDeviceInformation(&mapped)) {
+                // A handler that corrupted the structure or wrote an undefined identity is
+                // ignored rather than obeyed: half-applying it would fail device creation
+                // later, for a reason with no visible connection to what was written.
+                return;
+            }
+            ApplyDeviceInformation(mapped, &canonical);
+        });
+    return PublishRegistration(
+        std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(
+            resource, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_graphics_device_manager_destroy(const CNA_GraphicsDeviceManagerHandle manager)
+[[nodiscard]] CNA_Result GraphicsDeviceManagerDestroy(const CNA_GraphicsDeviceManagerHandle manager)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->Dispose();
-        if (const CNA_Result result = ReleaseHandle(manager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        {
-            const std::lock_guard<std::mutex> lock(RetiredManagerMutex());
-            RetiredManagers().push_back(std::move(resource));
-        }
-        CNA::C::Detail::RemoveOwnedGameComponent();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ManagerResource> resource;
+    if (const CNA_Result result = BorrowManager(manager, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->value->Dispose();
+    if (const CNA_Result result = ReleaseHandle(manager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    {
+        const std::lock_guard<std::mutex> lock(RetiredManagerMutex());
+        RetiredManagers().push_back(std::move(resource));
+    }
+    CNA::C::Detail::RemoveOwnedGameComponent();
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 

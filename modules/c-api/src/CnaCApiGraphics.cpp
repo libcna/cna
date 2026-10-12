@@ -595,491 +595,456 @@ CNA_Result GetOwnedSpriteBatchValue(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_graphics_device_get_renderer_info(
+namespace {
+
+[[nodiscard]] CNA_Result GraphicsDeviceGetRendererInfo(
     const CNA_Handle graphicsDeviceHandle,
     CNA_RendererInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outInfo, "The renderer-info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outInfo, "The renderer-info output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        GraphicsDevice& nativeDevice = *graphicsDevice->value;
-        const std::string_view rendererName = nativeDevice.GetGraphicsRendererName();
-        const int maxTextureDimension = nativeDevice.GetMaxTextureDimension();
-        if (maxTextureDimension < 0) {
-            return InternalError(
-                "The native renderer reported a negative texture-dimension limit.");
-        }
-        const CNA_RendererInfo info = {
-            .struct_size = sizeof(CNA_RendererInfo),
-            .struct_version = StructureVersion,
-            .renderer_name_byte_length = rendererName.size(),
-            .capability_flags = GetGraphicsCapabilityFlags(nativeDevice),
-            .renderer_type = MapGraphicsRendererType(nativeDevice.GetGraphicsRendererType()),
-            .max_texture_dimension = static_cast<uint32_t>(maxTextureDimension)
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
+    GraphicsDevice& nativeDevice = *graphicsDevice->value;
+    const std::string_view rendererName = nativeDevice.GetGraphicsRendererName();
+    const int maxTextureDimension = nativeDevice.GetMaxTextureDimension();
+    if (maxTextureDimension < 0) {
+        return InternalError(
+            "The native renderer reported a negative texture-dimension limit.");
+    }
+    const CNA_RendererInfo info = {
+        .struct_size = sizeof(CNA_RendererInfo),
+        .struct_version = StructureVersion,
+        .renderer_name_byte_length = rendererName.size(),
+        .capability_flags = GetGraphicsCapabilityFlags(nativeDevice),
+        .renderer_type = MapGraphicsRendererType(nativeDevice.GetGraphicsRendererType()),
+        .max_texture_dimension = static_cast<uint32_t>(maxTextureDimension)
+    };
+    *outInfo = info;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_supports_capability(
+[[nodiscard]] CNA_Result GraphicsDeviceSupportsCapability(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsCapability capability,
     CNA_Bool* const outSupported)
 {
-    return CallWithExceptionBarrier([&]() {
-        CNA::GraphicsCapability nativeCapability{};
-        if (outSupported == nullptr || !TryMapGraphicsCapability(capability, &nativeCapability)) {
-            return InvalidArgument("The graphics-capability query arguments are invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(graphicsDevice->value->SupportsCapability(nativeCapability));
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA::GraphicsCapability nativeCapability{};
+    if (!TryMapGraphicsCapability(capability, &nativeCapability)) {
+        return InvalidArgument("The graphics-capability query arguments are invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outSupported = ToCBool(graphicsDevice->value->SupportsCapability(nativeCapability));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_renderer_feature_support_ext(
+[[nodiscard]] CNA_Result GraphicsDeviceGetRendererFeatureSupportExt(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_RendererFeature feature,
     CNA_RendererFeatureSupport* const outSupport)
 {
-    return CallWithExceptionBarrier([&]() {
-        CNA::RendererFeature nativeFeature{};
-        if (outSupport == nullptr || !TryMapRendererFeature(feature, &nativeFeature)) {
-            return InvalidArgument("The detailed renderer-feature query arguments are invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupport = MapRendererFeatureSupport(
-            graphicsDevice->value->GetRendererFeatureSupportEXT(nativeFeature));
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA::RendererFeature nativeFeature{};
+    if (!TryMapRendererFeature(feature, &nativeFeature)) {
+        return InvalidArgument("The detailed renderer-feature query arguments are invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outSupport = MapRendererFeatureSupport(
+        graphicsDevice->value->GetRendererFeatureSupportEXT(nativeFeature));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_renderer_limit_ext(
+[[nodiscard]] CNA_Result GraphicsDeviceGetRendererLimitExt(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_RendererLimit limit,
     CNA_Bool* const outKnown,
     uint64_t* const outValue)
 {
-    return CallWithExceptionBarrier([&]() {
-        CNA::RendererLimit nativeLimit{};
-        if (outKnown == nullptr || outValue == nullptr ||
-            !TryMapRendererLimit(limit, &nativeLimit)) {
-            return InvalidArgument("The renderer-limit query arguments are invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA::RendererLimitValue value =
-            graphicsDevice->value->GetRendererLimitEXT(nativeLimit);
-        *outKnown = ToCBool(value.known);
-        *outValue = value.known ? value.value : UINT64_C(0);
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA::RendererLimit nativeLimit{};
+    if (!TryMapRendererLimit(limit, &nativeLimit)) {
+        return InvalidArgument("The renderer-limit query arguments are invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA::RendererLimitValue value =
+        graphicsDevice->value->GetRendererLimitEXT(nativeLimit);
+    *outKnown = ToCBool(value.known);
+    *outValue = value.known ? value.value : UINT64_C(0);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_surface_format_support_ext(
+[[nodiscard]] CNA_Result GraphicsDeviceGetSurfaceFormatSupportExt(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_SurfaceFormat format,
     CNA_RendererFormatUsageFlags* const outKnownUsages,
     CNA_RendererFormatUsageFlags* const outSupportedUsages)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (format > CNA_SURFACE_FORMAT_USHORT_EXT || outKnownUsages == nullptr ||
-            outSupportedUsages == nullptr) {
-            return InvalidArgument("The renderer surface-format query arguments are invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA::RendererFormatSupport support =
-            graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(
-                static_cast<SurfaceFormat>(format));
-        *outKnownUsages = support.knownUsages;
-        *outSupportedUsages = support.supportedUsages;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (format > CNA_SURFACE_FORMAT_USHORT_EXT) {
+        return InvalidArgument("The renderer surface-format query arguments are invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA::RendererFormatSupport support =
+        graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(
+            static_cast<SurfaceFormat>(format));
+    *outKnownUsages = support.knownUsages;
+    *outSupportedUsages = support.supportedUsages;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_backbuffer_info(
+[[nodiscard]] CNA_Result GraphicsDeviceGetBackbufferInfo(
     const CNA_Handle graphicsDeviceHandle,
     CNA_BackBufferInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outInfo, "The backbuffer-info output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outInfo, "The backbuffer-info output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto& presentationParameters =
-            graphicsDevice->value->getPresentationParametersProperty();
-        const int width = presentationParameters.getBackBufferWidthProperty();
-        const int height = presentationParameters.getBackBufferHeightProperty();
-        if (width <= 0 || height <= 0) {
-            return InternalError(
-                "The native graphics device reported invalid backbuffer dimensions.");
-        }
-        *outInfo = CNA_BackBufferInfo{
-            .struct_size = sizeof(CNA_BackBufferInfo),
-            .struct_version = StructureVersion,
-            .width = static_cast<uint32_t>(width),
-            .height = static_cast<uint32_t>(height),
-            .format = MapSurfaceFormat(presentationParameters.getBackBufferFormatProperty()),
-            .reserved = 0U
-        };
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto& presentationParameters =
+        graphicsDevice->value->getPresentationParametersProperty();
+    const int width = presentationParameters.getBackBufferWidthProperty();
+    const int height = presentationParameters.getBackBufferHeightProperty();
+    if (width <= 0 || height <= 0) {
+        return InternalError(
+            "The native graphics device reported invalid backbuffer dimensions.");
+    }
+    *outInfo = CNA_BackBufferInfo{
+        .struct_size = sizeof(CNA_BackBufferInfo),
+        .struct_version = StructureVersion,
+        .width = static_cast<uint32_t>(width),
+        .height = static_cast<uint32_t>(height),
+        .format = MapSurfaceFormat(presentationParameters.getBackBufferFormatProperty()),
+        .reserved = 0U
+    };
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
+[[nodiscard]] CNA_Result GraphicsDeviceGetBackbufferDataRgba8(
     const CNA_Handle graphicsDeviceHandle,
     CNA_Color* const destination,
     const uint64_t capacity,
     uint64_t* const outPixels)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outPixels == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The backbuffer readback output buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The backbuffer readback output buffer is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto& presentationParameters =
-            graphicsDevice->value->getPresentationParametersProperty();
-        const int width = presentationParameters.getBackBufferWidthProperty();
-        const int height = presentationParameters.getBackBufferHeightProperty();
-        if (width <= 0 || height <= 0) {
-            return InternalError(
-                "The native graphics device reported invalid backbuffer dimensions.");
-        }
-        const uint64_t requiredPixels =
-            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
-        *outPixels = requiredPixels;
-        if (requiredPixels > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Overflow("The backbuffer pixel count exceeds the native readback range.");
-        }
-        if (capacity < requiredPixels) {
-            return BufferTooSmall("The backbuffer readback output buffer is too small.");
-        }
+    const auto& presentationParameters =
+        graphicsDevice->value->getPresentationParametersProperty();
+    const int width = presentationParameters.getBackBufferWidthProperty();
+    const int height = presentationParameters.getBackBufferHeightProperty();
+    if (width <= 0 || height <= 0) {
+        return InternalError(
+            "The native graphics device reported invalid backbuffer dimensions.");
+    }
+    const uint64_t requiredPixels =
+        static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+    *outPixels = requiredPixels;
+    if (requiredPixels > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return Overflow("The backbuffer pixel count exceeds the native readback range.");
+    }
+    if (capacity < requiredPixels) {
+        return BufferTooSmall("The backbuffer readback output buffer is too small.");
+    }
 
-        std::vector<Color> nativePixels;
-        if (requiredPixels > nativePixels.max_size()) {
-            return Overflow("The backbuffer pixel count exceeds the native collection range.");
-        }
-        nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
-        for (uint64_t index = 0U; index < requiredPixels; ++index) {
-            nativePixels.emplace_back(
-                UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
-        }
-        graphicsDevice->value->GetBackBufferData(
-            nativePixels.data(),
-            static_cast<int>(nativePixels.size()));
-        for (uint64_t index = 0U; index < requiredPixels; ++index) {
-            destination[index] = CNA_Color{
-                .r = nativePixels[index].getRProperty(),
-                .g = nativePixels[index].getGProperty(),
-                .b = nativePixels[index].getBProperty(),
-                .a = nativePixels[index].getAProperty()
-            };
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<Color> nativePixels;
+    if (requiredPixels > nativePixels.max_size()) {
+        return Overflow("The backbuffer pixel count exceeds the native collection range.");
+    }
+    nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
+    for (uint64_t index = 0U; index < requiredPixels; ++index) {
+        nativePixels.emplace_back(
+            UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+    }
+    graphicsDevice->value->GetBackBufferData(
+        nativePixels.data(),
+        static_cast<int>(nativePixels.size()));
+    for (uint64_t index = 0U; index < requiredPixels; ++index) {
+        destination[index] = CNA_Color{
+            .r = nativePixels[index].getRProperty(),
+            .g = nativePixels[index].getGProperty(),
+            .b = nativePixels[index].getBProperty(),
+            .a = nativePixels[index].getAProperty()
+        };
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_create(
+[[nodiscard]] CNA_Result Texture2dCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Texture2DCreateInfo* const createInfo,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) || createInfo->width == 0U ||
-            createInfo->height == 0U ||
-            (createInfo->mip_map != CNA_FALSE && createInfo->mip_map != CNA_TRUE) ||
-            createInfo->reserved[0] != 0U || createInfo->reserved[1] != 0U ||
-            createInfo->reserved[2] != 0U) {
-            return InvalidArgument("The Texture2D creation configuration is invalid.");
-        }
-        if (createInfo->format > CNA_SURFACE_FORMAT_USHORT_EXT) {
-            return InvalidArgument("The Texture2D surface-format identity is invalid.");
-        }
-        if (createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-            createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-            static_cast<uint64_t>(createInfo->width) * createInfo->height >
-                static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Overflow("The Texture2D dimensions exceed the native transfer range.");
-        }
+    if (!IsVersionedStructure(createInfo) || createInfo->width == 0U ||
+        createInfo->height == 0U ||
+        (createInfo->mip_map != CNA_FALSE && createInfo->mip_map != CNA_TRUE) ||
+        createInfo->reserved[0] != 0U || createInfo->reserved[1] != 0U ||
+        createInfo->reserved[2] != 0U) {
+        return InvalidArgument("The Texture2D creation configuration is invalid.");
+    }
+    if (createInfo->format > CNA_SURFACE_FORMAT_USHORT_EXT) {
+        return InvalidArgument("The Texture2D surface-format identity is invalid.");
+    }
+    if (createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        static_cast<uint64_t>(createInfo->width) * createInfo->height >
+            static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return Overflow("The Texture2D dimensions exceed the native transfer range.");
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int maxTextureDimension = graphicsDevice->value->GetMaxTextureDimension();
-        if (maxTextureDimension < 0) {
-            return InternalError(
-                "The native renderer reported a negative texture-dimension limit.");
-        }
-        if (createInfo->width > static_cast<uint32_t>(maxTextureDimension) ||
-            createInfo->height > static_cast<uint32_t>(maxTextureDimension)) {
-            return NotSupported("The Texture2D dimensions exceed the active renderer's maximum.");
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const int maxTextureDimension = graphicsDevice->value->GetMaxTextureDimension();
+    if (maxTextureDimension < 0) {
+        return InternalError(
+            "The native renderer reported a negative texture-dimension limit.");
+    }
+    if (createInfo->width > static_cast<uint32_t>(maxTextureDimension) ||
+        createInfo->height > static_cast<uint32_t>(maxTextureDimension)) {
+        return NotSupported("The Texture2D dimensions exceed the active renderer's maximum.");
+    }
 
-        const SurfaceFormat format = static_cast<SurfaceFormat>(createInfo->format);
-        if (!Texture::IsFormatAllowedByProfileEXT(
-                graphicsDevice->value->getGraphicsProfileProperty(), format)) {
-            return NotSupported(
-                "The Texture2D surface format is unavailable on the active graphics profile.");
-        }
-        const CNA::RendererFormatSupport formatSupport =
-            graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(format);
-        if (formatSupport.IsKnown(CNA::RendererFormatUsage::TextureStorage) &&
-            !formatSupport.Supports(CNA::RendererFormatUsage::TextureStorage)) {
-            return NotSupported(
-                "The Texture2D surface format is unavailable on the selected renderer.");
-        }
+    const SurfaceFormat format = static_cast<SurfaceFormat>(createInfo->format);
+    if (!Texture::IsFormatAllowedByProfileEXT(
+            graphicsDevice->value->getGraphicsProfileProperty(), format)) {
+        return NotSupported(
+            "The Texture2D surface format is unavailable on the active graphics profile.");
+    }
+    const CNA::RendererFormatSupport formatSupport =
+        graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(format);
+    if (formatSupport.IsKnown(CNA::RendererFormatUsage::TextureStorage) &&
+        !formatSupport.Supports(CNA::RendererFormatUsage::TextureStorage)) {
+        return NotSupported(
+            "The Texture2D surface format is unavailable on the selected renderer.");
+    }
 
-        const auto texture = std::make_shared<Texture2D>(
-            *graphicsDevice->value,
-            static_cast<int>(createInfo->width),
-            static_cast<int>(createInfo->height),
-            createInfo->mip_map == CNA_TRUE,
-            format);
-        return CNA::C::Detail::CreateOwnedTexture2D(
-            texture,
-            graphicsDevice->parentGame,
-            outTexture);
-    });
+    const auto texture = std::make_shared<Texture2D>(
+        *graphicsDevice->value,
+        static_cast<int>(createInfo->width),
+        static_cast<int>(createInfo->height),
+        createInfo->mip_map == CNA_TRUE,
+        format);
+    return CNA::C::Detail::CreateOwnedTexture2D(
+        texture,
+        graphicsDevice->parentGame,
+        outTexture);
 }
 
-CNA_Result cna_texture2d_set_data_rgba8(
+[[nodiscard]] CNA_Result Texture2dSetDataRgba8(
     const CNA_Handle textureHandle,
     const CNA_Color* const pixels,
     const uint64_t pixelCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::size_t ignoredByteCount = 0U;
-        if (const CNA_Result validationResult = CheckedElementByteCount(
-                pixels,
-                pixelCount,
-                sizeof(CNA_Color),
-                &ignoredByteCount);
-            validationResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                validationResult,
-                ErrorCategoryForResult(validationResult),
-                "The Texture2D upload buffer is invalid.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t requiredPixels = GetTexturePixelCount(*texture->value);
-        if (pixelCount != requiredPixels) {
-            return InvalidArgument(
-                "The Texture2D upload pixel count must equal width multiplied by height.");
-        }
+    std::size_t ignoredByteCount = 0U;
+    if (const CNA_Result validationResult = CheckedElementByteCount(
+            pixels,
+            pixelCount,
+            sizeof(CNA_Color),
+            &ignoredByteCount);
+        validationResult != CNA_RESULT_SUCCESS) {
+        return Fail(
+            validationResult,
+            ErrorCategoryForResult(validationResult),
+            "The Texture2D upload buffer is invalid.");
+    }
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t requiredPixels = GetTexturePixelCount(*texture->value);
+    if (pixelCount != requiredPixels) {
+        return InvalidArgument(
+            "The Texture2D upload pixel count must equal width multiplied by height.");
+    }
 
-        std::vector<Color> nativePixels;
-        nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
-        for (uint64_t index = 0U; index < requiredPixels; ++index) {
-            nativePixels.emplace_back(
-                pixels[index].r,
-                pixels[index].g,
-                pixels[index].b,
-                pixels[index].a);
-        }
-        texture->value->SetData(nativePixels.data(), static_cast<int>(nativePixels.size()));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<Color> nativePixels;
+    nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
+    for (uint64_t index = 0U; index < requiredPixels; ++index) {
+        nativePixels.emplace_back(
+            pixels[index].r,
+            pixels[index].g,
+            pixels[index].b,
+            pixels[index].a);
+    }
+    texture->value->SetData(nativePixels.data(), static_cast<int>(nativePixels.size()));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_get_data_rgba8(
+[[nodiscard]] CNA_Result Texture2dGetDataRgba8(
     const CNA_Handle textureHandle,
     CNA_Color* const destination,
     const uint64_t capacity,
     uint64_t* const outPixels)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outPixels == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The Texture2D readback buffer is invalid.");
-        }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t requiredPixels = GetTexturePixelCount(*texture->value);
-        *outPixels = requiredPixels;
-        if (capacity < requiredPixels) {
-            return BufferTooSmall("The Texture2D readback buffer is too small.");
-        }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The Texture2D readback buffer is invalid.");
+    }
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t requiredPixels = GetTexturePixelCount(*texture->value);
+    *outPixels = requiredPixels;
+    if (capacity < requiredPixels) {
+        return BufferTooSmall("The Texture2D readback buffer is too small.");
+    }
 
-        std::vector<Color> nativePixels;
-        nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
-        for (uint64_t index = 0U; index < requiredPixels; ++index) {
-            nativePixels.emplace_back(
-                UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
-        }
-        texture->value->GetData(nativePixels.data(), static_cast<int>(nativePixels.size()));
-        for (uint64_t index = 0U; index < requiredPixels; ++index) {
-            destination[index] = CNA_Color{
-                .r = nativePixels[index].getRProperty(),
-                .g = nativePixels[index].getGProperty(),
-                .b = nativePixels[index].getBProperty(),
-                .a = nativePixels[index].getAProperty()
-            };
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<Color> nativePixels;
+    nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
+    for (uint64_t index = 0U; index < requiredPixels; ++index) {
+        nativePixels.emplace_back(
+            UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+    }
+    texture->value->GetData(nativePixels.data(), static_cast<int>(nativePixels.size()));
+    for (uint64_t index = 0U; index < requiredPixels; ++index) {
+        destination[index] = CNA_Color{
+            .r = nativePixels[index].getRProperty(),
+            .g = nativePixels[index].getGProperty(),
+            .b = nativePixels[index].getBProperty(),
+            .a = nativePixels[index].getAProperty()
+        };
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
+[[nodiscard]] CNA_Result Texture2dDestroy(const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (texture->activeBatchReferenceCount != 0U ||
-            texture->activeFontReferenceCount != 0U ||
-            texture->activeEffectReferenceCount != 0U ||
-            texture->activeModelReferenceCount != 0U ||
-            texture->activeScopeReferenceCount != 0U) {
-            return InvalidState(
-                "The Texture2D is retained by an active SpriteBatch, SpriteFont, effect, model "
-                "or render-target scope.");
-        }
-        if (texture->disposeAllowed) {
-            texture->value->Dispose();
-        }
-        if (const CNA_Result releaseResult = ReleaseHandle(textureHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        if (texture->ownedResource && texture->parentGame != CNA_INVALID_HANDLE) {
-            RemoveOwnedGraphicsResourceFor(texture->parentGame);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (texture->activeBatchReferenceCount != 0U ||
+        texture->activeFontReferenceCount != 0U ||
+        texture->activeEffectReferenceCount != 0U ||
+        texture->activeModelReferenceCount != 0U ||
+        texture->activeScopeReferenceCount != 0U) {
+        return InvalidState(
+            "The Texture2D is retained by an active SpriteBatch, SpriteFont, effect, model "
+            "or render-target scope.");
+    }
+    if (texture->disposeAllowed) {
+        texture->value->Dispose();
+    }
+    if (const CNA_Result releaseResult = ReleaseHandle(textureHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    if (texture->ownedResource && texture->parentGame != CNA_INVALID_HANDLE) {
+        RemoveOwnedGraphicsResourceFor(texture->parentGame);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_create(
+[[nodiscard]] CNA_Result SpriteBatchCreate(
     const CNA_Handle graphicsDeviceHandle,
     CNA_Handle* const outSpriteBatch)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outSpriteBatch == nullptr) {
-            return InvalidArgument("The SpriteBatch output handle is null.");
-        }
-        *outSpriteBatch = CNA_INVALID_HANDLE;
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const auto nativeSpriteBatch = std::make_shared<SpriteBatch>(*graphicsDevice->value);
-        const auto resource = std::make_shared<SpriteBatchResource>(SpriteBatchResource{
-            nativeSpriteBatch,
-            graphicsDevice->parentGame,
-            false,
-            {}});
-        if (const CNA_Result result = CreateHandle(ObjectKind::SpriteBatch,
-            resource,
-            outSpriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto nativeSpriteBatch = std::make_shared<SpriteBatch>(*graphicsDevice->value);
+    const auto resource = std::make_shared<SpriteBatchResource>(SpriteBatchResource{
+        nativeSpriteBatch,
+        graphicsDevice->parentGame,
+        false,
+        {}});
+    if (const CNA_Result result = CreateHandle(ObjectKind::SpriteBatch,
+        resource,
+        outSpriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_begin(
+[[nodiscard]] CNA_Result SpriteBatchBegin(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteBatchBeginInfo* const beginInfo)
 {
-    return CallWithExceptionBarrier([&]() {
-        SpriteSortMode nativeSortMode{};
-        if (!IsVersionedStructure(beginInfo) || beginInfo->reserved != 0U ||
-            !TryMapSpriteSortMode(beginInfo->sort_mode, &nativeSortMode)) {
-            return InvalidArgument("The SpriteBatch begin configuration is invalid.");
-        }
+    SpriteSortMode nativeSortMode{};
+    if (!IsVersionedStructure(beginInfo) || beginInfo->reserved != 0U ||
+        !TryMapSpriteSortMode(beginInfo->sort_mode, &nativeSortMode)) {
+        return InvalidArgument("The SpriteBatch begin configuration is invalid.");
+    }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (spriteBatch->begun) {
-            return InvalidState("The SpriteBatch already has an active begin/end interval.");
-        }
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (spriteBatch->begun) {
+        return InvalidState("The SpriteBatch already has an active begin/end interval.");
+    }
 
-        spriteBatch->value->Begin(
-            nativeSortMode,
-            Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
-        spriteBatch->begun = true;
-        return CNA_RESULT_SUCCESS;
-    });
+    spriteBatch->value->Begin(
+        nativeSortMode,
+        Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
+    spriteBatch->begun = true;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_begin_with_states(
+[[nodiscard]] CNA_Result SpriteBatchBeginWithStates(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteSortMode sortMode,
     const CNA_BlendState* const blendState,
@@ -1087,70 +1052,68 @@ CNA_Result cna_sprite_batch_begin_with_states(
     const CNA_DepthStencilState* const depthStencilState,
     const CNA_RasterizerState* const rasterizerState)
 {
-    return CallWithExceptionBarrier([&]() {
-        SpriteSortMode nativeSortMode{};
-        Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
-        Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
-        Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
-        Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
-        if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
-            return InvalidArgument("The SpriteBatch sort mode is invalid.");
-        }
-        // Both Begin routes document each of these four as "or null for <default>", and that is
-        // the canonical behaviour: FNA's SpriteBatch.Begin stores
-        // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
-        // here rather than teaching the shared converters null keeps every other route's
-        // refusal of a null descriptor exactly as it was.
-        if (blendState == nullptr) {
-            nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
-        } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (samplerState == nullptr) {
-            nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
-        } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (depthStencilState == nullptr) {
-            nativeDepthStencilState =
-                Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
-        } else if (const CNA_Result result = ToNativeDepthStencilState(
-                       depthStencilState, &nativeDepthStencilState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (rasterizerState == nullptr) {
-            nativeRasterizerState =
-                Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
-        } else if (const CNA_Result result = ToNativeRasterizerState(
-                       rasterizerState, &nativeRasterizerState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    SpriteSortMode nativeSortMode{};
+    Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
+    Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
+    Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
+    Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
+    if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
+        return InvalidArgument("The SpriteBatch sort mode is invalid.");
+    }
+    // Both Begin routes document each of these four as "or null for <default>", and that is
+    // the canonical behaviour: FNA's SpriteBatch.Begin stores
+    // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
+    // here rather than teaching the shared converters null keeps every other route's
+    // refusal of a null descriptor exactly as it was.
+    if (blendState == nullptr) {
+        nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
+    } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (samplerState == nullptr) {
+        nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
+    } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (depthStencilState == nullptr) {
+        nativeDepthStencilState =
+            Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
+    } else if (const CNA_Result result = ToNativeDepthStencilState(
+                   depthStencilState, &nativeDepthStencilState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (rasterizerState == nullptr) {
+        nativeRasterizerState =
+            Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
+    } else if (const CNA_Result result = ToNativeRasterizerState(
+                   rasterizerState, &nativeRasterizerState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (spriteBatch->begun) {
-            return InvalidState("The SpriteBatch already has an active begin/end interval.");
-        }
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (spriteBatch->begun) {
+        return InvalidState("The SpriteBatch already has an active begin/end interval.");
+    }
 
-        spriteBatch->value->Begin(
-            nativeSortMode,
-            nativeBlendState,
-            &nativeSamplerState,
-            &nativeDepthStencilState,
-            &nativeRasterizerState);
-        spriteBatch->begun = true;
-        return CNA_RESULT_SUCCESS;
-    });
+    spriteBatch->value->Begin(
+        nativeSortMode,
+        nativeBlendState,
+        &nativeSamplerState,
+        &nativeDepthStencilState,
+        &nativeRasterizerState);
+    spriteBatch->begun = true;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_begin_with_effect(
+[[nodiscard]] CNA_Result SpriteBatchBeginWithEffect(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteSortMode sortMode,
     const CNA_BlendState* const blendState,
@@ -1160,390 +1123,380 @@ CNA_Result cna_sprite_batch_begin_with_effect(
     const CNA_Handle effectHandle,
     const CNA_Matrix* const transformMatrix)
 {
-    return CallWithExceptionBarrier([&]() {
-        SpriteSortMode nativeSortMode{};
-        Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
-        Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
-        Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
-        Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
-        if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
-            return InvalidArgument("The SpriteBatch sort mode is invalid.");
-        }
-        // Both Begin routes document each of these four as "or null for <default>", and that is
-        // the canonical behaviour: FNA's SpriteBatch.Begin stores
-        // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
-        // here rather than teaching the shared converters null keeps every other route's
-        // refusal of a null descriptor exactly as it was.
-        if (blendState == nullptr) {
-            nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
-        } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (samplerState == nullptr) {
-            nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
-        } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (depthStencilState == nullptr) {
-            nativeDepthStencilState =
-                Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
-        } else if (const CNA_Result result = ToNativeDepthStencilState(
-                       depthStencilState, &nativeDepthStencilState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (rasterizerState == nullptr) {
-            nativeRasterizerState =
-                Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
-        } else if (const CNA_Result result = ToNativeRasterizerState(
-                       rasterizerState, &nativeRasterizerState);
-                   result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    SpriteSortMode nativeSortMode{};
+    Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
+    Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
+    Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
+    Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
+    if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
+        return InvalidArgument("The SpriteBatch sort mode is invalid.");
+    }
+    // Both Begin routes document each of these four as "or null for <default>", and that is
+    // the canonical behaviour: FNA's SpriteBatch.Begin stores
+    // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
+    // here rather than teaching the shared converters null keeps every other route's
+    // refusal of a null descriptor exactly as it was.
+    if (blendState == nullptr) {
+        nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
+    } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (samplerState == nullptr) {
+        nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
+    } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (depthStencilState == nullptr) {
+        nativeDepthStencilState =
+            Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
+    } else if (const CNA_Result result = ToNativeDepthStencilState(
+                   depthStencilState, &nativeDepthStencilState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (rasterizerState == nullptr) {
+        nativeRasterizerState =
+            Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
+    } else if (const CNA_Result result = ToNativeRasterizerState(
+                   rasterizerState, &nativeRasterizerState);
+               result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        // CABI-38: a non-finite transform component is carried through, not refused. XNA validates
-        // nothing here and propagates the bits into the vertex path; this boundary used to refuse
-        // them, which was the observable divergence fixcnacs.md Phase 5 asked about.
-        Microsoft::Xna::Framework::Matrix nativeTransform =
-            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
-        if (transformMatrix != nullptr) {
-            nativeTransform = Microsoft::Xna::Framework::Matrix(
-                transformMatrix->m11, transformMatrix->m12,
-                transformMatrix->m13, transformMatrix->m14,
-                transformMatrix->m21, transformMatrix->m22,
-                transformMatrix->m23, transformMatrix->m24,
-                transformMatrix->m31, transformMatrix->m32,
-                transformMatrix->m33, transformMatrix->m34,
-                transformMatrix->m41, transformMatrix->m42,
-                transformMatrix->m43, transformMatrix->m44);
-        }
+    // CABI-38: a non-finite transform component is carried through, not refused. XNA validates
+    // nothing here and propagates the bits into the vertex path; this boundary used to refuse
+    // them, which was the observable divergence fixcnacs.md Phase 5 asked about.
+    Microsoft::Xna::Framework::Matrix nativeTransform =
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+    if (transformMatrix != nullptr) {
+        nativeTransform = Microsoft::Xna::Framework::Matrix(
+            transformMatrix->m11, transformMatrix->m12,
+            transformMatrix->m13, transformMatrix->m14,
+            transformMatrix->m21, transformMatrix->m22,
+            transformMatrix->m23, transformMatrix->m24,
+            transformMatrix->m31, transformMatrix->m32,
+            transformMatrix->m33, transformMatrix->m34,
+            transformMatrix->m41, transformMatrix->m42,
+            transformMatrix->m43, transformMatrix->m44);
+    }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (spriteBatch->begun) {
-            return InvalidState("The SpriteBatch already has an active begin/end interval.");
-        }
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (spriteBatch->begun) {
+        return InvalidState("The SpriteBatch already has an active begin/end interval.");
+    }
 
-        // CNA_INVALID_HANDLE is the default sprite effect, which is what a null Effect* means to
-        // the canonical call -- not a missing argument.
-        Microsoft::Xna::Framework::Graphics::Effect* nativeEffect = nullptr;
-        std::shared_ptr<EffectResource> effect;
-        if (effectHandle != CNA_INVALID_HANDLE) {
-            const CNA_Result effectResult = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
-            if (effectResult != CNA_RESULT_SUCCESS) {
-                return effectResult;
-            }
-            if (effect->parentGame != spriteBatch->parentGame) {
-                return InvalidArgument(
-                    "The Effect belongs to a different game than the SpriteBatch.");
-            }
-            nativeEffect = effect->value.get();
+    // CNA_INVALID_HANDLE is the default sprite effect, which is what a null Effect* means to
+    // the canonical call -- not a missing argument.
+    Microsoft::Xna::Framework::Graphics::Effect* nativeEffect = nullptr;
+    std::shared_ptr<EffectResource> effect;
+    if (effectHandle != CNA_INVALID_HANDLE) {
+        const CNA_Result effectResult = LookupHandle(effectHandle, ObjectKind::Effect, &effect);
+        if (effectResult != CNA_RESULT_SUCCESS) {
+            return effectResult;
         }
+        if (effect->parentGame != spriteBatch->parentGame) {
+            return InvalidArgument(
+                "The Effect belongs to a different game than the SpriteBatch.");
+        }
+        nativeEffect = effect->value.get();
+    }
 
-        spriteBatch->value->Begin(
-            nativeSortMode,
-            nativeBlendState,
-            &nativeSamplerState,
-            &nativeDepthStencilState,
-            &nativeRasterizerState,
-            nativeEffect,
-            nativeTransform);
-        spriteBatch->begun = true;
-        return CNA_RESULT_SUCCESS;
-    });
+    spriteBatch->value->Begin(
+        nativeSortMode,
+        nativeBlendState,
+        &nativeSamplerState,
+        &nativeDepthStencilState,
+        &nativeRasterizerState,
+        nativeEffect,
+        nativeTransform);
+    spriteBatch->begun = true;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_submit_many(
+[[nodiscard]] CNA_Result SpriteBatchSubmitMany(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteCommand* const commands,
     const uint64_t commandCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::size_t ignoredByteCount = 0U;
-        if (const CNA_Result validationResult = CheckedElementByteCount(
-                commands,
-                commandCount,
-                sizeof(CNA_SpriteCommand),
-                &ignoredByteCount);
-            validationResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                validationResult,
-                ErrorCategoryForResult(validationResult),
-                "The SpriteBatch command array is invalid.");
+    std::size_t ignoredByteCount = 0U;
+    if (const CNA_Result validationResult = CheckedElementByteCount(
+            commands,
+            commandCount,
+            sizeof(CNA_SpriteCommand),
+            &ignoredByteCount);
+        validationResult != CNA_RESULT_SUCCESS) {
+        return Fail(
+            validationResult,
+            ErrorCategoryForResult(validationResult),
+            "The SpriteBatch command array is invalid.");
+    }
+
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!spriteBatch->begun) {
+        return InvalidState("The SpriteBatch has no active begin/end interval.");
+    }
+
+    std::vector<ResolvedSpriteCommand> resolvedCommands;
+    if (commandCount > resolvedCommands.max_size()) {
+        return Overflow("The SpriteBatch command count exceeds the native collection range.");
+    }
+    resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
+    constexpr CNA_SpriteEffects ValidEffects =
+        CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
+    for (uint64_t index = 0U; index < commandCount; ++index) {
+        const CNA_SpriteCommand& command = commands[index];
+        // CABI-38: the structure's own shape is still checked; its floating-point values are
+        // not. A non-finite rotation, origin or layer depth is XNA-valid and travels into the
+        // vertex path, so refusing it here was a divergence rather than a safety check.
+        if (command.struct_size < sizeof(CNA_SpriteCommand) ||
+            command.struct_version != StructureVersion ||
+            (command.effects & ~ValidEffects) != 0U) {
+            return InvalidArgument(
+                "A SpriteBatch command contains an invalid version or effect value.");
         }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        std::shared_ptr<Texture2DResource> texture;
+        if (const CNA_Result result = GetTexture2D(command.texture, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (!spriteBatch->begun) {
-            return InvalidState("The SpriteBatch has no active begin/end interval.");
+        if (texture->parentGame != spriteBatch->parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A SpriteBatch command texture belongs to a different game.");
         }
+        resolvedCommands.push_back(ResolvedSpriteCommand{command, std::move(texture)});
+    }
 
-        std::vector<ResolvedSpriteCommand> resolvedCommands;
-        if (commandCount > resolvedCommands.max_size()) {
-            return Overflow("The SpriteBatch command count exceeds the native collection range.");
+    for (const ResolvedSpriteCommand& resolved : resolvedCommands) {
+        if (resolved.texture->activeBatchReferenceCount ==
+            std::numeric_limits<uint64_t>::max()) {
+            return Overflow("The SpriteBatch texture reference count overflowed.");
         }
-        resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
-        constexpr CNA_SpriteEffects ValidEffects =
-            CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
-        for (uint64_t index = 0U; index < commandCount; ++index) {
-            const CNA_SpriteCommand& command = commands[index];
-            // CABI-38: the structure's own shape is still checked; its floating-point values are
-            // not. A non-finite rotation, origin or layer depth is XNA-valid and travels into the
-            // vertex path, so refusing it here was a divergence rather than a safety check.
-            if (command.struct_size < sizeof(CNA_SpriteCommand) ||
-                command.struct_version != StructureVersion ||
-                (command.effects & ~ValidEffects) != 0U) {
-                return InvalidArgument(
-                    "A SpriteBatch command contains an invalid version or effect value.");
-            }
-
-            std::shared_ptr<Texture2DResource> texture;
-            if (const CNA_Result result = GetTexture2D(command.texture, &texture);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (texture->parentGame != spriteBatch->parentGame) {
-                return Fail(
-                    CNA_RESULT_INVALID_HANDLE,
-                    CNA_ERROR_CATEGORY_HANDLE,
-                    "A SpriteBatch command texture belongs to a different game.");
-            }
-            resolvedCommands.push_back(ResolvedSpriteCommand{command, std::move(texture)});
-        }
-
-        for (const ResolvedSpriteCommand& resolved : resolvedCommands) {
-            if (resolved.texture->activeBatchReferenceCount ==
-                std::numeric_limits<uint64_t>::max()) {
-                return Overflow("The SpriteBatch texture reference count overflowed.");
-            }
-            spriteBatch->retainedTextures.push_back(resolved.texture);
-            ++resolved.texture->activeBatchReferenceCount;
-            const CNA_SpriteCommand& command = resolved.value;
-            spriteBatch->value->Draw(
-                *resolved.texture->value,
-                Rectangle(
-                    command.destination.x,
-                    command.destination.y,
-                    command.destination.width,
-                    command.destination.height),
-                Rectangle(
-                    command.source.x,
-                    command.source.y,
-                    command.source.width,
-                    command.source.height),
-                Color(command.color.r, command.color.g, command.color.b, command.color.a),
-                command.rotation,
-                Vector2(command.origin.x, command.origin.y),
-                static_cast<SpriteEffects>(command.effects),
-                command.layer_depth);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+        spriteBatch->retainedTextures.push_back(resolved.texture);
+        ++resolved.texture->activeBatchReferenceCount;
+        const CNA_SpriteCommand& command = resolved.value;
+        spriteBatch->value->Draw(
+            *resolved.texture->value,
+            Rectangle(
+                command.destination.x,
+                command.destination.y,
+                command.destination.width,
+                command.destination.height),
+            Rectangle(
+                command.source.x,
+                command.source.y,
+                command.source.width,
+                command.source.height),
+            Color(command.color.r, command.color.g, command.color.b, command.color.a),
+            command.rotation,
+            Vector2(command.origin.x, command.origin.y),
+            static_cast<SpriteEffects>(command.effects),
+            command.layer_depth);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_submit_scaled_many(
+[[nodiscard]] CNA_Result SpriteBatchSubmitScaledMany(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteScaledCommand* const commands,
     const uint64_t commandCount)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::size_t ignoredByteCount = 0U;
-        if (const CNA_Result validationResult = CheckedElementByteCount(
-                commands,
-                commandCount,
-                sizeof(CNA_SpriteScaledCommand),
-                &ignoredByteCount);
-            validationResult != CNA_RESULT_SUCCESS) {
-            return Fail(
-                validationResult,
-                ErrorCategoryForResult(validationResult),
-                "The SpriteBatch scaled-command array is invalid.");
+    std::size_t ignoredByteCount = 0U;
+    if (const CNA_Result validationResult = CheckedElementByteCount(
+            commands,
+            commandCount,
+            sizeof(CNA_SpriteScaledCommand),
+            &ignoredByteCount);
+        validationResult != CNA_RESULT_SUCCESS) {
+        return Fail(
+            validationResult,
+            ErrorCategoryForResult(validationResult),
+            "The SpriteBatch scaled-command array is invalid.");
+    }
+
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!spriteBatch->begun) {
+        return InvalidState("The SpriteBatch has no active begin/end interval.");
+    }
+
+    struct ResolvedScaledCommand final {
+        CNA_SpriteScaledCommand value;
+        std::shared_ptr<Texture2DResource> texture;
+    };
+
+    std::vector<ResolvedScaledCommand> resolvedCommands;
+    if (commandCount > resolvedCommands.max_size()) {
+        return Overflow("The SpriteBatch command count exceeds the native collection range.");
+    }
+    resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
+    constexpr CNA_SpriteEffects ValidEffects =
+        CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
+    for (uint64_t index = 0U; index < commandCount; ++index) {
+        const CNA_SpriteScaledCommand& command = commands[index];
+        // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
+        if (command.struct_size < sizeof(CNA_SpriteScaledCommand) ||
+            command.struct_version != StructureVersion ||
+            (command.effects & ~ValidEffects) != 0U) {
+            return InvalidArgument(
+                "A SpriteBatch scaled command contains an invalid version or effect value.");
         }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        std::shared_ptr<Texture2DResource> texture;
+        if (const CNA_Result result = GetTexture2D(command.texture, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (!spriteBatch->begun) {
-            return InvalidState("The SpriteBatch has no active begin/end interval.");
+        if (texture->parentGame != spriteBatch->parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A SpriteBatch command texture belongs to a different game.");
         }
+        resolvedCommands.push_back(ResolvedScaledCommand{command, std::move(texture)});
+    }
 
-        struct ResolvedScaledCommand final {
-            CNA_SpriteScaledCommand value;
-            std::shared_ptr<Texture2DResource> texture;
-        };
-
-        std::vector<ResolvedScaledCommand> resolvedCommands;
-        if (commandCount > resolvedCommands.max_size()) {
-            return Overflow("The SpriteBatch command count exceeds the native collection range.");
+    for (const ResolvedScaledCommand& resolved : resolvedCommands) {
+        if (resolved.texture->activeBatchReferenceCount ==
+            std::numeric_limits<uint64_t>::max()) {
+            return Overflow("The SpriteBatch texture reference count overflowed.");
         }
-        resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
-        constexpr CNA_SpriteEffects ValidEffects =
-            CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
-        for (uint64_t index = 0U; index < commandCount; ++index) {
-            const CNA_SpriteScaledCommand& command = commands[index];
-            // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
-            if (command.struct_size < sizeof(CNA_SpriteScaledCommand) ||
-                command.struct_version != StructureVersion ||
-                (command.effects & ~ValidEffects) != 0U) {
-                return InvalidArgument(
-                    "A SpriteBatch scaled command contains an invalid version or effect value.");
-            }
-
-            std::shared_ptr<Texture2DResource> texture;
-            if (const CNA_Result result = GetTexture2D(command.texture, &texture);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (texture->parentGame != spriteBatch->parentGame) {
-                return Fail(
-                    CNA_RESULT_INVALID_HANDLE,
-                    CNA_ERROR_CATEGORY_HANDLE,
-                    "A SpriteBatch command texture belongs to a different game.");
-            }
-            resolvedCommands.push_back(ResolvedScaledCommand{command, std::move(texture)});
+        spriteBatch->retainedTextures.push_back(resolved.texture);
+        ++resolved.texture->activeBatchReferenceCount;
+        const CNA_SpriteScaledCommand& command = resolved.value;
+        // Zero width and height is the empty optional the canonical overloads take, which draws
+        // the whole texture; anything else is a real source rectangle.
+        std::optional<Rectangle> source;
+        if (command.source.width != 0 || command.source.height != 0) {
+            source = Rectangle(
+                command.source.x,
+                command.source.y,
+                command.source.width,
+                command.source.height);
         }
-
-        for (const ResolvedScaledCommand& resolved : resolvedCommands) {
-            if (resolved.texture->activeBatchReferenceCount ==
-                std::numeric_limits<uint64_t>::max()) {
-                return Overflow("The SpriteBatch texture reference count overflowed.");
-            }
-            spriteBatch->retainedTextures.push_back(resolved.texture);
-            ++resolved.texture->activeBatchReferenceCount;
-            const CNA_SpriteScaledCommand& command = resolved.value;
-            // Zero width and height is the empty optional the canonical overloads take, which draws
-            // the whole texture; anything else is a real source rectangle.
-            std::optional<Rectangle> source;
-            if (command.source.width != 0 || command.source.height != 0) {
-                source = Rectangle(
-                    command.source.x,
-                    command.source.y,
-                    command.source.width,
-                    command.source.height);
-            }
-            spriteBatch->value->Draw(
-                *resolved.texture->value,
-                Vector2(command.position.x, command.position.y),
-                source,
-                Color(command.color.r, command.color.g, command.color.b, command.color.a),
-                command.rotation,
-                Vector2(command.origin.x, command.origin.y),
-                Vector2(command.scale.x, command.scale.y),
-                static_cast<SpriteEffects>(command.effects),
-                command.layer_depth);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+        spriteBatch->value->Draw(
+            *resolved.texture->value,
+            Vector2(command.position.x, command.position.y),
+            source,
+            Color(command.color.r, command.color.g, command.color.b, command.color.a),
+            command.rotation,
+            Vector2(command.origin.x, command.origin.y),
+            Vector2(command.scale.x, command.scale.y),
+            static_cast<SpriteEffects>(command.effects),
+            command.layer_depth);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_end(const CNA_Handle spriteBatchHandle)
+[[nodiscard]] CNA_Result SpriteBatchEnd(const CNA_Handle spriteBatchHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!spriteBatch->begun) {
-            return InvalidState("The SpriteBatch has no active begin/end interval.");
-        }
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!spriteBatch->begun) {
+        return InvalidState("The SpriteBatch has no active begin/end interval.");
+    }
 
-        spriteBatch->value->End();
+    spriteBatch->value->End();
+    spriteBatch->begun = false;
+    ReleaseBatchTextureReferences(*spriteBatch);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result SpriteBatchDestroy(const CNA_Handle spriteBatchHandle)
+{
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (spriteBatch->begun) {
         spriteBatch->begun = false;
         ReleaseBatchTextureReferences(*spriteBatch);
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+
+    spriteBatch->value->Dispose();
+    if (const CNA_Result releaseResult = ReleaseHandle(spriteBatchHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    RemoveOwnedGraphicsResourceFor(spriteBatch->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (spriteBatch->begun) {
-            spriteBatch->begun = false;
-            ReleaseBatchTextureReferences(*spriteBatch);
-        }
-
-        spriteBatch->value->Dispose();
-        if (const CNA_Result releaseResult = ReleaseHandle(spriteBatchHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        RemoveOwnedGraphicsResourceFor(spriteBatch->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sprite_batch_draw_string(
+[[nodiscard]] CNA_Result SpriteBatchDrawString(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteTextCommand* const command)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
-        if (!IsVersionedStructure(command) ||
-            (command->effects & ~(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
-                                  CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U) {
-            return InvalidArgument("The SpriteBatch text command is invalid.");
-        }
-        std::string text;
-        if (const CNA_Result result =
-                ReadText(command->text, "The SpriteBatch text is not valid UTF-8.", &text);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
+    if (!IsVersionedStructure(command) ||
+        (command->effects & ~(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
+                              CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U) {
+        return InvalidArgument("The SpriteBatch text command is invalid.");
+    }
+    std::string text;
+    if (const CNA_Result result =
+            ReadText(command->text, "The SpriteBatch text is not valid UTF-8.", &text);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!spriteBatch->begun) {
-            return InvalidState("The SpriteBatch is not inside a begin/end interval.");
-        }
-        std::shared_ptr<SpriteFontResource> font;
-        if (const CNA_Result result = GetOwnedSpriteFont(command->sprite_font, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (font->parentGame != spriteBatch->parentGame) {
-            return InvalidArgument(
-                "The SpriteFont belongs to a different game than the SpriteBatch.");
-        }
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!spriteBatch->begun) {
+        return InvalidState("The SpriteBatch is not inside a begin/end interval.");
+    }
+    std::shared_ptr<SpriteFontResource> font;
+    if (const CNA_Result result = GetOwnedSpriteFont(command->sprite_font, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (font->parentGame != spriteBatch->parentGame) {
+        return InvalidArgument(
+            "The SpriteFont belongs to a different game than the SpriteBatch.");
+    }
 
-        spriteBatch->value->DrawString(
-            *font->value,
-            text,
-            Vector2(command->position.x, command->position.y),
-            Color(command->color.r, command->color.g, command->color.b, command->color.a),
-            command->rotation,
-            Vector2(command->origin.x, command->origin.y),
-            Vector2(command->scale.x, command->scale.y),
-            static_cast<SpriteEffects>(command->effects),
-            command->layer_depth);
+    spriteBatch->value->DrawString(
+        *font->value,
+        text,
+        Vector2(command->position.x, command->position.y),
+        Color(command->color.r, command->color.g, command->color.b, command->color.a),
+        command->rotation,
+        Vector2(command->origin.x, command->origin.y),
+        Vector2(command->scale.x, command->scale.y),
+        static_cast<SpriteEffects>(command->effects),
+        command->layer_depth);
 
-        // The atlas must outlive the interval, so it is retained exactly like a drawn texture.
-        if (font->texture->activeBatchReferenceCount !=
-            std::numeric_limits<uint64_t>::max()) {
-            ++font->texture->activeBatchReferenceCount;
-            spriteBatch->retainedTextures.push_back(font->texture);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    // The atlas must outlive the interval, so it is retained exactly like a drawn texture.
+    if (font->texture->activeBatchReferenceCount !=
+        std::numeric_limits<uint64_t>::max()) {
+        ++font->texture->activeBatchReferenceCount;
+        spriteBatch->retainedTextures.push_back(font->texture);
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Graphics.toml.
 #include "generated/Graphics.inc"

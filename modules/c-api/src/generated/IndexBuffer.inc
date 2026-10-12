@@ -74,3 +74,86 @@ CNA_Result cna_index_buffer_get_info(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_index_buffer_create(
+    const CNA_Handle graphics_device,
+    const CNA_IndexBufferCreateInfo* const create_info,
+    CNA_IndexBufferHandle* const out_index_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_index_buffer_create: out_index_buffer is null.");
+        }
+        *out_index_buffer = CNA_INVALID_HANDLE;
+        return IndexBufferCreate(graphics_device, create_info, out_index_buffer);
+    });
+}
+
+CNA_Result cna_index_buffer_get_data(
+    const CNA_IndexBufferHandle index_buffer,
+    const CNA_IndexBufferTransfer* const transfer,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_element_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_element_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_index_buffer_get_data: out_element_count is null.");
+        }
+        return IndexBufferGetData(index_buffer, transfer, destination, capacity, out_element_count);
+    });
+}
+
+CNA_Result cna_index_buffer_subscribe_content_lost(
+    const CNA_IndexBufferHandle index_buffer,
+    const CNA_IndexBufferContentLostCallback callback,
+    void* const context,
+    CNA_IndexBufferEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_index_buffer_subscribe_content_lost: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return IndexBufferSubscribeContentLost(index_buffer, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_index_buffer_destroy(
+    const CNA_IndexBufferHandle index_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return IndexBufferDestroy(index_buffer);
+    });
+}
+
+CNA_Result cna_index_buffer_set_data_at(
+    const CNA_IndexBufferHandle index_buffer,
+    const uint64_t buffer_offset_in_bytes,
+    const CNA_IndexBufferTransfer* const transfer,
+    const void* const data,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return IndexBufferSetDataAt(index_buffer, buffer_offset_in_bytes, transfer, data, capacity);
+    });
+}
+
+CNA_Result cna_index_buffer_set_data(
+    const CNA_IndexBufferHandle index_buffer,
+    const CNA_IndexBufferTransfer* const transfer,
+    const void* const data,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return IndexBufferSetData(index_buffer, transfer, data, capacity);
+    });
+}
+
+CNA_Result cna_index_buffer_unsubscribe_content_lost(
+    const CNA_IndexBufferEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return IndexBufferUnsubscribeContentLost(registration);
+    });
+}

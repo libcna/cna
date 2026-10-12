@@ -12,3 +12,20 @@ object = "std::shared_ptr<BorrowedGraphicsDevice>"
 [borrowed_graphics_device.routes]
 cna_render_target2d_create = { result = "CreateOwnedRenderTarget2D(std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture2D>((std::make_shared<RenderTarget2D>(*object->value, static_cast<int>(create_info->width), static_cast<int>(create_info->height), create_info->mip_map == CNA_TRUE, static_cast<SurfaceFormat>(create_info->format), static_cast<DepthFormat>(create_info->depth_format), create_info->multi_sample_count, static_cast<RenderTargetUsage>(create_info->usage)))), object->parentGame, out_render_target)", invalid_if = "!IsVersionedStructure(create_info) || create_info->width == 0U || create_info->height == 0U || create_info->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) || create_info->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved0[0] != 0U || create_info->reserved0[1] != 0U || create_info->reserved0[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage) || create_info->reserved1 != 0U" }
 cna_render_target_cube_create = { result = "CreateRenderTargetCubeHandle((std::make_shared<RenderTargetCube>(*object->value, static_cast<int>(create_info->size), create_info->mip_map == CNA_TRUE, static_cast<SurfaceFormat>(create_info->format), static_cast<DepthFormat>(create_info->depth_format), create_info->multi_sample_count, static_cast<RenderTargetUsage>(create_info->usage))), object->parentGame, out_render_target)", invalid_if = "!IsVersionedStructure(create_info) || create_info->size == 0U || create_info->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved[0] != 0U || create_info->reserved[1] != 0U || create_info->reserved[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_graphics_device_get_render_target_count = { result = "GraphicsDeviceGetRenderTargetCount(graphics_device, out_count)" }
+cna_graphics_device_copy_render_targets = { result = "GraphicsDeviceCopyRenderTargets(graphics_device, destination, capacity, out_count)" }
+cna_render_target_subscribe_content_lost = { result = "RenderTargetSubscribeContentLost(render_target, callback, context, out_registration)" }
+cna_render_target_get_info = { result = "RenderTargetGetInfo(render_target, out_info)" }
+cna_graphics_device_set_render_targets = { result = "GraphicsDeviceSetRenderTargets(graphics_device, bindings, binding_count)" }
+cna_graphics_device_set_render_target2d = { result = "GraphicsDeviceSetRenderTarget2d(graphics_device, render_target)" }
+cna_graphics_device_set_render_target_cube = { result = "GraphicsDeviceSetRenderTargetCube(graphics_device, render_target, cube_map_face)" }
+cna_render_target_unsubscribe_content_lost = { result = "RenderTargetUnsubscribeContentLost(registration)" }
+cna_render_target_destroy = { result = "RenderTargetDestroy(render_target)" }

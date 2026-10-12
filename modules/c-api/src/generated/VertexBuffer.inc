@@ -45,3 +45,165 @@ CNA_Result cna_vertex_buffer_copy_type_name(
         return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
     });
 }
+
+CNA_Result cna_vertex_buffer_create(
+    const CNA_Handle graphics_device,
+    const CNA_VertexBufferCreateInfo* const create_info,
+    CNA_VertexBufferHandle* const out_vertex_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_vertex_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_create: out_vertex_buffer is null.");
+        }
+        *out_vertex_buffer = CNA_INVALID_HANDLE;
+        return VertexBufferCreate(graphics_device, create_info, out_vertex_buffer);
+    });
+}
+
+CNA_Result cna_vertex_buffer_copy_declaration_elements(
+    const CNA_VertexBufferHandle vertex_buffer,
+    CNA_VertexElement* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_element_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_element_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_copy_declaration_elements: out_element_count is null.");
+        }
+        return VertexBufferCopyDeclarationElements(vertex_buffer, destination, capacity, out_element_count);
+    });
+}
+
+CNA_Result cna_vertex_buffer_get_data(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const CNA_VertexBufferTransfer* const transfer,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_element_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_element_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_get_data: out_element_count is null.");
+        }
+        return VertexBufferGetData(vertex_buffer, transfer, destination, capacity, out_element_count);
+    });
+}
+
+CNA_Result cna_vertex_buffer_subscribe_content_lost(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const CNA_VertexBufferContentLostCallback callback,
+    void* const context,
+    CNA_VertexBufferEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_subscribe_content_lost: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return VertexBufferSubscribeContentLost(vertex_buffer, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_vertex_buffer_get_info(
+    const CNA_VertexBufferHandle vertex_buffer,
+    CNA_VertexBufferInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_get_info: out_info is null.");
+        }
+        return VertexBufferGetInfo(vertex_buffer, out_info);
+    });
+}
+
+CNA_Result cna_vertex_buffer_destroy(
+    const CNA_VertexBufferHandle vertex_buffer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferDestroy(vertex_buffer);
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const CNA_VertexBufferTransfer* const transfer,
+    const void* const data,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferSetData(vertex_buffer, transfer, data, capacity);
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const void* const data,
+    const uint64_t data_byte_count,
+    const uint64_t vertex_count,
+    const uint32_t vertex_stride)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferSetDataRaw(vertex_buffer, data, data_byte_count, vertex_count, vertex_stride);
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw_at(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const uint64_t buffer_offset_in_bytes,
+    const void* const data,
+    const uint64_t data_byte_count,
+    const uint64_t vertex_count,
+    const uint32_t vertex_stride)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferSetDataRawAt(vertex_buffer, buffer_offset_in_bytes, data, data_byte_count, vertex_count, vertex_stride);
+    });
+}
+
+CNA_Result cna_vertex_buffer_get_data_raw(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const uint64_t buffer_offset_in_bytes,
+    void* const destination,
+    const uint64_t destination_byte_count,
+    const uint64_t vertex_count,
+    const uint32_t vertex_stride)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferGetDataRaw(vertex_buffer, buffer_offset_in_bytes, destination, destination_byte_count, vertex_count, vertex_stride);
+    });
+}
+
+CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
+    const CNA_VertexBufferEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferUnsubscribeContentLost(registration);
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw_with_options(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const void* const data,
+    const uint64_t data_byte_count,
+    const uint64_t vertex_count,
+    const uint32_t vertex_stride,
+    const CNA_SetDataOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferSetDataRawWithOptions(vertex_buffer, data, data_byte_count, vertex_count, vertex_stride, options);
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
+    const CNA_VertexBufferHandle vertex_buffer,
+    const uint64_t buffer_offset_in_bytes,
+    const void* const data,
+    const uint64_t data_byte_count,
+    const uint64_t vertex_count,
+    const uint32_t vertex_stride,
+    const CNA_SetDataOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return VertexBufferSetDataRawAtWithOptions(vertex_buffer, buffer_offset_in_bytes, data, data_byte_count, vertex_count, vertex_stride, options);
+    });
+}

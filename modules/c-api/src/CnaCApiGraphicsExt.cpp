@@ -38,8 +38,16 @@ using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::ToCBool;
 
-// Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
-// compiles this without using it. The routes stay exported either way, which is the point.
+// Whether this build contains the extended graphics layer; its routes are exported either way.
+#ifdef CNA_CNAEXT
+constexpr bool GraphicsExtBuilt = true;
+#else
+constexpr bool GraphicsExtBuilt = false;
+#endif
+
+// What every extension route answers in a build without CNA_CNAEXT (the `unavailable` of the
+// spec's feature groups); a build with the layer compiles it unused. The routes stay exported
+// either way, which is the point.
 [[nodiscard, maybe_unused]] CNA_Result ExtensionUnavailable()
 {
     return NotSupported("This CNA build does not contain the extended graphics layer.");
@@ -105,312 +113,210 @@ static_assert(
 
 } // namespace
 
-CNA_Result cna_graphics_ext_is_available(CNA_Bool* const outAvailable)
+namespace {
+
+[[nodiscard]] CNA_Result IndirectDrawArgumentsInit(CNA_IndirectDrawArguments* const outArguments)
 {
-#ifdef CNA_CNAEXT
-    return StoreValue(outAvailable, CNA_TRUE);
-#else
-    return StoreValue(outAvailable, CNA_FALSE);
-#endif
+    const CNA::IndirectDrawArguments defaults;
+    outArguments->vertex_count = defaults.VertexCount;
+    outArguments->instance_count = defaults.InstanceCount;
+    outArguments->first_vertex = defaults.FirstVertex;
+    outArguments->base_instance = defaults.BaseInstance;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* const outArguments)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outArguments == nullptr) {
-            return InvalidArgument("The arguments are null.");
-        }
-        const CNA::IndirectDrawArguments defaults;
-        outArguments->vertex_count = defaults.VertexCount;
-        outArguments->instance_count = defaults.InstanceCount;
-        outArguments->first_vertex = defaults.FirstVertex;
-        outArguments->base_instance = defaults.BaseInstance;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_indirect_draw_indexed_arguments_init(
+[[nodiscard]] CNA_Result IndirectDrawIndexedArgumentsInit(
     CNA_IndirectDrawIndexedArguments* const outArguments)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outArguments == nullptr) {
-            return InvalidArgument("The arguments are null.");
-        }
-        const CNA::IndirectDrawIndexedArguments defaults;
-        outArguments->index_count = defaults.IndexCount;
-        outArguments->instance_count = defaults.InstanceCount;
-        outArguments->first_index = defaults.FirstIndex;
-        outArguments->base_vertex = defaults.BaseVertex;
-        outArguments->base_instance = defaults.BaseInstance;
-        return CNA_RESULT_SUCCESS;
-    });
+    const CNA::IndirectDrawIndexedArguments defaults;
+    outArguments->index_count = defaults.IndexCount;
+    outArguments->instance_count = defaults.InstanceCount;
+    outArguments->first_index = defaults.FirstIndex;
+    outArguments->base_vertex = defaults.BaseVertex;
+    outArguments->base_instance = defaults.BaseInstance;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* const outLight)
+[[nodiscard]] CNA_Result ImageBasedLightExtInit(CNA_ImageBasedLightEXT* const outLight)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLight == nullptr) {
-            return InvalidArgument("The light is null.");
-        }
-        const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT defaults;
-        *outLight = CNA_ImageBasedLightEXT{};
-        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT));
-        outLight->struct_version = UINT32_C(1);
-        outLight->irradiance = CNA_INVALID_HANDLE;
-        outLight->prefiltered_specular = CNA_INVALID_HANDLE;
-        outLight->brdf_lut = CNA_INVALID_HANDLE;
-        outLight->prefiltered_mip_count = static_cast<int32_t>(defaults.PrefilteredMipCount);
-        outLight->intensity = defaults.Intensity;
-        return CNA_RESULT_SUCCESS;
-    });
+    const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT defaults;
+    *outLight = CNA_ImageBasedLightEXT{};
+    outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT));
+    outLight->struct_version = UINT32_C(1);
+    outLight->irradiance = CNA_INVALID_HANDLE;
+    outLight->prefiltered_specular = CNA_INVALID_HANDLE;
+    outLight->brdf_lut = CNA_INVALID_HANDLE;
+    outLight->prefiltered_mip_count = static_cast<int32_t>(defaults.PrefilteredMipCount);
+    outLight->intensity = defaults.Intensity;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_image_based_light_ext_is_valid(
+[[nodiscard]] CNA_Result ImageBasedLightExtIsValid(
     const CNA_ImageBasedLightEXT* const light, CNA_Bool* const outValid)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (light == nullptr) {
-            return InvalidArgument("The light is null.");
-        }
-        if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
-            light->struct_version == UINT32_C(0)) {
-            return InvalidArgument("The image-based-light structure is malformed.");
-        }
-        // The canonical predicate asks whether all three textures are present and the mip count is
-        // at least one. Here the textures are handles, so "present" is "a live texture handle" --
-        // a stale one is not a texture and must not read as a complete light.
-        const CNA_Handle handles[] = {
-            light->irradiance, light->prefiltered_specular, light->brdf_lut};
-        // IsValidEXT() also refuses a negative intensity: a bundle that would subtract light
-        // is not two thirds of an answer either.
-        bool complete = light->prefiltered_mip_count >= INT32_C(1) && light->intensity >= 0.0F;
-        for (const CNA_Handle handle : handles) {
-            if (!complete) {
-                break;
-            }
-            CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
-            complete = handle != CNA_INVALID_HANDLE &&
-                CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
-                    CNA_RESULT_SUCCESS;
-        }
-        return StoreValue(outValid, static_cast<CNA_Bool>(ToCBool(complete)));
-    });
-}
-
-#ifndef CNA_CNAEXT
-
-CNA_Result cna_ascii_post_process_effect_create(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_AsciiPostProcessEffectHandle* const outEffect)
-{
-    (void)graphicsDeviceHandle;
-    if (outEffect != nullptr) {
-        *outEffect = CNA_INVALID_HANDLE;
+    if (light == nullptr) {
+        return InvalidArgument("The light is null.");
     }
-    return ExtensionUnavailable();
+    if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
+        light->struct_version == UINT32_C(0)) {
+        return InvalidArgument("The image-based-light structure is malformed.");
+    }
+    // The canonical predicate asks whether all three textures are present and the mip count is
+    // at least one. Here the textures are handles, so "present" is "a live texture handle" --
+    // a stale one is not a texture and must not read as a complete light.
+    const CNA_Handle handles[] = {
+        light->irradiance, light->prefiltered_specular, light->brdf_lut};
+    // IsValidEXT() also refuses a negative intensity: a bundle that would subtract light
+    // is not two thirds of an answer either.
+    bool complete = light->prefiltered_mip_count >= INT32_C(1) && light->intensity >= 0.0F;
+    for (const CNA_Handle handle : handles) {
+        if (!complete) {
+            break;
+        }
+        CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
+        complete = handle != CNA_INVALID_HANDLE &&
+            CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
+                CNA_RESULT_SUCCESS;
+    }
+    return StoreValue(outValid, static_cast<CNA_Bool>(ToCBool(complete)));
 }
 
-CNA_Result cna_ascii_post_process_effect_get_cell_size(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    int32_t* const outWidth,
-    int32_t* const outHeight)
-{
-    (void)effect;
-    (void)outWidth;
-    (void)outHeight;
-    return ExtensionUnavailable();
-}
+} // namespace
 
-CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    const CNA_AsciiQuantizeMode mode)
-{
-    (void)effect;
-    (void)mode;
-    return ExtensionUnavailable();
-}
+#ifdef CNA_CNAEXT
 
-CNA_Result cna_ascii_post_process_effect_draw(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    const CNA_Handle source,
-    const CNA_Rectangle* const destinationRectangle)
-{
-    (void)effect;
-    (void)source;
-    (void)destinationRectangle;
-    return ExtensionUnavailable();
-}
+namespace {
 
-CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
-    const CNA_AsciiPostProcessEffectHandle effect,
-    int32_t* const outColumns,
-    int32_t* const outRows)
-{
-    (void)effect;
-    (void)outColumns;
-    (void)outRows;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_ascii_post_process_effect_destroy(
-    const CNA_AsciiPostProcessEffectHandle effect)
-{
-    (void)effect;
-    return ExtensionUnavailable();
-}
-
-#else // CNA_CNAEXT
-
-CNA_Result cna_ascii_post_process_effect_create(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectCreate(
     const CNA_Handle graphicsDeviceHandle,
     CNA_AsciiPostProcessEffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The ASCII post-process effect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        auto native =
-            std::make_shared<Ext::AsciiPostProcessEffect>(*graphicsDevice->value);
-        const auto resource = std::make_shared<AsciiEffectResource>(
-            AsciiEffectResource{std::move(native), graphicsDevice->parentGame});
-        if (const CNA_Result result =
-                CreateHandle(ObjectKind::AsciiPostProcessEffect, resource, outEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    auto native =
+        std::make_shared<Ext::AsciiPostProcessEffect>(*graphicsDevice->value);
+    const auto resource = std::make_shared<AsciiEffectResource>(
+        AsciiEffectResource{std::move(native), graphicsDevice->parentGame});
+    if (const CNA_Result result =
+            CreateHandle(ObjectKind::AsciiPostProcessEffect, resource, outEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ascii_post_process_effect_get_cell_size(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectGetCellSize(
     const CNA_AsciiPostProcessEffectHandle effectHandle,
     int32_t* const outWidth,
     int32_t* const outHeight)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWidth == nullptr || outHeight == nullptr) {
-            return InvalidArgument("A cell-size output is null.");
-        }
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        int width = 0;
-        int height = 0;
-        effect->value->getCellSize(width, height);
-        *outWidth = static_cast<int32_t>(width);
-        *outHeight = static_cast<int32_t>(height);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AsciiEffectResource> effect;
+    if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    int width = 0;
+    int height = 0;
+    effect->value->getCellSize(width, height);
+    *outWidth = static_cast<int32_t>(width);
+    *outHeight = static_cast<int32_t>(height);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectSetQuantizeMode(
     const CNA_AsciiPostProcessEffectHandle effectHandle,
     const CNA_AsciiQuantizeMode mode)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (mode > CNA_ASCII_QUANTIZE_MODE_COLOR) {
-            return InvalidArgument("The ASCII quantize mode is not recognized.");
-        }
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->value->setQuantizeMode(static_cast<Ext::AsciiQuantizeMode>(mode));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (mode > CNA_ASCII_QUANTIZE_MODE_COLOR) {
+        return InvalidArgument("The ASCII quantize mode is not recognized.");
+    }
+    std::shared_ptr<AsciiEffectResource> effect;
+    if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    effect->value->setQuantizeMode(static_cast<Ext::AsciiQuantizeMode>(mode));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ascii_post_process_effect_draw(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectDraw(
     const CNA_AsciiPostProcessEffectHandle effectHandle,
     const CNA_Handle sourceHandle,
     const CNA_Rectangle* const destinationRectangle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureResourceView source;
-        if (const CNA_Result result = GetOwnedTexture(sourceHandle, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const texture = dynamic_cast<Texture2D*>(source.value.get());
-        if (texture == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE,
-                CNA_ERROR_CATEGORY_HANDLE,
-                "The ASCII source must be a two-dimensional texture.");
-        }
+    std::shared_ptr<AsciiEffectResource> effect;
+    if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TextureResourceView source;
+    if (const CNA_Result result = GetOwnedTexture(sourceHandle, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const texture = dynamic_cast<Texture2D*>(source.value.get());
+    if (texture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The ASCII source must be a two-dimensional texture.");
+    }
 
-        if (destinationRectangle == nullptr) {
-            effect->value->Draw(*texture);
-        } else {
-            effect->value->Draw(
-                *texture,
-                Rectangle(
-                    destinationRectangle->x,
-                    destinationRectangle->y,
-                    destinationRectangle->width,
-                    destinationRectangle->height));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (destinationRectangle == nullptr) {
+        effect->value->Draw(*texture);
+    } else {
+        effect->value->Draw(
+            *texture,
+            Rectangle(
+                destinationRectangle->x,
+                destinationRectangle->y,
+                destinationRectangle->width,
+                destinationRectangle->height));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectGetLastGridDimensions(
     const CNA_AsciiPostProcessEffectHandle effectHandle,
     int32_t* const outColumns,
     int32_t* const outRows)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outColumns == nullptr || outRows == nullptr) {
-            return InvalidArgument("A grid-dimension output is null.");
-        }
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        int columns = 0;
-        int rows = 0;
-        effect->value->GetLastGridDimensions(columns, rows);
-        *outColumns = static_cast<int32_t>(columns);
-        *outRows = static_cast<int32_t>(rows);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AsciiEffectResource> effect;
+    if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    int columns = 0;
+    int rows = 0;
+    effect->value->GetLastGridDimensions(columns, rows);
+    *outColumns = static_cast<int32_t>(columns);
+    *outRows = static_cast<int32_t>(rows);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ascii_post_process_effect_destroy(
+[[nodiscard]] CNA_Result AsciiPostProcessEffectDestroy(
     const CNA_AsciiPostProcessEffectHandle effectHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AsciiEffectResource> effect;
-        if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result releaseResult = ReleaseHandle(effectHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        RemoveOwnedGraphicsResourceFor(effect->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AsciiEffectResource> effect;
+    if (const CNA_Result result = GetAsciiEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result releaseResult = ReleaseHandle(effectHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    RemoveOwnedGraphicsResourceFor(effect->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 #endif // CNA_CNAEXT
 

@@ -13,3 +13,22 @@ cna_debug_draw_clear = { call = "object->value->clear()" }
 cna_debug_draw_is_depth_tested = { get = "object->value->isDepthTested()" }
 cna_debug_draw_set_depth_tested = { call = "object->value->setDepthTested(depth_tested)" }
 cna_debug_draw_get_line_count = { get = "object->value->getLineCount()" }
+
+# Helper routes that exist only in builds with CNA_CNAEXT; without it each answers
+# CNA_RESULT_NOT_SUPPORTED.
+[helpers_cnaext]
+raw = true
+feature = "CNA_CNAEXT"
+unavailable = "CNA_RESULT_NOT_SUPPORTED"
+
+[helpers_cnaext.routes]
+cna_debug_draw_create = { result = "DebugDrawCreate(graphics_device, out_debug)" }
+cna_debug_draw_destroy = { result = "DebugDrawDestroy(debug)" }
+cna_debug_draw_begin = { result = "DebugDrawBegin(debug, view, projection)" }
+cna_debug_draw_add_line = { result = "DebugDrawAddLine(debug, from, to, colour)" }
+cna_debug_draw_add_box = { result = "DebugDrawAddBox(debug, bounds, colour)" }
+cna_debug_draw_add_sphere = { result = "DebugDrawAddSphere(debug, centre, radius, colour, segments)" }
+cna_debug_draw_add_bounding_sphere = { result = "DebugDrawAddBoundingSphere(debug, sphere, colour, segments)" }
+cna_debug_draw_add_frustum = { result = "DebugDrawAddFrustum(debug, frustum, colour)" }
+cna_debug_draw_add_cross = { result = "DebugDrawAddCross(debug, position, size, colour)" }
+cna_debug_draw_copy_vertices = { result = "DebugDrawCopyVertices(debug, depth_tested, destination, capacity, out_count)", optional = ["out_count"] }

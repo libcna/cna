@@ -20,3 +20,18 @@ CNA_IndexBufferInfo{
     ToCBool(object->value->HasRenderer()),
     0U
 }''' }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_index_buffer_create = { result = "IndexBufferCreate(graphics_device, create_info, out_index_buffer)" }
+cna_index_buffer_get_data = { result = "IndexBufferGetData(index_buffer, transfer, destination, capacity, out_element_count)" }
+cna_index_buffer_subscribe_content_lost = { result = "IndexBufferSubscribeContentLost(index_buffer, callback, context, out_registration)" }
+cna_index_buffer_destroy = { result = "IndexBufferDestroy(index_buffer)" }
+cna_index_buffer_set_data_at = { result = "IndexBufferSetDataAt(index_buffer, buffer_offset_in_bytes, transfer, data, capacity)" }
+cna_index_buffer_set_data = { result = "IndexBufferSetData(index_buffer, transfer, data, capacity)" }
+cna_index_buffer_unsubscribe_content_lost = { result = "IndexBufferUnsubscribeContentLost(registration)" }

@@ -80,7 +80,6 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
-using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
@@ -960,227 +959,201 @@ CNA_Result CreateBorrowedEffect(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_effect_annotation_create(
+namespace {
+
+[[nodiscard]] CNA_Result EffectAnnotationCreate(
     const CNA_EffectAnnotationCreateInfo* const createInfo,
     CNA_EffectAnnotationHandle* const outAnnotation)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAnnotation == nullptr) {
-            return InvalidArgument("The EffectAnnotation output handle is null.");
-        }
-        *outAnnotation = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) ||
-            createInfo->parameter_class > CNA_EFFECT_PARAMETER_CLASS_STRUCT ||
-            createInfo->parameter_type > CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE) {
-            return InvalidArgument("The EffectAnnotation creation configuration is invalid.");
-        }
-        std::size_t dataByteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                createInfo->data,
-                createInfo->data_count,
-                sizeof(float),
-                &dataByteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectAnnotation data buffer is invalid.");
-        }
-        std::string name;
-        std::string semantic;
-        std::string cachedString;
-        if (const CNA_Result result = ReadText(
-                createInfo->name, "The EffectAnnotation name is not valid UTF-8 text.", &name,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                createInfo->semantic, "The EffectAnnotation semantic is not valid UTF-8 text.",
-                &semantic, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                createInfo->cached_string,
-                "The EffectAnnotation cached string is not valid UTF-8 text.", &cachedString,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<float> data;
-        if (dataByteCount != 0U) {
-            data.assign(
-                createInfo->data,
-                createInfo->data + static_cast<std::size_t>(createInfo->data_count));
-        }
-        const EffectAnnotation native(
-            std::move(name),
-            std::move(semantic),
-            createInfo->row_count,
-            createInfo->column_count,
-            static_cast<EffectParameterClass>(createInfo->parameter_class),
-            static_cast<EffectParameterType>(createInfo->parameter_type),
-            std::move(data),
-            std::move(cachedString));
-        return CreateAnnotationHandle(native, outAnnotation);
-    });
+    if (!IsVersionedStructure(createInfo) ||
+        createInfo->parameter_class > CNA_EFFECT_PARAMETER_CLASS_STRUCT ||
+        createInfo->parameter_type > CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE) {
+        return InvalidArgument("The EffectAnnotation creation configuration is invalid.");
+    }
+    std::size_t dataByteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            createInfo->data,
+            createInfo->data_count,
+            sizeof(float),
+            &dataByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The EffectAnnotation data buffer is invalid.");
+    }
+    std::string name;
+    std::string semantic;
+    std::string cachedString;
+    if (const CNA_Result result = ReadText(
+            createInfo->name, "The EffectAnnotation name is not valid UTF-8 text.", &name,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            createInfo->semantic, "The EffectAnnotation semantic is not valid UTF-8 text.",
+            &semantic, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            createInfo->cached_string,
+            "The EffectAnnotation cached string is not valid UTF-8 text.", &cachedString,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<float> data;
+    if (dataByteCount != 0U) {
+        data.assign(
+            createInfo->data,
+            createInfo->data + static_cast<std::size_t>(createInfo->data_count));
+    }
+    const EffectAnnotation native(
+        std::move(name),
+        std::move(semantic),
+        createInfo->row_count,
+        createInfo->column_count,
+        static_cast<EffectParameterClass>(createInfo->parameter_class),
+        static_cast<EffectParameterType>(createInfo->parameter_type),
+        std::move(data),
+        std::move(cachedString));
+    return CreateAnnotationHandle(native, outAnnotation);
 }
 
-CNA_Result cna_effect_annotation_collection_find(
+[[nodiscard]] CNA_Result EffectAnnotationCollectionFind(
     const CNA_EffectAnnotationCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_EffectAnnotationHandle* const outAnnotation)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outAnnotation == nullptr) {
-            return InvalidArgument("The EffectAnnotationCollection find output is null.");
-        }
-        *outFound = CNA_FALSE;
-        *outAnnotation = CNA_INVALID_HANDLE;
-        std::shared_ptr<AnnotationCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The EffectAnnotation lookup name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const EffectAnnotation* const annotation =
-            static_cast<const EffectAnnotationCollection&>(*collection->value)[copiedName];
-        if (annotation == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const CNA_Result result = CreateAnnotationHandle(*annotation, outAnnotation);
-        if (result == CNA_RESULT_SUCCESS) {
-            *outFound = CNA_TRUE;
-        }
+    *outFound = CNA_FALSE;
+    *outAnnotation = CNA_INVALID_HANDLE;
+    std::shared_ptr<AnnotationCollectionResource> collection;
+    if (const CNA_Result result = GetCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The EffectAnnotation lookup name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const EffectAnnotation* const annotation =
+        static_cast<const EffectAnnotationCollection&>(*collection->value)[copiedName];
+    if (annotation == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const CNA_Result result = CreateAnnotationHandle(*annotation, outAnnotation);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outFound = CNA_TRUE;
+    }
+    return result;
 }
 
-CNA_Result cna_effect_parameter_get_elements(
+[[nodiscard]] CNA_Result EffectParameterGetElements(
     const CNA_EffectParameterHandle parameterHandle,
     CNA_EffectParameterCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectParameter elements output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (parameter->state->elements == nullptr) {
-            auto state = std::make_shared<ParameterCollectionState>();
-            state->value = std::shared_ptr<EffectParameterCollection>(
-                parameter->value, &parameter->value->getElementsProperty());
-            state->effectOwnership = parameter->state->effectOwnership;
-            parameter->state->elements = std::move(state);
-        }
-        return CreateParameterCollectionHandle(parameter->state->elements, outCollection);
-    });
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (parameter->state->elements == nullptr) {
+        auto state = std::make_shared<ParameterCollectionState>();
+        state->value = std::shared_ptr<EffectParameterCollection>(
+            parameter->value, &parameter->value->getElementsProperty());
+        state->effectOwnership = parameter->state->effectOwnership;
+        parameter->state->elements = std::move(state);
+    }
+    return CreateParameterCollectionHandle(parameter->state->elements, outCollection);
 }
 
-CNA_Result cna_effect_parameter_get_structure_members(
+[[nodiscard]] CNA_Result EffectParameterGetStructureMembers(
     const CNA_EffectParameterHandle parameterHandle,
     CNA_EffectParameterCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectParameter members output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (parameter->state->members == nullptr) {
-            auto state = std::make_shared<ParameterCollectionState>();
-            state->value = std::shared_ptr<EffectParameterCollection>(
-                parameter->value, &parameter->value->getStructureMembersProperty());
-            state->effectOwnership = parameter->state->effectOwnership;
-            parameter->state->members = std::move(state);
-        }
-        return CreateParameterCollectionHandle(parameter->state->members, outCollection);
-    });
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (parameter->state->members == nullptr) {
+        auto state = std::make_shared<ParameterCollectionState>();
+        state->value = std::shared_ptr<EffectParameterCollection>(
+            parameter->value, &parameter->value->getStructureMembersProperty());
+        state->effectOwnership = parameter->state->effectOwnership;
+        parameter->state->members = std::move(state);
+    }
+    return CreateParameterCollectionHandle(parameter->state->members, outCollection);
 }
 
-CNA_Result cna_effect_parameter_get_value(
+[[nodiscard]] CNA_Result EffectParameterGetValue(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectValueType valueType,
     void* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The EffectParameter scalar output is null.");
-        }
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        switch (valueType) {
-        case CNA_EFFECT_VALUE_BOOLEAN: {
-            const CNA_Bool value = ToCBool(parameter->value->GetValueBoolean());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_INT32: {
-            const int32_t value = static_cast<int32_t>(parameter->value->GetValueInt32());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_SINGLE: {
-            const float value = parameter->value->GetValueSingle();
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_MATRIX: {
-            const CNA_Matrix value = ToC(parameter->value->GetValueMatrix());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
-            const CNA_Matrix value = ToC(parameter->value->GetValueMatrixTranspose());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_QUATERNION: {
-            const CNA_Quaternion value = ToC(parameter->value->GetValueQuaternion());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR2: {
-            const CNA_Vector2 value = ToC(parameter->value->GetValueVector2());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR3: {
-            const CNA_Vector3 value = ToC(parameter->value->GetValueVector3());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR4: {
-            const CNA_Vector4 value = ToC(parameter->value->GetValueVector4());
-            std::memcpy(outValue, &value, sizeof(value));
-            return CNA_RESULT_SUCCESS;
-        }
-        default:
-            return InvalidArgument("The EffectParameter scalar value type is invalid.");
-        }
-    });
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    switch (valueType) {
+    case CNA_EFFECT_VALUE_BOOLEAN: {
+        const CNA_Bool value = ToCBool(parameter->value->GetValueBoolean());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_INT32: {
+        const int32_t value = static_cast<int32_t>(parameter->value->GetValueInt32());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_SINGLE: {
+        const float value = parameter->value->GetValueSingle();
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_MATRIX: {
+        const CNA_Matrix value = ToC(parameter->value->GetValueMatrix());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+        const CNA_Matrix value = ToC(parameter->value->GetValueMatrixTranspose());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_QUATERNION: {
+        const CNA_Quaternion value = ToC(parameter->value->GetValueQuaternion());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR2: {
+        const CNA_Vector2 value = ToC(parameter->value->GetValueVector2());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR3: {
+        const CNA_Vector3 value = ToC(parameter->value->GetValueVector3());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR4: {
+        const CNA_Vector4 value = ToC(parameter->value->GetValueVector4());
+        std::memcpy(outValue, &value, sizeof(value));
+        return CNA_RESULT_SUCCESS;
+    }
+    default:
+        return InvalidArgument("The EffectParameter scalar value type is invalid.");
+    }
 }
 
-CNA_Result cna_effect_parameter_get_values(
+[[nodiscard]] CNA_Result EffectParameterGetValues(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectValueType valueType,
     const uint64_t requestedCount,
@@ -1188,1839 +1161,1637 @@ CNA_Result cna_effect_parameter_get_values(
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The EffectParameter value-array output is invalid.");
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The EffectParameter value-array output is invalid.");
+    }
+    *outCount = 0U;
+    int nativeCount = 0;
+    if (const CNA_Result result = RequestedCountToInt(requestedCount, &nativeCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    switch (valueType) {
+    case CNA_EFFECT_VALUE_BOOLEAN: {
+        const std::vector<bool> nativeValues =
+            parameter->value->GetValueBooleanArray(nativeCount);
+        std::vector<CNA_Bool> values;
+        values.reserve(nativeValues.size());
+        for (const bool value : nativeValues) {
+            values.push_back(ToCBool(value));
         }
-        *outCount = 0U;
-        int nativeCount = 0;
-        if (const CNA_Result result = RequestedCountToInt(requestedCount, &nativeCount);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        switch (valueType) {
-        case CNA_EFFECT_VALUE_BOOLEAN: {
-            const std::vector<bool> nativeValues =
-                parameter->value->GetValueBooleanArray(nativeCount);
-            std::vector<CNA_Bool> values;
-            values.reserve(nativeValues.size());
-            for (const bool value : nativeValues) {
-                values.push_back(ToCBool(value));
-            }
-            return CopyValues(values, destination, capacity, outCount);
-        }
-        case CNA_EFFECT_VALUE_INT32:
-            return CopyConvertedValues<int, int32_t>(
-                parameter->value->GetValueInt32Array(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const int value) { return static_cast<int32_t>(value); });
-        case CNA_EFFECT_VALUE_SINGLE:
-            return CopyValues(
-                parameter->value->GetValueSingleArray(nativeCount),
-                destination,
-                capacity,
-                outCount);
-        case CNA_EFFECT_VALUE_MATRIX:
-            return CopyConvertedValues<Matrix, CNA_Matrix>(
-                parameter->value->GetValueMatrixArray(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Matrix& value) { return ToC(value); });
-        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE:
-            return CopyConvertedValues<Matrix, CNA_Matrix>(
-                parameter->value->GetValueMatrixTransposeArray(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Matrix& value) { return ToC(value); });
-        case CNA_EFFECT_VALUE_QUATERNION:
-            return CopyConvertedValues<Quaternion, CNA_Quaternion>(
-                parameter->value->GetValueQuaternionArray(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Quaternion& value) { return ToC(value); });
-        case CNA_EFFECT_VALUE_VECTOR2:
-            return CopyConvertedValues<Vector2, CNA_Vector2>(
-                parameter->value->GetValueVector2Array(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Vector2& value) { return ToC(value); });
-        case CNA_EFFECT_VALUE_VECTOR3:
-            return CopyConvertedValues<Vector3, CNA_Vector3>(
-                parameter->value->GetValueVector3Array(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Vector3& value) { return ToC(value); });
-        case CNA_EFFECT_VALUE_VECTOR4:
-            return CopyConvertedValues<Vector4, CNA_Vector4>(
-                parameter->value->GetValueVector4Array(nativeCount),
-                destination,
-                capacity,
-                outCount,
-                [](const Vector4& value) { return ToC(value); });
-        default:
-            return InvalidArgument("The EffectParameter array value type is invalid.");
-        }
-    });
+        return CopyValues(values, destination, capacity, outCount);
+    }
+    case CNA_EFFECT_VALUE_INT32:
+        return CopyConvertedValues<int, int32_t>(
+            parameter->value->GetValueInt32Array(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const int value) { return static_cast<int32_t>(value); });
+    case CNA_EFFECT_VALUE_SINGLE:
+        return CopyValues(
+            parameter->value->GetValueSingleArray(nativeCount),
+            destination,
+            capacity,
+            outCount);
+    case CNA_EFFECT_VALUE_MATRIX:
+        return CopyConvertedValues<Matrix, CNA_Matrix>(
+            parameter->value->GetValueMatrixArray(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Matrix& value) { return ToC(value); });
+    case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE:
+        return CopyConvertedValues<Matrix, CNA_Matrix>(
+            parameter->value->GetValueMatrixTransposeArray(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Matrix& value) { return ToC(value); });
+    case CNA_EFFECT_VALUE_QUATERNION:
+        return CopyConvertedValues<Quaternion, CNA_Quaternion>(
+            parameter->value->GetValueQuaternionArray(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Quaternion& value) { return ToC(value); });
+    case CNA_EFFECT_VALUE_VECTOR2:
+        return CopyConvertedValues<Vector2, CNA_Vector2>(
+            parameter->value->GetValueVector2Array(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Vector2& value) { return ToC(value); });
+    case CNA_EFFECT_VALUE_VECTOR3:
+        return CopyConvertedValues<Vector3, CNA_Vector3>(
+            parameter->value->GetValueVector3Array(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Vector3& value) { return ToC(value); });
+    case CNA_EFFECT_VALUE_VECTOR4:
+        return CopyConvertedValues<Vector4, CNA_Vector4>(
+            parameter->value->GetValueVector4Array(nativeCount),
+            destination,
+            capacity,
+            outCount,
+            [](const Vector4& value) { return ToC(value); });
+    default:
+        return InvalidArgument("The EffectParameter array value type is invalid.");
+    }
 }
 
-CNA_Result cna_effect_parameter_set_value(
+[[nodiscard]] CNA_Result EffectParameterSetValue(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectValueType valueType,
     const void* const value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The EffectParameter scalar input is null.");
+    if (value == nullptr) {
+        return InvalidArgument("The EffectParameter scalar input is null.");
+    }
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    switch (valueType) {
+    case CNA_EFFECT_VALUE_BOOLEAN: {
+        CNA_Bool copied = CNA_FALSE;
+        LoadValue(value, &copied);
+        if (copied != CNA_FALSE && copied != CNA_TRUE) {
+            return InvalidArgument("The EffectParameter Boolean value is invalid.");
         }
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+        parameter->value->SetValue(copied == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_INT32: {
+        int32_t copied = 0;
+        LoadValue(value, &copied);
+        parameter->value->SetValue(static_cast<int>(copied));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_SINGLE: {
+        float copied = 0.0F;
+        LoadValue(value, &copied);
+        parameter->value->SetValue(copied);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_MATRIX:
+    case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+        CNA_Matrix copied{};
+        LoadValue(value, &copied);
+        const Matrix native = ToNative(copied);
+        if (valueType == CNA_EFFECT_VALUE_MATRIX) {
+            parameter->value->SetValue(native);
+        } else {
+            parameter->value->SetValueTranspose(native);
         }
-        switch (valueType) {
-        case CNA_EFFECT_VALUE_BOOLEAN: {
-            CNA_Bool copied = CNA_FALSE;
-            LoadValue(value, &copied);
-            if (copied != CNA_FALSE && copied != CNA_TRUE) {
-                return InvalidArgument("The EffectParameter Boolean value is invalid.");
-            }
-            parameter->value->SetValue(copied == CNA_TRUE);
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_INT32: {
-            int32_t copied = 0;
-            LoadValue(value, &copied);
-            parameter->value->SetValue(static_cast<int>(copied));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_SINGLE: {
-            float copied = 0.0F;
-            LoadValue(value, &copied);
-            parameter->value->SetValue(copied);
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_MATRIX:
-        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
-            CNA_Matrix copied{};
-            LoadValue(value, &copied);
-            const Matrix native = ToNative(copied);
-            if (valueType == CNA_EFFECT_VALUE_MATRIX) {
-                parameter->value->SetValue(native);
-            } else {
-                parameter->value->SetValueTranspose(native);
-            }
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_QUATERNION: {
-            CNA_Quaternion copied{};
-            LoadValue(value, &copied);
-            parameter->value->SetValue(ToNative(copied));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR2: {
-            CNA_Vector2 copied{};
-            LoadValue(value, &copied);
-            parameter->value->SetValue(ToNative(copied));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR3: {
-            CNA_Vector3 copied{};
-            LoadValue(value, &copied);
-            parameter->value->SetValue(ToNative(copied));
-            return CNA_RESULT_SUCCESS;
-        }
-        case CNA_EFFECT_VALUE_VECTOR4: {
-            CNA_Vector4 copied{};
-            LoadValue(value, &copied);
-            parameter->value->SetValue(ToNative(copied));
-            return CNA_RESULT_SUCCESS;
-        }
-        default:
-            return InvalidArgument("The EffectParameter scalar value type is invalid.");
-        }
-    });
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_QUATERNION: {
+        CNA_Quaternion copied{};
+        LoadValue(value, &copied);
+        parameter->value->SetValue(ToNative(copied));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR2: {
+        CNA_Vector2 copied{};
+        LoadValue(value, &copied);
+        parameter->value->SetValue(ToNative(copied));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR3: {
+        CNA_Vector3 copied{};
+        LoadValue(value, &copied);
+        parameter->value->SetValue(ToNative(copied));
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR4: {
+        CNA_Vector4 copied{};
+        LoadValue(value, &copied);
+        parameter->value->SetValue(ToNative(copied));
+        return CNA_RESULT_SUCCESS;
+    }
+    default:
+        return InvalidArgument("The EffectParameter scalar value type is invalid.");
+    }
 }
 
-CNA_Result cna_effect_parameter_set_values(
+[[nodiscard]] CNA_Result EffectParameterSetValues(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectValueType valueType,
     const void* const values,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    switch (valueType) {
+    case CNA_EFFECT_VALUE_BOOLEAN: {
+        std::vector<CNA_Bool> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        switch (valueType) {
-        case CNA_EFFECT_VALUE_BOOLEAN: {
-            std::vector<CNA_Bool> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
+        std::vector<bool> native;
+        native.reserve(copied.size());
+        for (const CNA_Bool value : copied) {
+            if (value != CNA_FALSE && value != CNA_TRUE) {
+                return InvalidArgument(
+                    "The EffectParameter Boolean value array is invalid.");
             }
-            std::vector<bool> native;
-            native.reserve(copied.size());
-            for (const CNA_Bool value : copied) {
-                if (value != CNA_FALSE && value != CNA_TRUE) {
-                    return InvalidArgument(
-                        "The EffectParameter Boolean value array is invalid.");
-                }
-                native.push_back(value == CNA_TRUE);
-            }
+            native.push_back(value == CNA_TRUE);
+        }
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_INT32: {
+        std::vector<int32_t> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<int> native;
+        native.reserve(copied.size());
+        for (const int32_t value : copied) {
+            native.push_back(static_cast<int>(value));
+        }
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_SINGLE: {
+        std::vector<float> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        parameter->value->SetValue(copied);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_MATRIX:
+    case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+        std::vector<CNA_Matrix> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<Matrix> native;
+        native.reserve(copied.size());
+        for (const CNA_Matrix value : copied) {
+            native.push_back(ToNative(value));
+        }
+        if (valueType == CNA_EFFECT_VALUE_MATRIX) {
             parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        } else {
+            parameter->value->SetValueTranspose(native);
         }
-        case CNA_EFFECT_VALUE_INT32: {
-            std::vector<int32_t> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<int> native;
-            native.reserve(copied.size());
-            for (const int32_t value : copied) {
-                native.push_back(static_cast<int>(value));
-            }
-            parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_QUATERNION: {
+        std::vector<CNA_Quaternion> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        case CNA_EFFECT_VALUE_SINGLE: {
-            std::vector<float> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            parameter->value->SetValue(copied);
-            return CNA_RESULT_SUCCESS;
+        std::vector<Quaternion> native;
+        native.reserve(copied.size());
+        for (const CNA_Quaternion value : copied) {
+            native.push_back(ToNative(value));
         }
-        case CNA_EFFECT_VALUE_MATRIX:
-        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
-            std::vector<CNA_Matrix> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<Matrix> native;
-            native.reserve(copied.size());
-            for (const CNA_Matrix value : copied) {
-                native.push_back(ToNative(value));
-            }
-            if (valueType == CNA_EFFECT_VALUE_MATRIX) {
-                parameter->value->SetValue(native);
-            } else {
-                parameter->value->SetValueTranspose(native);
-            }
-            return CNA_RESULT_SUCCESS;
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR2: {
+        std::vector<CNA_Vector2> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        case CNA_EFFECT_VALUE_QUATERNION: {
-            std::vector<CNA_Quaternion> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<Quaternion> native;
-            native.reserve(copied.size());
-            for (const CNA_Quaternion value : copied) {
-                native.push_back(ToNative(value));
-            }
-            parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        std::vector<Vector2> native;
+        native.reserve(copied.size());
+        for (const CNA_Vector2 value : copied) {
+            native.push_back(ToNative(value));
         }
-        case CNA_EFFECT_VALUE_VECTOR2: {
-            std::vector<CNA_Vector2> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<Vector2> native;
-            native.reserve(copied.size());
-            for (const CNA_Vector2 value : copied) {
-                native.push_back(ToNative(value));
-            }
-            parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR3: {
+        std::vector<CNA_Vector3> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        case CNA_EFFECT_VALUE_VECTOR3: {
-            std::vector<CNA_Vector3> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<Vector3> native;
-            native.reserve(copied.size());
-            for (const CNA_Vector3 value : copied) {
-                native.push_back(ToNative(value));
-            }
-            parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        std::vector<Vector3> native;
+        native.reserve(copied.size());
+        for (const CNA_Vector3 value : copied) {
+            native.push_back(ToNative(value));
         }
-        case CNA_EFFECT_VALUE_VECTOR4: {
-            std::vector<CNA_Vector4> copied;
-            if (const CNA_Result result = LoadValues(values, count, &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            std::vector<Vector4> native;
-            native.reserve(copied.size());
-            for (const CNA_Vector4 value : copied) {
-                native.push_back(ToNative(value));
-            }
-            parameter->value->SetValue(native);
-            return CNA_RESULT_SUCCESS;
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    case CNA_EFFECT_VALUE_VECTOR4: {
+        std::vector<CNA_Vector4> copied;
+        if (const CNA_Result result = LoadValues(values, count, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        default:
-            return InvalidArgument("The EffectParameter array value type is invalid.");
+        std::vector<Vector4> native;
+        native.reserve(copied.size());
+        for (const CNA_Vector4 value : copied) {
+            native.push_back(ToNative(value));
         }
-    });
+        parameter->value->SetValue(native);
+        return CNA_RESULT_SUCCESS;
+    }
+    default:
+        return InvalidArgument("The EffectParameter array value type is invalid.");
+    }
 }
 
-CNA_Result cna_effect_parameter_get_value_texture(
+[[nodiscard]] CNA_Result EffectParameterGetValueTexture(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectTextureType textureType,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The EffectParameter texture output is null.");
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    switch (textureType) {
+    case CNA_EFFECT_TEXTURE_2D:
+        if (parameter->value->GetValueTexture2D() != nullptr) {
+            *outTexture = parameter->state->texture2D.handle;
         }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+        return CNA_RESULT_SUCCESS;
+    case CNA_EFFECT_TEXTURE_3D:
+        if (parameter->value->GetValueTexture3D() != nullptr) {
+            *outTexture = parameter->state->texture3D.handle;
         }
-        switch (textureType) {
-        case CNA_EFFECT_TEXTURE_2D:
-            if (parameter->value->GetValueTexture2D() != nullptr) {
-                *outTexture = parameter->state->texture2D.handle;
-            }
-            return CNA_RESULT_SUCCESS;
-        case CNA_EFFECT_TEXTURE_3D:
-            if (parameter->value->GetValueTexture3D() != nullptr) {
-                *outTexture = parameter->state->texture3D.handle;
-            }
-            return CNA_RESULT_SUCCESS;
-        case CNA_EFFECT_TEXTURE_CUBE:
-            if (parameter->value->GetValueTextureCube() != nullptr) {
-                *outTexture = parameter->state->textureCube.handle;
-            }
-            return CNA_RESULT_SUCCESS;
-        case CNA_EFFECT_TEXTURE_BASE:
-            return InvalidArgument(
-                "The base Texture EffectParameter overload has no native getter.");
-        default:
-            return InvalidArgument("The EffectParameter texture type is invalid.");
+        return CNA_RESULT_SUCCESS;
+    case CNA_EFFECT_TEXTURE_CUBE:
+        if (parameter->value->GetValueTextureCube() != nullptr) {
+            *outTexture = parameter->state->textureCube.handle;
         }
-    });
+        return CNA_RESULT_SUCCESS;
+    case CNA_EFFECT_TEXTURE_BASE:
+        return InvalidArgument(
+            "The base Texture EffectParameter overload has no native getter.");
+    default:
+        return InvalidArgument("The EffectParameter texture type is invalid.");
+    }
 }
 
-CNA_Result cna_effect_parameter_set_value_texture(
+[[nodiscard]] CNA_Result EffectParameterSetValueTexture(
     const CNA_EffectParameterHandle parameterHandle,
     const CNA_EffectTextureType textureType,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+    std::shared_ptr<ParameterResource> parameter;
+    if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
+        return InvalidArgument("The EffectParameter texture type is invalid.");
+    }
+    RetainedTextureSlot* slot = nullptr;
+    switch (textureType) {
+    case CNA_EFFECT_TEXTURE_BASE:
+        slot = &parameter->state->baseTexture;
+        break;
+    case CNA_EFFECT_TEXTURE_2D:
+        slot = &parameter->state->texture2D;
+        break;
+    case CNA_EFFECT_TEXTURE_3D:
+        slot = &parameter->state->texture3D;
+        break;
+    case CNA_EFFECT_TEXTURE_CUBE:
+        slot = &parameter->state->textureCube;
+        break;
+    default:
+        break;
+    }
+    if (textureHandle == CNA_INVALID_HANDLE) {
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_BASE:
+            parameter->value->SetValue(static_cast<Texture*>(nullptr));
+            break;
+        case CNA_EFFECT_TEXTURE_2D:
+            parameter->value->SetValue(static_cast<Texture2D*>(nullptr));
+            break;
+        case CNA_EFFECT_TEXTURE_3D:
+            parameter->value->SetValue(static_cast<Texture3D*>(nullptr));
+            break;
+        case CNA_EFFECT_TEXTURE_CUBE:
+            parameter->value->SetValue(static_cast<TextureCube*>(nullptr));
+            break;
+        default:
+            break;
+        }
+        slot->Reset();
+        return CNA_RESULT_SUCCESS;
+    }
+
+    std::shared_ptr<Texture> texture;
+    std::shared_ptr<void> owner;
+    uint64_t* referenceCount = nullptr;
+    switch (textureType) {
+    case CNA_EFFECT_TEXTURE_BASE: {
+        TextureResourceView view;
+        if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
-            return InvalidArgument("The EffectParameter texture type is invalid.");
+        texture = std::move(view.value);
+        owner = std::move(view.retentionOwner);
+        referenceCount = view.activeEffectReferenceCount;
+        break;
+    }
+    case CNA_EFFECT_TEXTURE_2D: {
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
+        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        RetainedTextureSlot* slot = nullptr;
-        switch (textureType) {
-        case CNA_EFFECT_TEXTURE_BASE:
-            slot = &parameter->state->baseTexture;
-            break;
-        case CNA_EFFECT_TEXTURE_2D:
-            slot = &parameter->state->texture2D;
-            break;
-        case CNA_EFFECT_TEXTURE_3D:
-            slot = &parameter->state->texture3D;
-            break;
-        case CNA_EFFECT_TEXTURE_CUBE:
-            slot = &parameter->state->textureCube;
-            break;
-        default:
-            break;
+        texture = std::static_pointer_cast<Texture>(resource->value);
+        owner = resource;
+        referenceCount = &resource->activeEffectReferenceCount;
+        break;
+    }
+    case CNA_EFFECT_TEXTURE_3D: {
+        std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
+        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        if (textureHandle == CNA_INVALID_HANDLE) {
-            switch (textureType) {
-            case CNA_EFFECT_TEXTURE_BASE:
-                parameter->value->SetValue(static_cast<Texture*>(nullptr));
-                break;
-            case CNA_EFFECT_TEXTURE_2D:
-                parameter->value->SetValue(static_cast<Texture2D*>(nullptr));
-                break;
-            case CNA_EFFECT_TEXTURE_3D:
-                parameter->value->SetValue(static_cast<Texture3D*>(nullptr));
-                break;
-            case CNA_EFFECT_TEXTURE_CUBE:
-                parameter->value->SetValue(static_cast<TextureCube*>(nullptr));
-                break;
-            default:
-                break;
-            }
-            slot->Reset();
-            return CNA_RESULT_SUCCESS;
+        texture = std::static_pointer_cast<Texture>(resource->value);
+        owner = resource;
+        referenceCount = &resource->activeEffectReferenceCount;
+        break;
+    }
+    case CNA_EFFECT_TEXTURE_CUBE: {
+        TextureCubeResourceView view;
+        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
+        texture = std::static_pointer_cast<Texture>(view.value);
+        owner = std::move(view.retentionOwner);
+        referenceCount = view.activeEffectReferenceCount;
+        break;
+    }
+    default:
+        break;
+    }
+    if (texture->getIsDisposedProperty()) {
+        return InvalidState("A disposed texture cannot be assigned to an EffectParameter.");
+    }
+    if (referenceCount == nullptr || *referenceCount == UINT64_MAX) {
+        return Overflow("The EffectParameter texture retention count cannot be increased.");
+    }
 
-        std::shared_ptr<Texture> texture;
-        std::shared_ptr<void> owner;
-        uint64_t* referenceCount = nullptr;
-        switch (textureType) {
-        case CNA_EFFECT_TEXTURE_BASE: {
-            TextureResourceView view;
-            if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::move(view.value);
-            owner = std::move(view.retentionOwner);
-            referenceCount = view.activeEffectReferenceCount;
-            break;
-        }
-        case CNA_EFFECT_TEXTURE_2D: {
-            std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
-            if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(resource->value);
-            owner = resource;
-            referenceCount = &resource->activeEffectReferenceCount;
-            break;
-        }
-        case CNA_EFFECT_TEXTURE_3D: {
-            std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
-            if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(resource->value);
-            owner = resource;
-            referenceCount = &resource->activeEffectReferenceCount;
-            break;
-        }
-        case CNA_EFFECT_TEXTURE_CUBE: {
-            TextureCubeResourceView view;
-            if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(view.value);
-            owner = std::move(view.retentionOwner);
-            referenceCount = view.activeEffectReferenceCount;
-            break;
-        }
-        default:
-            break;
-        }
-        if (texture->getIsDisposedProperty()) {
-            return InvalidState("A disposed texture cannot be assigned to an EffectParameter.");
-        }
-        if (referenceCount == nullptr || *referenceCount == UINT64_MAX) {
-            return Overflow("The EffectParameter texture retention count cannot be increased.");
-        }
-
-        switch (textureType) {
-        case CNA_EFFECT_TEXTURE_BASE:
-            parameter->value->SetValue(texture.get());
-            break;
-        case CNA_EFFECT_TEXTURE_2D:
-            parameter->value->SetValue(static_cast<Texture2D*>(texture.get()));
-            break;
-        case CNA_EFFECT_TEXTURE_3D:
-            parameter->value->SetValue(static_cast<Texture3D*>(texture.get()));
-            break;
-        case CNA_EFFECT_TEXTURE_CUBE:
-            parameter->value->SetValue(static_cast<TextureCube*>(texture.get()));
-            break;
-        default:
-            break;
-        }
-        slot->Set(textureHandle, std::move(texture), std::move(owner), referenceCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    switch (textureType) {
+    case CNA_EFFECT_TEXTURE_BASE:
+        parameter->value->SetValue(texture.get());
+        break;
+    case CNA_EFFECT_TEXTURE_2D:
+        parameter->value->SetValue(static_cast<Texture2D*>(texture.get()));
+        break;
+    case CNA_EFFECT_TEXTURE_3D:
+        parameter->value->SetValue(static_cast<Texture3D*>(texture.get()));
+        break;
+    case CNA_EFFECT_TEXTURE_CUBE:
+        parameter->value->SetValue(static_cast<TextureCube*>(texture.get()));
+        break;
+    default:
+        break;
+    }
+    slot->Set(textureHandle, std::move(texture), std::move(owner), referenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_effect_parameter_collection_create(
+[[nodiscard]] CNA_Result EffectParameterCollectionCreate(
     CNA_EffectParameterCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectParameterCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        auto state = std::make_shared<ParameterCollectionState>();
-        state->value = std::make_shared<EffectParameterCollection>();
-        return CreateParameterCollectionHandle(std::move(state), outCollection);
-    });
+    auto state = std::make_shared<ParameterCollectionState>();
+    state->value = std::make_shared<EffectParameterCollection>();
+    return CreateParameterCollectionHandle(std::move(state), outCollection);
 }
 
-CNA_Result cna_effect_parameter_collection_add_create(
+[[nodiscard]] CNA_Result EffectParameterCollectionAddCreate(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_EffectParameterCreateInfo* const createInfo,
     CNA_EffectParameterHandle* const outParameter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outParameter == nullptr) {
-            return InvalidArgument("The EffectParameter element output handle is null.");
-        }
-        *outParameter = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<EffectParameter> parameter;
-        if (const CNA_Result result = CreateNativeParameter(createInfo, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->state->value->Add(std::move(*parameter));
-        const int index = collection->state->value->getCountProperty() - 1;
-        // Non-null by construction: Add() above left the collection holding at least this element.
-        EffectParameter* const added = (*collection->state->value)[index];
-        return CreateCollectionElementHandle(collection->state, added, outParameter);
-    });
+    std::shared_ptr<ParameterCollectionResource> collection;
+    if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<EffectParameter> parameter;
+    if (const CNA_Result result = CreateNativeParameter(createInfo, &parameter);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    collection->state->value->Add(std::move(*parameter));
+    const int index = collection->state->value->getCountProperty() - 1;
+    // Non-null by construction: Add() above left the collection holding at least this element.
+    EffectParameter* const added = (*collection->state->value)[index];
+    return CreateCollectionElementHandle(collection->state, added, outParameter);
 }
 
-CNA_Result cna_effect_parameter_collection_find_name(
+[[nodiscard]] CNA_Result EffectParameterCollectionFindName(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_EffectParameterHandle* const outParameter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outParameter == nullptr) {
-            return InvalidArgument("The EffectParameterCollection find output is null.");
-        }
-        *outFound = CNA_FALSE;
-        *outParameter = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The EffectParameter lookup name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        EffectParameter* const parameter = (*collection->state->value)[copiedName];
-        if (parameter == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const CNA_Result result = CreateCollectionElementHandle(
-            collection->state, parameter, outParameter);
-        if (result == CNA_RESULT_SUCCESS) {
-            *outFound = CNA_TRUE;
-        }
+    *outFound = CNA_FALSE;
+    *outParameter = CNA_INVALID_HANDLE;
+    std::shared_ptr<ParameterCollectionResource> collection;
+    if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The EffectParameter lookup name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    EffectParameter* const parameter = (*collection->state->value)[copiedName];
+    if (parameter == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const CNA_Result result = CreateCollectionElementHandle(
+        collection->state, parameter, outParameter);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outFound = CNA_TRUE;
+    }
+    return result;
 }
 
-CNA_Result cna_effect_parameter_collection_find_semantic(
+[[nodiscard]] CNA_Result EffectParameterCollectionFindSemantic(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_StringView semantic,
     CNA_Bool* const outFound,
     CNA_EffectParameterHandle* const outParameter)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outParameter == nullptr) {
-            return InvalidArgument("The EffectParameterCollection find output is null.");
-        }
-        *outFound = CNA_FALSE;
-        *outParameter = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedSemantic;
-        if (const CNA_Result result = ReadText(
-                semantic, "The EffectParameter lookup semantic is not valid UTF-8 text.",
-                &copiedSemantic, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        EffectParameter* const parameter =
-            collection->state->value->GetParameterBySemantic(copiedSemantic);
-        if (parameter == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const CNA_Result result = CreateCollectionElementHandle(
-            collection->state, parameter, outParameter);
-        if (result == CNA_RESULT_SUCCESS) {
-            *outFound = CNA_TRUE;
-        }
+    *outFound = CNA_FALSE;
+    *outParameter = CNA_INVALID_HANDLE;
+    std::shared_ptr<ParameterCollectionResource> collection;
+    if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string copiedSemantic;
+    if (const CNA_Result result = ReadText(
+            semantic, "The EffectParameter lookup semantic is not valid UTF-8 text.",
+            &copiedSemantic, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    EffectParameter* const parameter =
+        collection->state->value->GetParameterBySemantic(copiedSemantic);
+    if (parameter == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const CNA_Result result = CreateCollectionElementHandle(
+        collection->state, parameter, outParameter);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outFound = CNA_TRUE;
+    }
+    return result;
 }
 
-CNA_Result cna_effect_pass_create(
+[[nodiscard]] CNA_Result EffectPassCreate(
     const CNA_StringView name,
     const uint64_t techniqueIdentity,
     CNA_EffectPassHandle* const outPass)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPass == nullptr) {
-            return InvalidArgument("The EffectPass output handle is null.");
-        }
-        *outPass = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreatePassHandle(
-            std::make_shared<EffectPass>(nullptr, std::move(copiedName), techniqueIdentity),
-            nullptr,
-            outPass);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreatePassHandle(
+        std::make_shared<EffectPass>(nullptr, std::move(copiedName), techniqueIdentity),
+        nullptr,
+        outPass);
 }
 
-CNA_Result cna_effect_pass_create_indexed_ext(
+[[nodiscard]] CNA_Result EffectPassCreateIndexedExt(
     const CNA_StringView name,
     const uint64_t techniqueIdentity,
     const uint32_t passIndex,
     CNA_EffectPassHandle* const outPass)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPass == nullptr) {
-            return InvalidArgument("The EffectPass output handle is null.");
-        }
-        *outPass = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreatePassHandle(
-            std::make_shared<EffectPass>(
-                nullptr, std::move(copiedName), techniqueIdentity, passIndex),
-            nullptr,
-            outPass);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreatePassHandle(
+        std::make_shared<EffectPass>(
+            nullptr, std::move(copiedName), techniqueIdentity, passIndex),
+        nullptr,
+        outPass);
 }
 
-CNA_Result cna_effect_pass_collection_create(
+[[nodiscard]] CNA_Result EffectPassCollectionCreate(
     CNA_EffectPassCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectPassCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        auto state = std::make_shared<PassCollectionState>();
-        state->value = std::make_shared<EffectPassCollection>();
-        return CreatePassCollectionHandle(std::move(state), outCollection);
-    });
+    auto state = std::make_shared<PassCollectionState>();
+    state->value = std::make_shared<EffectPassCollection>();
+    return CreatePassCollectionHandle(std::move(state), outCollection);
 }
 
-CNA_Result cna_effect_pass_collection_add_create(
+[[nodiscard]] CNA_Result EffectPassCollectionAddCreate(
     const CNA_EffectPassCollectionHandle collectionHandle,
     const CNA_StringView name,
     const uint64_t techniqueIdentity,
     CNA_EffectPassHandle* const outPass)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPass == nullptr) {
-            return InvalidArgument("The EffectPass element output handle is null.");
-        }
-        *outPass = CNA_INVALID_HANDLE;
-        std::shared_ptr<PassCollectionResource> collection;
-        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->state->value->Add(
-            EffectPass(collection->state->owner, std::move(copiedName), techniqueIdentity));
-        // Non-null by construction: Add() above left the collection holding at least this element.
-        EffectPass* const pass = (*collection->state->value)[
-            collection->state->value->getCountProperty() - 1];
-        return CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass),
-            collection->state->effectOwnership,
-            outPass);
-    });
+    std::shared_ptr<PassCollectionResource> collection;
+    if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    collection->state->value->Add(
+        EffectPass(collection->state->owner, std::move(copiedName), techniqueIdentity));
+    // Non-null by construction: Add() above left the collection holding at least this element.
+    EffectPass* const pass = (*collection->state->value)[
+        collection->state->value->getCountProperty() - 1];
+    return CreatePassHandle(
+        std::shared_ptr<EffectPass>(collection->state->value, pass),
+        collection->state->effectOwnership,
+        outPass);
 }
 
-CNA_Result cna_effect_pass_collection_find(
+[[nodiscard]] CNA_Result EffectPassCollectionFind(
     const CNA_EffectPassCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_EffectPassHandle* const outPass)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outPass == nullptr) {
-            return InvalidArgument("The EffectPassCollection find output is null.");
-        }
-        *outFound = CNA_FALSE;
-        *outPass = CNA_INVALID_HANDLE;
-        std::shared_ptr<PassCollectionResource> collection;
-        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectPass lookup name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        EffectPass* const pass = (*collection->state->value)[copiedName];
-        if (pass == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const CNA_Result result = CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass),
-            collection->state->effectOwnership,
-            outPass);
-        if (result == CNA_RESULT_SUCCESS) {
-            *outFound = CNA_TRUE;
-        }
+    *outFound = CNA_FALSE;
+    *outPass = CNA_INVALID_HANDLE;
+    std::shared_ptr<PassCollectionResource> collection;
+    if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectPass lookup name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    EffectPass* const pass = (*collection->state->value)[copiedName];
+    if (pass == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const CNA_Result result = CreatePassHandle(
+        std::shared_ptr<EffectPass>(collection->state->value, pass),
+        collection->state->effectOwnership,
+        outPass);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outFound = CNA_TRUE;
+    }
+    return result;
 }
 
-CNA_Result cna_effect_technique_create_named(
+[[nodiscard]] CNA_Result EffectTechniqueCreateNamed(
     const CNA_StringView name,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTechniqueHandle(
-            std::make_shared<EffectTechnique>(nullptr, std::move(copiedName)),
-            std::make_shared<TechniqueState>(),
-            outTechnique);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTechniqueHandle(
+        std::make_shared<EffectTechnique>(nullptr, std::move(copiedName)),
+        std::make_shared<TechniqueState>(),
+        outTechnique);
 }
 
-CNA_Result cna_effect_technique_create_reflected_ext(
+[[nodiscard]] CNA_Result EffectTechniqueCreateReflectedExt(
     const CNA_StringView name,
     const uint32_t techniqueIndex,
     const CNA_Bool addDefaultPass,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        if (addDefaultPass != CNA_FALSE && addDefaultPass != CNA_TRUE) {
-            return InvalidArgument("The default-pass flag is not a CNA_Bool value.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTechniqueHandle(
-            std::make_shared<EffectTechnique>(
-                nullptr, std::move(copiedName), techniqueIndex, addDefaultPass == CNA_TRUE),
-            std::make_shared<TechniqueState>(),
-            outTechnique);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTechniqueHandle(
+        std::make_shared<EffectTechnique>(
+            nullptr, std::move(copiedName), techniqueIndex, addDefaultPass == CNA_TRUE),
+        std::make_shared<TechniqueState>(),
+        outTechnique);
 }
 
-CNA_Result cna_effect_technique_get_passes(
+[[nodiscard]] CNA_Result EffectTechniqueGetPasses(
     const CNA_EffectTechniqueHandle techniqueHandle,
     CNA_EffectPassCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectTechnique passes output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (technique->state->passes == nullptr) {
-            auto state = std::make_shared<PassCollectionState>();
-            state->value = std::shared_ptr<EffectPassCollection>(
-                technique->value, &technique->value->getPassesProperty());
-            state->owner = technique->state->owner;
-            state->effectOwnership = technique->state->effectOwnership;
-            technique->state->passes = std::move(state);
-        }
-        return CreatePassCollectionHandle(technique->state->passes, outCollection);
-    });
+    std::shared_ptr<TechniqueResource> technique;
+    if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (technique->state->passes == nullptr) {
+        auto state = std::make_shared<PassCollectionState>();
+        state->value = std::shared_ptr<EffectPassCollection>(
+            technique->value, &technique->value->getPassesProperty());
+        state->owner = technique->state->owner;
+        state->effectOwnership = technique->state->effectOwnership;
+        technique->state->passes = std::move(state);
+    }
+    return CreatePassCollectionHandle(technique->state->passes, outCollection);
 }
 
-CNA_Result cna_effect_technique_collection_create(
+[[nodiscard]] CNA_Result EffectTechniqueCollectionCreate(
     CNA_EffectTechniqueCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectTechniqueCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        auto state = std::make_shared<TechniqueCollectionState>();
-        state->value = std::make_shared<EffectTechniqueCollection>();
-        return CreateTechniqueCollectionHandle(std::move(state), outCollection);
-    });
+    auto state = std::make_shared<TechniqueCollectionState>();
+    state->value = std::make_shared<EffectTechniqueCollection>();
+    return CreateTechniqueCollectionHandle(std::move(state), outCollection);
 }
 
-CNA_Result cna_effect_technique_collection_add_default(
+[[nodiscard]] CNA_Result EffectTechniqueCollectionAddDefault(
     const CNA_EffectTechniqueCollectionHandle collectionHandle,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique element output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Owned by the collection's effect, so Effect::setCurrentTechniqueProperty accepts it
-        // (RUST-UPSTREAM-030); a standalone collection has no owner and passes null.
-        collection->state->value->Add(
-            EffectTechnique(collection->state->owner, std::string(), 0U, false));
-        // Non-null by construction: Add() above left the collection holding at least this element.
-        EffectTechnique* const technique = (*collection->state->value)[
-            collection->state->value->getCountProperty() - 1];
-        return CreateTechniqueElementHandle(
-            collection->state, technique, outTechnique);
-    });
+    std::shared_ptr<TechniqueCollectionResource> collection;
+    if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Owned by the collection's effect, so Effect::setCurrentTechniqueProperty accepts it
+    // (RUST-UPSTREAM-030); a standalone collection has no owner and passes null.
+    collection->state->value->Add(
+        EffectTechnique(collection->state->owner, std::string(), 0U, false));
+    // Non-null by construction: Add() above left the collection holding at least this element.
+    EffectTechnique* const technique = (*collection->state->value)[
+        collection->state->value->getCountProperty() - 1];
+    return CreateTechniqueElementHandle(
+        collection->state, technique, outTechnique);
 }
 
-CNA_Result cna_effect_technique_collection_add_named(
+[[nodiscard]] CNA_Result EffectTechniqueCollectionAddNamed(
     const CNA_EffectTechniqueCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique element output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->state->value->Add(
-            EffectTechnique(collection->state->owner, std::move(copiedName)));
-        // Non-null by construction: Add() above left the collection holding at least this element.
-        EffectTechnique* const technique = (*collection->state->value)[
-            collection->state->value->getCountProperty() - 1];
-        return CreateTechniqueElementHandle(
-            collection->state, technique, outTechnique);
-    });
+    std::shared_ptr<TechniqueCollectionResource> collection;
+    if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    collection->state->value->Add(
+        EffectTechnique(collection->state->owner, std::move(copiedName)));
+    // Non-null by construction: Add() above left the collection holding at least this element.
+    EffectTechnique* const technique = (*collection->state->value)[
+        collection->state->value->getCountProperty() - 1];
+    return CreateTechniqueElementHandle(
+        collection->state, technique, outTechnique);
 }
 
-CNA_Result cna_effect_technique_collection_find(
+[[nodiscard]] CNA_Result EffectTechniqueCollectionFind(
     const CNA_EffectTechniqueCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechniqueCollection find output is null.");
-        }
-        *outFound = CNA_FALSE;
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyEffectName(
-                name, &copiedName, "The EffectTechnique lookup name is not valid UTF-8 text.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        EffectTechnique* const technique = (*collection->state->value)[copiedName];
-        if (technique == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const CNA_Result result = CreateTechniqueElementHandle(
-            collection->state, technique, outTechnique);
-        if (result == CNA_RESULT_SUCCESS) {
-            *outFound = CNA_TRUE;
-        }
+    *outFound = CNA_FALSE;
+    *outTechnique = CNA_INVALID_HANDLE;
+    std::shared_ptr<TechniqueCollectionResource> collection;
+    if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
         return result;
-    });
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyEffectName(
+            name, &copiedName, "The EffectTechnique lookup name is not valid UTF-8 text.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    EffectTechnique* const technique = (*collection->state->value)[copiedName];
+    if (technique == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const CNA_Result result = CreateTechniqueElementHandle(
+        collection->state, technique, outTechnique);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outFound = CNA_TRUE;
+    }
+    return result;
 }
 
-CNA_Result cna_effect_create_compiled(
+[[nodiscard]] CNA_Result EffectCreateCompiled(
     const CNA_Handle graphicsDeviceHandle,
     const uint8_t* const effectCode,
     const uint64_t effectCodeCount,
     CNA_EffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The compiled Effect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                effectCode, effectCodeCount, sizeof(uint8_t), &byteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The compiled Effect bytecode buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> code(byteCount);
-        if (byteCount != 0U) {
-            std::memcpy(code.data(), effectCode, byteCount);
-        }
-        return CreateEffectHandle(
-            std::make_shared<CApiEffect>(*graphicsDevice->value, code),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            effectCode, effectCodeCount, sizeof(uint8_t), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The compiled Effect bytecode buffer is invalid.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> code(byteCount);
+    if (byteCount != 0U) {
+        std::memcpy(code.data(), effectCode, byteCount);
+    }
+    return CreateEffectHandle(
+        std::make_shared<CApiEffect>(*graphicsDevice->value, code),
+        graphicsDevice->parentGame,
+        outEffect);
 }
 
-CNA_Result cna_content_manager_load_effect(
+[[nodiscard]] CNA_Result ContentManagerLoadEffect(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_EffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The loaded Effect output handle is null.");
+    std::string assetNameCopy;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
+    CNA::C::Detail::BorrowedContentManager contentManager;
+    if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+            contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    try {
+        std::shared_ptr<Effect> loaded =
+            contentManager.value->Load<std::shared_ptr<Effect>>(assetNameCopy);
+        if (loaded == nullptr) {
+            return IoError("The Effect asset loaded as a null effect.");
         }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::string assetNameCopy;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
-        CNA::C::Detail::BorrowedContentManager contentManager;
-        if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
-                contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        try {
-            std::shared_ptr<Effect> loaded =
-                contentManager.value->Load<std::shared_ptr<Effect>>(assetNameCopy);
-            if (loaded == nullptr) {
-                return IoError("The Effect asset loaded as a null effect.");
-            }
-            return CreateEffectHandle(
-                std::move(loaded), contentManager.parentGame, outEffect);
-        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // The asset's root reader produced something that is not an Effect. Reporting the
-            // mismatch beats the exception barrier's catch-all calling it an internal fault.
-            return IoError("The asset's root type reader did not produce an Effect.");
-        }
-    });
+        return CreateEffectHandle(
+            std::move(loaded), contentManager.parentGame, outEffect);
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // The asset's root reader produced something that is not an Effect. Reporting the
+        // mismatch beats the exception barrier's catch-all calling it an internal fault.
+        return IoError("The asset's root type reader did not produce an Effect.");
+    }
 }
 
-CNA_Result cna_shader_effect_create(
+[[nodiscard]] CNA_Result ShaderEffectCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_StringView vertexSource,
     const CNA_StringView fragmentSource,
     CNA_EffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The ShaderEffect output handle is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::string vertex;
-        std::string fragment;
-        if (const CNA_Result result = ReadText(
-                vertexSource, "The ShaderEffect vertex source is not valid UTF-8 text.", &vertex,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                fragmentSource, "The ShaderEffect fragment source is not valid UTF-8 text.",
-                &fragment, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // CBIND-075: an effect with no source at all is the caller's mistake, and renderers
-        // disagreed about it -- one threw, which the barrier reported as CNA_RESULT_INTERNAL and so
-        // blamed CNA for the caller's input, and another accepted it and handed back an effect that
-        // could never draw. Refused here so the answer is the same whichever renderer is active.
-        if (vertex.empty() && fragment.empty()) {
-            return InvalidArgument(
-                "A ShaderEffect needs source: the vertex and fragment sources are both empty.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateEffectHandle(
-            std::make_shared<ShaderEffect>(
-                *graphicsDevice->value, std::move(vertex), std::move(fragment)),
-            graphicsDevice->parentGame,
-            outEffect);
-    });
+    std::string vertex;
+    std::string fragment;
+    if (const CNA_Result result = ReadText(
+            vertexSource, "The ShaderEffect vertex source is not valid UTF-8 text.", &vertex,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            fragmentSource, "The ShaderEffect fragment source is not valid UTF-8 text.",
+            &fragment, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // CBIND-075: an effect with no source at all is the caller's mistake, and renderers
+    // disagreed about it -- one threw, which the barrier reported as CNA_RESULT_INTERNAL and so
+    // blamed CNA for the caller's input, and another accepted it and handed back an effect that
+    // could never draw. Refused here so the answer is the same whichever renderer is active.
+    if (vertex.empty() && fragment.empty()) {
+        return InvalidArgument(
+            "A ShaderEffect needs source: the vertex and fragment sources are both empty.");
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateEffectHandle(
+        std::make_shared<ShaderEffect>(
+            *graphicsDevice->value, std::move(vertex), std::move(fragment)),
+        graphicsDevice->parentGame,
+        outEffect);
 }
 
-CNA_Result cna_effect_clone(
+[[nodiscard]] CNA_Result EffectClone(
     const CNA_EffectHandle effectHandle,
     CNA_EffectHandle* const outClone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outClone == nullptr) {
-            return InvalidArgument("The Effect clone output handle is null.");
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<Effect> clone(effect->value->Clone());
+    if (clone == nullptr) {
+        return InternalError("The native Effect clone operation returned null.");
+    }
+    if (const CNA_Result result = CreateEffectHandle(
+            std::move(clone), effect->parentGame, outClone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EffectResource> clonedEffect;
+    if (const CNA_Result result = GetEffect(*outClone, &clonedEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::shared_ptr<EffectLifetime> sourceLifetime =
+        GetEffectState(effect)->lifetime;
+    const std::shared_ptr<EffectLifetime> cloneLifetime =
+        GetEffectState(clonedEffect)->lifetime;
+    const auto copyRetained = [](const RetainedTextureSlot& source,
+                                 RetainedTextureSlot& destination) {
+        if (source.handle != CNA_INVALID_HANDLE) {
+            destination.Set(
+                source.handle,
+                source.value,
+                source.owner,
+                source.referenceCount);
         }
-        *outClone = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Effect> clone(effect->value->Clone());
-        if (clone == nullptr) {
-            return InternalError("The native Effect clone operation returned null.");
-        }
-        if (const CNA_Result result = CreateEffectHandle(
-                std::move(clone), effect->parentGame, outClone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EffectResource> clonedEffect;
-        if (const CNA_Result result = GetEffect(*outClone, &clonedEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::shared_ptr<EffectLifetime> sourceLifetime =
-            GetEffectState(effect)->lifetime;
-        const std::shared_ptr<EffectLifetime> cloneLifetime =
-            GetEffectState(clonedEffect)->lifetime;
-        const auto copyRetained = [](const RetainedTextureSlot& source,
-                                     RetainedTextureSlot& destination) {
-            if (source.handle != CNA_INVALID_HANDLE) {
-                destination.Set(
-                    source.handle,
-                    source.value,
-                    source.owner,
-                    source.referenceCount);
-            }
-        };
-        copyRetained(sourceLifetime->basicTexture, cloneLifetime->basicTexture);
-        copyRetained(sourceLifetime->stockTexture0, cloneLifetime->stockTexture0);
-        copyRetained(sourceLifetime->stockTexture1, cloneLifetime->stockTexture1);
-        copyRetained(sourceLifetime->environmentMap, cloneLifetime->environmentMap);
-        for (std::size_t index = 0U; index < sourceLifetime->pbrTextures.size(); ++index) {
-            copyRetained(
-                sourceLifetime->pbrTextures[index],
-                cloneLifetime->pbrTextures[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    copyRetained(sourceLifetime->basicTexture, cloneLifetime->basicTexture);
+    copyRetained(sourceLifetime->stockTexture0, cloneLifetime->stockTexture0);
+    copyRetained(sourceLifetime->stockTexture1, cloneLifetime->stockTexture1);
+    copyRetained(sourceLifetime->environmentMap, cloneLifetime->environmentMap);
+    for (std::size_t index = 0U; index < sourceLifetime->pbrTextures.size(); ++index) {
+        copyRetained(
+            sourceLifetime->pbrTextures[index],
+            cloneLifetime->pbrTextures[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_effect_get_current_technique(
+[[nodiscard]] CNA_Result EffectGetCurrentTechnique(
     const CNA_EffectHandle effectHandle,
     CNA_EffectTechniqueHandle* const outTechnique)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The Effect current-technique output is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        EffectTechnique* const technique =
-            effect->value->getCurrentTechniqueProperty();
-        if (technique == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return CreateTechniqueElementHandle(
-            GetEffectState(effect)->techniques, technique, outTechnique);
-    });
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    EffectTechnique* const technique =
+        effect->value->getCurrentTechniqueProperty();
+    if (technique == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CreateTechniqueElementHandle(
+        GetEffectState(effect)->techniques, technique, outTechnique);
 }
 
-CNA_Result cna_effect_set_current_technique(
+[[nodiscard]] CNA_Result EffectSetCurrentTechnique(
     const CNA_EffectHandle effectHandle,
     const CNA_EffectTechniqueHandle techniqueHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (techniqueHandle == CNA_INVALID_HANDLE) {
-            effect->value->setCurrentTechniqueProperty(nullptr);
-            return CNA_RESULT_SUCCESS;
-        }
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (technique->state->owner != effect->value.get()) {
-            return InvalidArgument(
-                "The selected technique does not belong to this Effect.");
-        }
-        effect->value->setCurrentTechniqueProperty(technique->value.get());
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (techniqueHandle == CNA_INVALID_HANDLE) {
+        effect->value->setCurrentTechniqueProperty(nullptr);
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    std::shared_ptr<TechniqueResource> technique;
+    if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (technique->state->owner != effect->value.get()) {
+        return InvalidArgument(
+            "The selected technique does not belong to this Effect.");
+    }
+    effect->value->setCurrentTechniqueProperty(technique->value.get());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_effect_get_graphics_device(
+[[nodiscard]] CNA_Result EffectGetGraphicsDevice(
     const CNA_EffectHandle effectHandle,
     CNA_Handle* const outGraphicsDevice)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The Effect graphics-device output is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA_Handle borrowed = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = BorrowGameGraphicsDevice(
-                effect->parentGame, &borrowed);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        const CNA_Result lookupResult = GetRuntimeHandles().Get(
-            borrowed, ObjectKind::GraphicsDevice, &graphicsDevice);
-        if (lookupResult != CNA_RESULT_SUCCESS ||
-            graphicsDevice->value != &effect->value->getGraphicsDeviceInternal()) {
-            return InternalError("The Effect and borrowed graphics-device owners disagree.");
-        }
-        *outGraphicsDevice = borrowed;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA_Handle borrowed = CNA_INVALID_HANDLE;
+    if (const CNA_Result result = BorrowGameGraphicsDevice(
+            effect->parentGame, &borrowed);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    const CNA_Result lookupResult = GetRuntimeHandles().Get(
+        borrowed, ObjectKind::GraphicsDevice, &graphicsDevice);
+    if (lookupResult != CNA_RESULT_SUCCESS ||
+        graphicsDevice->value != &effect->value->getGraphicsDeviceInternal()) {
+        return InternalError("The Effect and borrowed graphics-device owners disagree.");
+    }
+    *outGraphicsDevice = borrowed;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_uniform_matrix(
+[[nodiscard]] CNA_Result ShaderEffectSetUniformMatrix(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
     const CNA_Matrix value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const float matrix[16] = {
-            value.m11, value.m12, value.m13, value.m14,
-            value.m21, value.m22, value.m23, value.m24,
-            value.m31, value.m32, value.m33, value.m34,
-            value.m41, value.m42, value.m43, value.m44};
-        shader->SetUniformMat4(copiedName.c_str(), matrix);
-        return CNA_RESULT_SUCCESS;
-    });
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyUniformName(name, &copiedName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const float matrix[16] = {
+        value.m11, value.m12, value.m13, value.m14,
+        value.m21, value.m22, value.m23, value.m24,
+        value.m31, value.m32, value.m33, value.m34,
+        value.m41, value.m42, value.m43, value.m44};
+    shader->SetUniformMat4(copiedName.c_str(), matrix);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_declare_uniform_block_ext(
+[[nodiscard]] CNA_Result ShaderEffectDeclareUniformBlockExt(
     const CNA_EffectHandle effectHandle,
     const int32_t blockSizeBytes,
     const CNA_StringView* const names,
     const int32_t* const offsets,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (blockSizeBytes < 0) {
-            return InvalidArgument("The uniform block size must not be negative.");
-        }
-        std::size_t nameBytes = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                names, count, sizeof(CNA_StringView), &nameBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The uniform block member-name array is invalid.");
-        }
-        std::size_t offsetBytes = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                offsets, count, sizeof(int32_t), &offsetBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The uniform block member-offset array is invalid.");
-        }
-        int nativeCount = 0;
-        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+    if (blockSizeBytes < 0) {
+        return InvalidArgument("The uniform block size must not be negative.");
+    }
+    std::size_t nameBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            names, count, sizeof(CNA_StringView), &nameBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The uniform block member-name array is invalid.");
+    }
+    std::size_t offsetBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            offsets, count, sizeof(int32_t), &offsetBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The uniform block member-offset array is invalid.");
+    }
+    int nativeCount = 0;
+    if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical signature takes `const char* const*`, so the views must become owned
+    // NUL-terminated strings first -- a CNA_StringView carries a length, not a terminator, and
+    // may point into the middle of a larger buffer.
+    std::vector<std::string> copiedNames;
+    std::vector<const char*> namePointers;
+    std::vector<int> nativeOffsets;
+    copiedNames.reserve(static_cast<std::size_t>(nativeCount));
+    namePointers.reserve(static_cast<std::size_t>(nativeCount));
+    nativeOffsets.reserve(static_cast<std::size_t>(nativeCount));
+    for (int index = 0; index < nativeCount; ++index) {
+        std::string copied;
+        if (const CNA_Result result = CopyUniformName(names[index], &copied);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical signature takes `const char* const*`, so the views must become owned
-        // NUL-terminated strings first -- a CNA_StringView carries a length, not a terminator, and
-        // may point into the middle of a larger buffer.
-        std::vector<std::string> copiedNames;
-        std::vector<const char*> namePointers;
-        std::vector<int> nativeOffsets;
-        copiedNames.reserve(static_cast<std::size_t>(nativeCount));
-        namePointers.reserve(static_cast<std::size_t>(nativeCount));
-        nativeOffsets.reserve(static_cast<std::size_t>(nativeCount));
-        for (int index = 0; index < nativeCount; ++index) {
-            std::string copied;
-            if (const CNA_Result result = CopyUniformName(names[index], &copied);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            copiedNames.push_back(std::move(copied));
-            nativeOffsets.push_back(static_cast<int>(offsets[index]));
-        }
-        for (const std::string& name : copiedNames) {
-            namePointers.push_back(name.c_str());
-        }
-        shader->DeclareUniformBlockEXT(
-            static_cast<int>(blockSizeBytes),
-            nativeCount == 0 ? nullptr : namePointers.data(),
-            nativeCount == 0 ? nullptr : nativeOffsets.data(),
-            nativeCount);
-        return CNA_RESULT_SUCCESS;
-    });
+        copiedNames.push_back(std::move(copied));
+        nativeOffsets.push_back(static_cast<int>(offsets[index]));
+    }
+    for (const std::string& name : copiedNames) {
+        namePointers.push_back(name.c_str());
+    }
+    shader->DeclareUniformBlockEXT(
+        static_cast<int>(blockSizeBytes),
+        nativeCount == 0 ? nullptr : namePointers.data(),
+        nativeCount == 0 ? nullptr : nativeOffsets.data(),
+        nativeCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_uniform_float_array(
+[[nodiscard]] CNA_Result ShaderEffectSetUniformFloatArray(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
     const float* const values,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                values, count, sizeof(float), &byteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The shader float-uniform array is invalid.");
-        }
-        int nativeCount = 0;
-        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformFloatArray(copiedName.c_str(), values, nativeCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            values, count, sizeof(float), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The shader float-uniform array is invalid.");
+    }
+    int nativeCount = 0;
+    if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyUniformName(name, &copiedName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetUniformFloatArray(copiedName.c_str(), values, nativeCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_uniform_vector2_array(
+[[nodiscard]] CNA_Result ShaderEffectSetUniformVector2Array(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
     const CNA_Vector2* const values,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                values, count, sizeof(CNA_Vector2), &byteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The shader vec2-uniform array is invalid.");
-        }
-        int nativeCount = 0;
-        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<float> copiedValues;
-        copiedValues.reserve(static_cast<std::size_t>(count) * 2U);
-        for (uint64_t index = 0U; index < count; ++index) {
-            copiedValues.push_back(values[index].x);
-            copiedValues.push_back(values[index].y);
-        }
-        shader->SetUniformVec2Array(
-            copiedName.c_str(), copiedValues.data(), nativeCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            values, count, sizeof(CNA_Vector2), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The shader vec2-uniform array is invalid.");
+    }
+    int nativeCount = 0;
+    if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyUniformName(name, &copiedName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<float> copiedValues;
+    copiedValues.reserve(static_cast<std::size_t>(count) * 2U);
+    for (uint64_t index = 0U; index < count; ++index) {
+        copiedValues.push_back(values[index].x);
+        copiedValues.push_back(values[index].y);
+    }
+    shader->SetUniformVec2Array(
+        copiedName.c_str(), copiedValues.data(), nativeCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_texture2d(
+[[nodiscard]] CNA_Result ShaderEffectSetTexture2d(
     const CNA_EffectHandle effectHandle,
     const int32_t unit,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (unit < 0) {
-            return InvalidArgument("The ShaderEffect texture unit is negative.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEffectTextureOwner(
-                *effect, texture->parentGame);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetTexture(unit, *texture->value);
-        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
-            textureHandle,
-            std::static_pointer_cast<Texture>(texture->value),
-            texture,
-            &texture->activeEffectReferenceCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (unit < 0) {
+        return InvalidArgument("The ShaderEffect texture unit is negative.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(
+            *effect, texture->parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetTexture(unit, *texture->value);
+    GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture->value),
+        texture,
+        &texture->activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_texture_cube(
+[[nodiscard]] CNA_Result ShaderEffectSetTextureCube(
     const CNA_EffectHandle effectHandle,
     const int32_t unit,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (unit < 0) {
-            return InvalidArgument("The ShaderEffect texture unit is negative.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextureCubeResourceView texture;
-        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEffectTextureOwner(
-                *effect, texture.parentGame);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetTexture(unit, *texture.value);
-        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
-            textureHandle,
-            std::static_pointer_cast<Texture>(texture.value),
-            std::move(texture.retentionOwner),
-            texture.activeEffectReferenceCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (unit < 0) {
+        return InvalidArgument("The ShaderEffect texture unit is negative.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    TextureCubeResourceView texture;
+    if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(
+            *effect, texture.parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetTexture(unit, *texture.value);
+    GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture.value),
+        std::move(texture.retentionOwner),
+        texture.activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_texture3d(
+[[nodiscard]] CNA_Result ShaderEffectSetTexture3d(
     const CNA_EffectHandle effectHandle,
     const int32_t unit,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (unit < 0) {
-            return InvalidArgument("The ShaderEffect texture unit is negative.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CNA::C::Detail::Texture3DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEffectTextureOwner(
-                *effect, texture->parentGame);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetTexture(unit, *texture->value);
-        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
-            textureHandle,
-            std::static_pointer_cast<Texture>(texture->value),
-            texture,
-            &texture->activeEffectReferenceCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (unit < 0) {
+        return InvalidArgument("The ShaderEffect texture unit is negative.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<CNA::C::Detail::Texture3DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(
+            *effect, texture->parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetTexture(unit, *texture->value);
+    GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture->value),
+        texture,
+        &texture->activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_effect_lights_get_directional_light(
+[[nodiscard]] CNA_Result EffectLightsGetDirectionalLight(
     const CNA_EffectHandle effectHandle,
     const uint32_t index,
     CNA_DirectionalLightHandle* const outLight)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLight == nullptr) {
-            return InvalidArgument("The effect directional-light output is null.");
-        }
-        *outLight = CNA_INVALID_HANDLE;
-        if (index > 2U) {
-            return InvalidArgument("The directional-light index is outside zero through two.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, &effect, &lights);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        DirectionalLight* light = nullptr;
-        if (index == 0U) {
-            light = &lights->getDirectionalLight0Property();
-        } else if (index == 1U) {
-            light = &lights->getDirectionalLight1Property();
-        } else {
-            light = &lights->getDirectionalLight2Property();
-        }
-        return CreateDirectionalLightHandle(
-            std::shared_ptr<DirectionalLight>(effect->value, light),
-            GetEffectState(effect)->lifetime,
-            outLight);
-    });
+    if (index > 2U) {
+        return InvalidArgument("The directional-light index is outside zero through two.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    IEffectLights* lights = nullptr;
+    if (const CNA_Result result = GetEffectInterface(
+            effectHandle, &effect, &lights);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    DirectionalLight* light = nullptr;
+    if (index == 0U) {
+        light = &lights->getDirectionalLight0Property();
+    } else if (index == 1U) {
+        light = &lights->getDirectionalLight1Property();
+    } else {
+        light = &lights->getDirectionalLight2Property();
+    }
+    return CreateDirectionalLightHandle(
+        std::shared_ptr<DirectionalLight>(effect->value, light),
+        GetEffectState(effect)->lifetime,
+        outLight);
 }
 
-CNA_Result cna_effect_lights_set_enabled(
+[[nodiscard]] CNA_Result EffectLightsSetEnabled(
     const CNA_EffectHandle effectHandle,
     const CNA_Bool value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The lighting-enabled value is not a CNA_Bool.");
-        }
-        IEffectLights* lights = nullptr;
-        if (const CNA_Result result = GetEffectInterface(
-                effectHandle, nullptr, &lights);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (value == CNA_FALSE &&
-            (dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr ||
-             dynamic_cast<SkinnedEffect*>(lights) != nullptr ||
-             dynamic_cast<PbrEffect*>(lights) != nullptr ||
-             dynamic_cast<SkinnedPbrEffect*>(lights) != nullptr)) {
-            return InvalidState("This stock effect's lighting cannot be disabled.");
-        }
-        lights->setLightingEnabledProperty(value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
+    IEffectLights* lights = nullptr;
+    if (const CNA_Result result = GetEffectInterface(
+            effectHandle, nullptr, &lights);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (value == CNA_FALSE &&
+        (dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr ||
+         dynamic_cast<SkinnedEffect*>(lights) != nullptr ||
+         dynamic_cast<PbrEffect*>(lights) != nullptr ||
+         dynamic_cast<SkinnedPbrEffect*>(lights) != nullptr)) {
+        return InvalidState("This stock effect's lighting cannot be disabled.");
+    }
+    lights->setLightingEnabledProperty(value == CNA_TRUE);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_basic_effect_get_texture(
+[[nodiscard]] CNA_Result BasicEffectGetTexture(
     const CNA_EffectHandle effectHandle,
     CNA_Bool* const outHasTexture,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("The BasicEffect texture outputs are null.");
-        }
-        *outHasTexture = CNA_FALSE;
-        *outTexture = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectResource> effect;
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)basic;
-        const RetainedTextureSlot& texture =
-            GetEffectState(effect)->lifetime->basicTexture;
-        if (texture.handle != CNA_INVALID_HANDLE) {
-            *outHasTexture = CNA_TRUE;
-            *outTexture = texture.handle;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    *outHasTexture = CNA_FALSE;
+    *outTexture = CNA_INVALID_HANDLE;
+    std::shared_ptr<EffectResource> effect;
+    BasicEffect* basic = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    (void)basic;
+    const RetainedTextureSlot& texture =
+        GetEffectState(effect)->lifetime->basicTexture;
+    if (texture.handle != CNA_INVALID_HANDLE) {
+        *outHasTexture = CNA_TRUE;
+        *outTexture = texture.handle;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_basic_effect_set_texture(
+[[nodiscard]] CNA_Result BasicEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        BasicEffect* basic = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        RetainedTextureSlot& retained =
-            GetEffectState(effect)->lifetime->basicTexture;
-        if (textureHandle == CNA_INVALID_HANDLE) {
-            basic->SetOwnedTexture(nullptr);
-            retained.Reset();
-            return CNA_RESULT_SUCCESS;
-        }
-        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEffectTextureOwner(
-                *effect, texture->parentGame);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        basic->SetOwnedTexture(texture->value);
-        retained.Set(
-            textureHandle,
-            std::static_pointer_cast<Texture>(texture->value),
-            texture,
-            &texture->activeEffectReferenceCount);
+    std::shared_ptr<EffectResource> effect;
+    BasicEffect* basic = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, &effect, &basic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    RetainedTextureSlot& retained =
+        GetEffectState(effect)->lifetime->basicTexture;
+    if (textureHandle == CNA_INVALID_HANDLE) {
+        basic->SetOwnedTexture(nullptr);
+        retained.Reset();
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(
+            *effect, texture->parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    basic->SetOwnedTexture(texture->value);
+    retained.Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture->value),
+        texture,
+        &texture->activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_alpha_test_effect_set_texture(
+[[nodiscard]] CNA_Result AlphaTestEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &alphaTest);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetRetainedEffectTexture2D(
-            effect,
-            GetEffectState(effect)->lifetime->stockTexture0,
-            textureHandle,
-            [alphaTest](std::shared_ptr<Texture2D> texture) {
-                alphaTest->SetOwnedTexture(std::move(texture));
-            });
-    });
+    std::shared_ptr<EffectResource> effect;
+    AlphaTestEffect* alphaTest = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &alphaTest);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SetRetainedEffectTexture2D(
+        effect,
+        GetEffectState(effect)->lifetime->stockTexture0,
+        textureHandle,
+        [alphaTest](std::shared_ptr<Texture2D> texture) {
+            alphaTest->SetOwnedTexture(std::move(texture));
+        });
 }
 
-CNA_Result cna_dual_texture_effect_get_texture(
+[[nodiscard]] CNA_Result DualTextureEffectGetTexture(
     const CNA_EffectHandle effectHandle,
     const uint32_t textureIndex,
     CNA_Bool* const outHasTexture,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("The DualTextureEffect texture outputs are null.");
-        }
-        *outHasTexture = CNA_FALSE;
-        *outTexture = CNA_INVALID_HANDLE;
-        if (textureIndex > 1U) {
-            return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &dualTexture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)dualTexture;
-        const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
-        return GetRetainedEffectTexture(
-            textureIndex == 0U ? lifetime->stockTexture0 : lifetime->stockTexture1,
-            outHasTexture,
-            outTexture);
-    });
+    *outHasTexture = CNA_FALSE;
+    *outTexture = CNA_INVALID_HANDLE;
+    if (textureIndex > 1U) {
+        return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    DualTextureEffect* dualTexture = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &dualTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    (void)dualTexture;
+    const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
+    return GetRetainedEffectTexture(
+        textureIndex == 0U ? lifetime->stockTexture0 : lifetime->stockTexture1,
+        outHasTexture,
+        outTexture);
 }
 
-CNA_Result cna_dual_texture_effect_set_texture(
+[[nodiscard]] CNA_Result DualTextureEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const uint32_t textureIndex,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (textureIndex > 1U) {
-            return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        DualTextureEffect* dualTexture = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &dualTexture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
-        RetainedTextureSlot& retained = textureIndex == 0U
-            ? lifetime->stockTexture0
-            : lifetime->stockTexture1;
-        return SetRetainedEffectTexture2D(
-            effect,
-            retained,
-            textureHandle,
-            [dualTexture, textureIndex](std::shared_ptr<Texture2D> texture) {
-                if (textureIndex == 0U) {
-                    dualTexture->SetOwnedTexture(std::move(texture));
-                } else {
-                    dualTexture->SetOwnedTexture2(std::move(texture));
-                }
-            });
-    });
+    if (textureIndex > 1U) {
+        return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    DualTextureEffect* dualTexture = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &dualTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
+    RetainedTextureSlot& retained = textureIndex == 0U
+        ? lifetime->stockTexture0
+        : lifetime->stockTexture1;
+    return SetRetainedEffectTexture2D(
+        effect,
+        retained,
+        textureHandle,
+        [dualTexture, textureIndex](std::shared_ptr<Texture2D> texture) {
+            if (textureIndex == 0U) {
+                dualTexture->SetOwnedTexture(std::move(texture));
+            } else {
+                dualTexture->SetOwnedTexture2(std::move(texture));
+            }
+        });
 }
 
-CNA_Result cna_environment_map_effect_set_texture(
+[[nodiscard]] CNA_Result EnvironmentMapEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetRetainedEffectTexture2D(
-            effect,
-            GetEffectState(effect)->lifetime->stockTexture0,
-            textureHandle,
-            [environmentMap](std::shared_ptr<Texture2D> texture) {
-                environmentMap->SetOwnedTexture(std::move(texture));
-            });
-    });
+    std::shared_ptr<EffectResource> effect;
+    EnvironmentMapEffect* environmentMap = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &environmentMap);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SetRetainedEffectTexture2D(
+        effect,
+        GetEffectState(effect)->lifetime->stockTexture0,
+        textureHandle,
+        [environmentMap](std::shared_ptr<Texture2D> texture) {
+            environmentMap->SetOwnedTexture(std::move(texture));
+        });
 }
 
-CNA_Result cna_environment_map_effect_set_environment_map(
+[[nodiscard]] CNA_Result EnvironmentMapEffectSetEnvironmentMap(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle environmentMapHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetRetainedEffectTextureCube(
-            effect,
-            GetEffectState(effect)->lifetime->environmentMap,
-            environmentMapHandle,
-            [environmentMap](std::shared_ptr<TextureCube> texture) {
-                environmentMap->SetOwnedEnvironmentMap(std::move(texture));
-            });
-    });
+    std::shared_ptr<EffectResource> effect;
+    EnvironmentMapEffect* environmentMap = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &environmentMap);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SetRetainedEffectTextureCube(
+        effect,
+        GetEffectState(effect)->lifetime->environmentMap,
+        environmentMapHandle,
+        [environmentMap](std::shared_ptr<TextureCube> texture) {
+            environmentMap->SetOwnedEnvironmentMap(std::move(texture));
+        });
 }
 
-CNA_Result cna_skinned_effect_set_texture(
+[[nodiscard]] CNA_Result SkinnedEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetRetainedEffectTexture2D(
-            effect,
-            GetEffectState(effect)->lifetime->stockTexture0,
-            textureHandle,
-            [skinned](std::shared_ptr<Texture2D> texture) {
-                skinned->SetOwnedTexture(std::move(texture));
-            });
-    });
+    std::shared_ptr<EffectResource> effect;
+    SkinnedEffect* skinned = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, &effect, &skinned);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SetRetainedEffectTexture2D(
+        effect,
+        GetEffectState(effect)->lifetime->stockTexture0,
+        textureHandle,
+        [skinned](std::shared_ptr<Texture2D> texture) {
+            skinned->SetOwnedTexture(std::move(texture));
+        });
 }
 
-CNA_Result cna_skinned_effect_set_bone_transforms(
+[[nodiscard]] CNA_Result SkinnedEffectSetBoneTransforms(
     const CNA_EffectHandle effectHandle,
     const CNA_Matrix* const transforms,
     const uint64_t transformCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t byteCount = 0U;
-        if (transformCount == 0U || transformCount > CNA_SKINNED_EFFECT_MAX_BONES ||
-            CheckedElementByteCount(
-                transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
-                CNA_RESULT_SUCCESS) {
-            return InvalidArgument(
-                "The SkinnedEffect bone-transform array must contain one through 72 matrices.");
-        }
-        (void)byteCount;
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<Matrix> copied;
-        copied.reserve(static_cast<std::size_t>(transformCount));
-        for (uint64_t index = 0U; index < transformCount; ++index) {
-            copied.push_back(ToNative(transforms[index]));
-        }
-        skinned->SetBoneTransforms(copied);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    if (transformCount == 0U || transformCount > CNA_SKINNED_EFFECT_MAX_BONES ||
+        CheckedElementByteCount(
+            transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
+            CNA_RESULT_SUCCESS) {
+        return InvalidArgument(
+            "The SkinnedEffect bone-transform array must contain one through 72 matrices.");
+    }
+    (void)byteCount;
+    SkinnedEffect* skinned = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, nullptr, &skinned);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Matrix> copied;
+    copied.reserve(static_cast<std::size_t>(transformCount));
+    for (uint64_t index = 0U; index < transformCount; ++index) {
+        copied.push_back(ToNative(transforms[index]));
+    }
+    skinned->SetBoneTransforms(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_effect_copy_bone_transforms(
+[[nodiscard]] CNA_Result SkinnedEffectCopyBoneTransforms(
     const CNA_EffectHandle effectHandle,
     const uint64_t requestedCount,
     CNA_Matrix* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U) ||
-            requestedCount == 0U || requestedCount > CNA_SKINNED_EFFECT_MAX_BONES) {
-            return InvalidArgument("The SkinnedEffect bone-transform copy request is invalid.");
-        }
-        *outCount = requestedCount;
-        if (capacity < requestedCount) {
-            return BufferTooSmall("The destination cannot hold the requested bone transforms.");
-        }
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<Matrix> bones = skinned->GetBoneTransforms(
-            static_cast<int>(requestedCount));
-        for (uint64_t index = 0U; index < requestedCount; ++index) {
-            destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U) || requestedCount == 0U ||
+        requestedCount > CNA_SKINNED_EFFECT_MAX_BONES) {
+        return InvalidArgument("The SkinnedEffect bone-transform copy request is invalid.");
+    }
+    *outCount = requestedCount;
+    if (capacity < requestedCount) {
+        return BufferTooSmall("The destination cannot hold the requested bone transforms.");
+    }
+    SkinnedEffect* skinned = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, nullptr, &skinned);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<Matrix> bones = skinned->GetBoneTransforms(
+        static_cast<int>(requestedCount));
+    for (uint64_t index = 0U; index < requestedCount; ++index) {
+        destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_set_texture(
+[[nodiscard]] CNA_Result PbrEffectSetTexture(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return SetRetainedEffectTexture2D(
-            view.resource,
-            GetEffectState(view.resource)->lifetime->pbrTextures[slot],
-            textureHandle,
-            [&view, slot](std::shared_ptr<Texture2D> texture) {
-                if (view.pbr != nullptr) {
-                    switch (slot) {
-                    case CNA_PBR_TEXTURE_BASE_COLOR: view.pbr->SetOwnedTexture(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_NORMAL: view.pbr->SetOwnedNormalMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.pbr->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_EMISSIVE: view.pbr->SetOwnedEmissiveMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_OCCLUSION: view.pbr->SetOwnedOcclusionMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_SPECULAR_EXT: view.pbr->SetOwnedSpecularMapEXT(std::move(texture)); break;
-                    default: view.pbr->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
-                    }
-                } else {
-                    switch (slot) {
-                    case CNA_PBR_TEXTURE_BASE_COLOR: view.skinned->SetOwnedTexture(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_NORMAL: view.skinned->SetOwnedNormalMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.skinned->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_EMISSIVE: view.skinned->SetOwnedEmissiveMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_OCCLUSION: view.skinned->SetOwnedOcclusionMap(std::move(texture)); break;
-                    case CNA_PBR_TEXTURE_SPECULAR_EXT: view.skinned->SetOwnedSpecularMapEXT(std::move(texture)); break;
-                    default: view.skinned->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
-                    }
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return SetRetainedEffectTexture2D(
+        view.resource,
+        GetEffectState(view.resource)->lifetime->pbrTextures[slot],
+        textureHandle,
+        [&view, slot](std::shared_ptr<Texture2D> texture) {
+            if (view.pbr != nullptr) {
+                switch (slot) {
+                case CNA_PBR_TEXTURE_BASE_COLOR: view.pbr->SetOwnedTexture(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_NORMAL: view.pbr->SetOwnedNormalMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.pbr->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_EMISSIVE: view.pbr->SetOwnedEmissiveMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_OCCLUSION: view.pbr->SetOwnedOcclusionMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_SPECULAR_EXT: view.pbr->SetOwnedSpecularMapEXT(std::move(texture)); break;
+                default: view.pbr->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
                 }
-            });
-    });
+            } else {
+                switch (slot) {
+                case CNA_PBR_TEXTURE_BASE_COLOR: view.skinned->SetOwnedTexture(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_NORMAL: view.skinned->SetOwnedNormalMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.skinned->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_EMISSIVE: view.skinned->SetOwnedEmissiveMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_OCCLUSION: view.skinned->SetOwnedOcclusionMap(std::move(texture)); break;
+                case CNA_PBR_TEXTURE_SPECULAR_EXT: view.skinned->SetOwnedSpecularMapEXT(std::move(texture)); break;
+                default: view.skinned->SetOwnedSpecularColorMapEXT(std::move(texture)); break;
+                }
+            }
+        });
 }
-
-namespace {
 
 // The three colour-carrying slots. Everything else a PBR material samples -- the normal map's
 // tangent-space vectors, the packed metallic-roughness channels, the occlusion factor -- is linear
@@ -3054,310 +2825,282 @@ namespace {
     return IsVersionedStructure(value);
 }
 
-} // namespace
-
-CNA_Result cna_pbr_effect_get_texture_coordinate_set_ext(
+[[nodiscard]] CNA_Result PbrEffectGetTextureCoordinateSetExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     int32_t* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR texture-coordinate-set output is null.");
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto read = [slot](const auto& effect) -> int {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_SPECULAR_EXT:
+            return effect.getSpecularTextureCoordinateSetEXTProperty();
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            return effect.getSpecularColorTextureCoordinateSetEXTProperty();
+        default:
+            return effect.getTextureCoordinateSetsEXTProperty()[slot];
         }
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto read = [slot](const auto& effect) -> int {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_SPECULAR_EXT:
-                return effect.getSpecularTextureCoordinateSetEXTProperty();
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                return effect.getSpecularColorTextureCoordinateSetEXTProperty();
-            default:
-                return effect.getTextureCoordinateSetsEXTProperty()[slot];
-            }
-        };
-        *outValue = view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned);
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    *outValue = view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_set_texture_coordinate_set_ext(
+[[nodiscard]] CNA_Result PbrEffectSetTextureCoordinateSetExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     const int32_t value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    if (value != 0 && value != 1) {
+        return InvalidArgument("The packed UV channel must be 0 or 1.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto write = [slot, value](auto& effect) {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_SPECULAR_EXT:
+            effect.setSpecularTextureCoordinateSetEXTProperty(value);
+            break;
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            effect.setSpecularColorTextureCoordinateSetEXTProperty(value);
+            break;
+        default:
+            effect.setTextureCoordinateSetEXTProperty(static_cast<int>(slot), value);
+            break;
         }
-        if (value != 0 && value != 1) {
-            return InvalidArgument("The packed UV channel must be 0 or 1.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto write = [slot, value](auto& effect) {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_SPECULAR_EXT:
-                effect.setSpecularTextureCoordinateSetEXTProperty(value);
-                break;
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                effect.setSpecularColorTextureCoordinateSetEXTProperty(value);
-                break;
-            default:
-                effect.setTextureCoordinateSetEXTProperty(static_cast<int>(slot), value);
-                break;
-            }
-        };
-        if (view.pbr != nullptr) {
-            write(*view.pbr);
-        } else {
-            write(*view.skinned);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    if (view.pbr != nullptr) {
+        write(*view.pbr);
+    } else {
+        write(*view.skinned);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_get_texture_transform_ext(
+[[nodiscard]] CNA_Result PbrEffectGetTextureTransformExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     CNA_TextureTransformEXT* const outTransform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsTextureTransform(outTransform)) {
-            return InvalidArgument("The PBR texture-transform output is null or malformed.");
+    if (!IsTextureTransform(outTransform)) {
+        return InvalidArgument("The PBR texture-transform output is null or malformed.");
+    }
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto read = [slot](const auto& effect) -> TextureTransformEXT {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_SPECULAR_EXT:
+            return effect.getSpecularTextureTransformEXTProperty();
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            return effect.getSpecularColorTextureTransformEXTProperty();
+        default:
+            return effect.getTextureTransformsEXTProperty()[slot];
         }
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto read = [slot](const auto& effect) -> TextureTransformEXT {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_SPECULAR_EXT:
-                return effect.getSpecularTextureTransformEXTProperty();
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                return effect.getSpecularColorTextureTransformEXTProperty();
-            default:
-                return effect.getTextureTransformsEXTProperty()[slot];
-            }
-        };
-        *outTransform = ToC(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    *outTransform = ToC(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_set_texture_transform_ext(
+[[nodiscard]] CNA_Result PbrEffectSetTextureTransformExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     const CNA_TextureTransformEXT* const transform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsTextureTransform(transform)) {
-            return InvalidArgument("The PBR texture transform is null or malformed.");
+    if (!IsTextureTransform(transform)) {
+        return InvalidArgument("The PBR texture transform is null or malformed.");
+    }
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const TextureTransformEXT native = ToNative(*transform);
+    const auto write = [slot, &native](auto& effect) {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_SPECULAR_EXT:
+            effect.setSpecularTextureTransformEXTProperty(native);
+            break;
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            effect.setSpecularColorTextureTransformEXTProperty(native);
+            break;
+        default:
+            effect.setTextureTransformEXTProperty(static_cast<int>(slot), native);
+            break;
         }
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const TextureTransformEXT native = ToNative(*transform);
-        const auto write = [slot, &native](auto& effect) {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_SPECULAR_EXT:
-                effect.setSpecularTextureTransformEXTProperty(native);
-                break;
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                effect.setSpecularColorTextureTransformEXTProperty(native);
-                break;
-            default:
-                effect.setTextureTransformEXTProperty(static_cast<int>(slot), native);
-                break;
-            }
-        };
-        if (view.pbr != nullptr) {
-            write(*view.pbr);
-        } else {
-            write(*view.skinned);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    if (view.pbr != nullptr) {
+        write(*view.pbr);
+    } else {
+        write(*view.skinned);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_get_texture_is_srgb_ext(
+[[nodiscard]] CNA_Result PbrEffectGetTextureIsSrgbExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     CNA_Bool* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR sRGB output is null.");
+    if (!IsColorTextureSlot(slot)) {
+        return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
+                               "carry an sRGB encoding flag.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto read = [slot](const auto& effect) -> bool {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_EMISSIVE:
+            return effect.getEmissiveTextureIsSrgbEXTProperty();
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            return effect.getSpecularColorTextureIsSrgbEXTProperty();
+        default:
+            return effect.getBaseColorTextureIsSrgbEXTProperty();
         }
-        if (!IsColorTextureSlot(slot)) {
-            return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
-                                   "carry an sRGB encoding flag.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto read = [slot](const auto& effect) -> bool {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_EMISSIVE:
-                return effect.getEmissiveTextureIsSrgbEXTProperty();
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                return effect.getSpecularColorTextureIsSrgbEXTProperty();
-            default:
-                return effect.getBaseColorTextureIsSrgbEXTProperty();
-            }
-        };
-        *outValue = ToCBool(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    *outValue = ToCBool(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
+[[nodiscard]] CNA_Result PbrEffectSetTextureIsSrgbExt(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
     const CNA_Bool value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsCanonicalBool(value)) {
-            return InvalidArgument("The boolean argument is neither CNA_TRUE nor CNA_FALSE.");
+    if (!IsColorTextureSlot(slot)) {
+        return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
+                               "carry an sRGB encoding flag.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const bool native = (value == CNA_TRUE);
+    const auto write = [slot, native](auto& effect) {
+        switch (slot) {
+        case CNA_PBR_TEXTURE_EMISSIVE:
+            effect.setEmissiveTextureIsSrgbEXTProperty(native);
+            break;
+        case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
+            effect.setSpecularColorTextureIsSrgbEXTProperty(native);
+            break;
+        default:
+            effect.setBaseColorTextureIsSrgbEXTProperty(native);
+            break;
         }
-        if (!IsColorTextureSlot(slot)) {
-            return InvalidArgument("Only the base-colour, emissive and specular-colour slots "
-                                   "carry an sRGB encoding flag.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const bool native = (value == CNA_TRUE);
-        const auto write = [slot, native](auto& effect) {
-            switch (slot) {
-            case CNA_PBR_TEXTURE_EMISSIVE:
-                effect.setEmissiveTextureIsSrgbEXTProperty(native);
-                break;
-            case CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT:
-                effect.setSpecularColorTextureIsSrgbEXTProperty(native);
-                break;
-            default:
-                effect.setBaseColorTextureIsSrgbEXTProperty(native);
-                break;
-            }
-        };
-        if (view.pbr != nullptr) {
-            write(*view.pbr);
-        } else {
-            write(*view.skinned);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    };
+    if (view.pbr != nullptr) {
+        write(*view.pbr);
+    } else {
+        write(*view.skinned);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_pbr_effect_set_alpha_mode_ext(
+[[nodiscard]] CNA_Result PbrEffectSetAlphaModeExt(
     const CNA_EffectHandle effectHandle,
     const CNA_AlphaModeEXT value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value > CNA_ALPHA_MODE_MAXIMUM_EXT) {
-            return InvalidArgument("The alpha mode is not a defined identity.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto native = static_cast<AlphaModeEXT>(value);
-        if (view.pbr != nullptr) {
-            view.pbr->setAlphaModeEXTProperty(native);
-        } else {
-            view.skinned->setAlphaModeEXTProperty(native);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value > CNA_ALPHA_MODE_MAXIMUM_EXT) {
+        return InvalidArgument("The alpha mode is not a defined identity.");
+    }
+    PbrEffectView view;
+    if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto native = static_cast<AlphaModeEXT>(value);
+    if (view.pbr != nullptr) {
+        view.pbr->setAlphaModeEXTProperty(native);
+    } else {
+        view.skinned->setAlphaModeEXTProperty(native);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_pbr_effect_set_bone_transforms(
+[[nodiscard]] CNA_Result SkinnedPbrEffectSetBoneTransforms(
     const CNA_EffectHandle effectHandle,
     const CNA_Matrix* const transforms,
     const uint64_t transformCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t byteCount = 0U;
-        if (transformCount == 0U || transformCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES ||
-            CheckedElementByteCount(
-                transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
-                CNA_RESULT_SUCCESS) {
-            return InvalidArgument(
-                "The SkinnedPbrEffect bone-transform array must contain one through 72 matrices.");
-        }
-        (void)byteCount;
-        SkinnedPbrEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<Matrix> copied;
-        copied.reserve(static_cast<std::size_t>(transformCount));
-        for (uint64_t index = 0U; index < transformCount; ++index) {
-            copied.push_back(ToNative(transforms[index]));
-        }
-        skinned->SetBoneTransforms(copied);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    if (transformCount == 0U || transformCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES ||
+        CheckedElementByteCount(
+            transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
+            CNA_RESULT_SUCCESS) {
+        return InvalidArgument(
+            "The SkinnedPbrEffect bone-transform array must contain one through 72 matrices.");
+    }
+    (void)byteCount;
+    SkinnedPbrEffect* skinned = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, nullptr, &skinned);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Matrix> copied;
+    copied.reserve(static_cast<std::size_t>(transformCount));
+    for (uint64_t index = 0U; index < transformCount; ++index) {
+        copied.push_back(ToNative(transforms[index]));
+    }
+    skinned->SetBoneTransforms(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
+[[nodiscard]] CNA_Result SkinnedPbrEffectCopyBoneTransforms(
     const CNA_EffectHandle effectHandle,
     const uint64_t requestedCount,
     CNA_Matrix* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U) ||
-            requestedCount == 0U || requestedCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES) {
-            return InvalidArgument(
-                "The SkinnedPbrEffect bone-transform copy request is invalid.");
-        }
-        *outCount = requestedCount;
-        if (capacity < requestedCount) {
-            return BufferTooSmall("The destination cannot hold the requested bone transforms.");
-        }
-        SkinnedPbrEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<Matrix> bones = skinned->GetBoneTransforms(
-            static_cast<int>(requestedCount));
-        for (uint64_t index = 0U; index < requestedCount; ++index) {
-            destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U) || requestedCount == 0U ||
+        requestedCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES) {
+        return InvalidArgument("The SkinnedPbrEffect bone-transform copy request is invalid.");
+    }
+    *outCount = requestedCount;
+    if (capacity < requestedCount) {
+        return BufferTooSmall("The destination cannot hold the requested bone transforms.");
+    }
+    SkinnedPbrEffect* skinned = nullptr;
+    if (const CNA_Result result = GetStockEffect(
+            effectHandle, nullptr, &skinned);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<Matrix> bones = skinned->GetBoneTransforms(
+        static_cast<int>(requestedCount));
+    for (uint64_t index = 0U; index < requestedCount; ++index) {
+        destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // CNA extended graphics layer: CRTEffect and DepthEffect are ordinary ShaderEffect descendants,
@@ -3432,9 +3175,7 @@ template<typename TCallable>
     });
 }
 
-} // namespace
-
-CNA_Result cna_crt_effect_set_scanline_intensity(
+[[nodiscard]] CNA_Result CrtEffectSetScanlineIntensity(
     const CNA_EffectHandle effectHandle,
     const float value)
 {
@@ -3443,14 +3184,16 @@ CNA_Result cna_crt_effect_set_scanline_intensity(
     });
 }
 
-CNA_Result cna_crt_effect_set_curvature(const CNA_EffectHandle effectHandle, const float value)
+[[nodiscard]] CNA_Result CrtEffectSetCurvature(
+    const CNA_EffectHandle effectHandle,
+    const float value)
 {
     return CrtCommand(effectHandle, value, [](CNA::Graphics::CRTEffect& effect, const float v) {
         effect.setCurvature(v);
     });
 }
 
-CNA_Result cna_crt_effect_set_vignette_intensity(
+[[nodiscard]] CNA_Result CrtEffectSetVignetteIntensity(
     const CNA_EffectHandle effectHandle,
     const float value)
 {
@@ -3459,7 +3202,7 @@ CNA_Result cna_crt_effect_set_vignette_intensity(
     });
 }
 
-CNA_Result cna_crt_effect_set_mask_intensity(
+[[nodiscard]] CNA_Result CrtEffectSetMaskIntensity(
     const CNA_EffectHandle effectHandle,
     const float value)
 {
@@ -3468,62 +3211,58 @@ CNA_Result cna_crt_effect_set_mask_intensity(
     });
 }
 
-CNA_Result cna_crt_effect_set_mask_type(
+[[nodiscard]] CNA_Result CrtEffectSetMaskType(
     const CNA_EffectHandle effectHandle,
     const CNA_CRTMaskType maskType)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (maskType > CNA_CRT_MASK_TYPE_SHADOW_MASK) {
-            return InvalidArgument("The CRT mask type is not recognized.");
-        }
-        CNA::Graphics::CRTEffect* effect = nullptr;
-        std::shared_ptr<EffectResource> resource;
-        if (const CNA_Result result = GetCrtEffect(effectHandle, &resource, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->setMaskType(static_cast<CNA::Graphics::CRTMaskType>(maskType));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (maskType > CNA_CRT_MASK_TYPE_SHADOW_MASK) {
+        return InvalidArgument("The CRT mask type is not recognized.");
+    }
+    CNA::Graphics::CRTEffect* effect = nullptr;
+    std::shared_ptr<EffectResource> resource;
+    if (const CNA_Result result = GetCrtEffect(effectHandle, &resource, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    effect->setMaskType(static_cast<CNA::Graphics::CRTMaskType>(maskType));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_depth_effect_set_mode(
+[[nodiscard]] CNA_Result DepthEffectSetMode(
     const CNA_EffectHandle effectHandle,
     const CNA_DepthEffectMode mode)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (mode > CNA_DEPTH_EFFECT_MODE_PALETTE_16) {
-            return InvalidArgument("The depth-effect mode is not recognized.");
-        }
-        CNA::Graphics::DepthEffect* effect = nullptr;
-        std::shared_ptr<EffectResource> resource;
-        if (const CNA_Result result = GetDepthEffect(effectHandle, &resource, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->setMode(static_cast<CNA::Graphics::DepthEffectMode>(mode));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (mode > CNA_DEPTH_EFFECT_MODE_PALETTE_16) {
+        return InvalidArgument("The depth-effect mode is not recognized.");
+    }
+    CNA::Graphics::DepthEffect* effect = nullptr;
+    std::shared_ptr<EffectResource> resource;
+    if (const CNA_Result result = GetDepthEffect(effectHandle, &resource, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    effect->setMode(static_cast<CNA::Graphics::DepthEffectMode>(mode));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_depth_effect_set_dither_mode(
+[[nodiscard]] CNA_Result DepthEffectSetDitherMode(
     const CNA_EffectHandle effectHandle,
     const CNA_DitherMode ditherMode)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (ditherMode > CNA_DITHER_MODE_BAYER_8X8) {
-            return InvalidArgument("The dither mode is not recognized.");
-        }
-        CNA::Graphics::DepthEffect* effect = nullptr;
-        std::shared_ptr<EffectResource> resource;
-        if (const CNA_Result result = GetDepthEffect(effectHandle, &resource, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        effect->setDitherMode(static_cast<CNA::Graphics::DitherMode>(ditherMode));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (ditherMode > CNA_DITHER_MODE_BAYER_8X8) {
+        return InvalidArgument("The dither mode is not recognized.");
+    }
+    CNA::Graphics::DepthEffect* effect = nullptr;
+    std::shared_ptr<EffectResource> resource;
+    if (const CNA_Result result = GetDepthEffect(effectHandle, &resource, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    effect->setDitherMode(static_cast<CNA::Graphics::DitherMode>(ditherMode));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 #else // CNA_CNAEXT
 
@@ -3535,67 +3274,6 @@ namespace {
 }
 
 } // namespace
-
-CNA_Result cna_crt_effect_set_scanline_intensity(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    (void)effectHandle;
-    (void)value;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_crt_effect_set_curvature(const CNA_EffectHandle effectHandle, const float value)
-{
-    (void)effectHandle;
-    (void)value;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_crt_effect_set_vignette_intensity(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    (void)effectHandle;
-    (void)value;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_crt_effect_set_mask_intensity(
-    const CNA_EffectHandle effectHandle,
-    const float value)
-{
-    (void)effectHandle;
-    (void)value;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_crt_effect_set_mask_type(
-    const CNA_EffectHandle effectHandle,
-    const CNA_CRTMaskType maskType)
-{
-    (void)effectHandle;
-    (void)maskType;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_depth_effect_set_mode(
-    const CNA_EffectHandle effectHandle,
-    const CNA_DepthEffectMode mode)
-{
-    (void)effectHandle;
-    (void)mode;
-    return ExtensionEffectUnavailable();
-}
-
-CNA_Result cna_depth_effect_set_dither_mode(
-    const CNA_EffectHandle effectHandle,
-    const CNA_DitherMode ditherMode)
-{
-    (void)effectHandle;
-    (void)ditherMode;
-    return ExtensionEffectUnavailable();
-}
 
 #endif // CNA_CNAEXT
 
@@ -3620,61 +3298,57 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_shader_effect_set_uniform_vec3_array(
+[[nodiscard]] CNA_Result ShaderEffectSetUniformVec3Array(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
     const float* const values,
     const int32_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireUniformArray(values, count, "The vector array is null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformVec3Array(copiedName.c_str(), values, static_cast<int>(count));
-        return CNA_RESULT_SUCCESS;
-    });
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyUniformName(name, &copiedName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            RequireUniformArray(values, count, "The vector array is null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetUniformVec3Array(copiedName.c_str(), values, static_cast<int>(count));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_shader_effect_set_uniform_mat4_array(
+[[nodiscard]] CNA_Result ShaderEffectSetUniformMat4Array(
     const CNA_EffectHandle effectHandle,
     const CNA_StringView name,
     const float* const matrices,
     const int32_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireUniformArray(matrices, count, "The matrix array is null.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformMat4Array(copiedName.c_str(), matrices, static_cast<int>(count));
-        return CNA_RESULT_SUCCESS;
-    });
+    ShaderEffect* shader = nullptr;
+    if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string copiedName;
+    if (const CNA_Result result = CopyUniformName(name, &copiedName);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            RequireUniformArray(matrices, count, "The matrix array is null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    shader->SetUniformMat4Array(copiedName.c_str(), matrices, static_cast<int>(count));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-104: the EffectMaterial retained-texture contract ----------------------------------- */
 
@@ -3702,76 +3376,74 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_effect_material_retain_parameter_texture_ext(
+[[nodiscard]] CNA_Result EffectMaterialRetainParameterTextureExt(
     const CNA_EffectHandle effectHandle,
     const CNA_EffectTextureType textureType,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        EffectMaterial* material = nullptr;
-        if (const CNA_Result result = GetEffectMaterial(effectHandle, &effect, &material);
+    std::shared_ptr<EffectResource> effect;
+    EffectMaterial* material = nullptr;
+    if (const CNA_Result result = GetEffectMaterial(effectHandle, &effect, &material);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
+        return InvalidArgument("The texture type is not a CNA_EFFECT_TEXTURE_* family.");
+    }
+    // The canonical method ignores a null pointer; the null handle is its C spelling, and
+    // treating it as an error would make the two disagree about the same input.
+    if (textureHandle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+
+    std::shared_ptr<Texture> texture;
+    switch (textureType) {
+    case CNA_EFFECT_TEXTURE_BASE: {
+        TextureResourceView view;
+        if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
-            return InvalidArgument("The texture type is not a CNA_EFFECT_TEXTURE_* family.");
+        texture = std::move(view.value);
+        break;
+    }
+    case CNA_EFFECT_TEXTURE_2D: {
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
+        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        // The canonical method ignores a null pointer; the null handle is its C spelling, and
-        // treating it as an error would make the two disagree about the same input.
-        if (textureHandle == CNA_INVALID_HANDLE) {
-            return CNA_RESULT_SUCCESS;
+        texture = std::static_pointer_cast<Texture>(resource->value);
+        break;
+    }
+    case CNA_EFFECT_TEXTURE_3D: {
+        std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
+        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
+        texture = std::static_pointer_cast<Texture>(resource->value);
+        break;
+    }
+    default: {
+        TextureCubeResourceView view;
+        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        texture = std::static_pointer_cast<Texture>(view.value);
+        break;
+    }
+    }
 
-        std::shared_ptr<Texture> texture;
-        switch (textureType) {
-        case CNA_EFFECT_TEXTURE_BASE: {
-            TextureResourceView view;
-            if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::move(view.value);
-            break;
-        }
-        case CNA_EFFECT_TEXTURE_2D: {
-            std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
-            if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(resource->value);
-            break;
-        }
-        case CNA_EFFECT_TEXTURE_3D: {
-            std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
-            if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(resource->value);
-            break;
-        }
-        default: {
-            TextureCubeResourceView view;
-            if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            texture = std::static_pointer_cast<Texture>(view.value);
-            break;
-        }
-        }
-
-        // Only the canonical texture is handed over, not the C resource wrapper: retaining is what
-        // makes the material own the object outright, so the caller's handle may be released
-        // immediately afterwards without the parameter dangling.
-        material->RetainParameterTextureEXT(std::move(texture));
-        return CNA_RESULT_SUCCESS;
-    });
+    // Only the canonical texture is handed over, not the C resource wrapper: retaining is what
+    // makes the material own the object outright, so the caller's handle may be released
+    // immediately afterwards without the parameter dangling.
+    material->RetainParameterTextureEXT(std::move(texture));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Effects.toml.
 #include "generated/Effects.inc"

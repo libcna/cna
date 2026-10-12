@@ -1521,165 +1521,137 @@ CNA_Result GetOwnedSkinnedModelValue(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_model_bone_create_default(CNA_ModelBoneHandle* const outBone)
+namespace {
+
+[[nodiscard]] CNA_Result ModelBoneCreateDefault(CNA_ModelBoneHandle* const outBone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBone == nullptr) {
-            return InvalidArgument("The ModelBone output handle is null.");
-        }
-        *outBone = CNA_INVALID_HANDLE;
-        auto node = std::make_shared<BoneNode>();
-        node->value = std::make_shared<ModelBone>();
-        return CreateBoneHandle(std::move(node), outBone);
-    });
+    auto node = std::make_shared<BoneNode>();
+    node->value = std::make_shared<ModelBone>();
+    return CreateBoneHandle(std::move(node), outBone);
 }
 
-CNA_Result cna_model_bone_create(
+[[nodiscard]] CNA_Result ModelBoneCreate(
     const int32_t index,
     const CNA_StringView name,
     CNA_ModelBoneHandle* const outBone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBone == nullptr) {
-            return InvalidArgument("The ModelBone output handle is null.");
-        }
-        *outBone = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The ModelBone name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto node = std::make_shared<BoneNode>();
-        node->value = std::make_shared<ModelBone>(
-            static_cast<int>(index), std::move(copiedName));
-        return CreateBoneHandle(std::move(node), outBone);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The ModelBone name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto node = std::make_shared<BoneNode>();
+    node->value = std::make_shared<ModelBone>(
+        static_cast<int>(index), std::move(copiedName));
+    return CreateBoneHandle(std::move(node), outBone);
 }
 
-CNA_Result cna_model_bone_get_parent(
+[[nodiscard]] CNA_Result ModelBoneGetParent(
     const CNA_ModelBoneHandle boneHandle,
     CNA_Bool* const outHasParent,
     CNA_ModelBoneHandle* const outParent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasParent == nullptr || outParent == nullptr) {
-            return InvalidArgument("The ModelBone parent outputs are null.");
-        }
-        *outHasParent = CNA_FALSE;
-        *outParent = CNA_INVALID_HANDLE;
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BoneNode> parent = bone->node->parent.lock();
-        if (parent == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = CreateBoneHandle(std::move(parent), outParent);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasParent = CNA_TRUE;
+    *outHasParent = CNA_FALSE;
+    *outParent = CNA_INVALID_HANDLE;
+    std::shared_ptr<BoneResource> bone;
+    if (const CNA_Result result = GetBone(boneHandle, &bone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BoneNode> parent = bone->node->parent.lock();
+    if (parent == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = CreateBoneHandle(std::move(parent), outParent);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasParent = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_bone_add_child(
+[[nodiscard]] CNA_Result ModelBoneAddChild(
     const CNA_ModelBoneHandle boneHandle,
     const CNA_ModelBoneHandle childHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BoneResource> bone;
-        std::shared_ptr<BoneResource> child;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+    std::shared_ptr<BoneResource> bone;
+    std::shared_ptr<BoneResource> child;
+    if (const CNA_Result result = GetBone(boneHandle, &bone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = GetBone(childHandle, &child);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    for (std::shared_ptr<BoneNode> ancestor = bone->node;
+         ancestor != nullptr;
+         ancestor = ancestor->parent.lock()) {
+        if (ancestor == child->node) {
+            return InvalidArgument(
+                "A ModelBone cannot be added as itself or create an ancestor cycle.");
         }
-        if (const CNA_Result result = GetBone(childHandle, &child);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        for (std::shared_ptr<BoneNode> ancestor = bone->node;
-             ancestor != nullptr;
-             ancestor = ancestor->parent.lock()) {
-            if (ancestor == child->node) {
-                return InvalidArgument(
-                    "A ModelBone cannot be added as itself or create an ancestor cycle.");
-            }
-        }
-        bone->node->value->AddChild(child->node->value.get());
-        bone->node->children.push_back(child->node);
-        child->node->parent = bone->node;
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    bone->node->value->AddChild(child->node->value.get());
+    bone->node->children.push_back(child->node);
+    child->node->parent = bone->node;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_bone_collection_get_at(
+[[nodiscard]] CNA_Result ModelBoneCollectionGetAt(
     const CNA_ModelBoneCollectionHandle collectionHandle,
     const uint64_t index,
     CNA_ModelBoneHandle* const outBone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBone == nullptr) {
-            return InvalidArgument("The ModelBoneCollection bone output is null.");
-        }
-        *outBone = CNA_INVALID_HANDLE;
-        std::shared_ptr<BoneCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& nodes = CollectionNodes(*collection);
-        if (index >= nodes.size()) {
-            return InvalidArgument("The ModelBoneCollection index is outside the valid range.");
-        }
-        return CreateBoneHandle(
-            nodes[static_cast<std::size_t>(index)], outBone);
-    });
+    std::shared_ptr<BoneCollectionResource> collection;
+    if (const CNA_Result result = GetCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& nodes = CollectionNodes(*collection);
+    if (index >= nodes.size()) {
+        return InvalidArgument("The ModelBoneCollection index is outside the valid range.");
+    }
+    return CreateBoneHandle(
+        nodes[static_cast<std::size_t>(index)], outBone);
 }
 
-CNA_Result cna_model_bone_collection_find(
+[[nodiscard]] CNA_Result ModelBoneCollectionFind(
     const CNA_ModelBoneCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_ModelBoneHandle* const outBone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outBone == nullptr) {
-            return InvalidArgument("The ModelBoneCollection find outputs are null.");
-        }
-        *outFound = CNA_FALSE;
-        *outBone = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The ModelBone lookup name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BoneCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        for (const std::shared_ptr<BoneNode>& node : CollectionNodes(*collection)) {
-            if (node->value->getNameProperty() == copiedName) {
-                if (const CNA_Result result = CreateBoneHandle(node, outBone);
-                    result != CNA_RESULT_SUCCESS) {
-                    return result;
-                }
-                *outFound = CNA_TRUE;
-                return CNA_RESULT_SUCCESS;
+    *outFound = CNA_FALSE;
+    *outBone = CNA_INVALID_HANDLE;
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The ModelBone lookup name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BoneCollectionResource> collection;
+    if (const CNA_Result result = GetCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    for (const std::shared_ptr<BoneNode>& node : CollectionNodes(*collection)) {
+        if (node->value->getNameProperty() == copiedName) {
+            if (const CNA_Result result = CreateBoneHandle(node, outBone);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
             }
+            *outFound = CNA_TRUE;
+            return CNA_RESULT_SUCCESS;
         }
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_create(
+[[nodiscard]] CNA_Result ModelMeshPartCreate(
     const CNA_VertexBufferHandle vertexBufferHandle,
     const CNA_IndexBufferHandle indexBufferHandle,
     const int32_t numVertices,
@@ -1688,27 +1660,23 @@ CNA_Result cna_model_mesh_part_create(
     const int32_t vertexOffset,
     CNA_ModelMeshPartHandle* const outPart)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPart == nullptr) {
-            return InvalidArgument("The ModelMeshPart output handle is null.");
-        }
-        *outPart = CNA_INVALID_HANDLE;
-        const auto part = std::make_shared<PartResource>();
-        if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = SetPartIndexBuffer(part, indexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->SetNumVertices(static_cast<int>(numVertices));
-        part->value->SetPrimitiveCount(static_cast<int>(primitiveCount));
-        part->value->SetStartIndex(static_cast<int>(startIndex));
-        part->value->SetVertexOffset(static_cast<int>(vertexOffset));
-        return CreatePartHandle(part, outPart);
-    });
+    const auto part = std::make_shared<PartResource>();
+    if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = SetPartIndexBuffer(part, indexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->value->SetNumVertices(static_cast<int>(numVertices));
+    part->value->SetPrimitiveCount(static_cast<int>(primitiveCount));
+    part->value->SetStartIndex(static_cast<int>(startIndex));
+    part->value->SetVertexOffset(static_cast<int>(vertexOffset));
+    return CreatePartHandle(part, outPart);
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 
@@ -1728,677 +1696,569 @@ CNA_Result GetOwnedModelMeshPartValue(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_model_mesh_part_set_num_vertices(
+namespace {
+
+[[nodiscard]] CNA_Result ModelMeshPartSetNumVertices(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->SetNumVertices(static_cast<int>(value));
-        if (part->detachedValue != nullptr) {
-            part->detachedValue->SetNumVertices(static_cast<int>(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->value->SetNumVertices(static_cast<int>(value));
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetNumVertices(static_cast<int>(value));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_primitive_count(
+[[nodiscard]] CNA_Result ModelMeshPartSetPrimitiveCount(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->SetPrimitiveCount(static_cast<int>(value));
-        if (part->detachedValue != nullptr) {
-            part->detachedValue->SetPrimitiveCount(static_cast<int>(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->value->SetPrimitiveCount(static_cast<int>(value));
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetPrimitiveCount(static_cast<int>(value));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_start_index(
+[[nodiscard]] CNA_Result ModelMeshPartSetStartIndex(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->SetStartIndex(static_cast<int>(value));
-        if (part->detachedValue != nullptr) {
-            part->detachedValue->SetStartIndex(static_cast<int>(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->value->SetStartIndex(static_cast<int>(value));
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetStartIndex(static_cast<int>(value));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_vertex_offset(
+[[nodiscard]] CNA_Result ModelMeshPartSetVertexOffset(
     const CNA_ModelMeshPartHandle partHandle,
     const int32_t value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->value->SetVertexOffset(static_cast<int>(value));
-        if (part->detachedValue != nullptr) {
-            part->detachedValue->SetVertexOffset(static_cast<int>(value));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->value->SetVertexOffset(static_cast<int>(value));
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetVertexOffset(static_cast<int>(value));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_get_effect(
+[[nodiscard]] CNA_Result ModelMeshPartGetEffect(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasEffect,
     CNA_EffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasEffect == nullptr || outEffect == nullptr) {
-            return InvalidArgument("The ModelMeshPart Effect outputs are null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasEffect = part->effect.handle == CNA_INVALID_HANDLE ? CNA_FALSE : CNA_TRUE;
-        *outEffect = part->effect.handle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasEffect = part->effect.handle == CNA_INVALID_HANDLE ? CNA_FALSE : CNA_TRUE;
+    *outEffect = part->effect.handle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_get_vertex_buffer(
+[[nodiscard]] CNA_Result ModelMeshPartGetVertexBuffer(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasBuffer,
     CNA_VertexBufferHandle* const outBuffer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasBuffer == nullptr || outBuffer == nullptr) {
-            return InvalidArgument("The ModelMeshPart VertexBuffer outputs are null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasBuffer = part->vertexBuffer.handle == CNA_INVALID_HANDLE
-            ? CNA_FALSE
-            : CNA_TRUE;
-        *outBuffer = part->vertexBuffer.handle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasBuffer = part->vertexBuffer.handle == CNA_INVALID_HANDLE
+        ? CNA_FALSE
+        : CNA_TRUE;
+    *outBuffer = part->vertexBuffer.handle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_get_index_buffer(
+[[nodiscard]] CNA_Result ModelMeshPartGetIndexBuffer(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasBuffer,
     CNA_IndexBufferHandle* const outBuffer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasBuffer == nullptr || outBuffer == nullptr) {
-            return InvalidArgument("The ModelMeshPart IndexBuffer outputs are null.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasBuffer = part->indexBuffer.handle == CNA_INVALID_HANDLE
-            ? CNA_FALSE
-            : CNA_TRUE;
-        *outBuffer = part->indexBuffer.handle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasBuffer = part->indexBuffer.handle == CNA_INVALID_HANDLE
+        ? CNA_FALSE
+        : CNA_TRUE;
+    *outBuffer = part->indexBuffer.handle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_collection_create(
+[[nodiscard]] CNA_Result ModelMeshPartCollectionCreate(
     const CNA_ModelMeshPartHandle* const partHandles,
     const uint64_t partCount,
     CNA_ModelMeshPartCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The ModelMeshPartCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                partHandles, partCount, sizeof(*partHandles), &byteCount);
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            partHandles, partCount, sizeof(*partHandles), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelMeshPart handle array is invalid or too large.");
+    }
+    static_cast<void>(byteCount);
+    auto collection = std::make_shared<PartCollectionResource>();
+    if (partCount > collection->parts.max_size()) {
+        return Overflow("The ModelMeshPart collection is too large.");
+    }
+    collection->parts.reserve(static_cast<std::size_t>(partCount));
+    for (uint64_t index = 0U; index < partCount; ++index) {
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandles[index], &part);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ModelMeshPart handle array is invalid or too large.");
+            return result;
         }
-        static_cast<void>(byteCount);
-        auto collection = std::make_shared<PartCollectionResource>();
-        if (partCount > collection->parts.max_size()) {
-            return Overflow("The ModelMeshPart collection is too large.");
-        }
-        collection->parts.reserve(static_cast<std::size_t>(partCount));
-        for (uint64_t index = 0U; index < partCount; ++index) {
-            std::shared_ptr<PartResource> part;
-            if (const CNA_Result result = GetPart(partHandles[index], &part);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            collection->parts.push_back(std::move(part));
-        }
-        return CreatePartCollectionHandle(std::move(collection), outCollection);
-    });
+        collection->parts.push_back(std::move(part));
+    }
+    return CreatePartCollectionHandle(std::move(collection), outCollection);
 }
 
-CNA_Result cna_model_mesh_part_collection_get_at(
+[[nodiscard]] CNA_Result ModelMeshPartCollectionGetAt(
     const CNA_ModelMeshPartCollectionHandle collectionHandle,
     const uint64_t index,
     CNA_ModelMeshPartHandle* const outPart)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPart == nullptr) {
-            return InvalidArgument("The ModelMeshPartCollection part output is null.");
-        }
-        *outPart = CNA_INVALID_HANDLE;
-        std::shared_ptr<PartCollectionResource> collection;
-        if (const CNA_Result result = GetPartCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& parts = PartList(*collection);
-        if (index >= parts.size()) {
-            return InvalidArgument(
-                "The ModelMeshPartCollection index is outside the valid range.");
-        }
-        return CreatePartHandle(
-            parts[static_cast<std::size_t>(index)], outPart);
-    });
+    std::shared_ptr<PartCollectionResource> collection;
+    if (const CNA_Result result = GetPartCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& parts = PartList(*collection);
+    if (index >= parts.size()) {
+        return InvalidArgument(
+            "The ModelMeshPartCollection index is outside the valid range.");
+    }
+    return CreatePartHandle(
+        parts[static_cast<std::size_t>(index)], outPart);
 }
 
-CNA_Result cna_model_mesh_create_named(
+[[nodiscard]] CNA_Result ModelMeshCreateNamed(
     const CNA_Handle graphicsDevice,
     const CNA_StringView name,
     const CNA_ModelMeshPartHandle* const parts,
     const uint64_t partCount,
     CNA_ModelMeshHandle* const outMesh)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMesh == nullptr) {
-            return InvalidArgument("The ModelMesh output handle is null.");
-        }
-        *outMesh = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The ModelMesh name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateMesh(
-            graphicsDevice, copiedName, true, parts, partCount, outMesh);
-    });
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The ModelMesh name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateMesh(
+        graphicsDevice, copiedName, true, parts, partCount, outMesh);
 }
 
-CNA_Result cna_model_mesh_get_mesh_parts(
+[[nodiscard]] CNA_Result ModelMeshGetMeshParts(
     const CNA_ModelMeshHandle meshHandle,
     CNA_ModelMeshPartCollectionHandle* const outParts)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outParts == nullptr) {
-            return InvalidArgument("The ModelMesh part-collection output is null.");
-        }
-        *outParts = CNA_INVALID_HANDLE;
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto collection = std::make_shared<PartCollectionResource>();
-        collection->mesh = std::move(mesh);
-        return CreatePartCollectionHandle(std::move(collection), outParts);
-    });
+    std::shared_ptr<MeshResource> mesh;
+    if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto collection = std::make_shared<PartCollectionResource>();
+    collection->mesh = std::move(mesh);
+    return CreatePartCollectionHandle(std::move(collection), outParts);
 }
 
-CNA_Result cna_model_mesh_get_parent_bone(
+[[nodiscard]] CNA_Result ModelMeshGetParentBone(
     const CNA_ModelMeshHandle meshHandle,
     CNA_Bool* const outHasParent,
     CNA_ModelBoneHandle* const outParent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasParent == nullptr || outParent == nullptr) {
-            return InvalidArgument("The ModelMesh parent-bone outputs are null.");
-        }
-        *outHasParent = CNA_FALSE;
-        *outParent = CNA_INVALID_HANDLE;
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (mesh->parentBone == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = CreateBoneHandle(mesh->parentBone, outParent);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasParent = CNA_TRUE;
+    *outHasParent = CNA_FALSE;
+    *outParent = CNA_INVALID_HANDLE;
+    std::shared_ptr<MeshResource> mesh;
+    if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (mesh->parentBone == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = CreateBoneHandle(mesh->parentBone, outParent);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasParent = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_set_parent_bone(
+[[nodiscard]] CNA_Result ModelMeshSetParentBone(
     const CNA_ModelMeshHandle meshHandle,
     const CNA_ModelBoneHandle parentHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (parentHandle == CNA_INVALID_HANDLE) {
-            mesh->value->setParentBoneProperty(nullptr);
-            mesh->parentBone.reset();
-            return CNA_RESULT_SUCCESS;
-        }
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(parentHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        mesh->value->setParentBoneProperty(bone->node->value.get());
-        mesh->parentBone = bone->node;
+    std::shared_ptr<MeshResource> mesh;
+    if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (parentHandle == CNA_INVALID_HANDLE) {
+        mesh->value->setParentBoneProperty(nullptr);
+        mesh->parentBone.reset();
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    std::shared_ptr<BoneResource> bone;
+    if (const CNA_Result result = GetBone(parentHandle, &bone);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    mesh->value->setParentBoneProperty(bone->node->value.get());
+    mesh->parentBone = bone->node;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_collection_create(
+[[nodiscard]] CNA_Result ModelMeshCollectionCreate(
     const CNA_ModelMeshHandle* const meshHandles,
     const uint64_t meshCount,
     CNA_ModelMeshCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The ModelMeshCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                meshHandles, meshCount, sizeof(*meshHandles), &byteCount);
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            meshHandles, meshCount, sizeof(*meshHandles), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelMesh handle array is invalid or too large.");
+    }
+    static_cast<void>(byteCount);
+    auto collection = std::make_shared<MeshCollectionResource>();
+    if (meshCount > collection->meshes.max_size()) {
+        return Overflow("The ModelMesh collection is too large.");
+    }
+    collection->meshes.reserve(static_cast<std::size_t>(meshCount));
+    for (uint64_t index = 0U; index < meshCount; ++index) {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandles[index], &mesh);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ModelMesh handle array is invalid or too large.");
+            return result;
         }
-        static_cast<void>(byteCount);
-        auto collection = std::make_shared<MeshCollectionResource>();
-        if (meshCount > collection->meshes.max_size()) {
-            return Overflow("The ModelMesh collection is too large.");
-        }
-        collection->meshes.reserve(static_cast<std::size_t>(meshCount));
-        for (uint64_t index = 0U; index < meshCount; ++index) {
-            std::shared_ptr<MeshResource> mesh;
-            if (const CNA_Result result = GetMesh(meshHandles[index], &mesh);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            collection->meshes.push_back(std::move(mesh));
-        }
-        return CreateMeshCollectionHandle(std::move(collection), outCollection);
-    });
+        collection->meshes.push_back(std::move(mesh));
+    }
+    return CreateMeshCollectionHandle(std::move(collection), outCollection);
 }
 
-CNA_Result cna_model_mesh_collection_find(
+[[nodiscard]] CNA_Result ModelMeshCollectionFind(
     const CNA_ModelMeshCollectionHandle collectionHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     CNA_ModelMeshHandle* const outMesh)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outMesh == nullptr) {
-            return InvalidArgument("The ModelMeshCollection find outputs are null.");
-        }
-        *outFound = CNA_FALSE;
-        *outMesh = CNA_INVALID_HANDLE;
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The ModelMesh lookup name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<MeshCollectionResource> collection;
-        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto iterator = std::find_if(
-            collection->meshes.begin(),
-            collection->meshes.end(),
-            [&copiedName](const std::shared_ptr<MeshResource>& mesh) {
-                return mesh->value->getNameProperty() == copiedName;
-            });
-        if (iterator == collection->meshes.end()) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = CreateMeshHandle(*iterator, outMesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFound = CNA_TRUE;
+    *outFound = CNA_FALSE;
+    *outMesh = CNA_INVALID_HANDLE;
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The ModelMesh lookup name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<MeshCollectionResource> collection;
+    if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto iterator = std::find_if(
+        collection->meshes.begin(),
+        collection->meshes.end(),
+        [&copiedName](const std::shared_ptr<MeshResource>& mesh) {
+            return mesh->value->getNameProperty() == copiedName;
+        });
+    if (iterator == collection->meshes.end()) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = CreateMeshHandle(*iterator, outMesh);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outFound = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_effect_collection_get_at(
+[[nodiscard]] CNA_Result ModelEffectCollectionGetAt(
     const CNA_ModelEffectCollectionHandle collectionHandle,
     const uint64_t index,
     CNA_EffectHandle* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The ModelEffectCollection effect output is null.");
-        }
-        *outEffect = CNA_INVALID_HANDLE;
-        std::shared_ptr<EffectCollectionResource> collection;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= collection->mesh->effects.size()) {
-            return InvalidArgument("The ModelEffectCollection index is outside the valid range.");
-        }
-        *outEffect = collection->mesh->effects[static_cast<std::size_t>(index)].handle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EffectCollectionResource> collection;
+    if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index >= collection->mesh->effects.size()) {
+        return InvalidArgument("The ModelEffectCollection index is outside the valid range.");
+    }
+    *outEffect = collection->mesh->effects[static_cast<std::size_t>(index)].handle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_effect_collection_add(
+[[nodiscard]] CNA_Result ModelEffectCollectionAdd(
     const CNA_ModelEffectCollectionHandle collectionHandle,
     const CNA_EffectHandle effectHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectCollectionResource> collection;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (effect->parentGame != collection->mesh->parentGame) {
-            return InvalidArgument(
-                "A ModelEffectCollection Effect must belong to its mesh graphics device.");
-        }
-        if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
-            return Overflow("The ModelEffectCollection retention count overflowed.");
-        }
-        collection->mesh->effects.reserve(collection->mesh->effects.size() + 1U);
-        collection->mesh->value->getEffectsPropertyMutable().Add(effect->value.get());
-        AddMeshEffect(*collection->mesh, effectHandle, effect);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EffectCollectionResource> collection;
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (effect->parentGame != collection->mesh->parentGame) {
+        return InvalidArgument(
+            "A ModelEffectCollection Effect must belong to its mesh graphics device.");
+    }
+    if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
+        return Overflow("The ModelEffectCollection retention count overflowed.");
+    }
+    collection->mesh->effects.reserve(collection->mesh->effects.size() + 1U);
+    collection->mesh->value->getEffectsPropertyMutable().Add(effect->value.get());
+    AddMeshEffect(*collection->mesh, effectHandle, effect);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_effect_collection_remove(
+[[nodiscard]] CNA_Result ModelEffectCollectionRemove(
     const CNA_ModelEffectCollectionHandle collectionHandle,
     const CNA_EffectHandle effectHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectCollectionResource> collection;
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->mesh->value->getEffectsPropertyMutable().Remove(effect->value.get());
-        RemoveFirstMeshEffect(*collection->mesh, effectHandle);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<EffectCollectionResource> collection;
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    collection->mesh->value->getEffectsPropertyMutable().Remove(effect->value.get());
+    RemoveFirstMeshEffect(*collection->mesh, effectHandle);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_create_default(CNA_ModelHandle* const outModel)
+[[nodiscard]] CNA_Result ModelCreateDefault(CNA_ModelHandle* const outModel)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The Model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        auto model = std::make_shared<ModelResource>();
-        model->value = std::make_shared<Model>();
-        return CreateModelHandle(std::move(model), outModel);
-    });
+    auto model = std::make_shared<ModelResource>();
+    model->value = std::make_shared<Model>();
+    return CreateModelHandle(std::move(model), outModel);
 }
 
-CNA_Result cna_model_destroy(const CNA_ModelHandle modelHandle)
+[[nodiscard]] CNA_Result ModelDestroy(const CNA_ModelHandle modelHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // CBIND-118: taken before the release, because the resource record is what holds them.
-        const std::vector<CNA_Handle> published = model->contentOwnedHandles;
-        if (const CNA_Result result = ReleaseHandle(modelHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // A content-loaded model published these; the caller never created them, so releasing the
-        // model is what ends them. Each release is best-effort: a caller that already released one
-        // by hand must not make destroying the model fail.
-        for (const CNA_Handle handle : published) {
-            static_cast<void>(GetRuntimeHandles().Release(handle));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // CBIND-118: taken before the release, because the resource record is what holds them.
+    const std::vector<CNA_Handle> published = model->contentOwnedHandles;
+    if (const CNA_Result result = ReleaseHandle(modelHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // A content-loaded model published these; the caller never created them, so releasing the
+    // model is what ends them. Each release is best-effort: a caller that already released one
+    // by hand must not make destroying the model fail.
+    for (const CNA_Handle handle : published) {
+        static_cast<void>(GetRuntimeHandles().Release(handle));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_get_bones(
+[[nodiscard]] CNA_Result ModelGetBones(
     const CNA_ModelHandle modelHandle,
     CNA_ModelBoneCollectionHandle* const outBones)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBones == nullptr) {
-            return InvalidArgument("The Model bone-collection output is null.");
-        }
-        *outBones = CNA_INVALID_HANDLE;
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto collection = std::make_shared<BoneCollectionResource>();
-        collection->nodes = model->bones;
-        return CreateCollectionHandle(std::move(collection), outBones);
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto collection = std::make_shared<BoneCollectionResource>();
+    collection->nodes = model->bones;
+    return CreateCollectionHandle(std::move(collection), outBones);
 }
 
-CNA_Result cna_model_get_meshes(
+[[nodiscard]] CNA_Result ModelGetMeshes(
     const CNA_ModelHandle modelHandle,
     CNA_ModelMeshCollectionHandle* const outMeshes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMeshes == nullptr) {
-            return InvalidArgument("The Model mesh-collection output is null.");
-        }
-        *outMeshes = CNA_INVALID_HANDLE;
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto collection = std::make_shared<MeshCollectionResource>();
-        collection->meshes = model->meshes;
-        return CreateMeshCollectionHandle(std::move(collection), outMeshes);
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto collection = std::make_shared<MeshCollectionResource>();
+    collection->meshes = model->meshes;
+    return CreateMeshCollectionHandle(std::move(collection), outMeshes);
 }
 
-CNA_Result cna_model_get_root(
+[[nodiscard]] CNA_Result ModelGetRoot(
     const CNA_ModelHandle modelHandle,
     CNA_Bool* const outHasRoot,
     CNA_ModelBoneHandle* const outRoot)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasRoot == nullptr || outRoot == nullptr) {
-            return InvalidArgument("The Model root outputs are null.");
-        }
-        *outHasRoot = CNA_FALSE;
-        *outRoot = CNA_INVALID_HANDLE;
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (model->root == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = CreateBoneHandle(model->root, outRoot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasRoot = CNA_TRUE;
+    *outHasRoot = CNA_FALSE;
+    *outRoot = CNA_INVALID_HANDLE;
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (model->root == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = CreateBoneHandle(model->root, outRoot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasRoot = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_set_owned_resources(
+[[nodiscard]] CNA_Result ModelSetOwnedResources(
     const CNA_ModelHandle modelHandle,
     void* const context,
     const CNA_ModelOwnedResourcesReleaseCallback release)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if ((context == nullptr) != (release == nullptr)) {
-            return InvalidArgument(
-                "Model owned resources require both context and release callback, or neither.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> owner;
-        if (context != nullptr) {
-            owner = std::shared_ptr<void>(
-                context,
-                [release](void* const value) noexcept { release(value); });
-        }
-        model->value->setOwnedResources(std::move(owner));
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((context == nullptr) != (release == nullptr)) {
+        return InvalidArgument(
+            "Model owned resources require both context and release callback, or neither.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<void> owner;
+    if (context != nullptr) {
+        owner = std::shared_ptr<void>(
+            context,
+            [release](void* const value) noexcept { release(value); });
+    }
+    model->value->setOwnedResources(std::move(owner));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_copy_absolute_bone_transforms(
+[[nodiscard]] CNA_Result ModelCopyAbsoluteBoneTransforms(
     const CNA_ModelHandle modelHandle,
     CNA_Matrix* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The Model absolute-transform output is invalid.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(model->bones.size());
-        if (capacity < model->bones.size()) {
-            return BufferTooSmall(
-                "The destination cannot hold all absolute Model bone transforms.");
-        }
-        std::vector<Matrix> transforms(model->bones.size());
-        model->value->CopyAbsoluteBoneTransformsTo(transforms);
-        for (std::size_t index = 0U; index < transforms.size(); ++index) {
-            destination[index] = ToC(transforms[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The Model absolute-transform output is invalid.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCount = static_cast<uint64_t>(model->bones.size());
+    if (capacity < model->bones.size()) {
+        return BufferTooSmall(
+            "The destination cannot hold all absolute Model bone transforms.");
+    }
+    std::vector<Matrix> transforms(model->bones.size());
+    model->value->CopyAbsoluteBoneTransformsTo(transforms);
+    for (std::size_t index = 0U; index < transforms.size(); ++index) {
+        destination[index] = ToC(transforms[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_set_bone_transforms(
+[[nodiscard]] CNA_Result ModelSetBoneTransforms(
     const CNA_ModelHandle modelHandle,
     const CNA_Matrix* const source,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t byteCount = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                source, count, sizeof(*source), &byteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The Model source-transform array is invalid or too large.");
-        }
-        static_cast<void>(byteCount);
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (count < model->bones.size()) {
-            return InvalidArgument(
-                "The source array does not cover all Model bone transforms.");
-        }
-        std::vector<Matrix> transforms;
-        transforms.reserve(model->bones.size());
-        for (std::size_t index = 0U; index < model->bones.size(); ++index) {
-            transforms.push_back(ToNative(source[index]));
-        }
-        model->value->CopyBoneTransformsFrom(transforms);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            source, count, sizeof(*source), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The Model source-transform array is invalid or too large.");
+    }
+    static_cast<void>(byteCount);
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (count < model->bones.size()) {
+        return InvalidArgument(
+            "The source array does not cover all Model bone transforms.");
+    }
+    std::vector<Matrix> transforms;
+    transforms.reserve(model->bones.size());
+    for (std::size_t index = 0U; index < model->bones.size(); ++index) {
+        transforms.push_back(ToNative(source[index]));
+    }
+    model->value->CopyBoneTransformsFrom(transforms);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_copy_bone_transforms(
+[[nodiscard]] CNA_Result ModelCopyBoneTransforms(
     const CNA_ModelHandle modelHandle,
     CNA_Matrix* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The Model local-transform output is invalid.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(model->bones.size());
-        if (capacity < model->bones.size()) {
-            return BufferTooSmall("The destination cannot hold all local Model bone transforms.");
-        }
-        std::vector<Matrix> transforms(model->bones.size());
-        model->value->CopyBoneTransformsTo(transforms);
-        for (std::size_t index = 0U; index < transforms.size(); ++index) {
-            destination[index] = ToC(transforms[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The Model local-transform output is invalid.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCount = static_cast<uint64_t>(model->bones.size());
+    if (capacity < model->bones.size()) {
+        return BufferTooSmall("The destination cannot hold all local Model bone transforms.");
+    }
+    std::vector<Matrix> transforms(model->bones.size());
+    model->value->CopyBoneTransformsTo(transforms);
+    for (std::size_t index = 0U; index < transforms.size(); ++index) {
+        destination[index] = ToC(transforms[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 constexpr uint32_t ReportStructureVersion = UINT32_C(1);
 
@@ -2449,341 +2309,264 @@ const std::string& SelectCode(const GltfImportDiagnosticEXT& value) { return val
 const std::string& SelectSubject(const GltfImportDiagnosticEXT& value) { return value.Subject; }
 const std::string& SelectMessage(const GltfImportDiagnosticEXT& value) { return value.Message; }
 
-} // namespace
-
-CNA_Result cna_model_get_gltf_import_report_ext(
+[[nodiscard]] CNA_Result ModelGetGltfImportReportExt(
     const CNA_ModelHandle modelHandle,
     CNA_GltfImportReportEXT* const outReport)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outReport, "The glTF import report output is null or malformed.",
-                ReportStructureVersion);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GltfImportReportEXT& report = model->value->getGltfImportReportEXTProperty();
-        *outReport = CNA_GltfImportReportEXT{
-            .struct_size = sizeof(CNA_GltfImportReportEXT),
-            .struct_version = ReportStructureVersion,
-            .node_count = static_cast<uint64_t>(report.NodeCount),
-            .mesh_instance_count = static_cast<uint64_t>(report.MeshInstanceCount),
-            .distinct_mesh_count = static_cast<uint64_t>(report.DistinctMeshCount),
-            .shared_mesh_count = static_cast<uint64_t>(report.SharedMeshCount),
-            .max_node_depth = static_cast<uint64_t>(report.MaxNodeDepth),
-            .camera_node_count = static_cast<uint64_t>(report.CameraNodeCount),
-            .light_node_count = static_cast<uint64_t>(report.LightNodeCount),
-            .imported_light_count = static_cast<uint64_t>(report.ImportedLightCount),
-            .primitive_count = static_cast<uint64_t>(report.PrimitiveCount),
-            .skin_count = static_cast<uint64_t>(report.SkinCount),
-            .animation_count = static_cast<uint64_t>(report.AnimationCount),
-            .clip_count = static_cast<uint64_t>(report.ClipCount),
-            .diagnostic_count = static_cast<uint64_t>(report.Diagnostics.size()),
-            .warning_count = static_cast<uint64_t>(report.getWarningCountProperty()),
-            .dropped_feature_count =
-                static_cast<uint64_t>(report.getDroppedFeatureCountProperty()),
-            .approximation_count = static_cast<uint64_t>(report.getApproximationCountProperty()),
-            .anything_lost = ToCBool(report.AnythingLost())};
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outReport, "The glTF import report output is null or malformed.",
+            ReportStructureVersion);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GltfImportReportEXT& report = model->value->getGltfImportReportEXTProperty();
+    *outReport = CNA_GltfImportReportEXT{
+        .struct_size = sizeof(CNA_GltfImportReportEXT),
+        .struct_version = ReportStructureVersion,
+        .node_count = static_cast<uint64_t>(report.NodeCount),
+        .mesh_instance_count = static_cast<uint64_t>(report.MeshInstanceCount),
+        .distinct_mesh_count = static_cast<uint64_t>(report.DistinctMeshCount),
+        .shared_mesh_count = static_cast<uint64_t>(report.SharedMeshCount),
+        .max_node_depth = static_cast<uint64_t>(report.MaxNodeDepth),
+        .camera_node_count = static_cast<uint64_t>(report.CameraNodeCount),
+        .light_node_count = static_cast<uint64_t>(report.LightNodeCount),
+        .imported_light_count = static_cast<uint64_t>(report.ImportedLightCount),
+        .primitive_count = static_cast<uint64_t>(report.PrimitiveCount),
+        .skin_count = static_cast<uint64_t>(report.SkinCount),
+        .animation_count = static_cast<uint64_t>(report.AnimationCount),
+        .clip_count = static_cast<uint64_t>(report.ClipCount),
+        .diagnostic_count = static_cast<uint64_t>(report.Diagnostics.size()),
+        .warning_count = static_cast<uint64_t>(report.getWarningCountProperty()),
+        .dropped_feature_count =
+            static_cast<uint64_t>(report.getDroppedFeatureCountProperty()),
+        .approximation_count = static_cast<uint64_t>(report.getApproximationCountProperty()),
+        .anything_lost = ToCBool(report.AnythingLost())};
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_set_gltf_import_report_ext(
+[[nodiscard]] CNA_Result ModelSetGltfImportReportExt(
     const CNA_ModelHandle modelHandle,
     const CNA_GltfImportReportEXT* const report)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                report, "The glTF import report is null or malformed.", ReportStructureVersion);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The derived values are answers the report computes from its diagnostics, not state a
-        // caller owns. Refusing a non-zero one is deliberate: silently dropping it would let a
-        // caller believe it had recorded a warning count that the next read contradicts.
-        if (report->diagnostic_count != 0U || report->warning_count != 0U ||
-            report->dropped_feature_count != 0U || report->approximation_count != 0U ||
-            report->anything_lost != CNA_FALSE) {
-            return InvalidArgument(
-                "The glTF import report's derived values are outputs and must be zero.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GltfImportReportEXT native;
-        native.NodeCount = static_cast<std::size_t>(report->node_count);
-        native.MeshInstanceCount = static_cast<std::size_t>(report->mesh_instance_count);
-        native.DistinctMeshCount = static_cast<std::size_t>(report->distinct_mesh_count);
-        native.SharedMeshCount = static_cast<std::size_t>(report->shared_mesh_count);
-        native.MaxNodeDepth = static_cast<std::size_t>(report->max_node_depth);
-        native.CameraNodeCount = static_cast<std::size_t>(report->camera_node_count);
-        native.LightNodeCount = static_cast<std::size_t>(report->light_node_count);
-        native.ImportedLightCount = static_cast<std::size_t>(report->imported_light_count);
-        native.PrimitiveCount = static_cast<std::size_t>(report->primitive_count);
-        native.SkinCount = static_cast<std::size_t>(report->skin_count);
-        native.AnimationCount = static_cast<std::size_t>(report->animation_count);
-        native.ClipCount = static_cast<std::size_t>(report->clip_count);
-        model->value->setGltfImportReportEXTProperty(std::move(native));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            report, "The glTF import report is null or malformed.", ReportStructureVersion);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The derived values are answers the report computes from its diagnostics, not state a
+    // caller owns. Refusing a non-zero one is deliberate: silently dropping it would let a
+    // caller believe it had recorded a warning count that the next read contradicts.
+    if (report->diagnostic_count != 0U || report->warning_count != 0U ||
+        report->dropped_feature_count != 0U || report->approximation_count != 0U ||
+        report->anything_lost != CNA_FALSE) {
+        return InvalidArgument(
+            "The glTF import report's derived values are outputs and must be zero.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    GltfImportReportEXT native;
+    native.NodeCount = static_cast<std::size_t>(report->node_count);
+    native.MeshInstanceCount = static_cast<std::size_t>(report->mesh_instance_count);
+    native.DistinctMeshCount = static_cast<std::size_t>(report->distinct_mesh_count);
+    native.SharedMeshCount = static_cast<std::size_t>(report->shared_mesh_count);
+    native.MaxNodeDepth = static_cast<std::size_t>(report->max_node_depth);
+    native.CameraNodeCount = static_cast<std::size_t>(report->camera_node_count);
+    native.LightNodeCount = static_cast<std::size_t>(report->light_node_count);
+    native.ImportedLightCount = static_cast<std::size_t>(report->imported_light_count);
+    native.PrimitiveCount = static_cast<std::size_t>(report->primitive_count);
+    native.SkinCount = static_cast<std::size_t>(report->skin_count);
+    native.AnimationCount = static_cast<std::size_t>(report->animation_count);
+    native.ClipCount = static_cast<std::size_t>(report->clip_count);
+    model->value->setGltfImportReportEXTProperty(std::move(native));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_add_gltf_import_diagnostic_ext(
+[[nodiscard]] CNA_Result ModelAddGltfImportDiagnosticExt(
     const CNA_ModelHandle modelHandle,
     const CNA_GltfImportDiagnosticDescriptorEXT* const descriptor)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (descriptor == nullptr) {
-            return InvalidArgument("The glTF import diagnostic descriptor is null.");
-        }
-        if (descriptor->severity > CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT) {
-            return InvalidArgument(
-                "The glTF import diagnostic severity is not a defined identity.");
-        }
-        if (descriptor->kind > CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT) {
-            return InvalidArgument("The glTF import diagnostic kind is not a defined identity.");
-        }
-        if (descriptor->details == nullptr && descriptor->detail_count != 0U) {
-            return InvalidArgument("The glTF import diagnostic detail array is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GltfImportDiagnosticEXT entry;
+    if (descriptor == nullptr) {
+        return InvalidArgument("The glTF import diagnostic descriptor is null.");
+    }
+    if (descriptor->severity > CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT) {
+        return InvalidArgument(
+            "The glTF import diagnostic severity is not a defined identity.");
+    }
+    if (descriptor->kind > CNA_GLTF_IMPORT_KIND_MAXIMUM_EXT) {
+        return InvalidArgument("The glTF import diagnostic kind is not a defined identity.");
+    }
+    if (descriptor->details == nullptr && descriptor->detail_count != 0U) {
+        return InvalidArgument("The glTF import diagnostic detail array is null.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    GltfImportDiagnosticEXT entry;
+    if (const CNA_Result result = ReadText(
+            descriptor->code, "The glTF import diagnostic code is not valid UTF-8 text.",
+            &entry.Code, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            descriptor->subject, "The glTF import diagnostic subject is not valid UTF-8 text.",
+            &entry.Subject, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            descriptor->message, "The glTF import diagnostic message is not valid UTF-8 text.",
+            &entry.Message, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    entry.Details.reserve(static_cast<std::size_t>(descriptor->detail_count));
+    for (uint64_t index = 0U; index < descriptor->detail_count; ++index) {
+        std::string detail;
         if (const CNA_Result result = ReadText(
-                descriptor->code, "The glTF import diagnostic code is not valid UTF-8 text.",
-                &entry.Code, EmbeddedNul::Refused);
+                descriptor->details[index],
+                "A glTF import diagnostic detail is not valid UTF-8 text.", &detail,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ReadText(
-                descriptor->subject, "The glTF import diagnostic subject is not valid UTF-8 text.",
-                &entry.Subject, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                descriptor->message, "The glTF import diagnostic message is not valid UTF-8 text.",
-                &entry.Message, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        entry.Details.reserve(static_cast<std::size_t>(descriptor->detail_count));
-        for (uint64_t index = 0U; index < descriptor->detail_count; ++index) {
-            std::string detail;
-            if (const CNA_Result result = ReadText(
-                    descriptor->details[index],
-                    "A glTF import diagnostic detail is not valid UTF-8 text.", &detail,
-                    EmbeddedNul::Refused);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            entry.Details.push_back(std::move(detail));
-        }
-        entry.Severity =
-            static_cast<GltfImportDiagnosticSeverityEXT>(descriptor->severity);
-        entry.Kind = static_cast<GltfImportDiagnosticKindEXT>(descriptor->kind);
-        entry.Count = static_cast<std::size_t>(descriptor->count);
-        entry.WorstMagnitude = descriptor->worst_magnitude;
+        entry.Details.push_back(std::move(detail));
+    }
+    entry.Severity =
+        static_cast<GltfImportDiagnosticSeverityEXT>(descriptor->severity);
+    entry.Kind = static_cast<GltfImportDiagnosticKindEXT>(descriptor->kind);
+    entry.Count = static_cast<std::size_t>(descriptor->count);
+    entry.WorstMagnitude = descriptor->worst_magnitude;
 
-        // The canonical report exposes its diagnostics as a const reference, so appending means
-        // reading the whole report, extending it and setting it back. Copies of this size happen
-        // once per diagnostic at build time and never on a render path.
-        GltfImportReportEXT updated = model->value->getGltfImportReportEXTProperty();
-        updated.Diagnostics.push_back(std::move(entry));
-        model->value->setGltfImportReportEXTProperty(std::move(updated));
-        return CNA_RESULT_SUCCESS;
-    });
+    // The canonical report exposes its diagnostics as a const reference, so appending means
+    // reading the whole report, extending it and setting it back. Copies of this size happen
+    // once per diagnostic at build time and never on a render path.
+    GltfImportReportEXT updated = model->value->getGltfImportReportEXTProperty();
+    updated.Diagnostics.push_back(std::move(entry));
+    model->value->setGltfImportReportEXTProperty(std::move(updated));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_get_gltf_import_diagnostic_ext(
+[[nodiscard]] CNA_Result ModelGetGltfImportDiagnosticExt(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
     CNA_GltfImportDiagnosticEXT* const outDiagnostic)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outDiagnostic, "The glTF import diagnostic output is null or malformed.",
-                ReportStructureVersion);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outDiagnostic = CNA_GltfImportDiagnosticEXT{
-            .struct_size = sizeof(CNA_GltfImportDiagnosticEXT),
-            .struct_version = ReportStructureVersion,
-            .severity = static_cast<CNA_GltfImportDiagnosticSeverityEXT>(diagnostic->Severity),
-            .kind = static_cast<CNA_GltfImportDiagnosticKindEXT>(diagnostic->Kind),
-            .count = static_cast<uint64_t>(diagnostic->Count),
-            .worst_magnitude = diagnostic->WorstMagnitude,
-            .detail_count = static_cast<uint64_t>(diagnostic->Details.size())};
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outDiagnostic, "The glTF import diagnostic output is null or malformed.",
+            ReportStructureVersion);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ModelResource> model;
+    const GltfImportDiagnosticEXT* diagnostic = nullptr;
+    if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outDiagnostic = CNA_GltfImportDiagnosticEXT{
+        .struct_size = sizeof(CNA_GltfImportDiagnosticEXT),
+        .struct_version = ReportStructureVersion,
+        .severity = static_cast<CNA_GltfImportDiagnosticSeverityEXT>(diagnostic->Severity),
+        .kind = static_cast<CNA_GltfImportDiagnosticKindEXT>(diagnostic->Kind),
+        .count = static_cast<uint64_t>(diagnostic->Count),
+        .worst_magnitude = diagnostic->WorstMagnitude,
+        .detail_count = static_cast<uint64_t>(diagnostic->Details.size())};
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_create(
+[[nodiscard]] CNA_Result MorphTargetDataExtCreate(
     const CNA_MorphTargetDataEXTDescriptor* const descriptor,
     CNA_MorphTargetDataEXTHandle* const outData)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (descriptor == nullptr || outData == nullptr) {
-            return InvalidArgument("The MorphTargetDataEXT descriptor or output is null.");
-        }
-        *outData = CNA_INVALID_HANDLE;
-        MorphTargetDataEXT copied;
-        if (const CNA_Result result = CopyMorphDataDescriptor(*descriptor, &copied);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<MorphDataResource>();
-        resource->value = std::make_shared<MorphTargetDataEXT>(std::move(copied));
-        return CreateMorphDataHandle(std::move(resource), outData);
-    });
+    if (descriptor == nullptr) {
+        return InvalidArgument("The MorphTargetDataEXT descriptor or output is null.");
+    }
+    MorphTargetDataEXT copied;
+    if (const CNA_Result result = CopyMorphDataDescriptor(*descriptor, &copied);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<MorphDataResource>();
+    resource->value = std::make_shared<MorphTargetDataEXT>(std::move(copied));
+    return CreateMorphDataHandle(std::move(resource), outData);
 }
 
-CNA_Result cna_morph_target_data_ext_set_weights(
+[[nodiscard]] CNA_Result MorphTargetDataExtSetWeights(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const float* const weights,
     const uint64_t weightCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::vector<float> copied;
-        if (const CNA_Result result = CopyInputArray(
-                weights, weightCount, &copied,
-                "The MorphTargetDataEXT weight array is invalid or too large.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (copied.size() != data->value->PositionDeltas.size()) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT weight count must equal its target count.");
-        }
-        data->value->Weights = std::move(copied);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<float> copied;
+    if (const CNA_Result result = CopyInputArray(
+            weights, weightCount, &copied,
+            "The MorphTargetDataEXT weight array is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (copied.size() != data->value->PositionDeltas.size()) {
+        return InvalidArgument(
+            "The MorphTargetDataEXT weight count must equal its target count.");
+    }
+    data->value->Weights = std::move(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_set_weight_track(
+[[nodiscard]] CNA_Result MorphTargetDataExtSetWeightTrack(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const CNA_MorphWeightTrackEXTDescriptor* const track)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (track == nullptr) {
-            return InvalidArgument("The MorphWeightTrackEXT descriptor is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        MorphWeightTrackEXT copied;
-        if (const CNA_Result result = CopyTrackDescriptor(
-                *track, data->value->PositionDeltas.size(), true, &copied);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data->value->WeightTrack = std::move(copied);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (track == nullptr) {
+        return InvalidArgument("The MorphWeightTrackEXT descriptor is null.");
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    MorphWeightTrackEXT copied;
+    if (const CNA_Result result = CopyTrackDescriptor(
+            *track, data->value->PositionDeltas.size(), true, &copied);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    data->value->WeightTrack = std::move(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_get_weight_track_info(
+[[nodiscard]] CNA_Result MorphTargetDataExtGetWeightTrackInfo(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     uint64_t* const outKeyframeCount,
     CNA_Bool* const outStepInterpolation,
     CNA_Bool* const outCubicSpline)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outKeyframeCount == nullptr || outStepInterpolation == nullptr ||
-            outCubicSpline == nullptr) {
-            return InvalidArgument("A MorphWeightTrackEXT info output is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outKeyframeCount = static_cast<uint64_t>(data->value->WeightTrack.Keys.size());
-        *outStepInterpolation = ToCBool(data->value->WeightTrack.StepInterpolation);
-        *outCubicSpline = ToCBool(data->value->WeightTrack.CubicSpline);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outKeyframeCount = static_cast<uint64_t>(data->value->WeightTrack.Keys.size());
+    *outStepInterpolation = ToCBool(data->value->WeightTrack.StepInterpolation);
+    *outCubicSpline = ToCBool(data->value->WeightTrack.CubicSpline);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_copy_weight_keyframe(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    const uint64_t keyframeIndex,
-    double* const outTimeSeconds,
-    float* const weights,
-    const uint64_t weightCapacity,
-    uint64_t* const outWeightCount,
-    float* const inTangents,
-    const uint64_t inTangentCapacity,
-    uint64_t* const outInTangentCount,
-    float* const outTangents,
-    const uint64_t outTangentCapacity,
-    uint64_t* const outOutTangentCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTimeSeconds == nullptr || outWeightCount == nullptr ||
-            outInTangentCount == nullptr || outOutTangentCount == nullptr ||
-            (weights == nullptr && weightCapacity != 0U) ||
-            (inTangents == nullptr && inTangentCapacity != 0U) ||
-            (outTangents == nullptr && outTangentCapacity != 0U)) {
-            return InvalidArgument("A MorphWeightKeyframeEXT output is invalid.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (keyframeIndex >= data->value->WeightTrack.Keys.size()) {
-            return InvalidArgument("The MorphWeightKeyframeEXT index is outside the valid range.");
-        }
-        const MorphWeightKeyframeEXT& key =
-            data->value->WeightTrack.Keys[static_cast<std::size_t>(keyframeIndex)];
-        *outWeightCount = static_cast<uint64_t>(key.Weights.size());
-        *outInTangentCount = static_cast<uint64_t>(key.InTangent.size());
-        *outOutTangentCount = static_cast<uint64_t>(key.OutTangent.size());
-        if (weightCapacity < key.Weights.size() ||
-            inTangentCapacity < key.InTangent.size() ||
-            outTangentCapacity < key.OutTangent.size()) {
-            return BufferTooSmall("A destination cannot hold the complete MorphWeightKeyframeEXT.");
-        }
-        *outTimeSeconds = key.Time.getTotalSecondsProperty();
-        if (!key.Weights.empty()) {
-            std::copy(key.Weights.begin(), key.Weights.end(), weights);
-        }
-        if (!key.InTangent.empty()) {
-            std::copy(key.InTangent.begin(), key.InTangent.end(), inTangents);
-        }
-        if (!key.OutTangent.empty()) {
-            std::copy(key.OutTangent.begin(), key.OutTangent.end(), outTangents);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_blend(
+[[nodiscard]] CNA_Result MorphTargetDataExtBlend(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const float* const weights,
     const uint64_t weightCount,
@@ -2791,446 +2574,404 @@ CNA_Result cna_morph_target_data_ext_blend(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The MorphTargetDataEXT blend output is invalid.");
-        }
-        std::vector<float> copiedWeights;
-        if (const CNA_Result result = CopyInputArray(
-                weights, weightCount, &copiedWeights,
-                "The morph blend weight array is invalid or too large.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateMorphShape(*data->value, copiedWeights);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
-        if (capacity < data->value->BaseVertexBytes.size()) {
-            return BufferTooSmall("The destination cannot hold all blended morph bytes.");
-        }
-        const std::vector<std::uint8_t> blended =
-            Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT(
-                *data->value, copiedWeights);
-        if (!blended.empty()) {
-            std::memcpy(destination, blended.data(), blended.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The MorphTargetDataEXT blend output is invalid.");
+    }
+    std::vector<float> copiedWeights;
+    if (const CNA_Result result = CopyInputArray(
+            weights, weightCount, &copiedWeights,
+            "The morph blend weight array is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateMorphShape(*data->value, copiedWeights);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
+    if (capacity < data->value->BaseVertexBytes.size()) {
+        return BufferTooSmall("The destination cannot hold all blended morph bytes.");
+    }
+    const std::vector<std::uint8_t> blended =
+        Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT(
+            *data->value, copiedWeights);
+    if (!blended.empty()) {
+        std::memcpy(destination, blended.data(), blended.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_weight_track_ext_evaluate(
+[[nodiscard]] CNA_Result MorphWeightTrackExtEvaluate(
     const CNA_MorphWeightTrackEXTDescriptor* const track,
     const double timeSeconds,
     float* const destination,
     const uint64_t capacity,
     uint64_t* const outWeightCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (track == nullptr || outWeightCount == nullptr ||
-            (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument(
-                "The MorphWeightTrackEXT evaluation input or output is invalid.");
-        }
-        if (!std::isfinite(timeSeconds)) {
-            return InvalidArgument("The morph evaluation time must be finite.");
-        }
-        MorphWeightTrackEXT copied;
-        if (const CNA_Result result = CopyTrackDescriptor(
-                *track, 0U, false, &copied);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<float> evaluated =
-            Microsoft::Xna::Framework::Graphics::EvaluateMorphWeightsEXT(
-                copied, timeSeconds);
-        *outWeightCount = static_cast<uint64_t>(evaluated.size());
-        if (capacity < evaluated.size()) {
-            return BufferTooSmall("The destination cannot hold all evaluated morph weights.");
-        }
-        if (!evaluated.empty()) {
-            std::copy(evaluated.begin(), evaluated.end(), destination);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (track == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The MorphWeightTrackEXT evaluation input or output is invalid.");
+    }
+    if (!std::isfinite(timeSeconds)) {
+        return InvalidArgument("The morph evaluation time must be finite.");
+    }
+    MorphWeightTrackEXT copied;
+    if (const CNA_Result result = CopyTrackDescriptor(
+            *track, 0U, false, &copied);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<float> evaluated =
+        Microsoft::Xna::Framework::Graphics::EvaluateMorphWeightsEXT(
+            copied, timeSeconds);
+    *outWeightCount = static_cast<uint64_t>(evaluated.size());
+    if (capacity < evaluated.size()) {
+        return BufferTooSmall("The destination cannot hold all evaluated morph weights.");
+    }
+    if (!evaluated.empty()) {
+        std::copy(evaluated.begin(), evaluated.end(), destination);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_morph_target_data_ext(
+[[nodiscard]] CNA_Result ModelMeshPartSetMorphTargetDataExt(
     const CNA_ModelMeshPartHandle partHandle,
     const CNA_MorphTargetDataEXTHandle dataHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (dataHandle == CNA_INVALID_HANDLE) {
-            part->value->setTagProperty(nullptr);
-            if (part->detachedValue != nullptr) {
-                part->detachedValue->setTagProperty(nullptr);
-            }
-            part->morphData.reset();
-            return CNA_RESULT_SUCCESS;
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->morphData = std::move(data);
-        part->value->setTagProperty(part->morphData->value.get());
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (dataHandle == CNA_INVALID_HANDLE) {
+        part->value->setTagProperty(nullptr);
         if (part->detachedValue != nullptr) {
-            part->detachedValue->setTagProperty(part->morphData->value.get());
+            part->detachedValue->setTagProperty(nullptr);
         }
+        part->morphData.reset();
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->morphData = std::move(data);
+    part->value->setTagProperty(part->morphData->value.get());
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->setTagProperty(part->morphData->value.get());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_get_morph_target_data_ext(
+[[nodiscard]] CNA_Result ModelMeshPartGetMorphTargetDataExt(
     const CNA_ModelMeshPartHandle partHandle,
     CNA_Bool* const outHasData,
     CNA_MorphTargetDataEXTHandle* const outData)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasData == nullptr || outData == nullptr) {
-            return InvalidArgument("A ModelMeshPart morph-data output is null.");
-        }
-        *outHasData = CNA_FALSE;
-        *outData = CNA_INVALID_HANDLE;
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (part->morphData == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result = CreateMorphDataHandle(part->morphData, outData);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasData = CNA_TRUE;
+    *outHasData = CNA_FALSE;
+    *outData = CNA_INVALID_HANDLE;
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (part->morphData == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result = CreateMorphDataHandle(part->morphData, outData);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasData = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_morph_weights_ext(
+[[nodiscard]] CNA_Result ModelMeshPartSetMorphWeightsExt(
     const CNA_ModelMeshPartHandle partHandle,
     const float* const weights,
     const uint64_t weightCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::vector<float> copiedWeights;
-        if (const CNA_Result result = CopyInputArray(
-                weights, weightCount, &copiedWeights,
-                "The ModelMeshPart morph weight array is invalid or too large.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (part->morphData == nullptr ||
-            part->value->getTagProperty() != part->morphData->value.get()) {
-            return InvalidState("The ModelMeshPart has no attached MorphTargetDataEXT.");
-        }
-        if (part->value->getVertexBufferProperty() == nullptr) {
-            return InvalidState("The ModelMeshPart has no vertex buffer for morph upload.");
-        }
-        if (const CNA_Result result = ValidateMorphShape(
-                *part->morphData->value, copiedWeights);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::size_t vertexCount = part->morphData->value->BaseVertexBytes.size() /
-            static_cast<std::size_t>(part->morphData->value->Stride);
-        const int bufferVertexCount =
-            part->value->getVertexBufferProperty()->getVertexCountProperty();
-        if (bufferVertexCount < 0 ||
-            vertexCount > static_cast<std::size_t>(bufferVertexCount)) {
-            return InvalidArgument(
-                "The ModelMeshPart vertex buffer cannot hold all morphed vertices.");
-        }
-        Microsoft::Xna::Framework::Graphics::SetMorphWeightsEXT(
-            *part->value, copiedWeights);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<float> copiedWeights;
+    if (const CNA_Result result = CopyInputArray(
+            weights, weightCount, &copiedWeights,
+            "The ModelMeshPart morph weight array is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (part->morphData == nullptr ||
+        part->value->getTagProperty() != part->morphData->value.get()) {
+        return InvalidState("The ModelMeshPart has no attached MorphTargetDataEXT.");
+    }
+    if (part->value->getVertexBufferProperty() == nullptr) {
+        return InvalidState("The ModelMeshPart has no vertex buffer for morph upload.");
+    }
+    if (const CNA_Result result = ValidateMorphShape(
+            *part->morphData->value, copiedWeights);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::size_t vertexCount = part->morphData->value->BaseVertexBytes.size() /
+        static_cast<std::size_t>(part->morphData->value->Stride);
+    const int bufferVertexCount =
+        part->value->getVertexBufferProperty()->getVertexCountProperty();
+    if (bufferVertexCount < 0 ||
+        vertexCount > static_cast<std::size_t>(bufferVertexCount)) {
+        return InvalidArgument(
+            "The ModelMeshPart vertex buffer cannot hold all morphed vertices.");
+    }
+    Microsoft::Xna::Framework::Graphics::SetMorphWeightsEXT(
+        *part->value, copiedWeights);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_create(
+[[nodiscard]] CNA_Result SkinnedModelExtCreate(
     const CNA_SkinnedModelEXTDescriptor* const descriptor,
     CNA_SkinnedModelEXTHandle* const outModel)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (descriptor == nullptr || outModel == nullptr) {
-            return InvalidArgument("The SkinnedModelEXT descriptor or output is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        if (descriptor->reserved != 0U) {
-            return InvalidArgument("CNA_SkinnedModelEXTDescriptor.reserved must be zero.");
-        }
-        std::vector<int> parents;
-        std::vector<Matrix> bindPose;
-        std::vector<Matrix> inverseBindPose;
-        if (const CNA_Result result = CopySkeleton(
-                descriptor->bone_count, descriptor->parent_bone_indices,
-                descriptor->bind_pose_local, descriptor->inverse_bind_pose_global,
-                &parents, &bindPose, &inverseBindPose);
+    if (descriptor == nullptr) {
+        return InvalidArgument("The SkinnedModelEXT descriptor or output is null.");
+    }
+    if (descriptor->reserved != 0U) {
+        return InvalidArgument("CNA_SkinnedModelEXTDescriptor.reserved must be zero.");
+    }
+    std::vector<int> parents;
+    std::vector<Matrix> bindPose;
+    std::vector<Matrix> inverseBindPose;
+    if (const CNA_Result result = CopySkeleton(
+            descriptor->bone_count, descriptor->parent_bone_indices,
+            descriptor->bind_pose_local, descriptor->inverse_bind_pose_global,
+            &parents, &bindPose, &inverseBindPose);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::size_t clipBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor->clips, descriptor->clip_count,
+            sizeof(CNA_NamedAnimationClipEXTDescriptor), &clipBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The SkinnedModelEXT clip array is invalid or too large.");
+    }
+    static_cast<void>(clipBytes);
+
+    auto resource = std::make_shared<SkinnedModelResource>();
+    resource->value->BoneCount = descriptor->bone_count;
+    resource->value->ParentBoneIndices = std::move(parents);
+    resource->value->BindPoseLocal = std::move(bindPose);
+    resource->value->InverseBindPoseGlobal = std::move(inverseBindPose);
+    if (descriptor->clip_count > resource->value->Clips.max_size()) {
+        return Overflow("The SkinnedModelEXT clip count is too large.");
+    }
+    resource->value->Clips.reserve(static_cast<std::size_t>(descriptor->clip_count));
+    for (uint64_t index = 0U; index < descriptor->clip_count; ++index) {
+        const CNA_NamedAnimationClipEXTDescriptor& source = descriptor->clips[index];
+        std::string name;
+        if (const CNA_Result result = ReadText(
+                source.name, "A SkinnedModelEXT clip name is not valid UTF-8 text.", &name,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::size_t clipBytes = 0U;
-        if (const CNA_Result result = CheckedElementByteCount(
-                descriptor->clips, descriptor->clip_count,
-                sizeof(CNA_NamedAnimationClipEXTDescriptor), &clipBytes);
+        if (resource->value->Clips.contains(name)) {
+            return InvalidArgument("SkinnedModelEXT construction clip names must be unique.");
+        }
+        AnimationClipEXT clip;
+        if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The SkinnedModelEXT clip array is invalid or too large.");
+            return result;
         }
-        static_cast<void>(clipBytes);
-
-        auto resource = std::make_shared<SkinnedModelResource>();
-        resource->value->BoneCount = descriptor->bone_count;
-        resource->value->ParentBoneIndices = std::move(parents);
-        resource->value->BindPoseLocal = std::move(bindPose);
-        resource->value->InverseBindPoseGlobal = std::move(inverseBindPose);
-        if (descriptor->clip_count > resource->value->Clips.max_size()) {
-            return Overflow("The SkinnedModelEXT clip count is too large.");
-        }
-        resource->value->Clips.reserve(static_cast<std::size_t>(descriptor->clip_count));
-        for (uint64_t index = 0U; index < descriptor->clip_count; ++index) {
-            const CNA_NamedAnimationClipEXTDescriptor& source = descriptor->clips[index];
-            std::string name;
-            if (const CNA_Result result = ReadText(
-                    source.name, "A SkinnedModelEXT clip name is not valid UTF-8 text.", &name,
-                    EmbeddedNul::Refused);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (resource->value->Clips.contains(name)) {
-                return InvalidArgument("SkinnedModelEXT construction clip names must be unique.");
-            }
-            AnimationClipEXT clip;
-            if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            resource->value->Clips.emplace(std::move(name), std::move(clip));
-        }
-        return CreateSkinnedModelHandle(std::move(resource), outModel);
-    });
+        resource->value->Clips.emplace(std::move(name), std::move(clip));
+    }
+    return CreateSkinnedModelHandle(std::move(resource), outModel);
 }
 
-CNA_Result cna_skinned_model_ext_create_move(
+[[nodiscard]] CNA_Result SkinnedModelExtCreateMove(
     const CNA_SkinnedModelEXTHandle sourceHandle,
     CNA_SkinnedModelEXTHandle* const outModel)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The moved SkinnedModelEXT output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        std::shared_ptr<SkinnedModelResource> source;
-        if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto moved = std::make_shared<SkinnedModelResource>();
-        moved->value = std::make_shared<SkinnedModelEXT>(std::move(*source->value));
-        moved->parts = std::move(source->parts);
-        moved->parentGame = source->parentGame;
-        RebuildSkinnedParts(*moved);
-        source->value = std::make_shared<SkinnedModelEXT>();
-        source->parts.clear();
-        source->parentGame = CNA_INVALID_HANDLE;
-        return CreateSkinnedModelHandle(std::move(moved), outModel);
-    });
+    std::shared_ptr<SkinnedModelResource> source;
+    if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto moved = std::make_shared<SkinnedModelResource>();
+    moved->value = std::make_shared<SkinnedModelEXT>(std::move(*source->value));
+    moved->parts = std::move(source->parts);
+    moved->parentGame = source->parentGame;
+    RebuildSkinnedParts(*moved);
+    source->value = std::make_shared<SkinnedModelEXT>();
+    source->parts.clear();
+    source->parentGame = CNA_INVALID_HANDLE;
+    return CreateSkinnedModelHandle(std::move(moved), outModel);
 }
 
-CNA_Result cna_skinned_model_ext_move_assign(
+[[nodiscard]] CNA_Result SkinnedModelExtMoveAssign(
     const CNA_SkinnedModelEXTHandle destinationHandle,
     const CNA_SkinnedModelEXTHandle sourceHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (destinationHandle == sourceHandle) {
-            return InvalidArgument("A SkinnedModelEXT cannot be move-assigned to itself.");
-        }
-        std::shared_ptr<SkinnedModelResource> destination;
-        std::shared_ptr<SkinnedModelResource> source;
-        if (const CNA_Result result = GetSkinnedModel(destinationHandle, &destination);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *destination->value = std::move(*source->value);
-        destination->parts = std::move(source->parts);
-        destination->parentGame = source->parentGame;
-        RebuildSkinnedParts(*destination);
-        source->value = std::make_shared<SkinnedModelEXT>();
-        source->parts.clear();
-        source->parentGame = CNA_INVALID_HANDLE;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (destinationHandle == sourceHandle) {
+        return InvalidArgument("A SkinnedModelEXT cannot be move-assigned to itself.");
+    }
+    std::shared_ptr<SkinnedModelResource> destination;
+    std::shared_ptr<SkinnedModelResource> source;
+    if (const CNA_Result result = GetSkinnedModel(destinationHandle, &destination);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *destination->value = std::move(*source->value);
+    destination->parts = std::move(source->parts);
+    destination->parentGame = source->parentGame;
+    RebuildSkinnedParts(*destination);
+    source->value = std::make_shared<SkinnedModelEXT>();
+    source->parts.clear();
+    source->parentGame = CNA_INVALID_HANDLE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_set_skeleton(
+[[nodiscard]] CNA_Result SkinnedModelExtSetSkeleton(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const int32_t boneCount,
     const int32_t* const parentBoneIndices,
     const CNA_Matrix* const bindPoseLocal,
     const CNA_Matrix* const inverseBindPoseGlobal)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::vector<int> parents;
-        std::vector<Matrix> bindPose;
-        std::vector<Matrix> inverseBindPose;
-        if (const CNA_Result result = CopySkeleton(
-                boneCount, parentBoneIndices, bindPoseLocal, inverseBindPoseGlobal,
-                &parents, &bindPose, &inverseBindPose);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->BoneCount = boneCount;
-        model->value->ParentBoneIndices = std::move(parents);
-        model->value->BindPoseLocal = std::move(bindPose);
-        model->value->InverseBindPoseGlobal = std::move(inverseBindPose);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<int> parents;
+    std::vector<Matrix> bindPose;
+    std::vector<Matrix> inverseBindPose;
+    if (const CNA_Result result = CopySkeleton(
+            boneCount, parentBoneIndices, bindPoseLocal, inverseBindPoseGlobal,
+            &parents, &bindPose, &inverseBindPose);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    model->value->BoneCount = boneCount;
+    model->value->ParentBoneIndices = std::move(parents);
+    model->value->BindPoseLocal = std::move(bindPose);
+    model->value->InverseBindPoseGlobal = std::move(inverseBindPose);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_set_clip(
+[[nodiscard]] CNA_Result SkinnedModelExtSetClip(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_StringView name,
     const CNA_AnimationClipEXTDescriptor* const clip)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (clip == nullptr) {
-            return InvalidArgument("The AnimationClipEXT descriptor is null.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AnimationClipEXT copiedClip;
-        if (const CNA_Result result = CopyAnimationClipDescriptor(*clip, &copiedClip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->Clips.insert_or_assign(std::move(copiedName), std::move(copiedClip));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (clip == nullptr) {
+        return InvalidArgument("The AnimationClipEXT descriptor is null.");
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AnimationClipEXT copiedClip;
+    if (const CNA_Result result = CopyAnimationClipDescriptor(*clip, &copiedClip);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    model->value->Clips.insert_or_assign(std::move(copiedName), std::move(copiedClip));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_get_clip_name_byte_count_at(
+[[nodiscard]] CNA_Result SkinnedModelExtGetClipNameByteCountAt(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t clipIndex,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The AnimationClipEXT name-size output is null.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*model->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
-        }
-        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*model->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
+    }
+    *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_copy_clip_name_at(
+[[nodiscard]] CNA_Result SkinnedModelExtCopyClipNameAt(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t clipIndex,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*model->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
-        }
-        return CopyText(
-            names[static_cast<std::size_t>(clipIndex)], destination, capacity,
-            outByteCount);
-    });
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*model->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
+    }
+    return CopyText(
+        names[static_cast<std::size_t>(clipIndex)], destination, capacity,
+        outByteCount);
 }
 
-CNA_Result cna_skinned_model_ext_get_clip_info(
+[[nodiscard]] CNA_Result SkinnedModelExtGetClipInfo(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
-            return InvalidArgument("An AnimationClipEXT info output is null.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto iterator = model->value->Clips.find(copiedName);
-        if (iterator == model->value->Clips.end()) {
-            *outFound = CNA_FALSE;
-            *outDurationSeconds = 0.0;
-            *outTrackCount = 0U;
-            return CNA_RESULT_SUCCESS;
-        }
-        *outFound = CNA_TRUE;
-        *outDurationSeconds = iterator->second.Duration.getTotalSecondsProperty();
-        *outTrackCount = static_cast<uint64_t>(iterator->second.Tracks.size());
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto iterator = model->value->Clips.find(copiedName);
+    if (iterator == model->value->Clips.end()) {
+        *outFound = CNA_FALSE;
+        *outDurationSeconds = 0.0;
+        *outTrackCount = 0U;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outFound = CNA_TRUE;
+    *outDurationSeconds = iterator->second.Duration.getTotalSecondsProperty();
+    *outTrackCount = static_cast<uint64_t>(iterator->second.Tracks.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_copy_clip_track(
+[[nodiscard]] CNA_Result SkinnedModelExtCopyClipTrack(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_StringView name,
     const uint64_t trackIndex,
@@ -3239,44 +2980,41 @@ CNA_Result cna_skinned_model_ext_copy_clip_track(
     const uint64_t capacity,
     uint64_t* const outKeyframeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBoneIndex == nullptr || outKeyframeCount == nullptr ||
-            (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("A BoneTrackEXT output is invalid.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto clip = model->value->Clips.find(copiedName);
-        if (clip == model->value->Clips.end()) {
-            return InvalidArgument("The AnimationClipEXT name is unknown.");
-        }
-        if (trackIndex >= clip->second.Tracks.size()) {
-            return InvalidArgument("The BoneTrackEXT index is outside the valid range.");
-        }
-        const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
-        *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
-        if (capacity < track.Keys.size()) {
-            return BufferTooSmall("The destination cannot hold all BoneTrackEXT keyframes.");
-        }
-        *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
-        for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
-            destination[index] = ToCKeyframe(track.Keys[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("A BoneTrackEXT output is invalid.");
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto clip = model->value->Clips.find(copiedName);
+    if (clip == model->value->Clips.end()) {
+        return InvalidArgument("The AnimationClipEXT name is unknown.");
+    }
+    if (trackIndex >= clip->second.Tracks.size()) {
+        return InvalidArgument("The BoneTrackEXT index is outside the valid range.");
+    }
+    const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
+    *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
+    if (capacity < track.Keys.size()) {
+        return BufferTooSmall("The destination cannot hold all BoneTrackEXT keyframes.");
+    }
+    *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
+    for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
+        destination[index] = ToCKeyframe(track.Keys[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_compute_bone_transforms(
+[[nodiscard]] CNA_Result SkinnedModelExtComputeBoneTransforms(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_StringView clipName,
     const double positionSeconds,
@@ -3285,48 +3023,43 @@ CNA_Result cna_skinned_model_ext_compute_bone_transforms(
     const uint64_t capacity,
     uint64_t* const outBoneCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBoneCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The SkinnedModelEXT transform output is invalid.");
-        }
-        if (loop != CNA_FALSE && loop != CNA_TRUE) {
-            return InvalidArgument("The SkinnedModelEXT loop value is not a canonical C boolean.");
-        }
-        if (!IsValidTimeSpanSeconds(positionSeconds)) {
-            return InvalidArgument(
-                "The SkinnedModelEXT playback position must fit a finite TimeSpan.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                clipName, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!model->value->Clips.contains(copiedName)) {
-            return InvalidArgument("The AnimationClipEXT name is unknown.");
-        }
-        *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
-        if (capacity < static_cast<uint64_t>(model->value->BoneCount)) {
-            return BufferTooSmall("The destination cannot hold all computed bone transforms.");
-        }
-        std::vector<Matrix> computed;
-        model->value->ComputeBoneTransformsEXT(
-            copiedName, System::TimeSpan::FromSeconds(positionSeconds),
-            loop == CNA_TRUE, computed);
-        for (std::size_t index = 0U; index < computed.size(); ++index) {
-            destination[index] = ToC(computed[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The SkinnedModelEXT transform output is invalid.");
+    }
+    if (!IsValidTimeSpanSeconds(positionSeconds)) {
+        return InvalidArgument(
+            "The SkinnedModelEXT playback position must fit a finite TimeSpan.");
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            clipName, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!model->value->Clips.contains(copiedName)) {
+        return InvalidArgument("The AnimationClipEXT name is unknown.");
+    }
+    *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
+    if (capacity < static_cast<uint64_t>(model->value->BoneCount)) {
+        return BufferTooSmall("The destination cannot hold all computed bone transforms.");
+    }
+    std::vector<Matrix> computed;
+    model->value->ComputeBoneTransformsEXT(
+        copiedName, System::TimeSpan::FromSeconds(positionSeconds),
+        loop == CNA_TRUE, computed);
+    for (std::size_t index = 0U; index < computed.size(); ++index) {
+        destination[index] = ToC(computed[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_add_part(
+[[nodiscard]] CNA_Result SkinnedModelExtAddPart(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_StringView name,
     const CNA_VertexBufferHandle vertexBufferHandle,
@@ -3334,359 +3067,326 @@ CNA_Result cna_skinned_model_ext_add_part(
     const CNA_ModelMeshPartHandle partHandle,
     const CNA_Handle textureHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (vertexBufferHandle == CNA_INVALID_HANDLE ||
+        indexBufferHandle == CNA_INVALID_HANDLE) {
+        return InvalidArgument("SkinnedModelEXT parts require vertex and index buffers.");
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    std::shared_ptr<VertexBufferResource> vertexBuffer;
+    std::shared_ptr<IndexBufferResource> indexBuffer;
+    std::shared_ptr<PartResource> part;
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveVertexBuffer(vertexBufferHandle, &vertexBuffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveIndexBuffer(indexBufferHandle, &indexBuffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (textureHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(
+                textureHandle, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (vertexBufferHandle == CNA_INVALID_HANDLE ||
-            indexBufferHandle == CNA_INVALID_HANDLE) {
-            return InvalidArgument("SkinnedModelEXT parts require vertex and index buffers.");
+        if (texture->value->getIsDisposedProperty()) {
+            return InvalidState("A disposed Texture2D cannot be added to a SkinnedModelEXT.");
         }
-        std::shared_ptr<SkinnedModelResource> model;
-        std::shared_ptr<VertexBufferResource> vertexBuffer;
-        std::shared_ptr<IndexBufferResource> indexBuffer;
-        std::shared_ptr<PartResource> part;
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ResolveVertexBuffer(vertexBufferHandle, &vertexBuffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ResolveIndexBuffer(indexBufferHandle, &indexBuffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (textureHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(
-                    textureHandle, &texture);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (texture->value->getIsDisposedProperty()) {
-                return InvalidState("A disposed Texture2D cannot be added to a SkinnedModelEXT.");
-            }
-        }
-        const CNA_Handle parentGame = vertexBuffer->parentGame;
-        if (indexBuffer->parentGame != parentGame ||
-            (texture != nullptr && texture->parentGame != parentGame)) {
-            return InvalidArgument(
-                "All SkinnedModelEXT part resources must belong to one graphics device.");
-        }
-        if (model->parentGame != CNA_INVALID_HANDLE && model->parentGame != parentGame) {
-            return InvalidArgument(
-                "All SkinnedModelEXT parts must belong to one graphics device.");
-        }
-        if (part->parentMesh != nullptr || part->activeSkinnedModelReferenceCount != 0U) {
-            return InvalidState("A ModelMeshPart cannot belong to more than one live model.");
-        }
-        if (part->activeSkinnedModelReferenceCount ==
-                std::numeric_limits<uint64_t>::max() ||
-            (texture != nullptr && texture->activeModelReferenceCount ==
-                std::numeric_limits<uint64_t>::max()) ||
-            (vertexBufferHandle != part->vertexBuffer.handle &&
-             vertexBuffer->activeModelReferenceCount ==
-                std::numeric_limits<uint64_t>::max()) ||
-            (indexBufferHandle != part->indexBuffer.handle &&
-             indexBuffer->activeModelReferenceCount ==
-                std::numeric_limits<uint64_t>::max())) {
-            return Overflow("A SkinnedModelEXT resource retention count overflowed.");
-        }
-        if (model->parts.size() == model->parts.max_size()) {
-            return Overflow("The SkinnedModelEXT part count is too large.");
-        }
-        model->parts.reserve(model->parts.size() + 1U);
-        if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = SetPartIndexBuffer(part, indexBufferHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    }
+    const CNA_Handle parentGame = vertexBuffer->parentGame;
+    if (indexBuffer->parentGame != parentGame ||
+        (texture != nullptr && texture->parentGame != parentGame)) {
+        return InvalidArgument(
+            "All SkinnedModelEXT part resources must belong to one graphics device.");
+    }
+    if (model->parentGame != CNA_INVALID_HANDLE && model->parentGame != parentGame) {
+        return InvalidArgument(
+            "All SkinnedModelEXT parts must belong to one graphics device.");
+    }
+    if (part->parentMesh != nullptr || part->activeSkinnedModelReferenceCount != 0U) {
+        return InvalidState("A ModelMeshPart cannot belong to more than one live model.");
+    }
+    if (part->activeSkinnedModelReferenceCount ==
+            std::numeric_limits<uint64_t>::max() ||
+        (texture != nullptr && texture->activeModelReferenceCount ==
+            std::numeric_limits<uint64_t>::max()) ||
+        (vertexBufferHandle != part->vertexBuffer.handle &&
+         vertexBuffer->activeModelReferenceCount ==
+            std::numeric_limits<uint64_t>::max()) ||
+        (indexBufferHandle != part->indexBuffer.handle &&
+         indexBuffer->activeModelReferenceCount ==
+            std::numeric_limits<uint64_t>::max())) {
+        return Overflow("A SkinnedModelEXT resource retention count overflowed.");
+    }
+    if (model->parts.size() == model->parts.max_size()) {
+        return Overflow("The SkinnedModelEXT part count is too large.");
+    }
+    model->parts.reserve(model->parts.size() + 1U);
+    if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = SetPartIndexBuffer(part, indexBufferHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        SkinnedPartEntry entry;
-        entry.name = std::move(copiedName);
-        entry.part = std::move(part);
-        entry.textureHandle = textureHandle;
-        entry.texture = std::move(texture);
-        ++entry.part->activeSkinnedModelReferenceCount;
-        if (entry.texture != nullptr) {
-            ++entry.texture->activeModelReferenceCount;
-        }
-        model->parts.push_back(std::move(entry));
-        model->parentGame = parentGame;
-        RebuildSkinnedParts(*model);
-        return CNA_RESULT_SUCCESS;
-    });
+    SkinnedPartEntry entry;
+    entry.name = std::move(copiedName);
+    entry.part = std::move(part);
+    entry.textureHandle = textureHandle;
+    entry.texture = std::move(texture);
+    ++entry.part->activeSkinnedModelReferenceCount;
+    if (entry.texture != nullptr) {
+        ++entry.texture->activeModelReferenceCount;
+    }
+    model->parts.push_back(std::move(entry));
+    model->parentGame = parentGame;
+    RebuildSkinnedParts(*model);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_attach_parts(
+[[nodiscard]] CNA_Result SkinnedModelExtAttachParts(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const CNA_SkinnedModelEXTHandle otherHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (modelHandle == otherHandle) {
-            return InvalidArgument("A SkinnedModelEXT cannot attach its own parts.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        std::shared_ptr<SkinnedModelResource> other;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = GetSkinnedModel(otherHandle, &other);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (model->value->BoneCount != other->value->BoneCount) {
-            return InvalidArgument(
-                "Attached SkinnedModelEXT instances must have equal bone counts.");
-        }
-        if (!model->parts.empty() && !other->parts.empty() &&
-            model->parentGame != other->parentGame) {
-            return InvalidArgument(
-                "Attached SkinnedModelEXT parts must belong to one graphics device.");
-        }
-        if (other->parts.empty()) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (other->parts.size() > model->parts.max_size() - model->parts.size()) {
-            return Overflow("The attached SkinnedModelEXT part count is too large.");
-        }
-        model->parts.reserve(model->parts.size() + other->parts.size());
-        for (SkinnedPartEntry& incoming : other->parts) {
-            model->parts.erase(
-                std::remove_if(
-                    model->parts.begin(), model->parts.end(),
-                    [&](const SkinnedPartEntry& current) {
-                        return current.name == incoming.name;
-                    }),
-                model->parts.end());
-            model->parts.push_back(std::move(incoming));
-        }
-        other->parts.clear();
-        if (model->parentGame == CNA_INVALID_HANDLE) {
-            model->parentGame = other->parentGame;
-        }
-        other->parentGame = CNA_INVALID_HANDLE;
-        RebuildSkinnedParts(*model);
-        RebuildSkinnedParts(*other);
+    if (modelHandle == otherHandle) {
+        return InvalidArgument("A SkinnedModelEXT cannot attach its own parts.");
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    std::shared_ptr<SkinnedModelResource> other;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = GetSkinnedModel(otherHandle, &other);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (model->value->BoneCount != other->value->BoneCount) {
+        return InvalidArgument(
+            "Attached SkinnedModelEXT instances must have equal bone counts.");
+    }
+    if (!model->parts.empty() && !other->parts.empty() &&
+        model->parentGame != other->parentGame) {
+        return InvalidArgument(
+            "Attached SkinnedModelEXT parts must belong to one graphics device.");
+    }
+    if (other->parts.empty()) {
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_model_ext_remove_part(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    }
+    if (other->parts.size() > model->parts.max_size() - model->parts.size()) {
+        return Overflow("The attached SkinnedModelEXT part count is too large.");
+    }
+    model->parts.reserve(model->parts.size() + other->parts.size());
+    for (SkinnedPartEntry& incoming : other->parts) {
         model->parts.erase(
             std::remove_if(
                 model->parts.begin(), model->parts.end(),
-                [&](const SkinnedPartEntry& entry) { return entry.name == copiedName; }),
+                [&](const SkinnedPartEntry& current) {
+                    return current.name == incoming.name;
+                }),
             model->parts.end());
-        if (model->parts.empty()) {
-            model->parentGame = CNA_INVALID_HANDLE;
-        }
-        RebuildSkinnedParts(*model);
-        return CNA_RESULT_SUCCESS;
-    });
+        model->parts.push_back(std::move(incoming));
+    }
+    other->parts.clear();
+    if (model->parentGame == CNA_INVALID_HANDLE) {
+        model->parentGame = other->parentGame;
+    }
+    other->parentGame = CNA_INVALID_HANDLE;
+    RebuildSkinnedParts(*model);
+    RebuildSkinnedParts(*other);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_get_part_at(
+[[nodiscard]] CNA_Result SkinnedModelExtRemovePart(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name)
+{
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    model->parts.erase(
+        std::remove_if(
+            model->parts.begin(), model->parts.end(),
+            [&](const SkinnedPartEntry& entry) { return entry.name == copiedName; }),
+        model->parts.end());
+    if (model->parts.empty()) {
+        model->parentGame = CNA_INVALID_HANDLE;
+    }
+    RebuildSkinnedParts(*model);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result SkinnedModelExtGetPartAt(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t partIndex,
     CNA_ModelMeshPartHandle* const outPart,
     CNA_Bool* const outHasTexture,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPart == nullptr || outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("A SkinnedModelEXT part output is null.");
-        }
-        *outPart = CNA_INVALID_HANDLE;
-        *outHasTexture = CNA_FALSE;
-        *outTexture = CNA_INVALID_HANDLE;
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (partIndex >= model->parts.size()) {
-            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
-        }
-        const SkinnedPartEntry& entry = model->parts[static_cast<std::size_t>(partIndex)];
-        if (const CNA_Result result = CreatePartHandle(entry.part, outPart);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (entry.texture != nullptr) {
-            *outHasTexture = CNA_TRUE;
-            *outTexture = entry.textureHandle;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    *outHasTexture = CNA_FALSE;
+    *outTexture = CNA_INVALID_HANDLE;
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (partIndex >= model->parts.size()) {
+        return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
+    }
+    const SkinnedPartEntry& entry = model->parts[static_cast<std::size_t>(partIndex)];
+    if (const CNA_Result result = CreatePartHandle(entry.part, outPart);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (entry.texture != nullptr) {
+        *outHasTexture = CNA_TRUE;
+        *outTexture = entry.textureHandle;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
+[[nodiscard]] CNA_Result SkinnedModelExtGetOwnedResourceCounts(
     const CNA_SkinnedModelEXTHandle modelHandle,
     uint64_t* const outVertexBuffers,
     uint64_t* const outIndexBuffers,
     uint64_t* const outParts,
     uint64_t* const outTextures)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVertexBuffers == nullptr || outIndexBuffers == nullptr ||
-            outParts == nullptr || outTextures == nullptr) {
-            return InvalidArgument("A SkinnedModelEXT owned-resource count output is null.");
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t partCount = static_cast<uint64_t>(model->parts.size());
+    uint64_t textureCount = 0U;
+    for (const SkinnedPartEntry& entry : model->parts) {
+        if (entry.texture != nullptr) {
+            ++textureCount;
         }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t partCount = static_cast<uint64_t>(model->parts.size());
-        uint64_t textureCount = 0U;
-        for (const SkinnedPartEntry& entry : model->parts) {
-            if (entry.texture != nullptr) {
-                ++textureCount;
-            }
-        }
-        *outVertexBuffers = partCount;
-        *outIndexBuffers = partCount;
-        *outParts = partCount;
-        *outTextures = textureCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outVertexBuffers = partCount;
+    *outIndexBuffers = partCount;
+    *outParts = partCount;
+    *outTextures = textureCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinning_data_create(
+[[nodiscard]] CNA_Result SkinningDataCreate(
     const CNA_SkinningDataDescriptor* const descriptor,
     CNA_SkinningDataHandle* const outData)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (descriptor == nullptr || outData == nullptr) {
-            return InvalidArgument("The SkinningData descriptor or output is null.");
-        }
-        *outData = CNA_INVALID_HANDLE;
-        SkinningData copied;
-        if (const CNA_Result result = CopySkinningDataDescriptor(*descriptor, &copied);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<SkinningDataResource>();
-        resource->value = std::make_shared<SkinningData>(std::move(copied));
-        return CreateSkinningDataHandle(std::move(resource), outData);
-    });
+    if (descriptor == nullptr) {
+        return InvalidArgument("The SkinningData descriptor or output is null.");
+    }
+    SkinningData copied;
+    if (const CNA_Result result = CopySkinningDataDescriptor(*descriptor, &copied);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<SkinningDataResource>();
+    resource->value = std::make_shared<SkinningData>(std::move(copied));
+    return CreateSkinningDataHandle(std::move(resource), outData);
 }
 
-CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
+[[nodiscard]] CNA_Result SkinningDataGetClipNameByteCountAt(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The SkinningData clip-name size output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*data->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The SkinningData clip index is outside the valid range.");
-        }
-        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*data->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The SkinningData clip index is outside the valid range.");
+    }
+    *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinning_data_copy_clip_name_at(
+[[nodiscard]] CNA_Result SkinningDataCopyClipNameAt(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*data->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The SkinningData clip index is outside the valid range.");
-        }
-        return CopyText(
-            names[static_cast<std::size_t>(clipIndex)], destination, capacity,
-            outByteCount);
-    });
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*data->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The SkinningData clip index is outside the valid range.");
+    }
+    return CopyText(
+        names[static_cast<std::size_t>(clipIndex)], destination, capacity,
+        outByteCount);
 }
 
-CNA_Result cna_skinning_data_get_clip_info(
+[[nodiscard]] CNA_Result SkinningDataGetClipInfo(
     const CNA_SkinningDataHandle dataHandle,
     const CNA_StringView name,
     CNA_Bool* const outFound,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
-            return InvalidArgument("A SkinningData clip-info output is null.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto clip = data->value->AnimationClips.find(copiedName);
-        if (clip == data->value->AnimationClips.end()) {
-            *outFound = CNA_FALSE;
-            *outDurationSeconds = 0.0;
-            *outTrackCount = 0U;
-            return CNA_RESULT_SUCCESS;
-        }
-        *outFound = CNA_TRUE;
-        *outDurationSeconds = clip->second.Duration.getTotalSecondsProperty();
-        *outTrackCount = static_cast<uint64_t>(clip->second.Tracks.size());
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto clip = data->value->AnimationClips.find(copiedName);
+    if (clip == data->value->AnimationClips.end()) {
+        *outFound = CNA_FALSE;
+        *outDurationSeconds = 0.0;
+        *outTrackCount = 0U;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outFound = CNA_TRUE;
+    *outDurationSeconds = clip->second.Duration.getTotalSecondsProperty();
+    *outTrackCount = static_cast<uint64_t>(clip->second.Tracks.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinning_data_copy_clip_track(
+[[nodiscard]] CNA_Result SkinningDataCopyClipTrack(
     const CNA_SkinningDataHandle dataHandle,
     const CNA_StringView name,
     const uint64_t trackIndex,
@@ -3695,330 +3395,295 @@ CNA_Result cna_skinning_data_copy_clip_track(
     const uint64_t capacity,
     uint64_t* const outKeyframeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBoneIndex == nullptr || outKeyframeCount == nullptr ||
-            (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("A SkinningData BoneTrack output is invalid.");
-        }
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto clip = data->value->AnimationClips.find(copiedName);
-        if (clip == data->value->AnimationClips.end()) {
-            return InvalidArgument("The SkinningData clip name is unknown.");
-        }
-        if (trackIndex >= clip->second.Tracks.size()) {
-            return InvalidArgument("The SkinningData track index is outside the valid range.");
-        }
-        const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
-        *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
-        if (capacity < track.Keys.size()) {
-            return BufferTooSmall("The destination cannot hold all SkinningData keyframes.");
-        }
-        *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
-        for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
-            destination[index] = ToCKeyframe(track.Keys[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("A SkinningData BoneTrack output is invalid.");
+    }
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto clip = data->value->AnimationClips.find(copiedName);
+    if (clip == data->value->AnimationClips.end()) {
+        return InvalidArgument("The SkinningData clip name is unknown.");
+    }
+    if (trackIndex >= clip->second.Tracks.size()) {
+        return InvalidArgument("The SkinningData track index is outside the valid range.");
+    }
+    const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
+    *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
+    if (capacity < track.Keys.size()) {
+        return BufferTooSmall("The destination cannot hold all SkinningData keyframes.");
+    }
+    *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
+    for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
+        destination[index] = ToCKeyframe(track.Keys[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_animation_player_create(
+[[nodiscard]] CNA_Result AnimationPlayerCreate(
     const CNA_SkinningDataHandle dataHandle,
     CNA_AnimationPlayerHandle* const outPlayer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlayer == nullptr) {
-            return InvalidArgument("The AnimationPlayer output handle is null.");
-        }
-        *outPlayer = CNA_INVALID_HANDLE;
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<AnimationPlayerResource>();
-        resource->data = std::move(data);
-        resource->value = std::make_shared<AnimationPlayer>(*resource->data->value);
-        return CreateAnimationPlayerHandle(std::move(resource), outPlayer);
-    });
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<AnimationPlayerResource>();
+    resource->data = std::move(data);
+    resource->value = std::make_shared<AnimationPlayer>(*resource->data->value);
+    return CreateAnimationPlayerHandle(std::move(resource), outPlayer);
 }
 
-CNA_Result cna_animation_player_start_clip(
+[[nodiscard]] CNA_Result AnimationPlayerStartClip(
     const CNA_AnimationPlayerHandle playerHandle,
     const CNA_StringView clipName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                clipName, "The AnimationPlayer clip name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto clip = player->data->value->AnimationClips.find(copiedName);
-        if (clip == player->data->value->AnimationClips.end()) {
-            return InvalidArgument("The AnimationPlayer clip name is unknown.");
-        }
-        player->value->StartClip(clip->second);
-        player->currentClipName = std::move(copiedName);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string copiedName;
+    if (const CNA_Result result = ReadText(
+            clipName, "The AnimationPlayer clip name is not valid UTF-8 text.", &copiedName,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<AnimationPlayerResource> player;
+    if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto clip = player->data->value->AnimationClips.find(copiedName);
+    if (clip == player->data->value->AnimationClips.end()) {
+        return InvalidArgument("The AnimationPlayer clip name is unknown.");
+    }
+    player->value->StartClip(clip->second);
+    player->currentClipName = std::move(copiedName);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_animation_player_update(
+[[nodiscard]] CNA_Result AnimationPlayerUpdate(
     const CNA_AnimationPlayerHandle playerHandle,
     const double timeSeconds,
     const CNA_Bool relativeToCurrentTime,
     const CNA_Bool loop)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsValidTimeSpanSeconds(timeSeconds)) {
-            return InvalidArgument("The AnimationPlayer time must fit a finite TimeSpan.");
-        }
-        if ((relativeToCurrentTime != CNA_FALSE && relativeToCurrentTime != CNA_TRUE) ||
-            (loop != CNA_FALSE && loop != CNA_TRUE)) {
-            return InvalidArgument("AnimationPlayer flags must be canonical C booleans.");
-        }
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        player->value->Update(
-            System::TimeSpan::FromSeconds(timeSeconds),
-            relativeToCurrentTime == CNA_TRUE,
-            loop == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsValidTimeSpanSeconds(timeSeconds)) {
+        return InvalidArgument("The AnimationPlayer time must fit a finite TimeSpan.");
+    }
+    if ((relativeToCurrentTime != CNA_FALSE && relativeToCurrentTime != CNA_TRUE) ||
+        (loop != CNA_FALSE && loop != CNA_TRUE)) {
+        return InvalidArgument("AnimationPlayer flags must be canonical C booleans.");
+    }
+    std::shared_ptr<AnimationPlayerResource> player;
+    if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    player->value->Update(
+        System::TimeSpan::FromSeconds(timeSeconds),
+        relativeToCurrentTime == CNA_TRUE,
+        loop == CNA_TRUE);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_animation_player_get_current_clip_info(
+[[nodiscard]] CNA_Result AnimationPlayerGetCurrentClipInfo(
     const CNA_AnimationPlayerHandle playerHandle,
     CNA_Bool* const outHasClip,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasClip == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
-            return InvalidArgument("An AnimationPlayer current-clip output is null.");
-        }
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const AnimationClipEXT* const clip = player->value->getCurrentClipProperty();
-        if (clip == nullptr) {
-            *outHasClip = CNA_FALSE;
-            *outDurationSeconds = 0.0;
-            *outTrackCount = 0U;
-            return CNA_RESULT_SUCCESS;
-        }
-        *outHasClip = CNA_TRUE;
-        *outDurationSeconds = clip->Duration.getTotalSecondsProperty();
-        *outTrackCount = static_cast<uint64_t>(clip->Tracks.size());
+    std::shared_ptr<AnimationPlayerResource> player;
+    if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const AnimationClipEXT* const clip = player->value->getCurrentClipProperty();
+    if (clip == nullptr) {
+        *outHasClip = CNA_FALSE;
+        *outDurationSeconds = 0.0;
+        *outTrackCount = 0U;
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outHasClip = CNA_TRUE;
+    *outDurationSeconds = clip->Duration.getTotalSecondsProperty();
+    *outTrackCount = static_cast<uint64_t>(clip->Tracks.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_mesh_part_set_sampler_state_ext(
+[[nodiscard]] CNA_Result ModelMeshPartSetSamplerStateExt(
     const CNA_ModelMeshPartHandle partHandle,
     const CNA_PbrTextureSlot slot,
     const CNA_SamplerState* const state)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SamplerState native;
-        if (const CNA_Result result = CNA::C::Detail::ToNativeSamplerState(state, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (slot < CNA_PBR_TEXTURE_SPECULAR_EXT) {
-            part->value->setSamplerStateEXTProperty(static_cast<int>(slot), native);
-        } else {
-            part->value->setSpecularSamplerStateEXTProperty(
-                static_cast<int>(slot - CNA_PBR_TEXTURE_SPECULAR_EXT), native);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+        return InvalidArgument("The PBR texture slot is outside the valid range.");
+    }
+    std::shared_ptr<PartResource> part;
+    if (const CNA_Result result = GetPart(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    SamplerState native;
+    if (const CNA_Result result = CNA::C::Detail::ToNativeSamplerState(state, &native);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (slot < CNA_PBR_TEXTURE_SPECULAR_EXT) {
+        part->value->setSamplerStateEXTProperty(static_cast<int>(slot), native);
+    } else {
+        part->value->setSpecularSamplerStateEXTProperty(
+            static_cast<int>(slot - CNA_PBR_TEXTURE_SPECULAR_EXT), native);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinning_data_get_clip_target_space_ext(
+[[nodiscard]] CNA_Result SkinningDataGetClipTargetSpaceExt(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
     CNA_ClipTargetSpaceEXT* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The SkinningData clip target-space output is null.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*data->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The SkinningData clip index is outside the valid range.");
-        }
-        *outValue = static_cast<CNA_ClipTargetSpaceEXT>(
-            data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)])
-                .TargetSpace);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*data->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The SkinningData clip index is outside the valid range.");
+    }
+    *outValue = static_cast<CNA_ClipTargetSpaceEXT>(
+        data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)])
+            .TargetSpace);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_skinning_data_set_clip_target_space_ext(
+[[nodiscard]] CNA_Result SkinningDataSetClipTargetSpaceExt(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
     const CNA_ClipTargetSpaceEXT value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
-            return InvalidArgument("The clip target space is not a defined identity.");
-        }
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> names = SortedClipNames(*data->value);
-        if (clipIndex >= names.size()) {
-            return InvalidArgument("The SkinningData clip index is outside the valid range.");
-        }
-        data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)]).TargetSpace =
-            static_cast<ClipTargetSpaceEXT>(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+        return InvalidArgument("The clip target space is not a defined identity.");
+    }
+    std::shared_ptr<SkinningDataResource> data;
+    if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> names = SortedClipNames(*data->value);
+    if (clipIndex >= names.size()) {
+        return InvalidArgument("The SkinningData clip index is outside the valid range.");
+    }
+    data->value->AnimationClips.at(names[static_cast<std::size_t>(clipIndex)]).TargetSpace =
+        static_cast<ClipTargetSpaceEXT>(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
+[[nodiscard]] CNA_Result MorphTargetDataExtCopyTangentDeltas(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const uint64_t targetIndex,
     CNA_Vector3* const destination,
     const uint64_t capacity,
     uint64_t* const outDeltaCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The target count is the position array's length, which is what the matching setter
-        // bounds against and why: TangentDeltas is grown to cover the targets only when a tangent
-        // is first written, so bounding against it refused every target of data that has none --
-        // and said the index was out of range, which was never the reason.
-        if (targetIndex >= data->value->PositionDeltas.size()) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT target index is outside the valid range.");
-        }
-        static const std::vector<Microsoft::Xna::Framework::Vector3> kNoTangentDeltas;
-        const std::vector<Microsoft::Xna::Framework::Vector3>& tangents =
-            targetIndex < data->value->TangentDeltas.size()
-                ? data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)]
-                : kNoTangentDeltas;
-        return CopyOutputValues(
-            tangents,
-            destination, capacity, outDeltaCount, ToCVector3,
-            "The MorphTargetDataEXT tangent-delta output is invalid.",
-            "The destination cannot hold all morph tangent deltas.");
-    });
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The target count is the position array's length, which is what the matching setter
+    // bounds against and why: TangentDeltas is grown to cover the targets only when a tangent
+    // is first written, so bounding against it refused every target of data that has none --
+    // and said the index was out of range, which was never the reason.
+    if (targetIndex >= data->value->PositionDeltas.size()) {
+        return InvalidArgument(
+            "The MorphTargetDataEXT target index is outside the valid range.");
+    }
+    static const std::vector<Microsoft::Xna::Framework::Vector3> kNoTangentDeltas;
+    const std::vector<Microsoft::Xna::Framework::Vector3>& tangents =
+        targetIndex < data->value->TangentDeltas.size()
+            ? data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)]
+            : kNoTangentDeltas;
+    return CopyOutputValues(
+        tangents,
+        destination, capacity, outDeltaCount, ToCVector3,
+        "The MorphTargetDataEXT tangent-delta output is invalid.",
+        "The destination cannot hold all morph tangent deltas.");
 }
 
-CNA_Result cna_morph_target_data_ext_set_triangle_indices_ext(
+[[nodiscard]] CNA_Result MorphTargetDataExtSetTriangleIndicesExt(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const uint32_t* const indices,
     const uint64_t indexCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (indices == nullptr && indexCount != 0U) {
-            return InvalidArgument("The morph triangle-index array is null.");
-        }
-        // Three indices per face: a count that is not a multiple of three describes no triangle
-        // list at all, and the recomputation would read past the last complete face.
-        if ((indexCount % 3U) != 0U) {
-            return InvalidArgument(
-                "The morph triangle-index count must be a multiple of three.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<std::uint32_t>& target = data->value->TriangleIndicesEXT;
-        target.clear();
-        target.reserve(static_cast<std::size_t>(indexCount));
-        for (uint64_t index = 0U; index < indexCount; ++index) {
-            target.push_back(static_cast<std::uint32_t>(indices[index]));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (indices == nullptr && indexCount != 0U) {
+        return InvalidArgument("The morph triangle-index array is null.");
+    }
+    // Three indices per face: a count that is not a multiple of three describes no triangle
+    // list at all, and the recomputation would read past the last complete face.
+    if ((indexCount % 3U) != 0U) {
+        return InvalidArgument(
+            "The morph triangle-index count must be a multiple of three.");
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<std::uint32_t>& target = data->value->TriangleIndicesEXT;
+    target.clear();
+    target.reserve(static_cast<std::size_t>(indexCount));
+    for (uint64_t index = 0U; index < indexCount; ++index) {
+        target.push_back(static_cast<std::uint32_t>(indices[index]));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_morph_target_data_ext_set_tangent_deltas(
+[[nodiscard]] CNA_Result MorphTargetDataExtSetTangentDeltas(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const uint64_t targetIndex,
     const CNA_Vector3* const deltas,
     const uint64_t deltaCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (deltas == nullptr && deltaCount != 0U) {
-            return InvalidArgument("The morph tangent-delta array is null.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // TangentDeltas is sized per target like the position and normal arrays, and a target
-        // without a TANGENT delta keeps an empty inner vector rather than being absent, so the
-        // outer array is grown to match the targets the data already has.
-        if (targetIndex >= data->value->PositionDeltas.size()) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT target index is outside the valid range.");
-        }
-        const std::size_t vertexCount =
-            data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)].size();
-        if (deltaCount != 0U && static_cast<std::size_t>(deltaCount) != vertexCount) {
-            return InvalidArgument(
-                "The morph tangent-delta count must be zero or the target's vertex count.");
-        }
-        data->value->TangentDeltas.resize(data->value->PositionDeltas.size());
-        std::vector<Microsoft::Xna::Framework::Vector3>& target =
-            data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)];
-        target.clear();
-        target.reserve(static_cast<std::size_t>(deltaCount));
-        for (uint64_t index = 0U; index < deltaCount; ++index) {
-            target.push_back(ToNative(deltas[index]));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (deltas == nullptr && deltaCount != 0U) {
+        return InvalidArgument("The morph tangent-delta array is null.");
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // TangentDeltas is sized per target like the position and normal arrays, and a target
+    // without a TANGENT delta keeps an empty inner vector rather than being absent, so the
+    // outer array is grown to match the targets the data already has.
+    if (targetIndex >= data->value->PositionDeltas.size()) {
+        return InvalidArgument(
+            "The MorphTargetDataEXT target index is outside the valid range.");
+    }
+    const std::size_t vertexCount =
+        data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)].size();
+    if (deltaCount != 0U && static_cast<std::size_t>(deltaCount) != vertexCount) {
+        return InvalidArgument(
+            "The morph tangent-delta count must be zero or the target's vertex count.");
+    }
+    data->value->TangentDeltas.resize(data->value->PositionDeltas.size());
+    std::vector<Microsoft::Xna::Framework::Vector3>& target =
+        data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)];
+    target.clear();
+    target.reserve(static_cast<std::size_t>(deltaCount));
+    for (uint64_t index = 0U; index < deltaCount; ++index) {
+        target.push_back(ToNative(deltas[index]));
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 [[nodiscard]] CNA_ModelCameraEXT ToC(const ModelCameraEXT& value) noexcept
 {
@@ -4078,249 +3743,216 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_model_get_camera_ext(
+[[nodiscard]] CNA_Result ModelGetCameraExt(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
     CNA_ModelCameraEXT* const outCamera)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!IsModelCamera(outCamera)) {
-            return InvalidArgument("The Model camera output is null or malformed.");
-        }
-        std::shared_ptr<ModelResource> model;
-        const ModelCameraEXT* camera = nullptr;
-        if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCamera = ToC(*camera);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsModelCamera(outCamera)) {
+        return InvalidArgument("The Model camera output is null or malformed.");
+    }
+    std::shared_ptr<ModelResource> model;
+    const ModelCameraEXT* camera = nullptr;
+    if (const CNA_Result result = GetModelCamera(modelHandle, index, &model, &camera);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCamera = ToC(*camera);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_add_camera_ext(
+[[nodiscard]] CNA_Result ModelAddCameraExt(
     const CNA_ModelHandle modelHandle,
     const CNA_ModelCameraDescriptorEXT* const descriptor)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (descriptor == nullptr || !IsModelCamera(&descriptor->camera)) {
-            return InvalidArgument("The Model camera descriptor is null or malformed.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ModelCameraEXT camera;
-        if (const CNA_Result result = ReadText(
-                descriptor->name, "The Model camera name is not valid UTF-8 text.", &camera.Name,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        camera.SceneNodeIndex = descriptor->camera.scene_node_index;
-        camera.Projection = ToNative(descriptor->camera.projection);
-        camera.WorldTransform = ToNative(descriptor->camera.world_transform);
-        camera.IsPerspective = descriptor->camera.is_perspective == CNA_TRUE;
-        camera.HasInfiniteFarPlane = descriptor->camera.has_infinite_far_plane == CNA_TRUE;
-        camera.AspectRatio = descriptor->camera.aspect_ratio;
-        camera.HasAuthoredAspectRatio = descriptor->camera.has_authored_aspect_ratio == CNA_TRUE;
-        camera.FieldOfView = descriptor->camera.field_of_view;
-        camera.NearPlaneDistance = descriptor->camera.near_plane_distance;
-        camera.FarPlaneDistance = descriptor->camera.far_plane_distance;
+    if (descriptor == nullptr || !IsModelCamera(&descriptor->camera)) {
+        return InvalidArgument("The Model camera descriptor is null or malformed.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ModelCameraEXT camera;
+    if (const CNA_Result result = ReadText(
+            descriptor->name, "The Model camera name is not valid UTF-8 text.", &camera.Name,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    camera.SceneNodeIndex = descriptor->camera.scene_node_index;
+    camera.Projection = ToNative(descriptor->camera.projection);
+    camera.WorldTransform = ToNative(descriptor->camera.world_transform);
+    camera.IsPerspective = descriptor->camera.is_perspective == CNA_TRUE;
+    camera.HasInfiniteFarPlane = descriptor->camera.has_infinite_far_plane == CNA_TRUE;
+    camera.AspectRatio = descriptor->camera.aspect_ratio;
+    camera.HasAuthoredAspectRatio = descriptor->camera.has_authored_aspect_ratio == CNA_TRUE;
+    camera.FieldOfView = descriptor->camera.field_of_view;
+    camera.NearPlaneDistance = descriptor->camera.near_plane_distance;
+    camera.FarPlaneDistance = descriptor->camera.far_plane_distance;
 
-        std::vector<ModelCameraEXT> cameras = model->value->getCamerasEXTProperty();
-        cameras.push_back(std::move(camera));
-        model->value->setCamerasEXTProperty(std::move(cameras));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<ModelCameraEXT> cameras = model->value->getCamerasEXTProperty();
+    cameras.push_back(std::move(camera));
+    model->value->setCamerasEXTProperty(std::move(cameras));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_get_skin_ext(
+[[nodiscard]] CNA_Result ModelGetSkinExt(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
     CNA_Bool* const outHasData,
     uint64_t* const outMeshCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasData == nullptr || outMeshCount == nullptr) {
-            return InvalidArgument("The Model skin outputs are null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        const ModelSkinEXT* skin = nullptr;
-        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasData = ToCBool(skin->Data != nullptr);
-        *outMeshCount = static_cast<uint64_t>(skin->Meshes.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelResource> model;
+    const ModelSkinEXT* skin = nullptr;
+    if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasData = ToCBool(skin->Data != nullptr);
+    *outMeshCount = static_cast<uint64_t>(skin->Meshes.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_create_skin_skeleton_handle_ext(
+[[nodiscard]] CNA_Result ModelCreateSkinSkeletonHandleExt(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
     CNA_SkinningDataHandle* const outData)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outData == nullptr) {
-            return InvalidArgument("The Model skin skeleton output handle is null.");
-        }
-        *outData = CNA_INVALID_HANDLE;
-        std::shared_ptr<ModelResource> model;
-        const ModelSkinEXT* skin = nullptr;
-        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (skin->Data == nullptr) {
-            return InvalidState("The Model skin names no skeleton.");
-        }
-        const std::size_t skinIndex = static_cast<std::size_t>(index);
-        if (skinIndex >= model->skinSkeletons.size()) {
-            model->skinSkeletons.resize(skinIndex + 1U);
-        }
-        if (model->skinSkeletons[skinIndex] == nullptr) {
-            // A skin this ABI built has its skeleton in skinSkeletons already. One that arrived
-            // with a loaded Model -- a glTF import, say -- does not, and used to be refused with
-            // "the skeleton was not created through the C API": a refusal models.h does not
-            // document, on a skin cna_model_get_skin_ext had just reported as having data. The
-            // skeleton was reachable the whole time.
-            //
-            // Model.hpp's own guarantee is what makes publishing it safe: "Data and every mesh
-            // pointer are owned by the Model's content resources and remain valid for the Model's
-            // lifetime." So the handle aliases the Model, the way every other borrowed piece of a
-            // loaded Model does, and keeps it alive for as long as it exists. Cached, so a second
-            // read answers the same resource rather than minting a rival for one skeleton.
-            auto adopted = std::make_shared<SkinningDataResource>();
-            adopted->value = std::shared_ptr<SkinningData>(model->value, skin->Data);
-            model->skinSkeletons[skinIndex] = std::move(adopted);
-        }
-        return CreateSkinningDataHandle(model->skinSkeletons[skinIndex], outData);
-    });
+    std::shared_ptr<ModelResource> model;
+    const ModelSkinEXT* skin = nullptr;
+    if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (skin->Data == nullptr) {
+        return InvalidState("The Model skin names no skeleton.");
+    }
+    const std::size_t skinIndex = static_cast<std::size_t>(index);
+    if (skinIndex >= model->skinSkeletons.size()) {
+        model->skinSkeletons.resize(skinIndex + 1U);
+    }
+    if (model->skinSkeletons[skinIndex] == nullptr) {
+        // A skin this ABI built has its skeleton in skinSkeletons already. One that arrived
+        // with a loaded Model -- a glTF import, say -- does not, and used to be refused with
+        // "the skeleton was not created through the C API": a refusal models.h does not
+        // document, on a skin cna_model_get_skin_ext had just reported as having data. The
+        // skeleton was reachable the whole time.
+        //
+        // Model.hpp's own guarantee is what makes publishing it safe: "Data and every mesh
+        // pointer are owned by the Model's content resources and remain valid for the Model's
+        // lifetime." So the handle aliases the Model, the way every other borrowed piece of a
+        // loaded Model does, and keeps it alive for as long as it exists. Cached, so a second
+        // read answers the same resource rather than minting a rival for one skeleton.
+        auto adopted = std::make_shared<SkinningDataResource>();
+        adopted->value = std::shared_ptr<SkinningData>(model->value, skin->Data);
+        model->skinSkeletons[skinIndex] = std::move(adopted);
+    }
+    return CreateSkinningDataHandle(model->skinSkeletons[skinIndex], outData);
 }
 
-CNA_Result cna_model_get_skin_mesh_index_ext(
+[[nodiscard]] CNA_Result ModelGetSkinMeshIndexExt(
     const CNA_ModelHandle modelHandle,
     const uint64_t index,
     const uint64_t meshIndex,
     uint64_t* const outModelMeshIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModelMeshIndex == nullptr) {
-            return InvalidArgument("The Model skin mesh-index output is null.");
+    std::shared_ptr<ModelResource> model;
+    const ModelSkinEXT* skin = nullptr;
+    if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (meshIndex >= skin->Meshes.size()) {
+        return InvalidArgument("The Model skin mesh index is outside the valid range.");
+    }
+    const ModelMesh* const mesh = skin->Meshes[static_cast<std::size_t>(meshIndex)];
+    for (std::size_t candidate = 0U; candidate < model->meshes.size(); ++candidate) {
+        if (model->meshes[candidate]->value.get() == mesh) {
+            *outModelMeshIndex = static_cast<uint64_t>(candidate);
+            return CNA_RESULT_SUCCESS;
         }
-        std::shared_ptr<ModelResource> model;
-        const ModelSkinEXT* skin = nullptr;
-        if (const CNA_Result result = GetModelSkin(modelHandle, index, &model, &skin);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (meshIndex >= skin->Meshes.size()) {
-            return InvalidArgument("The Model skin mesh index is outside the valid range.");
-        }
-        const ModelMesh* const mesh = skin->Meshes[static_cast<std::size_t>(meshIndex)];
-        for (std::size_t candidate = 0U; candidate < model->meshes.size(); ++candidate) {
-            if (model->meshes[candidate]->value.get() == mesh) {
-                *outModelMeshIndex = static_cast<uint64_t>(candidate);
-                return CNA_RESULT_SUCCESS;
-            }
-        }
-        return InvalidState("The Model skin names a mesh this Model does not own.");
-    });
+    }
+    return InvalidState("The Model skin names a mesh this Model does not own.");
 }
 
-CNA_Result cna_model_clear_skins_ext(const CNA_ModelHandle modelHandle)
+[[nodiscard]] CNA_Result ModelClearSkinsExt(const CNA_ModelHandle modelHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->setSkinsEXTProperty({});
-        model->skinSkeletons.clear();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    model->value->setSkinsEXTProperty({});
+    model->skinSkeletons.clear();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_add_skin_ext(
+[[nodiscard]] CNA_Result ModelAddSkinExt(
     const CNA_ModelHandle modelHandle,
     const CNA_StringView name,
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t* const meshIndices,
     const uint64_t meshIndexCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (meshIndices == nullptr && meshIndexCount != 0U) {
-            return InvalidArgument("The Model skin mesh-index array is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
+    if (meshIndices == nullptr && meshIndexCount != 0U) {
+        return InvalidArgument("The Model skin mesh-index array is null.");
+    }
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<SkinningDataResource> data;
+    if (dataHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<SkinningDataResource> data;
-        if (dataHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
+    }
+    ModelSkinEXT skin;
+    if (const CNA_Result result = ReadText(
+            name, "The Model skin name is not valid UTF-8 text.", &skin.Name,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    skin.Meshes.reserve(static_cast<std::size_t>(meshIndexCount));
+    for (uint64_t entry = 0U; entry < meshIndexCount; ++entry) {
+        if (meshIndices[entry] >= model->meshes.size()) {
+            return InvalidArgument("A Model skin mesh index is outside the valid range.");
         }
-        ModelSkinEXT skin;
-        if (const CNA_Result result = ReadText(
-                name, "The Model skin name is not valid UTF-8 text.", &skin.Name,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        skin.Meshes.reserve(static_cast<std::size_t>(meshIndexCount));
-        for (uint64_t entry = 0U; entry < meshIndexCount; ++entry) {
-            if (meshIndices[entry] >= model->meshes.size()) {
-                return InvalidArgument("A Model skin mesh index is outside the valid range.");
-            }
-            skin.Meshes.push_back(
-                model->meshes[static_cast<std::size_t>(meshIndices[entry])]->value.get());
-        }
-        // The skeleton is borrowed by the canonical type, so the model holds a strong reference
-        // beside it: without one, destroying the caller's handle would leave ModelSkinEXT::Data
-        // pointing at freed memory the next reader would follow.
-        skin.Data = data != nullptr ? data->value.get() : nullptr;
+        skin.Meshes.push_back(
+            model->meshes[static_cast<std::size_t>(meshIndices[entry])]->value.get());
+    }
+    // The skeleton is borrowed by the canonical type, so the model holds a strong reference
+    // beside it: without one, destroying the caller's handle would leave ModelSkinEXT::Data
+    // pointing at freed memory the next reader would follow.
+    skin.Data = data != nullptr ? data->value.get() : nullptr;
 
-        std::vector<ModelSkinEXT> skins = model->value->getSkinsEXTProperty();
-        skins.push_back(std::move(skin));
-        model->value->setSkinsEXTProperty(std::move(skins));
-        model->skinSkeletons.push_back(std::move(data));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<ModelSkinEXT> skins = model->value->getSkinsEXTProperty();
+    skins.push_back(std::move(skin));
+    model->value->setSkinsEXTProperty(std::move(skins));
+    model->skinSkeletons.push_back(std::move(data));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_get_bounding_sphere_ext(
+[[nodiscard]] CNA_Result ModelGetBoundingSphereExt(
     const CNA_ModelHandle modelHandle,
     CNA_Bool* const outHasValue,
     CNA_BoundingSphere* const outSphere)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasValue == nullptr || outSphere == nullptr) {
-            return InvalidArgument("The Model bounding-sphere outputs are null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::optional<BoundingSphere> sphere =
-            model->value->getBoundingSphereEXTProperty();
-        *outHasValue = ToCBool(sphere.has_value());
-        *outSphere = sphere.has_value() ? ToC(*sphere) : CNA_BoundingSphere{};
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::optional<BoundingSphere> sphere =
+        model->value->getBoundingSphereEXTProperty();
+    *outHasValue = ToCBool(sphere.has_value());
+    *outSphere = sphere.has_value() ? ToC(*sphere) : CNA_BoundingSphere{};
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 struct ModelAnimationsResource final {
     std::shared_ptr<ModelAnimationsEXT> value = std::make_shared<ModelAnimationsEXT>();
@@ -4364,166 +3996,143 @@ struct ModelAnimationsResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_model_animations_ext_create(
+[[nodiscard]] CNA_Result ModelAnimationsExtCreate(
     const CNA_NamedAnimationClipEXTDescriptor* const clips,
     const uint64_t clipCount,
     CNA_ModelAnimationsEXTHandle* const outAnimations)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAnimations == nullptr) {
-            return InvalidArgument("The ModelAnimationsEXT output handle is null.");
+    if (clips == nullptr && clipCount != 0U) {
+        return InvalidArgument("The ModelAnimationsEXT clip array is null.");
+    }
+    auto resource = std::make_shared<ModelAnimationsResource>();
+    if (clipCount > resource->value->Clips.max_size()) {
+        return Overflow("The ModelAnimationsEXT clip count is too large.");
+    }
+    resource->value->Clips.reserve(static_cast<std::size_t>(clipCount));
+    for (uint64_t index = 0U; index < clipCount; ++index) {
+        const CNA_NamedAnimationClipEXTDescriptor& source = clips[index];
+        std::string name;
+        if (const CNA_Result result = ReadText(
+                source.name, "A ModelAnimationsEXT clip name is not valid UTF-8 text.", &name,
+                EmbeddedNul::Refused);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        *outAnimations = CNA_INVALID_HANDLE;
-        if (clips == nullptr && clipCount != 0U) {
-            return InvalidArgument("The ModelAnimationsEXT clip array is null.");
+        if (resource->value->Clips.contains(name)) {
+            return InvalidArgument("ModelAnimationsEXT clip names must be unique.");
         }
-        auto resource = std::make_shared<ModelAnimationsResource>();
-        if (clipCount > resource->value->Clips.max_size()) {
-            return Overflow("The ModelAnimationsEXT clip count is too large.");
+        AnimationClipEXT clip;
+        if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        resource->value->Clips.reserve(static_cast<std::size_t>(clipCount));
-        for (uint64_t index = 0U; index < clipCount; ++index) {
-            const CNA_NamedAnimationClipEXTDescriptor& source = clips[index];
-            std::string name;
-            if (const CNA_Result result = ReadText(
-                    source.name, "A ModelAnimationsEXT clip name is not valid UTF-8 text.", &name,
-                    EmbeddedNul::Refused);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (resource->value->Clips.contains(name)) {
-                return InvalidArgument("ModelAnimationsEXT clip names must be unique.");
-            }
-            AnimationClipEXT clip;
-            if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            resource->value->Clips.emplace(std::move(name), std::move(clip));
-        }
-        return GetRuntimeHandles().Create(
-            ObjectKind::ModelAnimationsEXT, std::move(resource), outAnimations);
-    });
+        resource->value->Clips.emplace(std::move(name), std::move(clip));
+    }
+    return GetRuntimeHandles().Create(
+        ObjectKind::ModelAnimationsEXT, std::move(resource), outAnimations);
 }
 
-CNA_Result cna_model_animations_ext_get_clip_name_byte_count_at(
+[[nodiscard]] CNA_Result ModelAnimationsExtGetClipNameByteCountAt(
     const CNA_ModelAnimationsEXTHandle handle,
     const uint64_t clipIndex,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The ModelAnimationsEXT clip-name byte-count output is null.");
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        std::string name;
-        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(name.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelAnimationsResource> animations;
+    std::string name;
+    if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = static_cast<uint64_t>(name.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_animations_ext_copy_clip_name_at(
+[[nodiscard]] CNA_Result ModelAnimationsExtCopyClipNameAt(
     const CNA_ModelAnimationsEXTHandle handle,
     const uint64_t clipIndex,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelAnimationsResource> animations;
-        std::string name;
-        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            name, destination, capacity, outByteCount);
-    });
+    std::shared_ptr<ModelAnimationsResource> animations;
+    std::string name;
+    if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyText(
+        name, destination, capacity, outByteCount);
 }
 
-CNA_Result cna_model_animations_ext_get_clip_info_at(
+[[nodiscard]] CNA_Result ModelAnimationsExtGetClipInfoAt(
     const CNA_ModelAnimationsEXTHandle handle,
     const uint64_t clipIndex,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount,
     CNA_ClipTargetSpaceEXT* const outTargetSpace)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDurationSeconds == nullptr || outTrackCount == nullptr ||
-            outTargetSpace == nullptr) {
-            return InvalidArgument("The ModelAnimationsEXT clip-info outputs are null.");
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        std::string name;
-        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const AnimationClipEXT& clip = animations->value->Clips.at(name);
-        *outDurationSeconds = clip.Duration.getTotalSecondsProperty();
-        *outTrackCount = static_cast<uint64_t>(clip.Tracks.size());
-        *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip.TargetSpace);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelAnimationsResource> animations;
+    std::string name;
+    if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const AnimationClipEXT& clip = animations->value->Clips.at(name);
+    *outDurationSeconds = clip.Duration.getTotalSecondsProperty();
+    *outTrackCount = static_cast<uint64_t>(clip.Tracks.size());
+    *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip.TargetSpace);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_animations_ext_set_clip_target_space_at(
+[[nodiscard]] CNA_Result ModelAnimationsExtSetClipTargetSpaceAt(
     const CNA_ModelAnimationsEXTHandle handle,
     const uint64_t clipIndex,
     const CNA_ClipTargetSpaceEXT value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
-            return InvalidArgument("The clip target space is not a defined identity.");
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        std::string name;
-        if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        animations->value->Clips.at(name).TargetSpace =
-            static_cast<ClipTargetSpaceEXT>(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+        return InvalidArgument("The clip target space is not a defined identity.");
+    }
+    std::shared_ptr<ModelAnimationsResource> animations;
+    std::string name;
+    if (const CNA_Result result = GetAnimationClipAt(handle, clipIndex, &animations, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    animations->value->Clips.at(name).TargetSpace =
+        static_cast<ClipTargetSpaceEXT>(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_apply_clip_to_bones_ext(
+[[nodiscard]] CNA_Result ModelApplyClipToBonesExt(
     const CNA_ModelHandle modelHandle,
     const CNA_ModelAnimationsEXTHandle animationsHandle,
     const uint64_t clipIndex,
     const double timeSeconds)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ModelAnimationsResource> animations;
-        std::string name;
-        if (const CNA_Result result =
-                GetAnimationClipAt(animationsHandle, clipIndex, &animations, &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!IsValidTimeSpanSeconds(timeSeconds)) {
-            return InvalidArgument("The clip evaluation time is not a valid TimeSpan.");
-        }
-        const System::TimeSpan time = System::TimeSpan::FromSeconds(timeSeconds);
-        // A joint-palette clip's indices name palette slots, so applying them to Model::Bones
-        // would pose the wrong bones without saying so. The canonical helper throws; the barrier
-        // turns that into INVALID_ARGUMENT rather than letting it pass as success.
-        ApplyClipToBonesEXT(*model->value, animations->value->Clips.at(name), time);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ModelAnimationsResource> animations;
+    std::string name;
+    if (const CNA_Result result =
+            GetAnimationClipAt(animationsHandle, clipIndex, &animations, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsValidTimeSpanSeconds(timeSeconds)) {
+        return InvalidArgument("The clip evaluation time is not a valid TimeSpan.");
+    }
+    const System::TimeSpan time = System::TimeSpan::FromSeconds(timeSeconds);
+    // A joint-palette clip's indices name palette slots, so applying them to Model::Bones
+    // would pose the wrong bones without saying so. The canonical helper throws; the barrier
+    // turns that into INVALID_ARGUMENT rather than letting it pass as success.
+    ApplyClipToBonesEXT(*model->value, animations->value->Clips.at(name), time);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-118: loading a Model from content -------------------------------------------------- */
 
@@ -4725,128 +4334,166 @@ template <typename TResource, typename TValue>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_content_manager_load_model(
+[[nodiscard]] CNA_Result ContentManagerLoadModel(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_ModelHandle* const outModel)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outModel == nullptr) {
-            return InvalidArgument("The loaded Model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        std::string assetNameText;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameText,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameText.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
-        CNA::C::Detail::BorrowedContentManager contentManager;
-        if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
-                contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (contentManager.value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
-                "The content manager handle does not name a manager.");
-        }
+    std::string assetNameText;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameText,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameText.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
+    CNA::C::Detail::BorrowedContentManager contentManager;
+    if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+            contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (contentManager.value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
+            "The content manager handle does not name a manager.");
+    }
 
-        std::shared_ptr<Model> loaded;
-        bool supportsThreeD = false;
-        try {
-            supportsThreeD = contentManager.value->getGraphicsDeviceInternal()
-                .SupportsCapability(CNA::GraphicsCapability::ThreeD);
-            loaded = std::make_shared<Model>(contentManager.value->Load<Model>(assetNameText));
-        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // The asset's root reader produced something that is not a Model. Reporting the
-            // mismatch beats the exception barrier's catch-all calling it an internal fault.
-            return IoError("The asset's root type reader did not produce a Model.");
-        }
+    std::shared_ptr<Model> loaded;
+    bool supportsThreeD = false;
+    try {
+        supportsThreeD = contentManager.value->getGraphicsDeviceInternal()
+            .SupportsCapability(CNA::GraphicsCapability::ThreeD);
+        loaded = std::make_shared<Model>(contentManager.value->Load<Model>(assetNameText));
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // The asset's root reader produced something that is not a Model. Reporting the
+        // mismatch beats the exception barrier's catch-all calling it an internal fault.
+        return IoError("The asset's root type reader did not produce a Model.");
+    }
 
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = MirrorLoadedModel(
-                std::move(loaded), contentManager.parentGame, supportsThreeD, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateModelHandle(std::move(model), outModel);
-    });
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = MirrorLoadedModel(
+            std::move(loaded), contentManager.parentGame, supportsThreeD, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateModelHandle(std::move(model), outModel);
 }
+
+} // namespace
 
 /* --- CBIND-118: the Tag the content pipeline wrote --------------------------------------------- */
 
-CNA_Result cna_model_get_content_tag_dictionary_ext(
+namespace {
+
+[[nodiscard]] CNA_Result ModelGetContentTagDictionaryExt(
     const CNA_ModelHandle modelHandle,
     CNA_Bool* const outHasTag,
     CNA_ObjectDictionaryHandle* const outDictionary)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTag == nullptr || outDictionary == nullptr) {
-            return InvalidArgument("The Model content-tag outputs are null.");
-        }
-        *outHasTag = CNA_FALSE;
-        *outDictionary = CNA_INVALID_HANDLE;
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const tag = dynamic_cast<CNA::Content::ObjectDictionaryEXT*>(
-            model->value->getTagProperty());
-        if (tag == nullptr) {
-            // No tag, or one of another shape. Not an error: XNA's unset Tag is null, and a caller
-            // asking the wrong question about a present tag learns that from out_has_tag.
-            return CNA_RESULT_SUCCESS;
-        }
-        // Aliased onto the model, so the handle keeps the loaded asset alive by itself and a caller
-        // that destroys the model first is left with a dictionary rather than with a dangling one.
-        if (const CNA_Result result = CNA::C::Detail::PublishObjectDictionary(
-                std::shared_ptr<CNA::Content::ObjectDictionaryEXT>(model->value, tag),
-                outDictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasTag = CNA_TRUE;
+    *outHasTag = CNA_FALSE;
+    *outDictionary = CNA_INVALID_HANDLE;
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const tag = dynamic_cast<CNA::Content::ObjectDictionaryEXT*>(
+        model->value->getTagProperty());
+    if (tag == nullptr) {
+        // No tag, or one of another shape. Not an error: XNA's unset Tag is null, and a caller
+        // asking the wrong question about a present tag learns that from out_has_tag.
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    // Aliased onto the model, so the handle keeps the loaded asset alive by itself and a caller
+    // that destroys the model first is left with a dictionary rather than with a dangling one.
+    if (const CNA_Result result = CNA::C::Detail::PublishObjectDictionary(
+            std::shared_ptr<CNA::Content::ObjectDictionaryEXT>(model->value, tag),
+            outDictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasTag = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_model_get_content_tag_foreign_object_ext(
+[[nodiscard]] CNA_Result ModelGetContentTagForeignObjectExt(
     const CNA_ModelHandle modelHandle,
     CNA_Bool* const outHasTag,
     void** const outObject)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTag == nullptr || outObject == nullptr) {
-            return InvalidArgument("The Model content-tag outputs are null.");
-        }
-        *outHasTag = CNA_FALSE;
-        *outObject = nullptr;
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        void* object = nullptr;
-        if (!CNA::C::Detail::TryGetForeignReferenceObject(
-                model->value->getTagProperty(), &object)) {
-            return CNA_RESULT_SUCCESS;
-        }
-        *outObject = object;
-        *outHasTag = CNA_TRUE;
+    *outHasTag = CNA_FALSE;
+    *outObject = nullptr;
+    std::shared_ptr<ModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    void* object = nullptr;
+    if (!CNA::C::Detail::TryGetForeignReferenceObject(
+            model->value->getTagProperty(), &object)) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outObject = object;
+    *outHasTag = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
+
+[[nodiscard]] CNA_Result MorphTargetDataExtCopyWeightKeyframe(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t keyframeIndex,
+    double* const outTimeSeconds,
+    float* const weights,
+    const uint64_t weightCapacity,
+    uint64_t* const outWeightCount,
+    float* const inTangents,
+    const uint64_t inTangentCapacity,
+    uint64_t* const outInTangentCount,
+    float* const outTangents,
+    const uint64_t outTangentCapacity,
+    uint64_t* const outOutTangentCount)
+{
+    if ((weights == nullptr && weightCapacity != 0U)
+        || (inTangents == nullptr && inTangentCapacity != 0U)
+        || (outTangents == nullptr && outTangentCapacity != 0U)) {
+        return InvalidArgument("A MorphWeightKeyframeEXT output is invalid.");
+    }
+    std::shared_ptr<MorphDataResource> data;
+    if (const CNA_Result result = GetMorphData(dataHandle, &data);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (keyframeIndex >= data->value->WeightTrack.Keys.size()) {
+        return InvalidArgument("The MorphWeightKeyframeEXT index is outside the valid range.");
+    }
+    const MorphWeightKeyframeEXT& key =
+        data->value->WeightTrack.Keys[static_cast<std::size_t>(keyframeIndex)];
+    *outWeightCount = static_cast<uint64_t>(key.Weights.size());
+    *outInTangentCount = static_cast<uint64_t>(key.InTangent.size());
+    *outOutTangentCount = static_cast<uint64_t>(key.OutTangent.size());
+    if (weightCapacity < key.Weights.size() ||
+        inTangentCapacity < key.InTangent.size() ||
+        outTangentCapacity < key.OutTangent.size()) {
+        return BufferTooSmall("A destination cannot hold the complete MorphWeightKeyframeEXT.");
+    }
+    *outTimeSeconds = key.Time.getTotalSecondsProperty();
+    if (!key.Weights.empty()) {
+        std::copy(key.Weights.begin(), key.Weights.end(), weights);
+    }
+    if (!key.InTangent.empty()) {
+        std::copy(key.InTangent.begin(), key.InTangent.end(), inTangents);
+    }
+    if (!key.OutTangent.empty()) {
+        std::copy(key.OutTangent.begin(), key.OutTangent.end(), outTangents);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Models.toml.
 #include "generated/Models.inc"

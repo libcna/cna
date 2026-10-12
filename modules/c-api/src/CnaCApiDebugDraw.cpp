@@ -85,52 +85,44 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
     dst[i] = src[i];
   return CNA_RESULT_SUCCESS;
 }
-} // namespace
-CNA_Result cna_debug_draw_create(const CNA_Handle graphicsDeviceHandle,
-                                 CNA_DebugDrawHandle *const outDebug) {
-  return CallWithExceptionBarrier([&]() -> CNA_Result {
-    if (outDebug == nullptr) {
-      return InvalidArgument("The output handle is null.");
-    }
-    *outDebug = CNA_INVALID_HANDLE;
-    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-    if (const CNA_Result result =
-            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-        result != CNA_RESULT_SUCCESS) {
+
+[[nodiscard]] CNA_Result DebugDrawCreate(const CNA_Handle graphicsDeviceHandle,
+                                         CNA_DebugDrawHandle *const outDebug) {
+  std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+  if (const CNA_Result result =
+          GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+      result != CNA_RESULT_SUCCESS) {
+    return result;
+  }
+  const auto resource = std::make_shared<DebugDrawResource>(DebugDrawResource{
+      std::make_shared<Ext::DebugDraw>(*graphicsDevice->value),
+      graphicsDevice->parentGame});
+  if (const CNA_Result result = CreateHandle(ObjectKind::DebugDraw, resource, outDebug);
+      result != CNA_RESULT_SUCCESS) {
       return result;
-    }
-    const auto resource = std::make_shared<DebugDrawResource>(DebugDrawResource{
-        std::make_shared<Ext::DebugDraw>(*graphicsDevice->value),
-        graphicsDevice->parentGame});
-    if (const CNA_Result result = CreateHandle(ObjectKind::DebugDraw, resource, outDebug);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
-    return CNA_RESULT_SUCCESS;
-  });
+  }
+  AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+  return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_debug_draw_destroy(const CNA_DebugDrawHandle debug) {
-  return CallWithExceptionBarrier([&]() -> CNA_Result {
-    std::shared_ptr<DebugDrawResource> resource;
-    if (const CNA_Result result = GetEngineResource(
-            debug, ObjectKind::DebugDraw, "DebugDraw", &resource);
-        result != CNA_RESULT_SUCCESS) {
-      return result;
-    }
-    if (const CNA_Result released = ReleaseHandle(debug);
-        released != CNA_RESULT_SUCCESS) {
-        return released;
-    }
-    RemoveOwnedGraphicsResourceFor(resource->parentGame);
-    return CNA_RESULT_SUCCESS;
-  });
+[[nodiscard]] CNA_Result DebugDrawDestroy(const CNA_DebugDrawHandle debug) {
+  std::shared_ptr<DebugDrawResource> resource;
+  if (const CNA_Result result = GetEngineResource(
+          debug, ObjectKind::DebugDraw, "DebugDraw", &resource);
+      result != CNA_RESULT_SUCCESS) {
+    return result;
+  }
+  if (const CNA_Result released = ReleaseHandle(debug);
+      released != CNA_RESULT_SUCCESS) {
+      return released;
+  }
+  RemoveOwnedGraphicsResourceFor(resource->parentGame);
+  return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
-                                const CNA_Matrix *const view,
-                                const CNA_Matrix *const projection) {
+[[nodiscard]] CNA_Result DebugDrawBegin(const CNA_DebugDrawHandle debug,
+                                        const CNA_Matrix *const view,
+                                        const CNA_Matrix *const projection) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (view == nullptr || projection == nullptr) {
@@ -141,10 +133,10 @@ CNA_Result cna_debug_draw_begin(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
-                                   const CNA_Vector3 *const from,
-                                   const CNA_Vector3 *const to,
-                                   const CNA_Color colour) {
+[[nodiscard]] CNA_Result DebugDrawAddLine(const CNA_DebugDrawHandle debug,
+                                          const CNA_Vector3 *const from,
+                                          const CNA_Vector3 *const to,
+                                          const CNA_Color colour) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (from == nullptr || to == nullptr) {
@@ -156,9 +148,9 @@ CNA_Result cna_debug_draw_add_line(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_add_box(const CNA_DebugDrawHandle debug,
-                                  const CNA_BoundingBox *const bounds,
-                                  const CNA_Color colour) {
+[[nodiscard]] CNA_Result DebugDrawAddBox(const CNA_DebugDrawHandle debug,
+                                         const CNA_BoundingBox *const bounds,
+                                         const CNA_Color colour) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         BoundingBox native;
@@ -171,10 +163,10 @@ CNA_Result cna_debug_draw_add_box(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_add_sphere(const CNA_DebugDrawHandle debug,
-                                     const CNA_Vector3 *const centre,
-                                     const float radius, const CNA_Color colour,
-                                     const int32_t segments) {
+[[nodiscard]] CNA_Result DebugDrawAddSphere(const CNA_DebugDrawHandle debug,
+                                            const CNA_Vector3 *const centre,
+                                            const float radius, const CNA_Color colour,
+                                            const int32_t segments) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (const CNA_Result result =
@@ -190,7 +182,7 @@ CNA_Result cna_debug_draw_add_sphere(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_add_bounding_sphere(
+[[nodiscard]] CNA_Result DebugDrawAddBoundingSphere(
     const CNA_DebugDrawHandle debug, const CNA_BoundingSphere *const sphere,
     const CNA_Color colour, const int32_t segments) {
   return WithDebugDraw(
@@ -206,9 +198,9 @@ CNA_Result cna_debug_draw_add_bounding_sphere(
       });
 }
 
-CNA_Result cna_debug_draw_add_frustum(const CNA_DebugDrawHandle debug,
-                                      const CNA_BoundingFrustum frustum,
-                                      const CNA_Color colour) {
+[[nodiscard]] CNA_Result DebugDrawAddFrustum(const CNA_DebugDrawHandle debug,
+                                             const CNA_BoundingFrustum frustum,
+                                             const CNA_Color colour) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         d->value->addFrustum(Microsoft::Xna::Framework::BoundingFrustum(
@@ -218,9 +210,9 @@ CNA_Result cna_debug_draw_add_frustum(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_add_cross(const CNA_DebugDrawHandle debug,
-                                    const CNA_Vector3 *const position,
-                                    const float size, const CNA_Color colour) {
+[[nodiscard]] CNA_Result DebugDrawAddCross(const CNA_DebugDrawHandle debug,
+                                           const CNA_Vector3 *const position,
+                                           const float size, const CNA_Color colour) {
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         if (const CNA_Result result =
@@ -234,15 +226,10 @@ CNA_Result cna_debug_draw_add_cross(const CNA_DebugDrawHandle debug,
       });
 }
 
-CNA_Result cna_debug_draw_copy_vertices(
+[[nodiscard]] CNA_Result DebugDrawCopyVertices(
     const CNA_DebugDrawHandle debug, const CNA_Bool depthTested,
     CNA_VertexPositionColor *const destination, const uint64_t capacity,
     uint64_t *const outCount) {
-  if (const CNA_Result result =
-          CNA::C::Detail::ValidateCanonicalBool(depthTested, "depth_tested");
-      result != CNA_RESULT_SUCCESS) {
-    return result;
-  }
   return WithDebugDraw(
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         const auto &vertices = d->value->getVertices(depthTested == CNA_TRUE);
@@ -262,47 +249,8 @@ CNA_Result cna_debug_draw_copy_vertices(
       });
 }
 
-#else
-CNA_Result cna_debug_draw_create(CNA_Handle, CNA_DebugDrawHandle *) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_destroy(CNA_DebugDrawHandle) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_begin(CNA_DebugDrawHandle, const CNA_Matrix *,
-                                const CNA_Matrix *) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_line(CNA_DebugDrawHandle, const CNA_Vector3 *,
-                                   const CNA_Vector3 *, CNA_Color) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_box(CNA_DebugDrawHandle, const CNA_BoundingBox *,
-                                  CNA_Color) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_sphere(CNA_DebugDrawHandle, const CNA_Vector3 *,
-                                     float, CNA_Color, int32_t) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_bounding_sphere(CNA_DebugDrawHandle,
-                                              const CNA_BoundingSphere *,
-                                              CNA_Color, int32_t) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_frustum(CNA_DebugDrawHandle, CNA_BoundingFrustum,
-                                      CNA_Color) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_add_cross(CNA_DebugDrawHandle, const CNA_Vector3 *,
-                                    float, CNA_Color) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
-CNA_Result cna_debug_draw_copy_vertices(CNA_DebugDrawHandle, CNA_Bool,
-                                        CNA_VertexPositionColor *, uint64_t,
-                                        uint64_t *) {
-  return CNA_RESULT_NOT_SUPPORTED;
-}
+} // namespace
+
 #endif // CNA_CNAEXT
 
 // The routes generated from modules/c-api/spec/DebugDraw.toml.
