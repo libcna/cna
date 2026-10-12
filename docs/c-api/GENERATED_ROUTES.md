@@ -14,7 +14,7 @@ hand-written, and generation exists so that this code stands out.
 | What each generated route does | `modules/c-api/spec/<Family>.toml` |
 | Generated route definitions — never edit | `modules/c-api/src/generated/<Family>.inc` |
 | Hand-written routes and the family's lookups | `modules/c-api/src/CnaCApi<Family>.cpp`, which ends with `#include "generated/<Family>.inc"` |
-| Exception barrier, error recording, `CNA_Bool` rules, text input (`ReadText`), the handle registry with `LookupHandle`, `CreateHandle` and `ReleaseHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
+| Exception barrier, error recording and the named refusals (`InvalidArgument`, `OutOfRange`, `BufferTooSmall`, `Overflow`, `IoError`, …, and their `…If` forms with `RequireIndex`), `CNA_Bool` rules, text input (`ReadText`), the handle registry with `LookupHandle`, `CreateHandle`, `CreateResourceHandle` and `ReleaseHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
 | Output pointers, versioned structures, text and array size-then-copy | `modules/c-api/src/CnaCApiOutput.hpp` |
 | C ↔ C++ value conversions (`ToNative`, `ToC`), C enum range checks and value checks (`IsFinite`, reserved bytes) | `modules/c-api/src/CnaCApiMarshal.hpp` |
 | The generator | `tools/c-api/generate_routes.py` |
@@ -36,7 +36,7 @@ implement are in [`ERRORS.md`](ERRORS.md), [`HANDLES.md`](HANDLES.md),
 | How do I specify ownership? | `CreateHandle`/`ReleaseHandle` publish and release; who owns what is in [`OWNERSHIP.md`](OWNERSHIP.md). A destroy with nothing to undo is a `release` spec line; anything else is hand-written. |
 | How are strings represented? | UTF-8 `CNA_StringView` in, size-then-copy out (`size`/`copy` kinds, `ReportTextSize`/`CopyText` in `src/CnaCApiOutput.hpp`) — [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md). |
 | How are arrays copied? | `CopyElements`/`CopyBytes` in `src/CnaCApiOutput.hpp`: the full count always, nothing written on a short buffer. |
-| How are errors translated? | `CallWithExceptionBarrier` (`src/CnaCApiDetail.hpp`) turns every exception into a result code and error record; `InvalidArgument`/`InvalidState`/`NotSupported` refuse — [`ERRORS.md`](ERRORS.md). |
+| How are errors translated? | `CallWithExceptionBarrier` (`src/CnaCApiDetail.hpp`) turns every exception into a result code and error record; a route refuses through the named helpers there (`InvalidArgument`, `InvalidState`, `NotSupported`, `OutOfRange`, …), each one code and category — [`ERRORS.md`](ERRORS.md). |
 | How do I regenerate the C API? | `python3 tools/c-api/generate_routes.py`. |
 | How do I verify generated files are current? | `python3 tools/c-api/generate_routes.py --check` (CTest `CApiGeneratedRoutesCurrent`, and CI). |
 | Which files may I edit by hand? | All but `src/generated/*.inc` and `tests/pure_c/GeneratedRoutesSmoke.c` (and `BoolContractSmoke.c`, from its own script). |
