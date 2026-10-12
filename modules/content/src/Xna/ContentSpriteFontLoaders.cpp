@@ -178,9 +178,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<Graphics::SpriteFont>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Graphics::SpriteFont>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Graphics::SpriteFont, SpriteFontTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::SpriteFont,
             "Microsoft.Xna.Framework.Graphics.SpriteFont",
@@ -191,9 +190,17 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
                     assetName));
             });
+    }
+
+    void detail::BuiltinContent<Graphics::SpriteFont>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Graphics::SpriteFont, SpriteFontTypeReader>();
+        RegisterCnbLoader();
         // An .xnb font holds its glyph texture and lists of rectangles, vectors and characters.
         detail::RegisterValueXnbReaders();
-        CNA::Internal::Xnb::RegisterTexture2DXnbReader();
-        CNA::Internal::Xnb::RegisterSpriteFontXnbReader();
+        detail::RegisterDeclaredXnbReaders([] {
+            CNA::Internal::Xnb::RegisterTexture2DXnbReader();
+            CNA::Internal::Xnb::RegisterSpriteFontXnbReader();
+        });
     }
 }

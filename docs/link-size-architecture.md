@@ -48,7 +48,8 @@ dependency is not real.
 | Gamer Services service client | `GamerServicesBackend.cpp` (test fake: `GamerServicesFakeBackend.cpp`) | service requests (`GamerRequests.cpp`, `SignedInGamerRequests.cpp`), the dispatcher, sign-in |
 | Content readers | one `Content*Loaders.cpp` per asset family | `Load<T>` of that family (`detail::BuiltinContent<T>`) |
 | Model, glTF, cgltf importer, Draco | `ContentModelLoaders.cpp`, `GltfImportCore.cpp` (cgltf in `CgltfImplementation.cpp`) | `Load<Model>`, `Load<SkinnedModelEXT>`, `Load<AnimationClipEXT>` |
-| Every `.xnb` reader | `XnbBuiltInReaders.cpp` | a `Load<T>` of a type CNA does not know, an untyped external reference, `RegisterBuiltinLoaders()` |
+| Every `.xnb` reader | `XnbBuiltInReaders.cpp` | a `Load<T>` of a type CNA does not know, an untyped external reference, `RegisterBuiltinLoaders()`, and the registry queried by name (`ContentTypeReaderManagerQueries.cpp`, `GetXnbReaderUsageSummary`) |
+| Every `.cnb` loader | `CnbLoaderRegistryQueries.cpp` | `CnbLoaderRegistry::Find` and `ResolveForDocument` asked for a built-in loader by hand |
 | `.xnb` canonical decoders | `XnbCanonicalTextures/Sound/Model/Asset/Data.cpp` | that family's readers; the pipeline for `Asset` |
 | Streaming audio, capture, media updates | slots of `FrameworkDispatcher` (`FrameworkUpdates.hpp`) | the subsystem installs its slot on first use |
 | Audio capture backend | `AudioRecordingDeviceFactory.cpp` | `Microphone` |
@@ -64,6 +65,12 @@ Each file at a boundary says so in a short `Link boundary:` comment, so that nob
   every panel links all of them into whatever links it. Select at build time (a generated table,
   as the renderer registry does), by type (`detail::BuiltinContent<T>` is a template the caller
   instantiates), or by installation (below).
+- **Declare what an API promises, install it when it is needed.** `Game` once registered every
+  `.xnb` reader and `ContentManager` every `.cnb` loader. Both still do as far as any API can see:
+  they declare the built-ins registered; a type's reader is installed by its first load; the
+  registries answer `IsRegistered` and type names from the declaration, and install everything only
+  when asked for a reader or loader object by hand -- in their own translation units, so only a
+  program that asks links everything. The load path uses lookups that never install anything.
 - **Install optional work when it is first used.** `FrameworkDispatcher` and the Guide frame hold
   plain function pointers that the optional subsystem sets on its first use. No static
   "registrar" object: in a static archive nothing references it, so it is dropped, and the usual
@@ -116,7 +123,7 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   chain of references that pulled X in, and `--top 40`/`--modules` rank what costs the most.
   `tools/link_audit/link_closure.py` lists *every* reference into a member, so a cut can be
   planned against all of them.
-- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 22 subsystem
+- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 24 subsystem
   families it does not use; `LinkFootprint_FullFeatures` fails if a game that uses them lacks any
   (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
   (`ModuleLinkClosure_*`) pin which archives each module's consumer links.

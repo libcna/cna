@@ -179,9 +179,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<Graphics::Texture2D>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Graphics::Texture2D>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Graphics::Texture2D, Texture2DTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Texture2D,
             "Microsoft.Xna.Framework.Graphics.Texture2D",
@@ -192,6 +191,12 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Content::Cnb::DecodeTexture2DFromCnb(document), contentManager,
                     assetName));
             });
-        CNA::Internal::Xnb::RegisterTexture2DXnbReader();
+    }
+
+    void detail::BuiltinContent<Graphics::Texture2D>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Graphics::Texture2D, Texture2DTypeReader>();
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterTexture2DXnbReader);
     }
 }

@@ -13,6 +13,8 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace detail { struct ContentTypeReaderRegistryAccess; }
+
     /**
      * @brief Matches FNA's real, public `Microsoft.Xna.Framework.Content.ContentTypeReaderManager`
      *        (`src/Content/ContentTypeReaderManager.cs`) -- this task (plans/plan_xnb.md XNB-14/14A)
@@ -138,7 +140,59 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT static void ClearTargetTypeAssociationsEXT();
 
     private:
+        friend struct detail::ContentTypeReaderRegistryAccess;
         static std::unordered_map<std::string, ReaderFactory>& TypeCreators();
         static std::unordered_map<std::type_index, std::string>& TargetTypeNames();
     };
+
+    // Declared built-in readers (docs/link-size-architecture.md). A Game declares every built-in
+    // reader registered, as its constructor used to register them all, but a reader is installed
+    // only when its type is first loaded -- or when the registry is asked about, or told to remove,
+    // a reader by name (IsRegistered, CreateReader, RemoveTypeCreatorEXT, which install every
+    // declared reader first, in their own translation unit). The registry therefore answers
+    // exactly as if every reader had been registered, while a program links only the readers of
+    // the types it loads.
+    namespace detail
+    {
+        /**
+         * @brief The load path's lookup: a reader from the registered factory, without installing
+         *        declared readers (the readers of the type being loaded are installed before it).
+         * @param canonicalName The canonical reader name.
+         * @return A fresh reader, or nullptr when nothing is registered under the name.
+         */
+        std::unique_ptr<ContentTypeReaderBase> CreateRegisteredReader(const std::string& canonicalName);
+
+        /** @brief Declares every built-in reader registered (Game's constructor). */
+        void DeclareBuiltinXnbReaders();
+
+        /** @brief Whether the built-in readers are declared. @return True after DeclareBuiltinXnbReaders() until ClearTypeCreators(). */
+        [[nodiscard]] bool BuiltinXnbReadersDeclared();
+
+        /** @brief Whether some declared reader may not be installed yet. @return True when declared and not all installed. */
+        [[nodiscard]] bool DeclaredXnbReadersPending();
+
+        /** @brief Records that every built-in reader is installed (RegisterAllBuiltInXnbReaders()). */
+        void NoteEveryBuiltinXnbReaderRegistered();
+
+        /**
+         * @brief Runs one family's reader registration if the built-in readers are declared, as
+         *        CNA's own registration: it replaces a reader a game registered under the same name
+         *        while the built-in was declared but not installed, which the built-in would have
+         *        kept out had it been installed.
+         * @param registerReaders The family's registration function.
+         */
+        void RegisterDeclaredXnbReaders(void (*registerReaders)());
+
+        /** @brief Marks the AddTypeCreator() calls made during its lifetime as CNA's built-in ones. */
+        class BuiltinXnbRegistrationScope
+        {
+        public:
+            /** @brief Opens the scope on this thread. */
+            BuiltinXnbRegistrationScope();
+            /** @brief Closes it. */
+            ~BuiltinXnbRegistrationScope();
+            BuiltinXnbRegistrationScope(const BuiltinXnbRegistrationScope&) = delete;
+            BuiltinXnbRegistrationScope& operator=(const BuiltinXnbRegistrationScope&) = delete;
+        };
+    }
 }

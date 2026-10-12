@@ -21,6 +21,8 @@ namespace Microsoft::Xna::Framework::Content
 {
     void ContentManager::RegisterBuiltinLoaders()
     {
+        // As the constructor: every built-in .cnb loader, including one removed since.
+        CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
         detail::BuiltinContent<Graphics::Texture2D>::Register(*this);
         detail::BuiltinContent<Graphics::TextureCube>::Register(*this);
         detail::BuiltinContent<std::shared_ptr<Graphics::Texture3D>>::Register(*this);

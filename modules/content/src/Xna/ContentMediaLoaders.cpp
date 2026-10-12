@@ -159,9 +159,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<Media::Song>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Media::Song>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Media::Song, SongTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Song, "Microsoft.Xna.Framework.Media.Song",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
@@ -170,12 +169,17 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildSongFromCnbEXT(
                     CNA::Content::Cnb::DecodeSongFromCnb(document), contentManager, assetName));
             });
-        CNA::Internal::Xnb::RegisterSongXnbReader();
     }
 
-    void detail::BuiltinContent<Media::Video>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Media::Song>::Register(ContentManager& manager)
     {
-        manager.RegisterBuiltinTypeReader<Media::Video, VideoTypeReader>();
+        manager.RegisterBuiltinTypeReader<Media::Song, SongTypeReader>();
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterSongXnbReader);
+    }
+
+    void detail::BuiltinContent<Media::Video>::RegisterCnbLoader()
+    {
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Video, "Microsoft.Xna.Framework.Media.Video",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
@@ -184,8 +188,14 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildVideoFromCnbEXT(
                     CNA::Content::Cnb::DecodeVideoFromCnb(document), contentManager, assetName));
             });
+    }
+
+    void detail::BuiltinContent<Media::Video>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Media::Video, VideoTypeReader>();
+        RegisterCnbLoader();
         // The reader and metadata-only Video constructor are backend-independent; playback is
         // what reports NotSupportedException in a no-video build.
-        CNA::Internal::Xnb::RegisterVideoXnbReader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterVideoXnbReader);
     }
 }

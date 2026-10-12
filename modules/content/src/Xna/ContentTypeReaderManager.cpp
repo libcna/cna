@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "ContentTypeReaderManagerState.hpp"
 
 #include <mutex>
 #include <shared_mutex>
+#include <unordered_set>
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -23,6 +25,24 @@ namespace Microsoft::Xna::Framework::Content
             static std::shared_mutex mutex;
             return mutex;
         }
+
+        // The declared built-in readers (see the header), guarded by CreatorsMutex().
+        struct DeclaredBuiltins
+        {
+            bool declared = false;
+            bool installed = false;
+            // Registered by a game while the built-ins were declared but not installed: the name
+            // may be a built-in's, which would have kept the game's registration out.
+            std::unordered_set<std::string> provisional;
+        };
+
+        DeclaredBuiltins& Declared()
+        {
+            static DeclaredBuiltins declared;
+            return declared;
+        }
+
+        thread_local int builtinRegistrationDepth = 0;
     }
 
     std::unordered_map<std::string, ContentTypeReaderManager::ReaderFactory>&
@@ -36,9 +56,20 @@ namespace Microsoft::Xna::Framework::Content
     {
         const std::unique_lock lock(CreatorsMutex());
         auto& creators = TypeCreators();
-        if (creators.find(canonicalName) == creators.end())
+        auto& declared = Declared();
+        const auto existing = creators.find(canonicalName);
+        if (existing == creators.end())
         {
             creators.emplace(canonicalName, std::move(factory));
+            if (builtinRegistrationDepth == 0 && declared.declared && !declared.installed)
+            {
+                declared.provisional.insert(canonicalName);
+            }
+            return;
+        }
+        if (builtinRegistrationDepth > 0 && declared.provisional.erase(canonicalName) != 0U)
+        {
+            existing->second = std::move(factory);
         }
     }
 
@@ -46,35 +77,7 @@ namespace Microsoft::Xna::Framework::Content
     {
         const std::unique_lock lock(CreatorsMutex());
         TypeCreators().clear();
-    }
-
-    bool ContentTypeReaderManager::RemoveTypeCreatorEXT(const std::string& canonicalName)
-    {
-        const std::unique_lock lock(CreatorsMutex());
-        return TypeCreators().erase(canonicalName) != 0U;
-    }
-
-    std::unique_ptr<ContentTypeReaderBase> ContentTypeReaderManager::CreateReader(const std::string& canonicalName)
-    {
-        ReaderFactory factory;
-        {
-            const std::shared_lock lock(CreatorsMutex());
-            const auto& creators = TypeCreators();
-            const auto it = creators.find(canonicalName);
-            if (it == creators.end())
-            {
-                return nullptr;
-            }
-            factory = it->second;
-        }
-        return factory();
-    }
-
-    bool ContentTypeReaderManager::IsRegistered(const std::string& canonicalName)
-    {
-        const std::shared_lock lock(CreatorsMutex());
-        const auto& creators = TypeCreators();
-        return creators.find(canonicalName) != creators.end();
+        Declared() = DeclaredBuiltins{};
     }
 
     std::unordered_map<std::type_index, std::string>& ContentTypeReaderManager::TargetTypeNames()
@@ -135,6 +138,97 @@ namespace Microsoft::Xna::Framework::Content
             }
             canonicalName = found->second;
         }
-        return CreateReader(canonicalName);
+        return detail::CreateRegisteredReader(canonicalName);
+    }
+
+    namespace detail
+    {
+        struct ContentTypeReaderRegistryAccess
+        {
+            static std::unordered_map<std::string, ContentTypeReaderManager::ReaderFactory>& Creators()
+            {
+                return ContentTypeReaderManager::TypeCreators();
+            }
+        };
+
+        std::unique_ptr<ContentTypeReaderBase> CreateRegisteredReader(const std::string& canonicalName)
+        {
+            ContentTypeReaderManager::ReaderFactory factory;
+            {
+                const std::shared_lock lock(CreatorsMutex());
+                const auto& creators = ContentTypeReaderRegistryAccess::Creators();
+                const auto it = creators.find(canonicalName);
+                if (it == creators.end())
+                {
+                    return nullptr;
+                }
+                factory = it->second;
+            }
+            return factory();
+        }
+
+        bool HasTypeCreator(const std::string& canonicalName)
+        {
+            const std::shared_lock lock(CreatorsMutex());
+            const auto& creators = ContentTypeReaderRegistryAccess::Creators();
+            return creators.find(canonicalName) != creators.end();
+        }
+
+        bool EraseTypeCreator(const std::string& canonicalName)
+        {
+            const std::unique_lock lock(CreatorsMutex());
+            Declared().provisional.erase(canonicalName);
+            return ContentTypeReaderRegistryAccess::Creators().erase(canonicalName) != 0U;
+        }
+
+        void DeclareBuiltinXnbReaders()
+        {
+            const std::unique_lock lock(CreatorsMutex());
+            auto& declared = Declared();
+            declared.declared = true;
+            // As a second Game's constructor re-registered every reader.
+            declared.installed = false;
+        }
+
+        bool BuiltinXnbReadersDeclared()
+        {
+            const std::shared_lock lock(CreatorsMutex());
+            return Declared().declared;
+        }
+
+        bool DeclaredXnbReadersPending()
+        {
+            const std::shared_lock lock(CreatorsMutex());
+            return Declared().declared && !Declared().installed;
+        }
+
+        void NoteEveryBuiltinXnbReaderRegistered()
+        {
+            const std::unique_lock lock(CreatorsMutex());
+            auto& declared = Declared();
+            declared.declared = true;
+            declared.installed = true;
+            declared.provisional.clear();
+        }
+
+        void RegisterDeclaredXnbReaders(void (*registerReaders)())
+        {
+            if (!BuiltinXnbReadersDeclared())
+            {
+                return;
+            }
+            const BuiltinXnbRegistrationScope scope;
+            registerReaders();
+        }
+
+        BuiltinXnbRegistrationScope::BuiltinXnbRegistrationScope()
+        {
+            ++builtinRegistrationDepth;
+        }
+
+        BuiltinXnbRegistrationScope::~BuiltinXnbRegistrationScope()
+        {
+            --builtinRegistrationDepth;
+        }
     }
 }

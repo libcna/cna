@@ -4819,9 +4819,8 @@ namespace Microsoft::Xna::Framework::Content
         };
     } // anonymous namespace
 
-    void detail::BuiltinContent<Graphics::Model>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Graphics::Model>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Graphics::Model, ModelTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Model, "Microsoft.Xna.Framework.Graphics.Model",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
@@ -4837,21 +4836,32 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildModelFromCnbEXT(
                     CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
             });
+    }
+
+    void detail::BuiltinContent<Graphics::Model>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Graphics::Model, ModelTypeReader>();
+        RegisterCnbLoader();
         // An .xnb model holds vertex and index buffers, its effects (stock, material, compiled)
         // with their textures, and a Tag that may be any value.
         detail::BuiltinContent<std::shared_ptr<Graphics::Effect>>::Register(manager);
-        CNA::Internal::Xnb::RegisterModelXnbReaders();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterModelXnbReaders);
     }
 
-    void detail::BuiltinContent<Graphics::AnimationClipEXT>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Graphics::AnimationClipEXT>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Graphics::AnimationClipEXT, AnimationClipTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::AnimationClip,
             "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager&,
                const std::string&) -> std::any
             { return std::any(CNA::Content::Cnb::DecodeAnimationClipFromCnb(document)); });
+    }
+
+    void detail::BuiltinContent<Graphics::AnimationClipEXT>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Graphics::AnimationClipEXT, AnimationClipTypeReader>();
+        RegisterCnbLoader();
     }
 
     void detail::BuiltinContent<std::shared_ptr<Graphics::SkinnedModelEXT>>::Register(

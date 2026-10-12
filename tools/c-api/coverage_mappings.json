@@ -5482,6 +5482,20 @@
       ]
     },
     {
+      "id": "content-type-reader-manager-registry-access-friend",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::ContentTypeReaderRegistryAccess$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a friendship declaration granting the registry's own load-path lookup and declared built-in readers (detail::ContentTypeReaderRegistryAccess) access to the reader table, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7EBD06DE915F"
+      ]
+    },
+    {
       "id": "content-manager-builtin-content-friend",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::BuiltinContent$",
       "kinds": [

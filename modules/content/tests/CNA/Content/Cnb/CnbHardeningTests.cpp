@@ -389,11 +389,10 @@ TEST(CnbHardeningTest, ALookedUpLoaderSurvivesLaterRegistryMutation)
     for (const std::uint32_t churnId : churn) { CnbLoaderRegistry::Remove(churnId); }
 }
 
-TEST(CnbHardeningTest, ConcurrentRegistrationLookupAndBuiltinRegistrationAreRaceFree)
+TEST(CnbHardeningTest, ConcurrentRegistrationLookupAndContentManagerConstructionAreRaceFree)
 {
-    // A content manager registers the built-in .cnb loaders (each type's on its first Load<T>(),
-    // or all of them through RegisterBuiltinLoaders()), so a program that loads content on more
-    // than one thread was mutating an unsynchronised global map.
+    // Every ContentManager constructor registers the built-in .cnb loaders, so a program that
+    // builds content managers on more than one thread was mutating an unsynchronised global map.
     // This is the shape that finds it: several threads doing all three things at once, run under
     // TSan/ASan as well as plain. It asserts only outcomes that are true regardless of
     // interleaving, so it can never be flaky.
@@ -417,9 +416,8 @@ TEST(CnbHardeningTest, ConcurrentRegistrationLookupAndBuiltinRegistrationAreRace
             const std::string name = "HardeningGame.Thread" + std::to_string(t);
             for (int i = 0; i < kIterations; ++i)
             {
-                // Register the built-ins from this thread, as a first load does.
+                // Constructing a ContentManager registers the built-ins from this thread.
                 ContentManager cm(nullptr, ".");
-                cm.RegisterBuiltinLoaders();
                 if (!CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve)) { ++failures; }
 
                 try

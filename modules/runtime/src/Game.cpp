@@ -7,6 +7,7 @@
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -434,9 +435,12 @@ namespace Microsoft::Xna::Framework
         modalFrames_ = std::make_unique<ModalFrames>(*this);
         Services_.AddService<CNA::Internal::Runtime::IModalFrames>(modalFrames_.get());
 
-        // No content reader is registered here: Content.Load<T>() registers the readers of T on
-        // its first use (detail::BuiltinContent), so a game links the readers of the types it
-        // loads rather than every importer CNA has (docs/link-size-architecture.md).
+        // A real Game instance is the framework startup boundary. Keep ContentManager neutral for
+        // isolated use, but make every XNA game ready to load built-in XNB types before
+        // Initialize()/LoadContent() can run: every built-in reader counts as registered from here,
+        // and each is installed when its type is first loaded or the registry is asked about it,
+        // so a game links the readers of the types it loads (docs/link-size-architecture.md).
+        Content::detail::DeclareBuiltinXnbReaders();
 
         FrameworkDispatcher::Update();
 

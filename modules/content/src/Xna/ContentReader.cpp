@@ -217,7 +217,7 @@ namespace Microsoft::Xna::Framework::Content
         typeReaders_.reserve(typeReaderTable_.size());
         for (const auto& entry : typeReaderTable_)
         {
-            auto reader = ContentTypeReaderManager::CreateReader(entry.normalizedName);
+            auto reader = detail::CreateRegisteredReader(entry.normalizedName);
             if (!reader)
             {
                 throw ContentLoadException(

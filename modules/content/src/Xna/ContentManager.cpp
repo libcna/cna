@@ -109,20 +109,26 @@ namespace Microsoft::Xna::Framework::Content
     // Constructor / lifecycle
     // ---------------------------------------------------------------------------
 
+    // Every built-in .cnb loader counts as registered from a manager's construction on, as when
+    // the constructor registered them all; each is installed by the first load of its type
+    // (detail::BuiltinContent), so a program links the loaders of the types it loads.
     ContentManager::ContentManager(System::IServiceProvider* serviceProvider)
         : serviceProvider_(serviceProvider)
     {
+        CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
     }
 
     ContentManager::ContentManager(System::IServiceProvider* serviceProvider,
                                    const std::string& rootDirectory)
         : serviceProvider_(serviceProvider), rootDirectory_(rootDirectory)
     {
+        CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
     }
 
     ContentManager::ContentManager()
         : rootDirectory_("Content")
     {
+        CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
     }
 
     System::IServiceProvider* ContentManager::getServiceProviderProperty() const
@@ -388,32 +394,6 @@ namespace Microsoft::Xna::Framework::Content
         return contentManifest_;
     }
 
-    std::vector<ContentManifestReaderUsage> ContentManager::GetXnbReaderUsageSummary()
-    {
-        const auto& manifest = GetContentManifest();
-
-        std::unordered_map<std::string, int> counts;
-        for (const auto& entry : manifest)
-        {
-            for (const auto& readerName : entry.xnbReaderNames)
-            {
-                ++counts[readerName];
-            }
-        }
-
-        std::vector<ContentManifestReaderUsage> result;
-        result.reserve(counts.size());
-        for (const auto& [readerName, count] : counts)
-        {
-            ContentManifestReaderUsage usage;
-            usage.readerName = readerName;
-            usage.fileCount = count;
-            usage.isRegistered = ContentTypeReaderManager::IsRegistered(readerName);
-            result.push_back(std::move(usage));
-        }
-        return result;
-    }
-
     // ---------------------------------------------------------------------------
     // Path helpers
     // ---------------------------------------------------------------------------
@@ -553,7 +533,7 @@ namespace Microsoft::Xna::Framework::Content
                                                   const std::string& canonicalTypeName,
                                                   CNA::Content::CnbLoaderRegistry::LoaderFn loader)
     {
-        CNA::Content::CnbLoaderRegistry::RegisterBuiltIn(assetTypeId, canonicalTypeName,
-                                                         std::move(loader));
+        CNA::Content::CnbLoaderRegistry::RegisterDeclaredBuiltIn(assetTypeId, canonicalTypeName,
+                                                                 std::move(loader));
     }
 }

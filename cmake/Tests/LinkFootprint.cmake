@@ -37,6 +37,9 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             "^draco::"
             "CNA::Internal::Xnb::RegisterModelXnbReaders"
             "Content::detail::RegisterEveryBuiltinXnbReader"
+            # The registry queries that install every declared reader or loader.
+            "ContentTypeReaderManager::IsRegistered"
+            "CNA::Content::CnbLoaderRegistry::Find(.abi|\\()"
             # Media, capture and streaming audio.
             "Media::MediaPlayer::"
             "Media::Video::"

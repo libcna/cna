@@ -170,11 +170,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<std::shared_ptr<Graphics::Texture3D>>::Register(ContentManager& manager)
+    void detail::BuiltinContent<std::shared_ptr<Graphics::Texture3D>>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<std::shared_ptr<Graphics::Texture3D>, Texture3DTypeReader>();
-        // The boxed type must be exactly what Load<T> asks for -- a shared_ptr, because Texture3D
-        // is non-copyable and the .xnb reader registers it the same way.
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Texture3D,
             "Microsoft.Xna.Framework.Graphics.Texture3D",
@@ -185,6 +182,14 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Content::Cnb::DecodeTexture3DFromCnb(document), contentManager,
                     assetName));
             });
-        CNA::Internal::Xnb::RegisterTexture3DXnbReader();
+    }
+
+    void detail::BuiltinContent<std::shared_ptr<Graphics::Texture3D>>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<std::shared_ptr<Graphics::Texture3D>, Texture3DTypeReader>();
+        // The boxed type must be exactly what Load<T> asks for -- a shared_ptr, because Texture3D
+        // is non-copyable and the .xnb reader registers it the same way.
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterTexture3DXnbReader);
     }
 }

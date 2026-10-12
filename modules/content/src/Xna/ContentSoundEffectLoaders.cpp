@@ -164,9 +164,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<Audio::SoundEffect>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Audio::SoundEffect>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Audio::SoundEffect, SoundEffectTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::SoundEffect,
             "Microsoft.Xna.Framework.Audio.SoundEffect",
@@ -176,7 +175,13 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildSoundEffectFromCnbEXT(
                     CNA::Content::Cnb::DecodeSoundEffectFromCnb(document), assetName));
             });
-        CNA::Internal::Xnb::RegisterSoundEffectXnbReader();
+    }
+
+    void detail::BuiltinContent<Audio::SoundEffect>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Audio::SoundEffect, SoundEffectTypeReader>();
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterSoundEffectXnbReader);
     }
 
     template<>

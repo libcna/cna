@@ -109,14 +109,19 @@ namespace Microsoft::Xna::Framework::Content
         };
     } // anonymous namespace
 
-    void detail::BuiltinContent<Microsoft::Xna::Framework::Curve>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Microsoft::Xna::Framework::Curve>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Microsoft::Xna::Framework::Curve, CurveTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager&,
                const std::string&) -> std::any
             { return std::any(CNA::Content::Cnb::DecodeCurveFromCnb(document)); });
-        CNA::Internal::Xnb::RegisterCurveXnbReader();
+    }
+
+    void detail::BuiltinContent<Microsoft::Xna::Framework::Curve>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Microsoft::Xna::Framework::Curve, CurveTypeReader>();
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterCurveXnbReader);
     }
 }

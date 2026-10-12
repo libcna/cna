@@ -17,14 +17,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   no longer contains the 30 MB embedded avatar catalog, the avatar system, the system Guide, the
   Gamer Services service client, the Model reader, glTF, Draco, MediaPlayer, Video, Microphone,
   networking or the Headless and Terminal platforms. Nothing was removed or disabled; a program
-  that uses those features links them. See `docs/link-size-architecture.md`. Observable
-  differences: `ContentManager` registers a type's readers on the first `Load<T>()` of it rather
-  than in its constructor (and `Game` no longer registers every `.xnb` reader at construction), so
-  `ContentTypeReaderManager`, `GetXnbReaderUsageSummary()` and `CnbLoaderRegistry` report a
-  built-in reader or `.cnb` loader once its type has been loaded; `RegisterBuiltinLoaders()`
-  (CNAEXT) registers every family, `.xnb` readers included. The system Guide's panels are
-  installed by `GamerServicesDispatcher.Initialize`, as before reachable only by signed-in
-  players.
+  that uses those features links them. See `docs/link-size-architecture.md`. A `Game` and every
+  `ContentManager` still register every built-in reader and `.cnb` loader as far as any API can
+  observe -- `ContentTypeReaderManager`, `CnbLoaderRegistry` and `GetXnbReaderUsageSummary()`
+  answer as before -- but each is installed when its type is first loaded, or when one of those
+  registries is asked about it by name, which is what keeps unused importers out of a game. The
+  system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as before
+  reachable only by signed-in players.
 - **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
   `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
   compiles CNA into per-function sections and collects unreferenced ones in every program that

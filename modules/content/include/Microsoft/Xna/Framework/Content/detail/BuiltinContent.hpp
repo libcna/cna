@@ -92,12 +92,15 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // RegisterCnbLoader() installs the type's `.cnb` loader alone (Register() does it too); it
+        // is defined only for the ten types that have one (CnbLoaderRegistryQueries.cpp).
 #define CNA_BUILTIN_CONTENT(Type)                                                              \
         template <>                                                                            \
         struct CNAEXT BuiltinContent<Type>                                                     \
         {                                                                                      \
             static constexpr bool IsBuiltin = true;                                            \
             static void Register(ContentManager& manager);                                     \
+            static void RegisterCnbLoader();                                                   \
         };
         /** @brief Texture2D (ContentTextureLoaders.cpp). */
         CNA_BUILTIN_CONTENT(Graphics::Texture2D)

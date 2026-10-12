@@ -5,10 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
-#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/DrawableGameComponent.hpp"
@@ -299,35 +296,24 @@ TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingTh
     }
 }
 
-// SAMPLE-003: an XNA game loads its compiled content from LoadContent with no setup of its own.
-// The readers come from Content.Load<T>() itself -- the readers an asset of type T can need, on
-// the first load of T -- rather than from Game's constructor registering every reader CNA has,
-// which linked the Model reader, the glTF importer and Draco into every game.
-TEST(GameTest, ContentLoadRegistersTheXnbReadersOfItsTypeOnly)
+TEST(GameTest, ConstructionRegistersBuiltInXnbReadersBeforeLoadContent)
 {
     if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
         GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
-    using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
     ContentTypeReaderManager::ClearTypeCreators();
 
     LifecycleTestGame game;
-    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(
-        "Microsoft.Xna.Framework.Content.SpriteFontReader"));
-
-    EXPECT_THROW((void)game.getContentProperty().Load<Microsoft::Xna::Framework::Graphics::SpriteFont>(
-                     "no-such-font"),
-                 ContentLoadException);
 
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
-        "Microsoft.Xna.Framework.Content.SpriteFontReader"));
-    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
-        "Microsoft.Xna.Framework.Content.Texture2DReader"));
-    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(
         "Microsoft.Xna.Framework.Content.ModelReader"));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.EffectReader"));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.SpriteFontReader"));
 }
 
 TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)

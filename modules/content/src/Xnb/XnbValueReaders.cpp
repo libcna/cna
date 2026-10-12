@@ -5,6 +5,7 @@
 // Link boundary: its own translation unit, apart from RegisterAllBuiltInXnbReaders(), so that
 // registering the value readers does not link the readers of every asset type.
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
@@ -13,8 +14,10 @@ namespace Microsoft::Xna::Framework::Content::detail
 {
     void RegisterValueXnbReaders()
     {
-        CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
-        CNA::Internal::Xnb::RegisterMathXnbReaders();
-        CNA::Internal::Xnb::RegisterDecimalDateTimeXnbReaders();
+        RegisterDeclaredXnbReaders([] {
+            CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
+            CNA::Internal::Xnb::RegisterMathXnbReaders();
+            CNA::Internal::Xnb::RegisterDecimalDateTimeXnbReaders();
+        });
     }
 }

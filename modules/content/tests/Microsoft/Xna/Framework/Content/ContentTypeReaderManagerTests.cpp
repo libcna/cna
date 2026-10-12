@@ -179,3 +179,82 @@ TEST_F(ContentTypeReaderManagerTest, RemoveTypeCreatorFreesTheNameForANewRegistr
     EXPECT_NE(ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader"), nullptr);
     EXPECT_TRUE(secondFactoryRan);
 }
+
+// -----------------------------------------------------------------------
+// Declared built-in readers (docs/link-size-architecture.md)
+//
+// A Game declares every built-in reader registered, as its constructor once registered them all;
+// each is installed when its type is first loaded, or when the registry is asked by name. These
+// pin that the registry answers exactly as the eager registration did.
+// -----------------------------------------------------------------------
+
+namespace
+{
+    namespace ContentDetail = Microsoft::Xna::Framework::Content::detail;
+    constexpr const char* kEffectReader = "Microsoft.Xna.Framework.Content.EffectReader";
+}
+
+TEST_F(ContentTypeReaderManagerTest, DeclaredBuiltinReadersAnswerAsRegisteredAndInstallWhenAsked)
+{
+    ContentDetail::DeclareBuiltinXnbReaders();
+    EXPECT_TRUE(ContentDetail::DeclaredXnbReadersPending());
+
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+    EXPECT_FALSE(ContentDetail::DeclaredXnbReadersPending());
+    auto reader = ContentTypeReaderManager::CreateReader(kEffectReader);
+    EXPECT_NE(dynamic_cast<EffectReader*>(reader.get()), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, AGameRegistrationUnderADeclaredBuiltinNameIsIgnoredAsBefore)
+{
+    // With every reader registered, AddTypeCreator ignored a game's factory under a built-in's
+    // name; a declared reader keeps it out the same way once it is installed.
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ContentTypeReaderManager::AddTypeCreator(
+        kEffectReader, [] { return std::make_unique<TestOnlyInt32Reader>(); });
+
+    auto reader = ContentTypeReaderManager::CreateReader(kEffectReader);
+    EXPECT_NE(dynamic_cast<EffectReader*>(reader.get()), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, AGameRegistrationMadeBeforeTheDeclarationKeepsTheName)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        kEffectReader, [] { return std::make_unique<TestOnlyInt32Reader>(); });
+    ContentDetail::DeclareBuiltinXnbReaders();
+
+    auto reader = ContentTypeReaderManager::CreateReader(kEffectReader);
+    EXPECT_NE(dynamic_cast<TestOnlyInt32Reader*>(reader.get()), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, RemovingADeclaredBuiltinWithdrawsIt)
+{
+    ContentDetail::DeclareBuiltinXnbReaders();
+
+    EXPECT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kEffectReader));
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+    EXPECT_FALSE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kEffectReader));
+}
+
+TEST_F(ContentTypeReaderManagerTest, ClearTypeCreatorsForgetsTheDeclaration)
+{
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ContentTypeReaderManager::ClearTypeCreators();
+
+    EXPECT_FALSE(ContentDetail::BuiltinXnbReadersDeclared());
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+}
+
+TEST_F(ContentTypeReaderManagerTest, WithoutADeclarationAFamilyRegistersNoReaderByItself)
+{
+    // ContentManager stays neutral for isolated use: only a Game, or an explicit registration,
+    // makes the built-in readers available.
+    ContentDetail::RegisterDeclaredXnbReaders(&RegisterEffectXnbReader);
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ContentDetail::RegisterDeclaredXnbReaders(&RegisterEffectXnbReader);
+    EXPECT_TRUE(ContentDetail::DeclaredXnbReadersPending());
+    EXPECT_NE(dynamic_cast<EffectReader*>(ContentDetail::CreateRegisteredReader(kEffectReader).get()),
+              nullptr);
+}

@@ -339,11 +339,13 @@ namespace Microsoft::Xna::Framework::Content
         // An .xnb effect may be a stock effect or an effect material, whose parameters name
         // textures of every kind.
         detail::RegisterValueXnbReaders();
-        CNA::Internal::Xnb::RegisterTexture2DXnbReader();
-        CNA::Internal::Xnb::RegisterTexture3DXnbReader();
-        CNA::Internal::Xnb::RegisterTextureCubeXnbReader();
-        CNA::Internal::Xnb::RegisterStockEffectXnbReaders();
-        CNA::Internal::Xnb::RegisterEffectXnbReader();
-        CNA::Internal::Xnb::RegisterEffectMaterialXnbReaders();
+        detail::RegisterDeclaredXnbReaders([] {
+            CNA::Internal::Xnb::RegisterTexture2DXnbReader();
+            CNA::Internal::Xnb::RegisterTexture3DXnbReader();
+            CNA::Internal::Xnb::RegisterTextureCubeXnbReader();
+            CNA::Internal::Xnb::RegisterStockEffectXnbReaders();
+            CNA::Internal::Xnb::RegisterEffectXnbReader();
+            CNA::Internal::Xnb::RegisterEffectMaterialXnbReaders();
+        });
     }
 }

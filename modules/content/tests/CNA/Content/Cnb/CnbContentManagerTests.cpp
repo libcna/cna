@@ -501,22 +501,14 @@ TEST_F(CnbContentManagerTest, RegistryRejectsInvalidRegistrations)
     EXPECT_THROW(CnbLoaderRegistry::Register(0x90000001u, "X", {}), std::invalid_argument);
 }
 
-TEST_F(CnbContentManagerTest, TheFirstLoadOfABuiltInTypeRegistersItsLoaderAndNoOtherFamilys)
+TEST_F(CnbContentManagerTest, TheBuiltInLoadersAreRegisteredByEveryContentManager)
 {
-    // A program links the loaders of the types it loads: the first Load<T>() registers T's
-    // built-in loader -- even when that load then fails -- and leaves the other families alone.
-    CnbLoaderRegistry::Clear();
     ScratchContentRoot root;
     ContentManager cm(nullptr, root.path().string());
-    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
-
-    EXPECT_THROW((void)cm.Load<Curve>("missing"), ContentLoadException);
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
     EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
               "Microsoft.Xna.Framework.Curve");
-    // AnimationClipEXT is the model family's, registered by its own first load.
-    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
-    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
 }
 
 // --------------------------------------------------------------------------------------------
@@ -689,9 +681,9 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
 {
     // RegisterBuiltIns()'s documentation used to claim "every asset type CNA itself compiles to
     // .cnb". It installs two. The other eight each construct a runtime object needing a
-    // GraphicsDevice or the ContentManager itself, so they come from the ContentManager -- on the
-    // first Load<T>() of each type, or all at once from RegisterBuiltinLoaders() -- which matters
-    // to anyone who calls Clear() in a test and expects the table back.
+    // GraphicsDevice or the ContentManager itself, so they come from
+    // ContentManager::RegisterBuiltinLoaders() -- which matters to anyone who calls Clear() in a
+    // test and expects the table back.
     CnbLoaderRegistry::Clear();
     CnbLoaderRegistry::RegisterBuiltIns();
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
@@ -708,9 +700,6 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
 
     ScratchContentRoot root;
     ContentManager cm(nullptr, root.path().string());
-    // Constructing a manager installs nothing: a program links the loaders of the types it loads.
-    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
-    cm.RegisterBuiltinLoaders();
     for (const std::uint32_t everyBuiltIn :
          {CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
           CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
@@ -723,4 +712,60 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
     }
     // Effect is the one built-in identifier with no schema, so it must have no loader either.
     EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Effect));
+}
+
+// docs/link-size-architecture.md: a manager declares every built-in loader registered, and each is
+// installed when its type is first loaded or when Find()/ResolveForDocument() needs it, so a
+// program links the loaders of the types it loads. These pin that the registry still answers as
+// the constructor's eager registration did.
+TEST_F(CnbContentManagerTest, TheDeclaredBuiltInNamesAreTheNamesTheLoadersInstallUnder)
+{
+    const std::uint32_t everyBuiltIn[] = {
+        CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
+        CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
+        CnbAssetTypeId::SpriteFont, CnbAssetTypeId::SoundEffect, CnbAssetTypeId::Song,
+        CnbAssetTypeId::Video};
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    std::vector<std::string> declared;
+    for (const std::uint32_t id : everyBuiltIn)
+    {
+        declared.push_back(CnbLoaderRegistry::RegisteredTypeName(id));
+    }
+
+    ASSERT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    for (std::size_t i = 0; i < std::size(everyBuiltIn); ++i)
+    {
+        EXPECT_FALSE(declared[i].empty());
+        EXPECT_TRUE(CnbLoaderRegistry::Find(everyBuiltIn[i]).has_value());
+        EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(everyBuiltIn[i]), declared[i]);
+    }
+}
+
+TEST_F(CnbContentManagerTest, RemovingABuiltInLoaderHoldsUntilTheNextContentManager)
+{
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager first(nullptr, root.path().string());
+    EXPECT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
+    EXPECT_FALSE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
+    // Installing the other declared loaders does not bring it back...
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Texture2D).has_value());
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
+
+    // ... a new manager does, as its constructor re-registered every built-in.
+    ContentManager second(nullptr, root.path().string());
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
+}
+
+TEST_F(CnbContentManagerTest, ClearForgetsTheDeclaredBuiltInLoaders)
+{
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    CnbLoaderRegistry::Clear();
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve), "");
 }

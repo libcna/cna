@@ -148,14 +148,15 @@ namespace Microsoft::Xna::Framework::Content
 
     public:
         /**
-         * @brief CNAEXT: registers the readers of every built-in asset type on this manager, with
-         *        their process-wide `.cnb` loaders and `.xnb` readers -- as if each type had been
-         *        loaded once.
+         * @brief CNAEXT: installs the readers of every built-in asset type on this manager, every
+         *        built-in `.cnb` loader (one removed since included) and, once a Game has declared
+         *        them, every built-in `.xnb` reader -- as if each type had been loaded once.
          *
-         * Load<T>() registers the readers of T by itself on first use, so a game never needs
-         * this; calling it links every reader, importer and codec CNA has (the glTF importer and
-         * Draco among them). It is for hosts that must expose every type without naming them,
-         * such as the C API, and for tests that clear the registries.
+         * A game never needs this: every manager declares the built-in loaders registered, and
+         * Load<T>() installs those of T on first use. Calling it links every reader, importer and
+         * codec CNA has (the glTF importer and Draco among them). It is for hosts that must expose
+         * every type without naming them, such as the C API, and for tests that clear the
+         * registries.
          */
         CNAEXT void RegisterBuiltinLoaders();
 
@@ -315,8 +316,7 @@ namespace Microsoft::Xna::Framework::Content
          * @brief CNAEXT: aggregates the manifest's per-file `.xnb` reader-name inventories
          *        (plans/plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
          *        reference it, and whether `ContentTypeReaderManager` currently has a reader
-         *        registered for it -- a built-in reader is registered by the first Load<T>() of its
-         *        type. Builds the manifest first via GetContentManifest() if needed.
+         *        registered for it. Builds the manifest first via GetContentManifest() if needed.
          *
          * @return One ContentManifestReaderUsage row per distinct reader name found, unordered.
          */
@@ -716,14 +716,14 @@ namespace Microsoft::Xna::Framework::Content
             const CNA::Content::Cnb::CnbDocument document =
                 CNA::Content::Cnb::CnbDocument::Parse(std::move(bytes), cnbPath);
 
-            // Through ResolveForDocument rather than a bare numeric lookup: for a CUSTOM asset
-            // type the identifier is only a 31-bit hash, so a numeric match does not prove the
-            // file is that type. The resolver additionally requires the file's own canonical type
+            // Through ResolveForDocument's checks rather than a bare numeric lookup: for a CUSTOM
+            // asset type the identifier is only a 31-bit hash, so a numeric match does not prove
+            // the file is that type. The resolver additionally requires the file's own canonical type
             // name to equal the registered one (plans/plan_cnb.md CNBF-H002). It hands back a COPY of
             // the loader, so nothing that registers or withdraws a loader on another thread can
             // pull it out from under the call below (CNBF-H003).
             const CNA::Content::CnbLoaderRegistry::LoaderFn loader =
-                CNA::Content::CnbLoaderRegistry::ResolveForDocument(document);
+                CNA::Content::CnbLoaderRegistry::ResolveRegisteredForDocument(document);
 
             std::any produced = loader(document, *this, assetName);
             try

@@ -162,9 +162,8 @@ namespace Microsoft::Xna::Framework::Content
         }
     } // anonymous namespace
 
-    void detail::BuiltinContent<Graphics::TextureCube>::Register(ContentManager& manager)
+    void detail::BuiltinContent<Graphics::TextureCube>::RegisterCnbLoader()
     {
-        manager.RegisterBuiltinTypeReader<Graphics::TextureCube, TextureCubeTypeReader>();
         ContentManager::RegisterBuiltinCnbLoader(
             CNA::Content::Cnb::CnbAssetTypeId::TextureCube,
             "Microsoft.Xna.Framework.Graphics.TextureCube",
@@ -175,6 +174,12 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Content::Cnb::DecodeTextureCubeFromCnb(document), contentManager,
                     assetName));
             });
-        CNA::Internal::Xnb::RegisterTextureCubeXnbReader();
+    }
+
+    void detail::BuiltinContent<Graphics::TextureCube>::Register(ContentManager& manager)
+    {
+        manager.RegisterBuiltinTypeReader<Graphics::TextureCube, TextureCubeTypeReader>();
+        RegisterCnbLoader();
+        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterTextureCubeXnbReader);
     }
 }

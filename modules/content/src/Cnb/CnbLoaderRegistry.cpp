@@ -5,7 +5,9 @@
 #include <mutex>
 #include <shared_mutex>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
@@ -51,6 +53,55 @@ namespace CNA::Content
         {
             static std::shared_mutex mutex;
             return mutex;
+        }
+
+        // The declared built-in loaders (see the header), guarded by TableMutex().
+        struct DeclaredBuiltIns
+        {
+            bool declared = false;
+            // Removed since they were declared: not installed again until the next declaration.
+            std::unordered_set<std::uint32_t> removed;
+        };
+
+        DeclaredBuiltIns& Declared()
+        {
+            static DeclaredBuiltIns declared;
+            return declared;
+        }
+
+        // The ten built-in loaders and the names they register under -- what a declaration
+        // stands for. Data only: the loaders themselves stay in their families' translation
+        // units. CnbContentManagerTests checks this list against the installed loaders.
+        struct BuiltInName
+        {
+            std::uint32_t assetTypeId;
+            std::string_view canonicalTypeName;
+        };
+
+        constexpr BuiltInName BuiltInNames[] = {
+            {Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve"},
+            {Cnb::CnbAssetTypeId::AnimationClip, "Microsoft.Xna.Framework.Graphics.AnimationClipEXT"},
+            {Cnb::CnbAssetTypeId::Model, "Microsoft.Xna.Framework.Graphics.Model"},
+            {Cnb::CnbAssetTypeId::Texture2D, "Microsoft.Xna.Framework.Graphics.Texture2D"},
+            {Cnb::CnbAssetTypeId::TextureCube, "Microsoft.Xna.Framework.Graphics.TextureCube"},
+            {Cnb::CnbAssetTypeId::Texture3D, "Microsoft.Xna.Framework.Graphics.Texture3D"},
+            {Cnb::CnbAssetTypeId::SpriteFont, "Microsoft.Xna.Framework.Graphics.SpriteFont"},
+            {Cnb::CnbAssetTypeId::SoundEffect, "Microsoft.Xna.Framework.Audio.SoundEffect"},
+            {Cnb::CnbAssetTypeId::Song, "Microsoft.Xna.Framework.Media.Song"},
+            {Cnb::CnbAssetTypeId::Video, "Microsoft.Xna.Framework.Media.Video"},
+        };
+
+        /// The name a declared, not removed built-in loader registers under; empty otherwise.
+        /// Called with TableMutex() held.
+        std::string_view DeclaredName(std::uint32_t assetTypeId)
+        {
+            const auto& declared = Declared();
+            if (!declared.declared || declared.removed.contains(assetTypeId)) { return {}; }
+            for (const BuiltInName& builtIn : BuiltInNames)
+            {
+                if (builtIn.assetTypeId == assetTypeId) { return builtIn.canonicalTypeName; }
+            }
+            return {};
         }
     }
 
@@ -136,6 +187,7 @@ namespace CNA::Content
 
             table.emplace(assetTypeId,
                           Registration{canonicalTypeName, std::move(loader), ownership});
+            if (ownership == Ownership::CnaBuiltIn) { Declared().removed.erase(assetTypeId); }
         }
     }
 
@@ -153,25 +205,54 @@ namespace CNA::Content
                               Ownership::CnaBuiltIn);
     }
 
+    void CnbLoaderRegistry::DeclareBuiltIns()
+    {
+        const std::unique_lock lock(TableMutex());
+        auto& declared = Declared();
+        declared.declared = true;
+        declared.removed.clear();
+    }
+
+    void CnbLoaderRegistry::RegisterDeclaredBuiltIn(std::uint32_t assetTypeId,
+                                                    const std::string& canonicalTypeName,
+                                                    LoaderFn loader)
+    {
+        {
+            const std::shared_lock lock(TableMutex());
+            if (DeclaredName(assetTypeId).empty()) { return; }
+        }
+        RegisterBuiltIn(assetTypeId, canonicalTypeName, std::move(loader));
+    }
+
+    bool CnbLoaderRegistry::DeclaredButNotInstalled(std::uint32_t assetTypeId)
+    {
+        const std::shared_lock lock(TableMutex());
+        return Table().find(assetTypeId) == Table().end() && !DeclaredName(assetTypeId).empty();
+    }
+
     bool CnbLoaderRegistry::Remove(std::uint32_t assetTypeId)
     {
         const std::unique_lock lock(TableMutex());
-        return Table().erase(assetTypeId) != 0u;
+        const bool declared = !DeclaredName(assetTypeId).empty();
+        if (declared) { Declared().removed.insert(assetTypeId); }
+        return Table().erase(assetTypeId) != 0u || declared;
     }
 
     void CnbLoaderRegistry::Clear()
     {
         const std::unique_lock lock(TableMutex());
         Table().clear();
+        Declared() = DeclaredBuiltIns{};
     }
 
     bool CnbLoaderRegistry::IsRegistered(std::uint32_t assetTypeId)
     {
         const std::shared_lock lock(TableMutex());
-        return Table().find(assetTypeId) != Table().end();
+        return Table().find(assetTypeId) != Table().end() || !DeclaredName(assetTypeId).empty();
     }
 
-    std::optional<CnbLoaderRegistry::LoaderFn> CnbLoaderRegistry::Find(std::uint32_t assetTypeId)
+    std::optional<CnbLoaderRegistry::LoaderFn> CnbLoaderRegistry::FindRegistered(
+        std::uint32_t assetTypeId)
     {
         const std::shared_lock lock(TableMutex());
         const auto it = Table().find(assetTypeId);
@@ -183,10 +264,11 @@ namespace CNA::Content
     {
         const std::shared_lock lock(TableMutex());
         const auto it = Table().find(assetTypeId);
-        return it == Table().end() ? std::string() : it->second.canonicalTypeName;
+        if (it != Table().end()) { return it->second.canonicalTypeName; }
+        return std::string(DeclaredName(assetTypeId));
     }
 
-    CnbLoaderRegistry::LoaderFn CnbLoaderRegistry::ResolveForDocument(
+    CnbLoaderRegistry::LoaderFn CnbLoaderRegistry::ResolveRegisteredForDocument(
         const Cnb::CnbDocument& document)
     {
         const std::uint32_t assetTypeId = document.AssetTypeId();

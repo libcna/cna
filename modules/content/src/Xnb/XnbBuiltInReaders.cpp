@@ -2,6 +2,7 @@
 #include "CNA/Internal/Xnb/EffectMaterialContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
@@ -24,6 +25,7 @@ namespace CNA::Internal::Xnb
 {
     void RegisterAllBuiltInXnbReaders()
     {
+        const Microsoft::Xna::Framework::Content::detail::BuiltinXnbRegistrationScope builtin;
         RegisterPrimitiveXnbReaders();
         RegisterMathXnbReaders();
         RegisterDecimalDateTimeXnbReaders();
@@ -42,6 +44,7 @@ namespace CNA::Internal::Xnb
         RegisterModelXnbReaders();
         RegisterEffectMaterialXnbReaders();
         Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
+        Microsoft::Xna::Framework::Content::detail::NoteEveryBuiltinXnbReaderRegistered();
     }
 }
 
@@ -49,6 +52,10 @@ namespace Microsoft::Xna::Framework::Content::detail
 {
     void RegisterEveryBuiltinXnbReader()
     {
-        CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+        // Only installs what a Game declared: without one, CNA registers no .xnb reader by itself.
+        if (BuiltinXnbReadersDeclared())
+        {
+            CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+        }
     }
 }
