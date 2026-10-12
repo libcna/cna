@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -219,6 +220,28 @@ namespace Microsoft::Xna::Framework::Graphics
     IRenderTargetRenderer* RenderTarget2D::GetRenderTargetRenderer() const
     {
         return rtRenderer_;
+    }
+
+    CNA::Internal::Renderers::RenderTargetBindingDescriptor
+    RenderTarget2D::DescribeRenderTargetBindingEXT(const RenderTargetBinding& binding)
+    {
+        if (binding.getArraySliceProperty() != 0)
+            throw System::NotSupportedException(
+                "SetRenderTargets: RenderTarget2D array slices are not supported; "
+                "arraySlice must be 0.");
+        if (!rtRenderer_)
+            throw System::NotSupportedException(
+                "SetRenderTargets: this renderer does not support RenderTarget2D.");
+        return CNA::Internal::Renderers::RenderTargetBindingDescriptor::ForRenderTarget2D(
+            rtRenderer_, 0, getWidthProperty(), getHeightProperty(), getMultiSampleCountProperty());
+    }
+
+    void RenderTarget2D::QueryRealDepthStencilEXT(bool& depth, bool& stencil) const
+    {
+        depth = rtRenderer_ != nullptr &&
+            rtRenderer_->HasRealDepthBuffer(depthFormat_ != DepthFormat::None);
+        stencil = rtRenderer_ != nullptr &&
+            rtRenderer_->HasRealStencilBuffer(depthFormat_ == DepthFormat::Depth24Stencil8);
     }
 
     const std::string& RenderTarget2D::GetTypeName() const

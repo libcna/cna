@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -141,6 +142,28 @@ namespace Microsoft::Xna::Framework::Graphics
     IRenderTargetCubeRenderer* RenderTargetCube::GetRenderTargetCubeRenderer() const
     {
         return rtCubeRenderer_;
+    }
+
+    CNA::Internal::Renderers::RenderTargetBindingDescriptor
+    RenderTargetCube::DescribeRenderTargetBindingEXT(const RenderTargetBinding& binding)
+    {
+        const int face = static_cast<int>(binding.getCubeMapFaceProperty());
+        if (face < static_cast<int>(CubeMapFace::PositiveX)
+            || face > static_cast<int>(CubeMapFace::NegativeZ))
+            throw System::ArgumentOutOfRangeException("cubeMapFace");
+        if (!rtCubeRenderer_)
+            throw System::NotSupportedException(
+                "SetRenderTargets: this renderer does not support RenderTargetCube.");
+        return CNA::Internal::Renderers::RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
+            rtCubeRenderer_, face, getWidthProperty(), getMultiSampleCountProperty());
+    }
+
+    void RenderTargetCube::QueryRealDepthStencilEXT(bool& depth, bool& stencil) const
+    {
+        depth = rtCubeRenderer_ != nullptr &&
+            rtCubeRenderer_->HasRealDepthBuffer(depthFormat_ != DepthFormat::None);
+        stencil = rtCubeRenderer_ != nullptr &&
+            rtCubeRenderer_->HasRealStencilBuffer(depthFormat_ == DepthFormat::Depth24Stencil8);
     }
 
     void RenderTargetCube::Dispose(bool disposing)

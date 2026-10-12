@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 #include "Fna3dStockEffectBlobs.hpp"
 // WEBGPU-169: a compiled sampler can name any of the three public texture kinds, and sorting them
@@ -11036,13 +11037,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (texture == nullptr) return {};
         using namespace Microsoft::Xna::Framework::Graphics;
-        if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+        if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
         {
             const auto* samplable =
                 dynamic_cast<const IWebGPUCubeSamplable*>(&textureCube->GetRenderer());
             return samplable != nullptr ? samplable->SampledCube() : WebGPUSampledTextureEXT{};
         }
-        if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+        if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
         {
             const auto* volume =
                 dynamic_cast<const WebGPUTexture3DRenderer*>(&texture3D->GetRenderer());

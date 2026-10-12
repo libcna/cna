@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
 #include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
@@ -135,9 +136,9 @@ namespace CNA::Internal::Renderers::Fna3d
             if (texture == nullptr) return nullptr;
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
                 return dynamic_cast<const Fna3dSampledTexture*>(&texture2D->GetRenderer());
-            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
                 return dynamic_cast<const Fna3dSampledTexture*>(&texture3D->GetRenderer());
-            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
                 return dynamic_cast<const Fna3dSampledTexture*>(&textureCube->GetRenderer());
             return nullptr;
         }

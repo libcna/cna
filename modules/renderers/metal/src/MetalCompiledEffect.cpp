@@ -7,6 +7,7 @@
 #if defined(CNA_METAL_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/Metal/MetalCompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
@@ -627,8 +628,8 @@ namespace CNA::Internal::Renderers::Metal
         if (texture != nullptr)
         {
             using namespace Microsoft::Xna::Framework::Graphics;
-            const bool isCube = dynamic_cast<TextureCube*>(texture) != nullptr;
-            const bool isVolume = !isCube && dynamic_cast<Texture3D*>(texture) != nullptr;
+            const bool isCube = CNA::Internal::Graphics::AsTextureCube(texture) != nullptr;
+            const bool isVolume = !isCube && CNA::Internal::Graphics::AsTexture3D(texture) != nullptr;
             const auto declared = static_cast<MOJOSHADER_symbolType>(parameterType);
             const bool declaredCube = declared == MOJOSHADER_SYMTYPE_TEXTURECUBE;
             const bool declaredVolume = declared == MOJOSHADER_SYMTYPE_TEXTURE3D;

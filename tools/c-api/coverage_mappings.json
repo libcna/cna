@@ -839,7 +839,7 @@
     },
     {
       "id": "texture-and-texture2d-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT)$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:2D)?\\.hpp$",
       "kinds": [
         "class",
@@ -1007,7 +1007,7 @@
     },
     {
       "id": "texture3d-and-texturecube-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT)$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:3D|Cube)\\.hpp$",
       "kinds": [
         "class",
@@ -14369,6 +14369,23 @@
         "CPP-B2E9BF3CA917",
         "CPP-D02886B7E0A5",
         "CPP-DA709BE1AC36"
+      ]
+    },
+    {
+      "id": "texture-kind-queries",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Texture|TextureCube|Texture3D)::(?:AsTextureCubeEXT|AsTexture3DEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No separate C route: a virtual query that stands in for `dynamic_cast` in C++, so that renderers' effect binding can tell a cube map or a volume from any other texture without linking those classes. A C program holds each texture by a typed handle it created through `cna_texture_cube_*` or `cna_texture3d_*`, so it already knows the kind",
+      "tests": "Doxygen declaration inventory; the renderers' cube and volume sampling tests exercise the query",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-2174A7517BA9",
+        "CPP-7DBC0F263A47",
+        "CPP-8735D264CD05",
+        "CPP-C6A8B394F721"
       ]
     },
     {

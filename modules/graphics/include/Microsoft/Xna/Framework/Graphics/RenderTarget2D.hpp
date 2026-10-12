@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
+#include "CNA/Internal/Graphics/IRenderTargetBindingSource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IRenderTarget.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -16,7 +17,8 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief A 2D texture that can be used as a render target. Mirrors XNA 4.0 RenderTarget2D. */
     class RenderTarget2D : public Texture2D, public IRenderTarget,
-            public CNA::Internal::Graphics::IContentLosable
+            public CNA::Internal::Graphics::IContentLosable,
+            public CNA::Internal::Graphics::IRenderTargetBindingSource
     {
     public:
         using Texture2D::Dispose;
@@ -137,6 +139,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Non-owning pointer into Texture2D::renderer_ (which holds the shared_ptr).
         CNA::Internal::Renderers::IRenderTargetRenderer* rtRenderer_ = nullptr;
+
+    private:
+        /// GraphicsDevice binds this target through these (IRenderTargetBindingSource).
+        [[nodiscard]] CNA::Internal::Renderers::RenderTargetBindingDescriptor
+        DescribeRenderTargetBindingEXT(const RenderTargetBinding& binding) override;
+        void QueryRealDepthStencilEXT(bool& depth, bool& stencil) const override;
 
     private:
         /** @brief Set by a real renderer-reported device reset; cleared by the next write. */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Link-footprint consumer: a game that uses the heavy subsystems the 2D consumer must not link --
-// 3D models (glTF, GLB and Draco reach Load<Model>), effects, avatars with the built-in catalog,
+// 3D models (glTF, GLB and Draco reach Load<Model>), effects, cube-map render targets and volume
+// textures, avatars with the built-in catalog,
 // the system Guide through GamerServicesComponent, MediaPlayer and songs, video, the microphone and
 // dynamic sound effects.
 //
@@ -18,6 +19,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
@@ -42,6 +45,10 @@ namespace
         {
             model_.emplace(getContentProperty().Load<Graphics::Model>("ship"));
             effect_ = getContentProperty().Load<std::shared_ptr<Graphics::Effect>>("glow");
+            volume_ = getContentProperty().Load<std::shared_ptr<Graphics::Texture3D>>("fog");
+            reflection_ = std::make_unique<Graphics::RenderTargetCube>(
+                *graphics_.getGraphicsDeviceProperty(), 64, false, Graphics::SurfaceFormat::Color,
+                Graphics::DepthFormat::None);
             song_.emplace(getContentProperty().Load<Media::Song>("theme"));
             video_.emplace(getContentProperty().Load<Media::Video>("intro"));
             Media::MediaPlayer::Play(&*song_);
@@ -59,6 +66,9 @@ namespace
 
         void Update(GameTime& gameTime) override
         {
+            getGraphicsDeviceProperty().SetRenderTarget(reflection_.get(),
+                                                        Graphics::CubeMapFace::PositiveX);
+            getGraphicsDeviceProperty().SetRenderTarget(nullptr);
             GamerServices::Guide::ShowFriends(PlayerIndex::One);
             Game::Update(gameTime);
         }
@@ -68,6 +78,8 @@ namespace
         GamerServices::GamerServicesComponent gamerServices_{*this};
         std::optional<Graphics::Model> model_;
         std::shared_ptr<Graphics::Effect> effect_;
+        std::shared_ptr<Graphics::Texture3D> volume_;
+        std::unique_ptr<Graphics::RenderTargetCube> reflection_;
         std::optional<Media::Song> song_;
         std::optional<Media::Video> video_;
         std::optional<GamerServices::AvatarDescription> avatar_;

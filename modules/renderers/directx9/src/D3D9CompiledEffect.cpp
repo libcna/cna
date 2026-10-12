@@ -3,6 +3,7 @@
 #if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/DirectX9/D3D9CompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
@@ -337,12 +338,12 @@ namespace CNA::Internal::Renderers::DirectX9
             ResolvedTexture result;
             if (texture == nullptr) return result;
             using namespace Microsoft::Xna::Framework::Graphics;
-            if (auto* cube = dynamic_cast<TextureCube*>(texture))
+            if (auto* cube = CNA::Internal::Graphics::AsTextureCube(texture))
             {
                 result.textureCube = cube->GetRenderer().shared_from_this();
                 result.kind = MOJOSHADER_SAMPLER_CUBE;
             }
-            else if (auto* volume = dynamic_cast<Texture3D*>(texture))
+            else if (auto* volume = CNA::Internal::Graphics::AsTexture3D(texture))
             {
                 result.texture3D = volume->GetRenderer().shared_from_this();
                 result.kind = MOJOSHADER_SAMPLER_VOLUME;

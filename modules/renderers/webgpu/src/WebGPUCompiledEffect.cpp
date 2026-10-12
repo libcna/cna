@@ -7,6 +7,7 @@
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/WebGPU/WebGPUCompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
@@ -475,8 +476,8 @@ namespace CNA::Internal::Renderers::WebGPU
         if (texture != nullptr)
         {
             using namespace Microsoft::Xna::Framework::Graphics;
-            const bool isCube = dynamic_cast<TextureCube*>(texture) != nullptr;
-            const bool isVolume = !isCube && dynamic_cast<Texture3D*>(texture) != nullptr;
+            const bool isCube = CNA::Internal::Graphics::AsTextureCube(texture) != nullptr;
+            const bool isVolume = !isCube && CNA::Internal::Graphics::AsTexture3D(texture) != nullptr;
             const auto declared = static_cast<MOJOSHADER_symbolType>(parameterType);
             const bool declaredCube = declared == MOJOSHADER_SYMTYPE_TEXTURECUBE;
             const bool declaredVolume = declared == MOJOSHADER_SYMTYPE_TEXTURE3D;
@@ -813,12 +814,12 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (texture == nullptr) return false;
         using namespace Microsoft::Xna::Framework::Graphics;
-        if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+        if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
         {
             return dynamic_cast<const IWebGPUCubeSamplable*>(&textureCube->GetRenderer()) !=
                    nullptr;
         }
-        if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+        if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
         {
             return dynamic_cast<const WebGPUTexture3DRenderer*>(&texture3D->GetRenderer()) !=
                    nullptr;

@@ -7,6 +7,7 @@
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
@@ -127,7 +128,7 @@ namespace CNA::Internal::Renderers::EasyGL
             ResolvedSamplerTextureEXT resolved;
             if (texture == nullptr) return resolved;
             using namespace Microsoft::Xna::Framework::Graphics;
-            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
             {
                 ITextureCubeRenderer& renderer = textureCube->GetRenderer();
                 if (dynamic_cast<const EasyGLTextureCubeRenderer*>(&renderer) != nullptr ||
@@ -138,7 +139,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 }
                 return resolved;
             }
-            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
             {
                 ITexture3DRenderer& renderer = texture3D->GetRenderer();
                 if (dynamic_cast<const EasyGLTexture3DRenderer*>(&renderer) != nullptr)

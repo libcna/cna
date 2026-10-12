@@ -48,7 +48,11 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             "Audio::DynamicSoundEffectInstance::"
             # Networking: the Guide and profiles need no network session or ENet.
             "Microsoft::Xna::Framework::Net::"
-            "^enet_")
+            "^enet_"
+            # Volume and cube textures, which a 2D game binds nowhere.
+            "Graphics::Texture3D::"
+            "Graphics::TextureCube::"
+            "Graphics::RenderTargetCube::")
         # Platforms other than the build's own.
         foreach(_platform IN ITEMS "SDL3:Sdl3" "HEADLESS:Headless" "TERMINAL:Terminal")
             string(REPLACE ":" ";" _platform "${_platform}")
@@ -83,7 +87,10 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             "CNA::Internal::GamerServices::GuideUi::homeScreen"
             "Media::MediaPlayer::Update"
             "Audio::Microphone::CheckAllBuffers"
-            "Audio::DynamicSoundEffectInstance::Update")
+            "Audio::DynamicSoundEffectInstance::Update"
+            "Graphics::RenderTargetCube::DescribeRenderTargetBindingEXT"
+            "Graphics::TextureCube::"
+            "Graphics::Texture3D::")
         if(CNA_DRACO_AVAILABLE)
             list(APPEND _cna_footprint_present "^draco::")
         endif()
