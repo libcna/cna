@@ -9,7 +9,7 @@ one reference inside one of them extracts a member that drags a whole unrelated 
 game legitimately needed). This reads the finished executable's symbol table instead.
 
 Usage:
-  check_link_footprint.py --binary <exe> [--forbid REGEX ...] [--require REGEX ...]
+  check_link_footprint.py --binary <exe> [--nm <tool>] [--forbid REGEX ...] [--require REGEX ...]
 
 A forbidden pattern fails when any symbol -- defined, or imported from a shared library -- matches
 it, demangled. A required pattern fails when none does; requirements keep the consumer honest, so
@@ -18,7 +18,12 @@ that a probe which stopped using an API cannot pass vacuously.
 Absolute byte limits are deliberately not checked: toolchains and build types differ by more than
 the regressions this guards against. The sizes are printed for the log.
 
-Exit codes: 0 ok, 1 violation, 77 (ctest SKIP) when no nm-compatible tool can read the binary.
+--nm names the symbol lister of the toolchain that built the binary (CMake passes CMAKE_NM), so a
+cross-compiled executable is read by a tool that understands it; a binary it cannot read is a
+failure. Without --nm the host's nm or llvm-nm is used, and finding neither is a skip.
+
+Exit codes: 0 ok, 1 violation or unreadable binary, 77 (ctest SKIP) when no --nm was given and
+the host has no nm-compatible tool.
 """
 import argparse
 import os
@@ -36,12 +41,9 @@ def _names(text):
     return [match.group(1) for match in map(_NM_LINE.match, text.splitlines()) if match]
 
 
-def symbols(binary):
-    """Demangled symbol names of the binary, or None when no tool can list them."""
-    for tool in ("nm", "llvm-nm"):
-        path = shutil.which(tool)
-        if not path:
-            continue
+def symbols(binary, tools):
+    """Demangled symbol names of the binary, or None when none of the tools can list them."""
+    for path in tools:
         listed = subprocess.run([path, "-C", binary], capture_output=True, text=True, check=False)
         if listed.returncode == 0 and listed.stdout:
             return _names(listed.stdout)
@@ -61,6 +63,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--binary", required=True)
+    parser.add_argument("--nm", help="the toolchain's nm (CMAKE_NM)")
     parser.add_argument("--forbid", action="append", default=[], metavar="REGEX")
     parser.add_argument("--require", action="append", default=[], metavar="REGEX")
     args = parser.parse_args()
@@ -68,14 +71,24 @@ def main():
     if not os.path.isfile(args.binary):
         print(f"link footprint: {args.binary} does not exist", file=sys.stderr)
         return 1
-    names = symbols(args.binary)
+    if args.nm:
+        tools = [args.nm]
+    else:
+        tools = [path for path in map(shutil.which, ("nm", "llvm-nm")) if path]
+        if not tools:
+            print("link footprint: no --nm given and the host has no nm or llvm-nm; skipping")
+            return 77
+    names = symbols(args.binary, tools)
     if names is None:
-        print("link footprint: no nm-compatible tool can read the binary; skipping")
-        return 77
+        print(f"link footprint: {', '.join(tools)} cannot read {args.binary}", file=sys.stderr)
+        return 1
 
     print(f"link footprint: {args.binary}: {os.path.getsize(args.binary):,} bytes, "
           f"{len(names):,} symbols")
-    size_tool = shutil.which("size")
+    # The size tool beside the nm used: llvm-nm -> llvm-size, x86_64-w64-mingw32-nm -> ...-size.
+    nm_dir, nm_name = os.path.split(tools[0])
+    size_tool = (shutil.which(nm_name[:-2] + "size", path=nm_dir or None)
+                 if nm_name.endswith("nm") else None)
     if size_tool:
         sized = subprocess.run([size_tool, args.binary], capture_output=True, text=True, check=False)
         if sized.returncode == 0:
@@ -96,8 +109,10 @@ def main():
             failed = True
             print(f"MISSING '{pattern}': no symbol matches")
     if failed:
-        print("link footprint: FAILED -- tools/link_audit/why_linked.py explains which reference "
-              "pulled a forbidden object in (relink with -fuse-ld=bfd -Wl,-Map=...)")
+        print("link footprint: FAILED -- ask the linker that produced it why a member was linked: "
+              "mold -Wl,--print-dependencies, lld -Wl,--why-extract=FILE, GNU ld -Wl,-Map=FILE "
+              "with tools/link_audit/why_linked.py (docs/link-size-architecture.md, 'Checking a "
+              "binary'); another linker may not reproduce the extraction")
         return 1
     print(f"link footprint: ok ({len(args.forbid)} forbidden families absent, "
           f"{len(args.require)} required present)")

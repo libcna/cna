@@ -7,9 +7,23 @@
 # consumer is statically linked from the module archives (as Mobile Eggbert links CNA, whatever
 # CNA_SHARED_LIBRARY says), built but never run, and its symbol table is checked.
 #
-# Native only: the probes inspect host executables with nm (the script skips when it has none).
+# The toolchain's own nm (CMAKE_NM) reads each probe, so a cross-compiled one is read by a tool
+# that understands it, and one it cannot read fails. A cross build without CMAKE_NM registers no
+# gate; a native one without it uses the host's nm and skips (exit 77) when there is none.
 if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDROID)
     find_package(Python3 COMPONENTS Interpreter QUIET)
+
+    function(cna_add_link_footprint_test name target)
+        set(_cna_nm_args)
+        if(CMAKE_NM)
+            set(_cna_nm_args --nm "${CMAKE_NM}")
+        endif()
+        add_test(NAME ${name}
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
+                --binary $<TARGET_FILE:${target}> ${_cna_nm_args} ${ARGN})
+        set_tests_properties(${name} PROPERTIES
+            LABELS "configuration;link-footprint" SKIP_RETURN_CODE 77)
+    endfunction()
 
     add_executable(cna_link_footprint_2d tests/link_footprint/footprint_2d_game.cpp)
     target_link_libraries(cna_link_footprint_2d PRIVATE CNA::Runtime CNA::GamerServices)
@@ -37,7 +51,11 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         target_link_libraries(cna_link_footprint_tray_only PRIVATE CNA::Runtime)
     endif()
 
-    if(Python3_Interpreter_FOUND)
+    if(NOT Python3_Interpreter_FOUND)
+        message(STATUS "CNA: no Python 3; the link-footprint gates are not registered")
+    elseif(CMAKE_CROSSCOMPILING AND NOT CMAKE_NM)
+        message(STATUS "CNA: no nm for this cross toolchain; the link-footprint gates are not registered")
+    else()
         # Volume and cube textures, by what only their implementation defines: constructors,
         # vtables and every out-of-line member. A renderer that binds an effect's textures emits
         # the classes' header-inline renderer accessors without linking either class, so those
@@ -106,16 +124,13 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         foreach(_pattern IN LISTS _cna_footprint_absent)
             list(APPEND _cna_footprint_args --forbid "${_pattern}")
         endforeach()
-        add_test(NAME LinkFootprint_2DGame
-            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                --binary $<TARGET_FILE:cna_link_footprint_2d>
+        cna_add_link_footprint_test(LinkFootprint_2DGame cna_link_footprint_2d
                 ${_cna_footprint_args}
                 --require "GamerServices::Guide::getIsTrialModeProperty"
                 --require "GamerServices::Guide::ShowMarketplace"
                 --require "Audio::SoundEffect::Play"
                 --require "Content::detail::BuiltinContent<Microsoft::Xna::Framework::Graphics::Texture2D>::Register"
                 --require "Content::detail::BuiltinContent<Microsoft::Xna::Framework::Graphics::SpriteFont>::Register")
-        set_tests_properties(LinkFootprint_2DGame PROPERTIES LABELS "configuration;link-footprint")
 
         # ...and that the subsystems are all there for a game that uses them.
         set(_cna_footprint_present
@@ -137,11 +152,8 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         foreach(_pattern IN LISTS _cna_footprint_present)
             list(APPEND _cna_footprint_args --require "${_pattern}")
         endforeach()
-        add_test(NAME LinkFootprint_FullFeatures
-            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                --binary $<TARGET_FILE:cna_link_footprint_full>
-                ${_cna_footprint_args})
-        set_tests_properties(LinkFootprint_FullFeatures PROPERTIES LABELS "configuration;link-footprint")
+        cna_add_link_footprint_test(LinkFootprint_FullFeatures cna_link_footprint_full
+            ${_cna_footprint_args})
         # A game with a GamerServicesComponent: initialized gamer services give its players the
         # system Guide (Home or the Guide button), whose panels show profiles and avatars, so the
         # Guide, the avatar renderer and editor and the built-in catalog are this game's own. The
@@ -169,17 +181,14 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 "CNA::Content::Cnb::CnbWriter::")
             list(APPEND _cna_footprint_args --forbid "${_pattern}")
         endforeach()
-        add_test(NAME LinkFootprint_GamerServicesGame
-            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                --binary $<TARGET_FILE:cna_link_footprint_gamer_services>
+        cna_add_link_footprint_test(LinkFootprint_GamerServicesGame
+            cna_link_footprint_gamer_services
                 ${_cna_footprint_args}
                 --require "CNA::Internal::GamerServices::installSystemGuide"
                 --require "CNA::Internal::GamerServices::GuideUi::homeScreen"
                 --require "GamerServices::AvatarRenderer::"
                 --require "CNA::Internal::GamerServices::Avatars::embeddedCatalogFiles"
                 --require "GamerServices::Guide::getIsTrialModeProperty")
-        set_tests_properties(LinkFootprint_GamerServicesGame PROPERTIES
-            LABELS "configuration;link-footprint")
         # A program that asks whether a camera and a tray are supported and uses neither: support
         # is reported without the services, which only their accessors link.
         set(_cna_footprint_args
@@ -198,28 +207,18 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 --require "CNA::Devices::Camera::getIsSupportedProperty"
                 --require "CNA::Devices::SystemTray::getIsSupportedProperty")
         endif()
-        add_test(NAME LinkFootprint_CapabilityQuery
-            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                --binary $<TARGET_FILE:cna_link_footprint_capability_query>
-                ${_cna_footprint_args})
-        set_tests_properties(LinkFootprint_CapabilityQuery PROPERTIES
-            LABELS "configuration;link-footprint")
+        cna_add_link_footprint_test(LinkFootprint_CapabilityQuery
+            cna_link_footprint_capability_query ${_cna_footprint_args})
         # A program that uses one of the two services links that one alone.
         if(CNA_PLATFORM STREQUAL "SDL3")
-            add_test(NAME LinkFootprint_CameraOnly
-                COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                    --binary $<TARGET_FILE:cna_link_footprint_camera_only>
+            cna_add_link_footprint_test(LinkFootprint_CameraOnly cna_link_footprint_camera_only
                     --require "CNA::Platform::Sdl3::Sdl3CameraProvider::"
                     --forbid "CNA::Platform::Sdl3::Sdl3Tray::"
                     --forbid "CNA::Platform::IPlatform::GetTray\\(\\)")
-            add_test(NAME LinkFootprint_TrayOnly
-                COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
-                    --binary $<TARGET_FILE:cna_link_footprint_tray_only>
+            cna_add_link_footprint_test(LinkFootprint_TrayOnly cna_link_footprint_tray_only
                     --require "CNA::Platform::Sdl3::Sdl3Tray::"
                     --forbid "CNA::Platform::Sdl3::Sdl3CameraProvider::"
                     --forbid "CNA::Platform::IPlatform::GetCamera\\(\\)")
-            set_tests_properties(LinkFootprint_CameraOnly LinkFootprint_TrayOnly PROPERTIES
-                LABELS "configuration;link-footprint")
         endif()
         unset(_cna_footprint_cube_and_volume)
         unset(_cna_footprint_absent)
