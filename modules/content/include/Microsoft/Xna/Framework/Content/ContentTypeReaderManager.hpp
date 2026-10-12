@@ -149,9 +149,10 @@ namespace Microsoft::Xna::Framework::Content
     // reader registered, as its constructor used to register them all, but a reader is installed
     // only when its type is first loaded -- or when the registry is asked about, or told to remove,
     // a reader by name (IsRegistered, CreateReader, RemoveTypeCreatorEXT, which install every
-    // declared reader first, in their own translation unit). The registry therefore answers
-    // exactly as if every reader had been registered, while a program links only the readers of
-    // the types it loads.
+    // declared reader first, in their own translation unit). Once everything is installed a load
+    // installs nothing, so a reader removed since stays removed until the next Game declares the
+    // built-ins again, as its constructor re-registered them. The registry therefore answers as the
+    // eager registration did, while a program links only the readers of the types it loads.
     namespace detail
     {
         /**
@@ -175,13 +176,21 @@ namespace Microsoft::Xna::Framework::Content
         void NoteEveryBuiltinXnbReaderRegistered();
 
         /**
-         * @brief Runs one family's reader registration if the built-in readers are declared, as
-         *        CNA's own registration: it replaces a reader a game registered under the same name
-         *        while the built-in was declared but not installed, which the built-in would have
-         *        kept out had it been installed.
+         * @brief Runs one family's reader registration while the built-in readers are declared and
+         *        not all installed, as CNA's own registration: it replaces a reader a game
+         *        registered under the same name in that time, which the built-in would have kept
+         *        out had it been installed.
          * @param registerReaders The family's registration function.
          */
         void RegisterDeclaredXnbReaders(void (*registerReaders)());
+
+        /**
+         * @brief Installs every declared reader, once: runs @p registerEveryReader while the
+         *        built-in readers are declared and not all installed.
+         * @param registerEveryReader CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders, passed in so
+         *        that only its callers link every reader.
+         */
+        void InstallDeclaredXnbReaders(void (*registerEveryReader)());
 
         /** @brief Marks the AddTypeCreator() calls made during its lifetime as CNA's built-in ones. */
         class BuiltinXnbRegistrationScope

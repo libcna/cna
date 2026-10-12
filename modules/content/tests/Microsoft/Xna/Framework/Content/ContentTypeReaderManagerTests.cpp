@@ -8,10 +8,17 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
 
+using Microsoft::Xna::Framework::Curve;
+using Microsoft::Xna::Framework::Content::ContentLoadException;
+using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderBase;
@@ -192,6 +199,13 @@ namespace
 {
     namespace ContentDetail = Microsoft::Xna::Framework::Content::detail;
     constexpr const char* kEffectReader = "Microsoft.Xna.Framework.Content.EffectReader";
+    constexpr const char* kCurveReader = "Microsoft.Xna.Framework.Content.CurveReader";
+
+    // A game's own content type: loading one may need any built-in reader.
+    struct GameOwnContent
+    {
+        int value = 0;
+    };
 }
 
 TEST_F(ContentTypeReaderManagerTest, DeclaredBuiltinReadersAnswerAsRegisteredAndInstallWhenAsked)
@@ -257,4 +271,36 @@ TEST_F(ContentTypeReaderManagerTest, WithoutADeclarationAFamilyRegistersNoReader
     EXPECT_TRUE(ContentDetail::DeclaredXnbReadersPending());
     EXPECT_NE(dynamic_cast<EffectReader*>(ContentDetail::CreateRegisteredReader(kEffectReader).get()),
               nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, ARemovedBuiltinReaderStaysRemovedWhenContentIsLoaded)
+{
+    // As when Game's constructor registered every reader: a removed one stayed removed until the
+    // built-ins were registered again, and loading content never did that.
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kCurveReader));
+
+    ContentManager content(nullptr, "no-such-content-root");
+    EXPECT_THROW((void)content.Load<Curve>("absent"), ContentLoadException);
+    EXPECT_THROW((void)content.Load<GameOwnContent>("absent"), ContentLoadException);
+    content.RegisterBuiltinLoaders();
+
+    EXPECT_EQ(ContentDetail::CreateRegisteredReader(kCurveReader), nullptr);
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kCurveReader));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+}
+
+TEST_F(ContentTypeReaderManagerTest, RegisteringTheBuiltinsAgainRestoresARemovedReader)
+{
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kCurveReader));
+    CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(kCurveReader));
+
+    // The next Game's constructor declares them again, as it used to register them again.
+    ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kCurveReader));
+    ContentDetail::DeclareBuiltinXnbReaders();
+    ContentManager content(nullptr, "no-such-content-root");
+    EXPECT_THROW((void)content.Load<Curve>("absent"), ContentLoadException);
+    EXPECT_NE(ContentDetail::CreateRegisteredReader(kCurveReader), nullptr);
 }

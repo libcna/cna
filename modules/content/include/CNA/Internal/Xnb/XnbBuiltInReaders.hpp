@@ -27,8 +27,9 @@ namespace CNA::Internal::Xnb
      *        Phase F/D3: primitives, math, `Decimal`/`DateTime`/`TimeSpan`, `Curve`, `Texture2D`,
      *        `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect`, `Song`, the 5 stock effects,
      *        and `Model`'s own supporting readers), plus the known-unsupported placeholder (the
-     *        general `EffectReader`, XNB-32A). A real game calls this once at startup, before
-     *        loading any `.xnb` asset.
+     *        general `EffectReader`, XNB-32A). A `Game` declares them instead and each is installed
+     *        when needed (ContentTypeReaderManager.hpp); this registers them all at once, a reader
+     *        removed since included.
      *
      * Idempotent and safe to call more than once: `ContentTypeReaderManager::AddTypeCreator()`
      * silently ignores a repeat registration of the same canonical name.

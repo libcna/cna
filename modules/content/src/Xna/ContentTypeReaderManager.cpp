@@ -43,6 +43,14 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         thread_local int builtinRegistrationDepth = 0;
+
+        // Serializes installing declared readers with each other, so that a reader removed after
+        // everything is installed cannot be put back by an installation that began before.
+        std::mutex& InstallMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
     }
 
     std::unordered_map<std::string, ContentTypeReaderManager::ReaderFactory>&
@@ -213,12 +221,28 @@ namespace Microsoft::Xna::Framework::Content
 
         void RegisterDeclaredXnbReaders(void (*registerReaders)())
         {
-            if (!BuiltinXnbReadersDeclared())
+            // Once every declared reader is installed, the registry holds what the eager
+            // registration would hold, a reader removed since included: a load adds nothing.
+            const std::lock_guard lock(InstallMutex());
+            if (!DeclaredXnbReadersPending())
             {
                 return;
             }
             const BuiltinXnbRegistrationScope scope;
             registerReaders();
+        }
+
+        void InstallDeclaredXnbReaders(void (*registerEveryReader)())
+        {
+            if (!DeclaredXnbReadersPending())
+            {
+                return;
+            }
+            const std::lock_guard lock(InstallMutex());
+            if (DeclaredXnbReadersPending())
+            {
+                registerEveryReader();
+            }
         }
 
         BuiltinXnbRegistrationScope::BuiltinXnbRegistrationScope()

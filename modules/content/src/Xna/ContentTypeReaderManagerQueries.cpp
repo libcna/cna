@@ -9,24 +9,13 @@
 #include "ContentTypeReaderManagerState.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 
-#include <mutex>
-
 namespace Microsoft::Xna::Framework::Content
 {
     namespace
     {
         void InstallDeclaredReaders()
         {
-            if (!detail::DeclaredXnbReadersPending())
-            {
-                return;
-            }
-            static std::mutex installing;
-            const std::lock_guard lock(installing);
-            if (detail::DeclaredXnbReadersPending())
-            {
-                CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
-            }
+            detail::InstallDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders);
         }
     }
 
