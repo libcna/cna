@@ -62,3 +62,27 @@ object = "std::shared_ptr<PropertyEnumeratorResource>"
 
 [enumerator.routes]
 cna_network_session_property_enumerator_destroy = { release = true }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_net_get_last_join_error = { result = "NetGetLastJoinError(out_join_error, out_has_join_error)" }
+cna_network_session_properties_get_item = { result = "NetworkSessionPropertiesGetItem(properties, index, out_value)" }
+cna_network_session_properties_index_of = { result = "NetworkSessionPropertiesIndexOf(properties, value, out_index)" }
+cna_network_session_properties_remove = { result = "NetworkSessionPropertiesRemove(properties, value, out_removed)" }
+cna_network_session_properties_contains = { result = "NetworkSessionPropertiesContains(properties, value, out_contains)" }
+cna_network_session_properties_copy_to = { result = "NetworkSessionPropertiesCopyTo(properties, destination, capacity, index, out_count)" }
+cna_network_session_properties_create_enumerator = { result = "NetworkSessionPropertiesCreateEnumerator(properties, out_enumerator)" }
+cna_network_session_property_enumerator_move_next = { result = "NetworkSessionPropertyEnumeratorMoveNext(enumerator, out_has_current)" }
+cna_network_session_property_enumerator_get_current = { result = "NetworkSessionPropertyEnumeratorGetCurrent(enumerator, out_value)" }
+cna_packet_writer_copy_data_ext = { result = "PacketWriterCopyDataExt(writer, destination, capacity, out_bytes)" }
+cna_packet_reader_copy_data_ext = { result = "PacketReaderCopyDataExt(reader, destination, capacity, out_bytes)" }
+cna_network_session_properties_set_item = { result = "NetworkSessionPropertiesSetItem(properties, index, value)" }
+cna_network_session_properties_insert = { result = "NetworkSessionPropertiesInsert(properties, index, value)" }
+cna_network_session_properties_add = { result = "NetworkSessionPropertiesAdd(properties, value)" }
+cna_network_session_property_enumerator_reset = { result = "NetworkSessionPropertyEnumeratorReset(enumerator)" }
+cna_packet_reader_set_data_ext = { result = "PacketReaderSetDataExt(reader, data, count)" }

@@ -45,3 +45,21 @@ cna_network_gamer_set_machine = { call = "object->value->setMachineProperty(*oth
 [calls]
 [calls.routes]
 cna_network_machine_create = { result = "CreateResourceHandle<NetworkMachineResource>(ObjectKind::NetworkMachine, std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal()), out_machine)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_network_gamer_create = { result = "NetworkGamerCreate(session, gamertag, out_gamer)" }
+cna_network_gamer_get_session = { result = "NetworkGamerGetSession(gamer, out_session)" }
+cna_network_machine_get_gamer = { result = "NetworkMachineGetGamer(machine, index, out_gamer)" }
+cna_game_ended_event_info_init = { result = "GameEndedEventInfoInit(out_info)" }
+cna_game_started_event_info_init = { result = "GameStartedEventInfoInit(out_info)" }
+cna_gamer_joined_event_info_init = { result = "GamerJoinedEventInfoInit(gamer, out_info)" }
+cna_gamer_left_event_info_init = { result = "GamerLeftEventInfoInit(gamer, out_info)" }
+cna_host_changed_event_info_init = { result = "HostChangedEventInfoInit(old_host, new_host, out_info)" }
+cna_network_session_ended_event_info_init = { result = "NetworkSessionEndedEventInfoInit(end_reason, out_info)" }
+cna_write_leaderboards_event_info_init = { result = "WriteLeaderboardsEventInfoInit(gamer, is_leaving, out_info)" }

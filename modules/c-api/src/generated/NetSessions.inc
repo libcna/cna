@@ -1040,3 +1040,636 @@ CNA_Result cna_local_network_gamer_send_packet_writer(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_available_network_session_create_ext(
+    const CNA_AvailableNetworkSessionCreateInfo* const create_info,
+    const CNA_QualityOfService* const quality_of_service,
+    CNA_AvailableNetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_create_ext: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return AvailableNetworkSessionCreateExt(create_info, quality_of_service, out_session);
+    });
+}
+
+CNA_Result cna_available_network_session_collection_create_ext(
+    const CNA_AvailableNetworkSessionHandle* const sessions,
+    const uint64_t count,
+    CNA_AvailableNetworkSessionCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_collection_create_ext: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return AvailableNetworkSessionCollectionCreateExt(sessions, count, out_collection);
+    });
+}
+
+CNA_Result cna_network_session_create_with_properties(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const int32_t max_gamers,
+    const int32_t private_gamer_slots,
+    const CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create_with_properties: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionCreateWithProperties(session_type, max_local_gamers, max_gamers, private_gamer_slots, session_properties, out_session);
+    });
+}
+
+CNA_Result cna_network_session_create_with_local_gamers(
+    const CNA_NetworkSessionType session_type,
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    const int32_t max_gamers,
+    const int32_t private_gamer_slots,
+    const CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create_with_local_gamers: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionCreateWithLocalGamers(session_type, local_gamers, count, max_gamers, private_gamer_slots, session_properties, out_session);
+    });
+}
+
+CNA_Result cna_network_session_get_gamer_count(
+    const CNA_NetworkSessionHandle session,
+    const uint32_t roster,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_gamer_count: out_count is null.");
+        }
+        return NetworkSessionGetGamerCount(session, roster, out_count);
+    });
+}
+
+CNA_Result cna_network_session_get_gamer(
+    const CNA_NetworkSessionHandle session,
+    const uint32_t roster,
+    const int32_t index,
+    CNA_NetworkGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_gamer: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return NetworkSessionGetGamer(session, roster, index, out_gamer);
+    });
+}
+
+CNA_Result cna_network_session_get_host(
+    const CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_get_host: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return NetworkSessionGetHost(session, out_gamer);
+    });
+}
+
+CNA_Result cna_network_session_find_gamer_by_id(
+    const CNA_NetworkSessionHandle session,
+    const uint8_t gamer_id,
+    CNA_NetworkGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_find_gamer_by_id: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return NetworkSessionFindGamerById(session, gamer_id, out_gamer);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_invite_accepted(
+    const CNA_InviteAcceptedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_subscribe_invite_accepted: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return NetworkSessionSubscribeInviteAccepted(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_create_async(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const int32_t max_gamers,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionCreateAsync(session_type, max_local_gamers, max_gamers, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_network_session_create_with_properties_async(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const int32_t max_gamers,
+    const int32_t private_gamer_slots,
+    const CNA_NetworkSessionPropertiesHandle session_properties,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create_with_properties_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionCreateWithPropertiesAsync(session_type, max_local_gamers, max_gamers, private_gamer_slots, session_properties, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_network_session_create_with_local_gamers_async(
+    const CNA_NetworkSessionType session_type,
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    const int32_t max_gamers,
+    const int32_t private_gamer_slots,
+    const CNA_NetworkSessionPropertiesHandle session_properties,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_create_with_local_gamers_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionCreateWithLocalGamersAsync(session_type, local_gamers, count, max_gamers, private_gamer_slots, session_properties, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_network_session_find(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_AvailableNetworkSessionCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_find: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return NetworkSessionFind(session_type, max_local_gamers, search_properties, out_collection);
+    });
+}
+
+CNA_Result cna_network_session_find_with_local_gamers(
+    const CNA_NetworkSessionType session_type,
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    const CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_AvailableNetworkSessionCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_find_with_local_gamers: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return NetworkSessionFindWithLocalGamers(session_type, local_gamers, count, search_properties, out_collection);
+    });
+}
+
+CNA_Result cna_network_session_find_async(
+    const CNA_NetworkSessionType session_type,
+    const int32_t max_local_gamers,
+    const CNA_NetworkSessionPropertiesHandle search_properties,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_AvailableNetworkSessionCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_find_async: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return NetworkSessionFindAsync(session_type, max_local_gamers, search_properties, callback, context, out_collection);
+    });
+}
+
+CNA_Result cna_network_session_find_with_local_gamers_async(
+    const CNA_NetworkSessionType session_type,
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    const CNA_NetworkSessionPropertiesHandle search_properties,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_AvailableNetworkSessionCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_find_with_local_gamers_async: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return NetworkSessionFindWithLocalGamersAsync(session_type, local_gamers, count, search_properties, callback, context, out_collection);
+    });
+}
+
+CNA_Result cna_network_session_join_async(
+    const CNA_AvailableNetworkSessionHandle available_session,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionJoinAsync(available_session, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_network_session_join_invited_async(
+    const int32_t max_local_gamers,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join_invited_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionJoinInvitedAsync(max_local_gamers, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_network_session_join_invited_with_local_gamers_async(
+    const CNA_Handle* const local_gamers,
+    const uint64_t count,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_NetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_join_invited_with_local_gamers_async: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        return NetworkSessionJoinInvitedWithLocalGamersAsync(local_gamers, count, callback, context, out_session);
+    });
+}
+
+CNA_Result cna_local_network_gamer_create_ext(
+    const CNA_SignedInGamerHandle signed_in_gamer,
+    const CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_create_ext: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return LocalNetworkGamerCreateExt(signed_in_gamer, session, out_gamer);
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data(
+    const CNA_NetworkGamerHandle gamer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    CNA_NetworkGamerHandle* const out_sender,
+    uint64_t* const out_received)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sender == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data: out_sender is null.");
+        }
+        if (out_received == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data: out_received is null.");
+        }
+        *out_sender = CNA_INVALID_HANDLE;
+        return LocalNetworkGamerReceiveData(gamer, destination, capacity, out_sender, out_received);
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data_at(
+    const CNA_NetworkGamerHandle gamer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    const int32_t offset,
+    CNA_NetworkGamerHandle* const out_sender,
+    uint64_t* const out_received)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sender == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data_at: out_sender is null.");
+        }
+        if (out_received == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data_at: out_received is null.");
+        }
+        *out_sender = CNA_INVALID_HANDLE;
+        return LocalNetworkGamerReceiveDataAt(gamer, destination, capacity, offset, out_sender, out_received);
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_PacketReaderHandle reader,
+    CNA_NetworkGamerHandle* const out_sender,
+    uint64_t* const out_received)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sender == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data_into_packet_reader: out_sender is null.");
+        }
+        if (out_received == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_local_network_gamer_receive_data_into_packet_reader: out_received is null.");
+        }
+        *out_sender = CNA_INVALID_HANDLE;
+        return LocalNetworkGamerReceiveDataIntoPacketReader(gamer, reader, out_sender, out_received);
+    });
+}
+
+CNA_Result cna_available_network_session_get_quality_of_service(
+    const CNA_AvailableNetworkSessionHandle session,
+    CNA_QualityOfService* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_get_quality_of_service: out_value is null.");
+        }
+        return AvailableNetworkSessionGetQualityOfService(session, out_value);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_game_started(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GameStartedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeGameStarted(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_game_ended(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GameEndedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeGameEnded(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_gamer_joined(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GamerJoinedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeGamerJoined(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_gamer_left(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GamerLeftCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeGamerLeft(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_host_changed(
+    const CNA_NetworkSessionHandle session,
+    const CNA_HostChangedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeHostChanged(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_session_ended(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkSessionEndedCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeSessionEnded(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_write_arbitrated_leaderboard(
+    const CNA_NetworkSessionHandle session,
+    const CNA_WriteLeaderboardsCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeWriteArbitratedLeaderboard(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_write_unarbitrated_leaderboard(
+    const CNA_NetworkSessionHandle session,
+    const CNA_WriteLeaderboardsCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeWriteUnarbitratedLeaderboard(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_subscribe_write_true_skill(
+    const CNA_NetworkSessionHandle session,
+    const CNA_WriteLeaderboardsCallback callback,
+    void* const context,
+    CNA_NetworkSessionEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration != nullptr) {
+            *out_registration = CNA_INVALID_HANDLE;
+        }
+        return NetworkSessionSubscribeWriteTrueSkill(session, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_network_session_replace_session_properties(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkSessionPropertiesHandle properties)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionReplaceSessionProperties(session, properties);
+    });
+}
+
+CNA_Result cna_network_session_add_local_gamer(
+    const CNA_NetworkSessionHandle session,
+    const CNA_Handle signed_in_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionAddLocalGamer(session, signed_in_gamer);
+    });
+}
+
+CNA_Result cna_network_session_send_network_event_ext(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkEventInfo* const event_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionSendNetworkEventExt(session, event_info);
+    });
+}
+
+CNA_Result cna_network_session_add_remote_gamer_ext(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkGamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionAddRemoteGamerExt(session, gamer);
+    });
+}
+
+CNA_Result cna_network_session_remove_gamer_ext(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_NetworkSessionEndReason reason)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionRemoveGamerExt(session, gamer, reason);
+    });
+}
+
+CNA_Result cna_network_session_unsubscribe(
+    const CNA_NetworkSessionEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionUnsubscribe(registration);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data(
+    const CNA_NetworkGamerHandle gamer,
+    const uint8_t* const data,
+    const uint64_t count,
+    const CNA_SendDataOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerSendData(gamer, data, count, options);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_range(
+    const CNA_NetworkGamerHandle gamer,
+    const uint8_t* const data,
+    const uint64_t count,
+    const int32_t offset,
+    const int32_t length,
+    const CNA_SendDataOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerSendDataRange(gamer, data, count, offset, length, options);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_to(
+    const CNA_NetworkGamerHandle gamer,
+    const uint8_t* const data,
+    const uint64_t count,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipient)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerSendDataTo(gamer, data, count, options, recipient);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_range_to(
+    const CNA_NetworkGamerHandle gamer,
+    const uint8_t* const data,
+    const uint64_t count,
+    const int32_t offset,
+    const int32_t length,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipient)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerSendDataRangeTo(gamer, data, count, offset, length, options, recipient);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_packet_writer_to(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_PacketWriterHandle writer,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipient)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerSendPacketWriterTo(gamer, writer, options, recipient);
+    });
+}
+
+CNA_Result cna_local_network_gamer_enqueue_packet_ext(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_NetworkEventInfo* const event_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LocalNetworkGamerEnqueuePacketExt(gamer, event_info);
+    });
+}

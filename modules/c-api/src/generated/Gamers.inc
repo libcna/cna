@@ -696,3 +696,405 @@ CNA_Result cna_signed_in_gamer_begin_award_achievement(
         return CompleteAtOnce(cna_signed_in_gamer_award_achievement(gamer, achievement_key), callback, context);
     });
 }
+
+CNA_Result cna_gamer_presence_init(
+    CNA_GamerPresence* const out_presence)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_presence == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_presence_init: out_presence is null.");
+        }
+        return GamerPresenceInit(out_presence);
+    });
+}
+
+CNA_Result cna_gamer_get_tag(
+    const CNA_GamerHandle gamer,
+    uint64_t* const out_tag)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tag == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_tag: out_tag is null.");
+        }
+        return GamerGetTag(gamer, out_tag);
+    });
+}
+
+CNA_Result cna_gamer_get_from_gamertag(
+    const CNA_StringView gamertag,
+    CNA_GamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_from_gamertag: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return GamerGetFromGamertag(gamertag, out_gamer);
+    });
+}
+
+CNA_Result cna_gamer_get_signed_in_gamer_at(
+    const int32_t index,
+    CNA_SignedInGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_signed_in_gamer_at: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return GamerGetSignedInGamerAt(index, out_gamer);
+    });
+}
+
+CNA_Result cna_gamer_signed_in_index_of(
+    const CNA_SignedInGamerHandle gamer,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_signed_in_index_of: out_index is null.");
+        }
+        return GamerSignedInIndexOf(gamer, out_index);
+    });
+}
+
+CNA_Result cna_gamer_signed_in_contains(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_signed_in_contains: out_contains is null.");
+        }
+        return GamerSignedInContains(gamer, out_contains);
+    });
+}
+
+CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
+    const CNA_PlayerIndex player_index,
+    CNA_Bool* const out_has_gamer,
+    CNA_SignedInGamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_signed_in_gamer_at_player_index: out_has_gamer is null.");
+        }
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_signed_in_gamer_at_player_index: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return GamerGetSignedInGamerAtPlayerIndex(player_index, out_has_gamer, out_gamer);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_is_headset(
+    const CNA_SignedInGamerHandle gamer,
+    const uint64_t microphone_index,
+    CNA_Bool* const out_is_headset)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_headset == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_is_headset: out_is_headset is null.");
+        }
+        return SignedInGamerIsHeadset(gamer, microphone_index, out_is_headset);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_get_friends(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_GamerCollectionHandle* const out_friends)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_friends == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_get_friends: out_friends is null.");
+        }
+        *out_friends = CNA_INVALID_HANDLE;
+        return SignedInGamerGetFriends(gamer, out_friends);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_subscribe_signed_in_ext(
+    const CNA_SignedInGamerEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_subscribe_signed_in_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SignedInGamerSubscribeSignedInExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_subscribe_signed_out_ext(
+    const CNA_SignedInGamerEventCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_subscribe_signed_out_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return SignedInGamerSubscribeSignedOutExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_gamer_profile_get_picture_size(
+    const CNA_GamerProfileHandle profile,
+    CNA_Bool* const out_has_picture,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_picture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_profile_get_picture_size: out_has_picture is null.");
+        }
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_profile_get_picture_size: out_bytes is null.");
+        }
+        return GamerProfileGetPictureSize(profile, out_has_picture, out_bytes);
+    });
+}
+
+CNA_Result cna_friend_gamer_create_ext(
+    const CNA_StringView gamertag,
+    const CNA_StringView display_name,
+    const CNA_Bool is_online,
+    const CNA_Bool is_playing,
+    const CNA_Bool is_away,
+    const CNA_Bool is_busy,
+    const CNA_Bool friend_request_sent_to,
+    const CNA_Bool friend_request_received_from,
+    CNA_GamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_friend_gamer_create_ext: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_online, "is_online");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_playing, "is_playing");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_away, "is_away");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_busy, "is_busy");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(friend_request_sent_to, "friend_request_sent_to");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(friend_request_received_from, "friend_request_received_from");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return FriendGamerCreateExt(gamertag, display_name, is_online, is_playing, is_away, is_busy, friend_request_sent_to, friend_request_received_from, out_gamer);
+    });
+}
+
+CNA_Result cna_friend_collection_create_ext(
+    const CNA_GamerHandle* const friends,
+    const uint64_t count,
+    CNA_GamerCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_friend_collection_create_ext: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return FriendCollectionCreateExt(friends, count, out_collection);
+    });
+}
+
+CNA_Result cna_gamer_collection_get_at(
+    const CNA_GamerCollectionHandle collection,
+    const int32_t index,
+    CNA_GamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_collection_get_at: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return GamerCollectionGetAt(collection, index, out_gamer);
+    });
+}
+
+CNA_Result cna_gamer_collection_index_of(
+    const CNA_GamerCollectionHandle collection,
+    const CNA_GamerHandle gamer,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_collection_index_of: out_index is null.");
+        }
+        return GamerCollectionIndexOf(collection, gamer, out_index);
+    });
+}
+
+CNA_Result cna_gamer_collection_contains(
+    const CNA_GamerCollectionHandle collection,
+    const CNA_GamerHandle gamer,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_collection_contains: out_contains is null.");
+        }
+        return GamerCollectionContains(collection, gamer, out_contains);
+    });
+}
+
+CNA_Result cna_gamer_collection_copy_to(
+    const CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle* const destination,
+    const uint64_t capacity,
+    const int32_t index,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_collection_copy_to: out_count is null.");
+        }
+        return GamerCollectionCopyTo(collection, destination, capacity, index, out_count);
+    });
+}
+
+CNA_Result cna_gamer_collection_create_enumerator(
+    const CNA_GamerCollectionHandle collection,
+    CNA_GamerEnumeratorHandle* const out_enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enumerator == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_collection_create_enumerator: out_enumerator is null.");
+        }
+        *out_enumerator = CNA_INVALID_HANDLE;
+        return GamerCollectionCreateEnumerator(collection, out_enumerator);
+    });
+}
+
+CNA_Result cna_gamer_enumerator_move_next(
+    const CNA_GamerEnumeratorHandle enumerator,
+    CNA_Bool* const out_has_current)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_current == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_enumerator_move_next: out_has_current is null.");
+        }
+        return GamerEnumeratorMoveNext(enumerator, out_has_current);
+    });
+}
+
+CNA_Result cna_gamer_enumerator_get_current(
+    const CNA_GamerEnumeratorHandle enumerator,
+    CNA_GamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_enumerator_get_current: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return GamerEnumeratorGetCurrent(enumerator, out_gamer);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_get_presence(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_GamerPresence* const out_presence)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_presence == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_get_presence: out_presence is null.");
+        }
+        return SignedInGamerGetPresence(gamer, out_presence);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_get_privileges(
+    const CNA_SignedInGamerHandle gamer,
+    CNA_GamerPrivileges* const out_privileges)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_privileges == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_get_privileges: out_privileges is null.");
+        }
+        return SignedInGamerGetPrivileges(gamer, out_privileges);
+    });
+}
+
+CNA_Result cna_gamer_destroy(
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerDestroy(gamer);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_set_presence(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_GamerPresence* const presence)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SignedInGamerSetPresence(gamer, presence);
+    });
+}
+
+CNA_Result cna_gamer_unsubscribe_ext(
+    const CNA_Handle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerUnsubscribeExt(registration);
+    });
+}
+
+CNA_Result cna_gamer_collection_add(
+    const CNA_GamerCollectionHandle collection,
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerCollectionAdd(collection, gamer);
+    });
+}
+
+CNA_Result cna_gamer_collection_remove(
+    const CNA_GamerCollectionHandle collection,
+    const CNA_GamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerCollectionRemove(collection, gamer);
+    });
+}
+
+CNA_Result cna_gamer_collection_clear(
+    const CNA_GamerCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerCollectionClear(collection);
+    });
+}
+
+CNA_Result cna_gamer_enumerator_reset(
+    const CNA_GamerEnumeratorHandle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerEnumeratorReset(enumerator);
+    });
+}
+
+CNA_Result cna_gamer_enumerator_destroy(
+    const CNA_GamerEnumeratorHandle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GamerEnumeratorDestroy(enumerator);
+    });
+}

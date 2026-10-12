@@ -562,3 +562,197 @@ CNA_Result cna_network_session_property_enumerator_destroy(
         return CNA::C::Detail::ReleaseHandle(enumerator);
     });
 }
+
+CNA_Result cna_net_get_last_join_error(
+    CNA_NetworkSessionJoinError* const out_join_error,
+    CNA_Bool* const out_has_join_error)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_join_error == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_net_get_last_join_error: out_join_error is null.");
+        }
+        if (out_has_join_error == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_net_get_last_join_error: out_has_join_error is null.");
+        }
+        return NetGetLastJoinError(out_join_error, out_has_join_error);
+    });
+}
+
+CNA_Result cna_network_session_properties_get_item(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const int32_t index,
+    CNA_OptionalInt32* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_get_item: out_value is null.");
+        }
+        return NetworkSessionPropertiesGetItem(properties, index, out_value);
+    });
+}
+
+CNA_Result cna_network_session_properties_index_of(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const CNA_OptionalInt32 value,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_index_of: out_index is null.");
+        }
+        return NetworkSessionPropertiesIndexOf(properties, value, out_index);
+    });
+}
+
+CNA_Result cna_network_session_properties_remove(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const CNA_OptionalInt32 value,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_remove: out_removed is null.");
+        }
+        return NetworkSessionPropertiesRemove(properties, value, out_removed);
+    });
+}
+
+CNA_Result cna_network_session_properties_contains(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const CNA_OptionalInt32 value,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_contains: out_contains is null.");
+        }
+        return NetworkSessionPropertiesContains(properties, value, out_contains);
+    });
+}
+
+CNA_Result cna_network_session_properties_copy_to(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    CNA_OptionalInt32* const destination,
+    const uint64_t capacity,
+    const int32_t index,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_copy_to: out_count is null.");
+        }
+        return NetworkSessionPropertiesCopyTo(properties, destination, capacity, index, out_count);
+    });
+}
+
+CNA_Result cna_network_session_properties_create_enumerator(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    CNA_NetworkSessionPropertyEnumeratorHandle* const out_enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enumerator == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_create_enumerator: out_enumerator is null.");
+        }
+        *out_enumerator = CNA_INVALID_HANDLE;
+        return NetworkSessionPropertiesCreateEnumerator(properties, out_enumerator);
+    });
+}
+
+CNA_Result cna_network_session_property_enumerator_move_next(
+    const CNA_NetworkSessionPropertyEnumeratorHandle enumerator,
+    CNA_Bool* const out_has_current)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_current == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_property_enumerator_move_next: out_has_current is null.");
+        }
+        return NetworkSessionPropertyEnumeratorMoveNext(enumerator, out_has_current);
+    });
+}
+
+CNA_Result cna_network_session_property_enumerator_get_current(
+    const CNA_NetworkSessionPropertyEnumeratorHandle enumerator,
+    CNA_OptionalInt32* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_property_enumerator_get_current: out_value is null.");
+        }
+        return NetworkSessionPropertyEnumeratorGetCurrent(enumerator, out_value);
+    });
+}
+
+CNA_Result cna_packet_writer_copy_data_ext(
+    const CNA_PacketWriterHandle writer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_writer_copy_data_ext: out_bytes is null.");
+        }
+        return PacketWriterCopyDataExt(writer, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_packet_reader_copy_data_ext(
+    const CNA_PacketReaderHandle reader,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_copy_data_ext: out_bytes is null.");
+        }
+        return PacketReaderCopyDataExt(reader, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_network_session_properties_set_item(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const int32_t index,
+    const CNA_OptionalInt32 value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionPropertiesSetItem(properties, index, value);
+    });
+}
+
+CNA_Result cna_network_session_properties_insert(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const int32_t index,
+    const CNA_OptionalInt32 value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionPropertiesInsert(properties, index, value);
+    });
+}
+
+CNA_Result cna_network_session_properties_add(
+    const CNA_NetworkSessionPropertiesHandle properties,
+    const CNA_OptionalInt32 value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionPropertiesAdd(properties, value);
+    });
+}
+
+CNA_Result cna_network_session_property_enumerator_reset(
+    const CNA_NetworkSessionPropertyEnumeratorHandle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NetworkSessionPropertyEnumeratorReset(enumerator);
+    });
+}
+
+CNA_Result cna_packet_reader_set_data_ext(
+    const CNA_PacketReaderHandle reader,
+    const uint8_t* const data,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PacketReaderSetDataExt(reader, data, count);
+    });
+}

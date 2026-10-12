@@ -113,3 +113,42 @@ cna_gamer_begin_get_profile = { result = "CompleteAtOnce(cna_gamer_get_profile(g
 cna_gamer_begin_get_from_gamertag = { result = "CompleteAtOnce(cna_gamer_get_from_gamertag(gamertag, out_gamer), callback, context)" }
 cna_gamer_begin_get_partner_token = { result = "CompleteAtOnce(cna_gamer_copy_partner_token(audience_uri, destination, capacity, out_bytes), callback, context)" }
 cna_signed_in_gamer_begin_award_achievement = { result = "CompleteAtOnce(cna_signed_in_gamer_award_achievement(gamer, achievement_key), callback, context)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_gamer_presence_init = { result = "GamerPresenceInit(out_presence)" }
+cna_gamer_get_tag = { result = "GamerGetTag(gamer, out_tag)" }
+cna_gamer_get_from_gamertag = { result = "GamerGetFromGamertag(gamertag, out_gamer)" }
+cna_gamer_get_signed_in_gamer_at = { result = "GamerGetSignedInGamerAt(index, out_gamer)" }
+cna_gamer_signed_in_index_of = { result = "GamerSignedInIndexOf(gamer, out_index)" }
+cna_gamer_signed_in_contains = { result = "GamerSignedInContains(gamer, out_contains)" }
+cna_gamer_get_signed_in_gamer_at_player_index = { result = "GamerGetSignedInGamerAtPlayerIndex(player_index, out_has_gamer, out_gamer)" }
+cna_signed_in_gamer_is_headset = { result = "SignedInGamerIsHeadset(gamer, microphone_index, out_is_headset)" }
+cna_signed_in_gamer_get_friends = { result = "SignedInGamerGetFriends(gamer, out_friends)" }
+cna_signed_in_gamer_subscribe_signed_in_ext = { result = "SignedInGamerSubscribeSignedInExt(callback, context, out_registration)" }
+cna_signed_in_gamer_subscribe_signed_out_ext = { result = "SignedInGamerSubscribeSignedOutExt(callback, context, out_registration)" }
+cna_gamer_profile_get_picture_size = { result = "GamerProfileGetPictureSize(profile, out_has_picture, out_bytes)" }
+cna_friend_gamer_create_ext = { result = "FriendGamerCreateExt(gamertag, display_name, is_online, is_playing, is_away, is_busy, friend_request_sent_to, friend_request_received_from, out_gamer)" }
+cna_friend_collection_create_ext = { result = "FriendCollectionCreateExt(friends, count, out_collection)" }
+cna_gamer_collection_get_at = { result = "GamerCollectionGetAt(collection, index, out_gamer)" }
+cna_gamer_collection_index_of = { result = "GamerCollectionIndexOf(collection, gamer, out_index)" }
+cna_gamer_collection_contains = { result = "GamerCollectionContains(collection, gamer, out_contains)" }
+cna_gamer_collection_copy_to = { result = "GamerCollectionCopyTo(collection, destination, capacity, index, out_count)" }
+cna_gamer_collection_create_enumerator = { result = "GamerCollectionCreateEnumerator(collection, out_enumerator)" }
+cna_gamer_enumerator_move_next = { result = "GamerEnumeratorMoveNext(enumerator, out_has_current)" }
+cna_gamer_enumerator_get_current = { result = "GamerEnumeratorGetCurrent(enumerator, out_gamer)" }
+cna_signed_in_gamer_get_presence = { result = "SignedInGamerGetPresence(gamer, out_presence)" }
+cna_signed_in_gamer_get_privileges = { result = "SignedInGamerGetPrivileges(gamer, out_privileges)" }
+cna_gamer_destroy = { result = "GamerDestroy(gamer)" }
+cna_signed_in_gamer_set_presence = { result = "SignedInGamerSetPresence(gamer, presence)" }
+cna_gamer_unsubscribe_ext = { result = "GamerUnsubscribeExt(registration)" }
+cna_gamer_collection_add = { result = "GamerCollectionAdd(collection, gamer)" }
+cna_gamer_collection_remove = { result = "GamerCollectionRemove(collection, gamer)" }
+cna_gamer_collection_clear = { result = "GamerCollectionClear(collection)" }
+cna_gamer_enumerator_reset = { result = "GamerEnumeratorReset(enumerator)" }
+cna_gamer_enumerator_destroy = { result = "GamerEnumeratorDestroy(enumerator)" }

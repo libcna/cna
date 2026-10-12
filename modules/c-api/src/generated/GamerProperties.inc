@@ -591,3 +591,62 @@ CNA_Result cna_signed_in_gamer_get_game_defaults(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_property_dictionary_try_get_value_kind_ext(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView key,
+    CNA_Bool* const out_found,
+    CNA_PropertyValueKind* const out_kind)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_try_get_value_kind_ext: out_found is null.");
+        }
+        if (out_kind == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_try_get_value_kind_ext: out_kind is null.");
+        }
+        return PropertyDictionaryTryGetValueKindExt(dictionary, key, out_found, out_kind);
+    });
+}
+
+CNA_Result cna_property_dictionary_get_stream_size_ext(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView key,
+    CNA_Bool* const out_has_stream,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_stream == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_stream_size_ext: out_has_stream is null.");
+        }
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_stream_size_ext: out_bytes is null.");
+        }
+        return PropertyDictionaryGetStreamSizeExt(dictionary, key, out_has_stream, out_bytes);
+    });
+}
+
+CNA_Result cna_property_dictionary_get_key_size_at(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const int32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_key_size_at: out_bytes is null.");
+        }
+        return PropertyDictionaryGetKeySizeAt(dictionary, index, out_bytes);
+    });
+}
+
+CNA_Result cna_property_dictionary_copy_key_at(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const int32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PropertyDictionaryCopyKeyAt(dictionary, index, destination, capacity, out_bytes);
+    });
+}

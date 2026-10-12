@@ -9,3 +9,15 @@ object = "std::shared_ptr<SignedInGamerResource>"
 cna_signed_in_gamer_get_gamertag_size = { size = "object->value->getGamertagProperty()" }
 cna_signed_in_gamer_destroy = { release = true, require = 'InvalidStateIf(object->published, "The process-wide signed-in collection still references this gamer.")' }
 cna_signed_in_gamer_copy_gamertag = { copy = "object->value->getGamertagProperty()" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_signed_in_gamer_create_ext = { result = "SignedInGamerCreateExt(gamertag, is_signed_in_to_live, is_guest, player_index, out_gamer)" }
+cna_gamer_get_signed_in_gamer_count = { result = "GamerGetSignedInGamerCount(out_count)" }
+cna_invite_accepted_event_info_init = { result = "InviteAcceptedEventInfoInit(gamer, is_current_session, out_info)" }
+cna_gamer_set_signed_in_gamers_ext = { result = "GamerSetSignedInGamersExt(gamers, count)" }

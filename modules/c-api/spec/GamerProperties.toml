@@ -47,3 +47,15 @@ object = "SignedInGamer*"
 
 [signed_in.routes]
 cna_signed_in_gamer_get_game_defaults = { get = "ToC(object->getGameDefaultsProperty())", versioned = true }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_property_dictionary_try_get_value_kind_ext = { result = "PropertyDictionaryTryGetValueKindExt(dictionary, key, out_found, out_kind)" }
+cna_property_dictionary_get_stream_size_ext = { result = "PropertyDictionaryGetStreamSizeExt(dictionary, key, out_has_stream, out_bytes)" }
+cna_property_dictionary_get_key_size_at = { result = "PropertyDictionaryGetKeySizeAt(dictionary, index, out_bytes)" }
+cna_property_dictionary_copy_key_at = { result = "PropertyDictionaryCopyKeyAt(dictionary, index, destination, capacity, out_bytes)", optional = ["out_bytes"] }

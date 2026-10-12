@@ -279,3 +279,159 @@ CNA_Result cna_avatar_renderer_draw_animation(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_avatar_description_create(
+    const uint8_t* const description,
+    const uint64_t byte_count,
+    CNA_AvatarDescriptionHandle* const out_description)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_description == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_create: out_description is null.");
+        }
+        *out_description = CNA_INVALID_HANDLE;
+        return AvatarDescriptionCreate(description, byte_count, out_description);
+    });
+}
+
+CNA_Result cna_avatar_description_get_from_gamer(
+    const CNA_GamerHandle gamer,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_AvatarDescriptionHandle* const out_description)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_description == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_get_from_gamer: out_description is null.");
+        }
+        *out_description = CNA_INVALID_HANDLE;
+        return AvatarDescriptionGetFromGamer(gamer, callback, context, out_description);
+    });
+}
+
+CNA_Result cna_avatar_description_subscribe_changed_ext(
+    const CNA_AvatarDescriptionHandle description,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_description_subscribe_changed_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return AvatarDescriptionSubscribeChangedExt(description, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_avatar_animation_get_bone_transform_at(
+    const CNA_AvatarAnimationHandle animation,
+    const int32_t index,
+    CNA_Matrix* const out_transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_transform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_animation_get_bone_transform_at: out_transform is null.");
+        }
+        return AvatarAnimationGetBoneTransformAt(animation, index, out_transform);
+    });
+}
+
+CNA_Result cna_avatar_renderer_create(
+    const CNA_AvatarDescriptionHandle description,
+    const CNA_Bool use_loading_effect,
+    CNA_AvatarRendererHandle* const out_renderer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_renderer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_renderer_create: out_renderer is null.");
+        }
+        *out_renderer = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(use_loading_effect, "use_loading_effect");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return AvatarRendererCreate(description, use_loading_effect, out_renderer);
+    });
+}
+
+CNA_Result cna_avatar_renderer_get_parent_bone_at(
+    const CNA_AvatarRendererHandle renderer,
+    const int32_t index,
+    int32_t* const out_parent_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parent_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_renderer_get_parent_bone_at: out_parent_index is null.");
+        }
+        return AvatarRendererGetParentBoneAt(renderer, index, out_parent_index);
+    });
+}
+
+CNA_Result cna_avatar_renderer_get_bind_pose_at(
+    const CNA_AvatarRendererHandle renderer,
+    const int32_t index,
+    CNA_Matrix* const out_transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_transform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_renderer_get_bind_pose_at: out_transform is null.");
+        }
+        return AvatarRendererGetBindPoseAt(renderer, index, out_transform);
+    });
+}
+
+CNA_Result cna_avatar_renderer_get_transforms(
+    const CNA_AvatarRendererHandle renderer,
+    CNA_Matrix* const out_world,
+    CNA_Matrix* const out_view,
+    CNA_Matrix* const out_projection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AvatarRendererGetTransforms(renderer, out_world, out_view, out_projection);
+    });
+}
+
+CNA_Result cna_avatar_renderer_get_lighting(
+    const CNA_AvatarRendererHandle renderer,
+    CNA_Vector3* const out_light_color,
+    CNA_Vector3* const out_light_direction,
+    CNA_Vector3* const out_ambient_light_color)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AvatarRendererGetLighting(renderer, out_light_color, out_light_direction, out_ambient_light_color);
+    });
+}
+
+CNA_Result cna_avatar_renderer_set_transforms(
+    const CNA_AvatarRendererHandle renderer,
+    const CNA_Matrix* const world,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AvatarRendererSetTransforms(renderer, world, view, projection);
+    });
+}
+
+CNA_Result cna_avatar_renderer_set_lighting(
+    const CNA_AvatarRendererHandle renderer,
+    const CNA_Vector3* const light_color,
+    const CNA_Vector3* const light_direction,
+    const CNA_Vector3* const ambient_light_color)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AvatarRendererSetLighting(renderer, light_color, light_direction, ambient_light_color);
+    });
+}
+
+CNA_Result cna_avatar_renderer_draw_bones(
+    const CNA_AvatarRendererHandle renderer,
+    const CNA_Matrix* const bones,
+    const uint64_t bone_count,
+    const CNA_AvatarExpression* const expression)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AvatarRendererDrawBones(renderer, bones, bone_count, expression);
+    });
+}

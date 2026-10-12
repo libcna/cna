@@ -538,3 +538,145 @@ CNA_Result cna_guide_show_achievements_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_guide_begin_show_keyboard_input(
+    const CNA_PlayerIndex player,
+    const CNA_StringView title,
+    const CNA_StringView description,
+    const CNA_StringView default_text,
+    const CNA_Bool use_password_mode,
+    const CNA_GamerAsyncCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(use_password_mode, "use_password_mode");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GuideBeginShowKeyboardInput(player, title, description, default_text, use_password_mode, callback, context);
+    });
+}
+
+CNA_Result cna_guide_was_keyboard_input_canceled_ext(
+    CNA_Bool* const out_was_canceled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_was_canceled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_was_keyboard_input_canceled_ext: out_was_canceled is null.");
+        }
+        return GuideWasKeyboardInputCanceledExt(out_was_canceled);
+    });
+}
+
+CNA_Result cna_guide_end_show_message_box(
+    CNA_Bool* const out_has_choice,
+    int32_t* const out_button_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_choice == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_end_show_message_box: out_has_choice is null.");
+        }
+        if (out_button_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_end_show_message_box: out_button_index is null.");
+        }
+        return GuideEndShowMessageBox(out_has_choice, out_button_index);
+    });
+}
+
+CNA_Result cna_guide_get_pending_message_box_focus_button_ext(
+    int32_t* const out_focus_button)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_focus_button == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_get_pending_message_box_focus_button_ext: out_focus_button is null.");
+        }
+        return GuideGetPendingMessageBoxFocusButtonExt(out_focus_button);
+    });
+}
+
+CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_services_dispatcher_subscribe_installing_title_update_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GamerServicesDispatcherSubscribeInstallingTitleUpdateExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_guide_render_pending_keyboard_input_ext(
+    const CNA_Handle device,
+    const CNA_Handle sprite_batch,
+    const CNA_Handle font,
+    const CNA_Handle white_pixel)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideRenderPendingKeyboardInputExt(device, sprite_batch, font, white_pixel);
+    });
+}
+
+CNA_Result cna_guide_reset_pending_keyboard_input_ext(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideResetPendingKeyboardInputExt();
+    });
+}
+
+CNA_Result cna_guide_begin_show_message_box(
+    const CNA_PlayerIndex player,
+    const CNA_StringView title,
+    const CNA_StringView text,
+    const CNA_StringView* const buttons,
+    const uint64_t button_count,
+    const int32_t focus_button,
+    const CNA_MessageBoxIcon icon,
+    const CNA_GamerAsyncCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideBeginShowMessageBox(player, title, text, buttons, button_count, focus_button, icon, callback, context);
+    });
+}
+
+CNA_Result cna_guide_render_pending_message_box_ext(
+    const CNA_Handle device,
+    const CNA_Handle sprite_batch,
+    const CNA_Handle font,
+    const CNA_Handle white_pixel)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideRenderPendingMessageBoxExt(device, sprite_batch, font, white_pixel);
+    });
+}
+
+CNA_Result cna_guide_reset_pending_message_box_ext(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideResetPendingMessageBoxExt();
+    });
+}
+
+CNA_Result cna_guide_show_compose_message(
+    const CNA_PlayerIndex player,
+    const CNA_StringView text,
+    const CNA_GamerHandle* const recipients,
+    const uint64_t recipient_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideShowComposeMessage(player, text, recipients, recipient_count);
+    });
+}
+
+CNA_Result cna_guide_show_game_invite(
+    const CNA_PlayerIndex player,
+    const CNA_GamerHandle* const recipients,
+    const uint64_t recipient_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GuideShowGameInvite(player, recipients, recipient_count);
+    });
+}

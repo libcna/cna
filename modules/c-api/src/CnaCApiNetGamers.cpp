@@ -199,291 +199,238 @@ CNA_Result CreateOwnedLocalNetworkGamer(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_network_gamer_create(
+namespace {
+
+[[nodiscard]] CNA_Result NetworkGamerCreate(
     const CNA_Handle session,
     const CNA_StringView gamertag,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        Microsoft::Xna::Framework::Net::NetworkSession* nativeSession = nullptr;
-        if (session != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
-                    session,
-                    &nativeSession);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-
-        std::string gamertagCopy;
-        if (const CNA_Result result = ReadText(
-                gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
+    Microsoft::Xna::Framework::Net::NetworkSession* nativeSession = nullptr;
+    if (session != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
+                session,
+                &nativeSession);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+    }
 
-        const auto resource = std::make_shared<NetworkGamerResource>();
-        resource->owned = gamertagCopy.empty()
-            ? std::make_shared<NetworkGamer>(NetworkGamer::CreateInternal(nativeSession))
-            : std::make_shared<NetworkGamer>(
-                  NetworkGamer::CreateInternal(nativeSession, gamertagCopy));
-        resource->value = resource->owned.get();
-        resource->session = session;
-        return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
-    });
+    std::string gamertagCopy;
+    if (const CNA_Result result = ReadText(
+            gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    const auto resource = std::make_shared<NetworkGamerResource>();
+    resource->owned = gamertagCopy.empty()
+        ? std::make_shared<NetworkGamer>(NetworkGamer::CreateInternal(nativeSession))
+        : std::make_shared<NetworkGamer>(
+              NetworkGamer::CreateInternal(nativeSession, gamertagCopy));
+    resource->value = resource->owned.get();
+    resource->session = session;
+    return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
 }
 
-CNA_Result cna_network_gamer_get_session(
+[[nodiscard]] CNA_Result NetworkGamerGetSession(
     const CNA_NetworkGamerHandle gamerHandle,
     CNA_Handle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The session output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkGamerResource> gamer;
-        if (const CNA_Result result = GetGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical property reports the raw session pointer, so the C route answers with the
-        // handle that supplied it and stays consistent when no session was supplied at all.
-        if ((gamer->value->getSessionProperty() == nullptr) !=
-            (gamer->session == CNA_INVALID_HANDLE)) {
-            return InternalError("The canonical gamer reported a different session.");
-        }
-        *outSession = gamer->session;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkGamerResource> gamer;
+    if (const CNA_Result result = GetGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical property reports the raw session pointer, so the C route answers with the
+    // handle that supplied it and stays consistent when no session was supplied at all.
+    if ((gamer->value->getSessionProperty() == nullptr) !=
+        (gamer->session == CNA_INVALID_HANDLE)) {
+        return InternalError("The canonical gamer reported a different session.");
+    }
+    *outSession = gamer->session;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_machine_get_gamer(
+[[nodiscard]] CNA_Result NetworkMachineGetGamer(
     const CNA_NetworkMachineHandle machineHandle,
     const int32_t index,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkMachineResource> machine;
-        if (const CNA_Result result = GetMachine(machineHandle, &machine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& gamers = machine->value->getGamersProperty();
-        if (index < 0 || index >= static_cast<int32_t>(gamers.getCountProperty())) {
-            return OutOfRange("The gamer index is outside the machine's collection.");
-        }
+    std::shared_ptr<NetworkMachineResource> machine;
+    if (const CNA_Result result = GetMachine(machineHandle, &machine);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& gamers = machine->value->getGamersProperty();
+    if (index < 0 || index >= static_cast<int32_t>(gamers.getCountProperty())) {
+        return OutOfRange("The gamer index is outside the machine's collection.");
+    }
 
-        const auto resource = std::make_shared<NetworkGamerResource>();
-        resource->value = gamers[static_cast<int>(index)];
-        if (resource->value == nullptr) {
-            return InternalError("The canonical machine reported a null gamer.");
-        }
-        if (const CNA_Result result = CreateHandle(ObjectKind::NetworkGamer,
-            resource,
-            outGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->viewOwner = machine;
-        resource->viewCounter = &machine->activeGamerViews;
-        machine->activeGamerViews += 1U;
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto resource = std::make_shared<NetworkGamerResource>();
+    resource->value = gamers[static_cast<int>(index)];
+    if (resource->value == nullptr) {
+        return InternalError("The canonical machine reported a null gamer.");
+    }
+    if (const CNA_Result result = CreateHandle(ObjectKind::NetworkGamer,
+        resource,
+        outGamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->viewOwner = machine;
+    resource->viewCounter = &machine->activeGamerViews;
+    machine->activeGamerViews += 1U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_ended_event_info_init(CNA_GameEndedEventInfo* const outInfo)
+[[nodiscard]] CNA_Result GameEndedEventInfoInit(CNA_GameEndedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_GameEndedEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GameEndedEventArgs arguments;
-        (void)arguments;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_GameEndedEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GameEndedEventArgs arguments;
+    (void)arguments;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_started_event_info_init(CNA_GameStartedEventInfo* const outInfo)
+[[nodiscard]] CNA_Result GameStartedEventInfoInit(CNA_GameStartedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_GameStartedEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GameStartedEventArgs arguments;
-        (void)arguments;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_GameStartedEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GameStartedEventArgs arguments;
+    (void)arguments;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_gamer_joined_event_info_init(
+[[nodiscard]] CNA_Result GamerJoinedEventInfoInit(
     const CNA_NetworkGamerHandle gamer,
     CNA_GamerJoinedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_GamerJoinedEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventGamer(gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GamerJoinedEventArgs arguments(nullptr);
-        (void)arguments.getGamerProperty();
-        outInfo->gamer = gamer;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_GamerJoinedEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEventGamer(gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GamerJoinedEventArgs arguments(nullptr);
+    (void)arguments.getGamerProperty();
+    outInfo->gamer = gamer;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_gamer_left_event_info_init(
+[[nodiscard]] CNA_Result GamerLeftEventInfoInit(
     const CNA_NetworkGamerHandle gamer,
     CNA_GamerLeftEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_GamerLeftEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventGamer(gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GamerLeftEventArgs arguments(nullptr);
-        (void)arguments.getGamerProperty();
-        outInfo->gamer = gamer;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_GamerLeftEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEventGamer(gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GamerLeftEventArgs arguments(nullptr);
+    (void)arguments.getGamerProperty();
+    outInfo->gamer = gamer;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_host_changed_event_info_init(
+[[nodiscard]] CNA_Result HostChangedEventInfoInit(
     const CNA_NetworkGamerHandle oldHost,
     const CNA_NetworkGamerHandle newHost,
     CNA_HostChangedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_HostChangedEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventGamer(oldHost);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventGamer(newHost);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const HostChangedEventArgs arguments(nullptr, nullptr);
-        (void)arguments.getOldHostProperty();
-        (void)arguments.getNewHostProperty();
-        outInfo->old_host = oldHost;
-        outInfo->new_host = newHost;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_HostChangedEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEventGamer(oldHost);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEventGamer(newHost);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const HostChangedEventArgs arguments(nullptr, nullptr);
+    (void)arguments.getOldHostProperty();
+    (void)arguments.getNewHostProperty();
+    outInfo->old_host = oldHost;
+    outInfo->new_host = newHost;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_ended_event_info_init(
+[[nodiscard]] CNA_Result NetworkSessionEndedEventInfoInit(
     const CNA_NetworkSessionEndReason endReason,
     CNA_NetworkSessionEndedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_NetworkSessionEndedEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (endReason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
-            return InvalidArgument(
-                "The requested reason is not a canonical NetworkSessionEndReason identity.");
-        }
-        const NetworkSessionEndedEventArgs arguments(
-            static_cast<NetworkSessionEndReason>(endReason));
-        outInfo->end_reason =
-            static_cast<CNA_NetworkSessionEndReason>(arguments.getEndReasonProperty());
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_NetworkSessionEndedEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (endReason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
+        return InvalidArgument(
+            "The requested reason is not a canonical NetworkSessionEndReason identity.");
+    }
+    const NetworkSessionEndedEventArgs arguments(
+        static_cast<NetworkSessionEndReason>(endReason));
+    outInfo->end_reason =
+        static_cast<CNA_NetworkSessionEndReason>(arguments.getEndReasonProperty());
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_write_leaderboards_event_info_init(
+[[nodiscard]] CNA_Result WriteLeaderboardsEventInfoInit(
     const CNA_NetworkGamerHandle gamer,
     const CNA_Bool isLeaving,
     CNA_WriteLeaderboardsEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The event description output is null.");
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(isLeaving, "is_leaving");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventPrefix(
-                outInfo->struct_size,
-                outInfo->struct_version,
-                sizeof(CNA_WriteLeaderboardsEventInfo));
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateEventGamer(gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const WriteLeaderboardsEventArgs arguments =
-            WriteLeaderboardsEventArgs::CreateInternal(nullptr, isLeaving != CNA_FALSE);
-        (void)arguments.getGamerProperty();
-        outInfo->gamer = gamer;
-        outInfo->is_leaving = ToCBool(arguments.getIsLeavingProperty());
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateEventPrefix(
+            outInfo->struct_size,
+            outInfo->struct_version,
+            sizeof(CNA_WriteLeaderboardsEventInfo));
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEventGamer(gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const WriteLeaderboardsEventArgs arguments =
+        WriteLeaderboardsEventArgs::CreateInternal(nullptr, isLeaving != CNA_FALSE);
+    (void)arguments.getGamerProperty();
+    outInfo->gamer = gamer;
+    outInfo->is_leaving = ToCBool(arguments.getIsLeavingProperty());
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/NetGamers.toml.
 #include "generated/NetGamers.inc"

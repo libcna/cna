@@ -160,43 +160,35 @@ template<typename TBegin>
     return CreateHandle(ObjectKind::LeaderboardEntry, resource, outEntry);
 }
 
-} // namespace
-
-CNA_Result cna_leaderboard_reader_read_from_pivot(
+[[nodiscard]] CNA_Result LeaderboardReaderReadFromPivot(
     const CNA_LeaderboardIdentity* const identity,
     const CNA_GamerHandle pivotGamerHandle,
     const int32_t pageSize,
     CNA_LeaderboardReaderHandle* const outReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The LeaderboardReader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        LeaderboardIdentity nativeIdentity;
-        if (const CNA_Result result = ToNativeIdentity(identity, &nativeIdentity);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* pivot = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(pivotGamerHandle, &pivot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReadThroughOperation(
-            [&]() {
-                return LeaderboardReader::BeginRead(
-                    nativeIdentity,
-                    pivot,
-                    static_cast<int>(pageSize),
-                    System::AsyncCallback{},
-                    std::any{});
-            },
-            outReader);
-    });
+    LeaderboardIdentity nativeIdentity;
+    if (const CNA_Result result = ToNativeIdentity(identity, &nativeIdentity);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Gamer* pivot = nullptr;
+    if (const CNA_Result result = BorrowOptionalGamer(pivotGamerHandle, &pivot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReadThroughOperation(
+        [&]() {
+            return LeaderboardReader::BeginRead(
+                nativeIdentity,
+                pivot,
+                static_cast<int>(pageSize),
+                System::AsyncCallback{},
+                std::any{});
+        },
+        outReader);
 }
 
-CNA_Result cna_leaderboard_reader_read_from_gamers(
+[[nodiscard]] CNA_Result LeaderboardReaderReadFromGamers(
     const CNA_LeaderboardIdentity* const identity,
     const CNA_GamerHandle* const gamers,
     const uint64_t gamerCount,
@@ -204,146 +196,123 @@ CNA_Result cna_leaderboard_reader_read_from_gamers(
     const int32_t pageSize,
     CNA_LeaderboardReaderHandle* const outReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The LeaderboardReader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        if (gamers == nullptr && gamerCount != UINT64_C(0)) {
-            return InvalidArgument("The gamer array is null.");
-        }
-        LeaderboardIdentity nativeIdentity;
-        if (const CNA_Result result = ToNativeIdentity(identity, &nativeIdentity);
+    if (gamers == nullptr && gamerCount != UINT64_C(0)) {
+        return InvalidArgument("The gamer array is null.");
+    }
+    LeaderboardIdentity nativeIdentity;
+    if (const CNA_Result result = ToNativeIdentity(identity, &nativeIdentity);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Gamer*> nativeGamers;
+    nativeGamers.reserve(static_cast<std::size_t>(gamerCount));
+    for (uint64_t index = UINT64_C(0); index < gamerCount; ++index) {
+        Gamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowAnyGamer(gamers[index], &gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::vector<Gamer*> nativeGamers;
-        nativeGamers.reserve(static_cast<std::size_t>(gamerCount));
-        for (uint64_t index = UINT64_C(0); index < gamerCount; ++index) {
-            Gamer* gamer = nullptr;
-            if (const CNA_Result result = BorrowAnyGamer(gamers[index], &gamer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            nativeGamers.push_back(gamer);
-        }
-        Gamer* pivot = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(pivotGamerHandle, &pivot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReadThroughOperation(
-            [&]() {
-                return LeaderboardReader::BeginRead(
-                    nativeIdentity,
-                    nativeGamers,
-                    pivot,
-                    static_cast<int>(pageSize),
-                    System::AsyncCallback{},
-                    std::any{});
-            },
-            outReader);
-    });
+        nativeGamers.push_back(gamer);
+    }
+    Gamer* pivot = nullptr;
+    if (const CNA_Result result = BorrowOptionalGamer(pivotGamerHandle, &pivot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReadThroughOperation(
+        [&]() {
+            return LeaderboardReader::BeginRead(
+                nativeIdentity,
+                nativeGamers,
+                pivot,
+                static_cast<int>(pageSize),
+                System::AsyncCallback{},
+                std::any{});
+        },
+        outReader);
 }
 
-CNA_Result cna_leaderboard_reader_get_entry_at(
+[[nodiscard]] CNA_Result LeaderboardReaderGetEntryAt(
     const CNA_LeaderboardReaderHandle readerHandle,
     const int32_t index,
     CNA_LeaderboardEntryHandle* const outEntry)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEntry == nullptr) {
-            return InvalidArgument("The LeaderboardEntry output handle is null.");
-        }
-        *outEntry = CNA_INVALID_HANDLE;
-        std::shared_ptr<LeaderboardReaderResource> reader;
-        if (const CNA_Result result = BorrowReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical entry list is answered by value, so what a reader hands out is a snapshot
-        // whatever this ABI does with it.
-        const auto entries = reader->value->getEntriesProperty();
-        if (index < 0 || index >= entries.getCountProperty()) {
-            return InvalidArgument("The entry index is outside the reader's page.");
-        }
-        return PublishOwnedEntry(entries[static_cast<int>(index)], outEntry, reader->value);
-    });
+    std::shared_ptr<LeaderboardReaderResource> reader;
+    if (const CNA_Result result = BorrowReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical entry list is answered by value, so what a reader hands out is a snapshot
+    // whatever this ABI does with it.
+    const auto entries = reader->value->getEntriesProperty();
+    if (index < 0 || index >= entries.getCountProperty()) {
+        return InvalidArgument("The entry index is outside the reader's page.");
+    }
+    return PublishOwnedEntry(entries[static_cast<int>(index)], outEntry, reader->value);
 }
 
-CNA_Result cna_leaderboard_entry_get_gamer(
+[[nodiscard]] CNA_Result LeaderboardEntryGetGamer(
     const CNA_LeaderboardEntryHandle entryHandle,
     CNA_Bool* const outHasGamer,
     CNA_GamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasGamer == nullptr || outGamer == nullptr) {
-            return InvalidArgument("The entry gamer output is invalid.");
-        }
-        *outHasGamer = CNA_FALSE;
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* const gamer = entry->Value()->getGamerProperty();
-        if (gamer == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (const CNA_Result result =
-                CNA::C::Detail::CreateBorrowedGamer(gamer, entry, outGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outHasGamer = CNA_TRUE;
+    *outHasGamer = CNA_FALSE;
+    std::shared_ptr<LeaderboardEntryResource> entry;
+    if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Gamer* const gamer = entry->Value()->getGamerProperty();
+    if (gamer == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (const CNA_Result result =
+            CNA::C::Detail::CreateBorrowedGamer(gamer, entry, outGamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outHasGamer = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_leaderboard_entry_get_columns(
+[[nodiscard]] CNA_Result LeaderboardEntryGetColumns(
     const CNA_LeaderboardEntryHandle entryHandle,
     CNA_PropertyDictionaryHandle* const outColumns)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outColumns == nullptr) {
-            return InvalidArgument("The property dictionary output handle is null.");
-        }
-        *outColumns = CNA_INVALID_HANDLE;
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The columns are the entry's own, so the dictionary handle aliases them and keeps the entry
-        // resource alive for as long as it names them; writing through it changes the entry.
-        PropertyDictionary* const columns = &entry->Value()->getColumnsProperty();
-        return CreateOwnedPropertyDictionary(
-            std::shared_ptr<PropertyDictionary>(
-                std::shared_ptr<void>(entry),
-                columns),
-            outColumns);
-    });
+    std::shared_ptr<LeaderboardEntryResource> entry;
+    if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The columns are the entry's own, so the dictionary handle aliases them and keeps the entry
+    // resource alive for as long as it names them; writing through it changes the entry.
+    PropertyDictionary* const columns = &entry->Value()->getColumnsProperty();
+    return CreateOwnedPropertyDictionary(
+        std::shared_ptr<PropertyDictionary>(
+            std::shared_ptr<void>(entry),
+            columns),
+        outColumns);
 }
 
-CNA_Result cna_leaderboard_entry_set_rating_changed_hook_ext(
+[[nodiscard]] CNA_Result LeaderboardEntrySetRatingChangedHookExt(
     const CNA_LeaderboardEntryHandle entryHandle,
     const CNA_GamerAsyncCallback callback,
     void* const context)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<LeaderboardEntryResource> entry;
-        if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback == nullptr) {
-            entry->Value()->SetOnRatingChangedHookEXT(std::function<void()>{});
-            return CNA_RESULT_SUCCESS;
-        }
-        entry->Value()->SetOnRatingChangedHookEXT([callback, context]() { callback(context); });
+    std::shared_ptr<LeaderboardEntryResource> entry;
+    if (const CNA_Result result = BorrowEntry(entryHandle, &entry);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (callback == nullptr) {
+        entry->Value()->SetOnRatingChangedHookEXT(std::function<void()>{});
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    entry->Value()->SetOnRatingChangedHookEXT([callback, context]() { callback(context); });
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Leaderboards.toml.
 #include "generated/Leaderboards.inc"

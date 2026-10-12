@@ -73,3 +73,23 @@ other = { lookup = "BorrowAnimation", object = "std::shared_ptr<AvatarAnimationR
 # The canonical parameter is the animation interface, and this ABI's animation handle is the
 # only thing that implements it -- a C caller cannot supply an implementation of its own.
 cna_avatar_renderer_draw_animation = { call = "object->value->Draw(other->value.get())" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_avatar_description_create = { result = "AvatarDescriptionCreate(description, byte_count, out_description)" }
+cna_avatar_description_get_from_gamer = { result = "AvatarDescriptionGetFromGamer(gamer, callback, context, out_description)" }
+cna_avatar_description_subscribe_changed_ext = { result = "AvatarDescriptionSubscribeChangedExt(description, callback, context, out_registration)" }
+cna_avatar_animation_get_bone_transform_at = { result = "AvatarAnimationGetBoneTransformAt(animation, index, out_transform)" }
+cna_avatar_renderer_create = { result = "AvatarRendererCreate(description, use_loading_effect, out_renderer)" }
+cna_avatar_renderer_get_parent_bone_at = { result = "AvatarRendererGetParentBoneAt(renderer, index, out_parent_index)" }
+cna_avatar_renderer_get_bind_pose_at = { result = "AvatarRendererGetBindPoseAt(renderer, index, out_transform)" }
+cna_avatar_renderer_get_transforms = { result = "AvatarRendererGetTransforms(renderer, out_world, out_view, out_projection)", optional = ["out_world", "out_view", "out_projection"] }
+cna_avatar_renderer_get_lighting = { result = "AvatarRendererGetLighting(renderer, out_light_color, out_light_direction, out_ambient_light_color)", optional = ["out_light_color", "out_light_direction", "out_ambient_light_color"] }
+cna_avatar_renderer_set_transforms = { result = "AvatarRendererSetTransforms(renderer, world, view, projection)" }
+cna_avatar_renderer_set_lighting = { result = "AvatarRendererSetLighting(renderer, light_color, light_direction, ambient_light_color)" }
+cna_avatar_renderer_draw_bones = { result = "AvatarRendererDrawBones(renderer, bones, bone_count, expression)" }

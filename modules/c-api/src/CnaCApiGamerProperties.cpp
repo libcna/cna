@@ -189,115 +189,102 @@ CNA_Result CreateOwnedPropertyDictionary(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_property_dictionary_try_get_value_kind_ext(
+namespace {
+
+[[nodiscard]] CNA_Result PropertyDictionaryTryGetValueKindExt(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     CNA_Bool* const outFound,
     CNA_PropertyValueKind* const outKind)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outFound == nullptr || outKind == nullptr) {
-            return InvalidArgument("The property kind output is invalid.");
-        }
-        *outFound = CNA_FALSE;
-        *outKind = CNA_PROPERTY_VALUE_KIND_UNKNOWN;
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        std::string nativeKey;
-        if (const CNA_Result result =
-                BorrowForWrite(dictionaryHandle, key, &dictionary, &nativeKey);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::any value;
-        if (!dictionary->value->TryGetValue(nativeKey, value)) {
-            return CNA_RESULT_SUCCESS;
-        }
-        *outFound = CNA_TRUE;
-        *outKind = KindOf(value);
+    *outFound = CNA_FALSE;
+    *outKind = CNA_PROPERTY_VALUE_KIND_UNKNOWN;
+    std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
+    std::string nativeKey;
+    if (const CNA_Result result =
+            BorrowForWrite(dictionaryHandle, key, &dictionary, &nativeKey);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::any value;
+    if (!dictionary->value->TryGetValue(nativeKey, value)) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outFound = CNA_TRUE;
+    *outKind = KindOf(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_property_dictionary_get_stream_size_ext(
+[[nodiscard]] CNA_Result PropertyDictionaryGetStreamSizeExt(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     CNA_Bool* const outHasStream,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasStream == nullptr || outBytes == nullptr) {
-            return InvalidArgument("The property stream output is invalid.");
-        }
-        *outHasStream = CNA_FALSE;
-        *outBytes = UINT64_C(0);
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        std::string nativeKey;
-        if (const CNA_Result result = BorrowForRead(
-                dictionaryHandle,
-                key,
-                CNA_PROPERTY_VALUE_KIND_STREAM,
-                &dictionary,
-                &nativeKey);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::Stream* const stream = dictionary->value->GetValueStream(nativeKey);
-        if (stream == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        *outHasStream = CNA_TRUE;
-        *outBytes = static_cast<uint64_t>(stream->getLengthProperty());
+    *outHasStream = CNA_FALSE;
+    *outBytes = UINT64_C(0);
+    std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
+    std::string nativeKey;
+    if (const CNA_Result result = BorrowForRead(
+            dictionaryHandle,
+            key,
+            CNA_PROPERTY_VALUE_KIND_STREAM,
+            &dictionary,
+            &nativeKey);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::Stream* const stream = dictionary->value->GetValueStream(nativeKey);
+    if (stream == nullptr) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outHasStream = CNA_TRUE;
+    *outBytes = static_cast<uint64_t>(stream->getLengthProperty());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_property_dictionary_get_key_size_at(
+[[nodiscard]] CNA_Result PropertyDictionaryGetKeySizeAt(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const int32_t index,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The key size output is null.");
-        }
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> keys = dictionary->value->Keys();
-        if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
-            return InvalidArgument("The key index is outside the property dictionary.");
-        }
-        *outBytes = keys[static_cast<std::size_t>(index)].size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
+    if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> keys = dictionary->value->Keys();
+    if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
+        return InvalidArgument("The key index is outside the property dictionary.");
+    }
+    *outBytes = keys[static_cast<std::size_t>(index)].size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_property_dictionary_copy_key_at(
+[[nodiscard]] CNA_Result PropertyDictionaryCopyKeyAt(
     const CNA_PropertyDictionaryHandle dictionaryHandle,
     const int32_t index,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
-        if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string> keys = dictionary->value->Keys();
-        if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
-            return InvalidArgument("The key index is outside the property dictionary.");
-        }
-        return CopyText(
-            keys[static_cast<std::size_t>(index)],
-            destination,
-            capacity,
-            outBytes);
-    });
+    std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> dictionary;
+    if (const CNA_Result result = BorrowDictionary(dictionaryHandle, &dictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<std::string> keys = dictionary->value->Keys();
+    if (index < 0 || static_cast<std::size_t>(index) >= keys.size()) {
+        return InvalidArgument("The key index is outside the property dictionary.");
+    }
+    return CopyText(
+        keys[static_cast<std::size_t>(index)],
+        destination,
+        capacity,
+        outBytes);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/GamerProperties.toml.
 #include "generated/GamerProperties.inc"

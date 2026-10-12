@@ -68,3 +68,23 @@ cna_guide_show_party = { call = "Guide::ShowParty(object)" }
 cna_guide_show_party_sessions = { call = "Guide::ShowPartySessions(object)" }
 cna_guide_show_players = { call = "Guide::ShowPlayers(object)" }
 cna_guide_show_achievements_ext = { call = "Guide::ShowAchievementsEXT(object)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_guide_begin_show_keyboard_input = { result = "GuideBeginShowKeyboardInput(player, title, description, default_text, use_password_mode, callback, context)" }
+cna_guide_was_keyboard_input_canceled_ext = { result = "GuideWasKeyboardInputCanceledExt(out_was_canceled)" }
+cna_guide_end_show_message_box = { result = "GuideEndShowMessageBox(out_has_choice, out_button_index)" }
+cna_guide_get_pending_message_box_focus_button_ext = { result = "GuideGetPendingMessageBoxFocusButtonExt(out_focus_button)" }
+cna_gamer_services_dispatcher_subscribe_installing_title_update_ext = { result = "GamerServicesDispatcherSubscribeInstallingTitleUpdateExt(callback, context, out_registration)" }
+cna_guide_render_pending_keyboard_input_ext = { result = "GuideRenderPendingKeyboardInputExt(device, sprite_batch, font, white_pixel)" }
+cna_guide_reset_pending_keyboard_input_ext = { result = "GuideResetPendingKeyboardInputExt()" }
+cna_guide_begin_show_message_box = { result = "GuideBeginShowMessageBox(player, title, text, buttons, button_count, focus_button, icon, callback, context)" }
+cna_guide_render_pending_message_box_ext = { result = "GuideRenderPendingMessageBoxExt(device, sprite_batch, font, white_pixel)" }
+cna_guide_reset_pending_message_box_ext = { result = "GuideResetPendingMessageBoxExt()" }
+cna_guide_show_compose_message = { result = "GuideShowComposeMessage(player, text, recipients, recipient_count)" }
+cna_guide_show_game_invite = { result = "GuideShowGameInvite(player, recipients, recipient_count)" }

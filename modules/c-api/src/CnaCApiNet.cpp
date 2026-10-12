@@ -302,383 +302,330 @@ CNA_Result BorrowPacketWriter(const CNA_Handle handle, PacketWriter** const outW
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_net_get_last_join_error(
+namespace {
+
+[[nodiscard]] CNA_Result NetGetLastJoinError(
     CNA_NetworkSessionJoinError* const outJoinError,
     CNA_Bool* const outHasJoinError)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outJoinError == nullptr || outHasJoinError == nullptr) {
-            return InvalidArgument("The join-error output is null.");
-        }
-        // Reading the record must not itself clear it, so the diagnostic stays inspectable in the
-        // same order as the rest of the per-thread error information.
-        const CNA::C::Detail::LastError& error = GetLastError();
-        *outHasJoinError = ToCBool(error.hasJoinError);
-        *outJoinError = error.hasJoinError
-            ? static_cast<CNA_NetworkSessionJoinError>(error.joinError)
-            : CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_NOT_FOUND;
-        return CNA_RESULT_SUCCESS;
-    });
+    // Reading the record must not itself clear it, so the diagnostic stays inspectable in the
+    // same order as the rest of the per-thread error information.
+    const CNA::C::Detail::LastError& error = GetLastError();
+    *outHasJoinError = ToCBool(error.hasJoinError);
+    *outJoinError = error.hasJoinError
+        ? static_cast<CNA_NetworkSessionJoinError>(error.joinError)
+        : CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_NOT_FOUND;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_get_item(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesGetItem(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const int32_t index,
     CNA_OptionalInt32* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The property output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = CheckedListIndex(
-                index,
-                static_cast<int32_t>(properties->value->getCountProperty()),
-                false,
-                "The property index is outside the list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        StoreOptional(properties->value->getItem(static_cast<int>(index)), outValue);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = CheckedListIndex(
+            index,
+            static_cast<int32_t>(properties->value->getCountProperty()),
+            false,
+            "The property index is outside the list.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    StoreOptional(properties->value->getItem(static_cast<int>(index)), outValue);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_set_item(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesSetItem(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const int32_t index,
     const CNA_OptionalInt32 value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index < 0) {
-            return InvalidArgument("The property index must not be negative.");
-        }
-        properties->value->setItem(static_cast<int>(index), ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index < 0) {
+        return InvalidArgument("The property index must not be negative.");
+    }
+    properties->value->setItem(static_cast<int>(index), ToNative(value));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_index_of(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesIndexOf(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const CNA_OptionalInt32 value,
     int32_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The property-index output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outIndex = static_cast<int32_t>(properties->value->IndexOf(ToNative(value)));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outIndex = static_cast<int32_t>(properties->value->IndexOf(ToNative(value)));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_insert(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesInsert(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const int32_t index,
     const CNA_OptionalInt32 value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        properties->value->Insert(static_cast<int>(index), ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    properties->value->Insert(static_cast<int>(index), ToNative(value));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_add(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesAdd(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const CNA_OptionalInt32 value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        properties->value->Add(ToNative(value));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    properties->value->Add(ToNative(value));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_remove(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesRemove(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const CNA_OptionalInt32 value,
     CNA_Bool* const outRemoved)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRemoved == nullptr) {
-            return InvalidArgument("The removal output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outRemoved = ToCBool(properties->value->Remove(ToNative(value)));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outRemoved = ToCBool(properties->value->Remove(ToNative(value)));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_contains(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesContains(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     const CNA_OptionalInt32 value,
     CNA_Bool* const outContains)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The containment output is null.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(properties->value->Contains(ToNative(value)));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outContains = ToCBool(properties->value->Contains(ToNative(value)));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_copy_to(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesCopyTo(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     CNA_OptionalInt32* const destination,
     const uint64_t capacity,
     const int32_t index,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The property copy destination is invalid.");
-        }
-        if (index < 0) {
-            return InvalidArgument("The property copy index must not be negative.");
-        }
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The property copy destination is invalid.");
+    }
+    if (index < 0) {
+        return InvalidArgument("The property copy index must not be negative.");
+    }
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto count = static_cast<uint64_t>(properties->value->getCountProperty());
-        *outCount = count;
-        const uint64_t required = count + static_cast<uint64_t>(index);
-        if (capacity < required) {
-            return BufferTooSmall("The property copy destination is too small.");
-        }
+    const auto count = static_cast<uint64_t>(properties->value->getCountProperty());
+    *outCount = count;
+    const uint64_t required = count + static_cast<uint64_t>(index);
+    if (capacity < required) {
+        return BufferTooSmall("The property copy destination is too small.");
+    }
 
-        std::vector<std::optional<int>> native(static_cast<std::size_t>(required));
-        properties->value->CopyTo(native, static_cast<int>(index));
-        for (std::size_t element = 0U; element < native.size(); ++element) {
-            StoreOptional(native[element], destination + element);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::vector<std::optional<int>> native(static_cast<std::size_t>(required));
+    properties->value->CopyTo(native, static_cast<int>(index));
+    for (std::size_t element = 0U; element < native.size(); ++element) {
+        StoreOptional(native[element], destination + element);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_properties_create_enumerator(
+[[nodiscard]] CNA_Result NetworkSessionPropertiesCreateEnumerator(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle,
     CNA_NetworkSessionPropertyEnumeratorHandle* const outEnumerator)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEnumerator == nullptr) {
-            return InvalidArgument("The enumerator output handle is null.");
-        }
-        *outEnumerator = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<PropertyEnumeratorResource>();
-        resource->value.reset(properties->value->GetEnumerator());
-        if (resource->value == nullptr) {
-            return InternalError("The canonical property list returned no enumerator.");
-        }
-        if (const CNA_Result result = CreateHandle(ObjectKind::NetworkSessionPropertyEnumerator,
-            resource,
-            outEnumerator);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->owner = properties;
-        properties->activeEnumerators += 1U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<PropertyEnumeratorResource>();
+    resource->value.reset(properties->value->GetEnumerator());
+    if (resource->value == nullptr) {
+        return InternalError("The canonical property list returned no enumerator.");
+    }
+    if (const CNA_Result result = CreateHandle(ObjectKind::NetworkSessionPropertyEnumerator,
+        resource,
+        outEnumerator);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    resource->owner = properties;
+    properties->activeEnumerators += 1U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_property_enumerator_move_next(
+[[nodiscard]] CNA_Result NetworkSessionPropertyEnumeratorMoveNext(
     const CNA_NetworkSessionPropertyEnumeratorHandle enumeratorHandle,
     CNA_Bool* const outHasCurrent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasCurrent == nullptr) {
-            return InvalidArgument("The enumerator advance output is null.");
-        }
-        std::shared_ptr<PropertyEnumeratorResource> enumerator;
-        if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        enumerator->hasCurrent = enumerator->value->MoveNext();
-        *outHasCurrent = ToCBool(enumerator->hasCurrent);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PropertyEnumeratorResource> enumerator;
+    if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    enumerator->hasCurrent = enumerator->value->MoveNext();
+    *outHasCurrent = ToCBool(enumerator->hasCurrent);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_property_enumerator_get_current(
+[[nodiscard]] CNA_Result NetworkSessionPropertyEnumeratorGetCurrent(
     const CNA_NetworkSessionPropertyEnumeratorHandle enumeratorHandle,
     CNA_OptionalInt32* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The enumerator value output is null.");
-        }
-        std::shared_ptr<PropertyEnumeratorResource> enumerator;
-        if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!enumerator->hasCurrent) {
-            return InvalidState("The enumerator is not positioned on a property.");
-        }
-        StoreOptional(enumerator->value->Current(), outValue);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PropertyEnumeratorResource> enumerator;
+    if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!enumerator->hasCurrent) {
+        return InvalidState("The enumerator is not positioned on a property.");
+    }
+    StoreOptional(enumerator->value->Current(), outValue);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_property_enumerator_reset(
+[[nodiscard]] CNA_Result NetworkSessionPropertyEnumeratorReset(
     const CNA_NetworkSessionPropertyEnumeratorHandle enumeratorHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PropertyEnumeratorResource> enumerator;
-        if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        enumerator->value->Reset();
-        enumerator->hasCurrent = false;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<PropertyEnumeratorResource> enumerator;
+    if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    enumerator->value->Reset();
+    enumerator->hasCurrent = false;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packet_writer_copy_data_ext(
+[[nodiscard]] CNA_Result PacketWriterCopyDataExt(
     const CNA_PacketWriterHandle writerHandle,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The packet copy destination is invalid.");
-        }
-        std::shared_ptr<PacketWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::MemoryStream* buffer = nullptr;
-        if (const CNA_Result result = GetPacketBuffer(
-                writer->value->getBaseStreamProperty(),
-                &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->Flush();
-        const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
-        *outBytes = data.size();
-        if (capacity < data.size()) {
-            return BufferTooSmall("The packet copy destination is too small.");
-        }
-        if (!data.empty()) {
-            std::memcpy(destination, data.data(), data.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The packet copy destination is invalid.");
+    }
+    std::shared_ptr<PacketWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::MemoryStream* buffer = nullptr;
+    if (const CNA_Result result = GetPacketBuffer(
+            writer->value->getBaseStreamProperty(),
+            &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    writer->value->Flush();
+    const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
+    *outBytes = data.size();
+    if (capacity < data.size()) {
+        return BufferTooSmall("The packet copy destination is too small.");
+    }
+    if (!data.empty()) {
+        std::memcpy(destination, data.data(), data.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packet_reader_set_data_ext(
+[[nodiscard]] CNA_Result PacketReaderSetDataExt(
     const CNA_PacketReaderHandle readerHandle,
     const uint8_t* const data,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (data == nullptr && count != 0U) {
-            return InvalidArgument("The packet payload is invalid.");
-        }
-        if (count > static_cast<uint64_t>(std::numeric_limits<SharpRuntime::intcs>::max())) {
-            return Overflow("The packet payload exceeds the canonical range.");
-        }
-        std::shared_ptr<PacketReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::MemoryStream* buffer = nullptr;
-        if (const CNA_Result result = GetPacketBuffer(
-                reader->value->getBaseStreamProperty(),
-                &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        buffer->SetLength(0);
-        buffer->setPositionProperty(0);
-        if (count != 0U) {
-            buffer->Write(data, 0, static_cast<SharpRuntime::intcs>(count));
-        }
-        buffer->setPositionProperty(0);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (data == nullptr && count != 0U) {
+        return InvalidArgument("The packet payload is invalid.");
+    }
+    if (count > static_cast<uint64_t>(std::numeric_limits<SharpRuntime::intcs>::max())) {
+        return Overflow("The packet payload exceeds the canonical range.");
+    }
+    std::shared_ptr<PacketReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::MemoryStream* buffer = nullptr;
+    if (const CNA_Result result = GetPacketBuffer(
+            reader->value->getBaseStreamProperty(),
+            &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    buffer->SetLength(0);
+    buffer->setPositionProperty(0);
+    if (count != 0U) {
+        buffer->Write(data, 0, static_cast<SharpRuntime::intcs>(count));
+    }
+    buffer->setPositionProperty(0);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packet_reader_copy_data_ext(
+[[nodiscard]] CNA_Result PacketReaderCopyDataExt(
     const CNA_PacketReaderHandle readerHandle,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The packet copy destination is invalid.");
-        }
-        std::shared_ptr<PacketReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::IO::MemoryStream* buffer = nullptr;
-        if (const CNA_Result result = GetPacketBuffer(
-                reader->value->getBaseStreamProperty(),
-                &buffer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
-        *outBytes = data.size();
-        if (capacity < data.size()) {
-            return BufferTooSmall("The packet copy destination is too small.");
-        }
-        if (!data.empty()) {
-            std::memcpy(destination, data.data(), data.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The packet copy destination is invalid.");
+    }
+    std::shared_ptr<PacketReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::IO::MemoryStream* buffer = nullptr;
+    if (const CNA_Result result = GetPacketBuffer(
+            reader->value->getBaseStreamProperty(),
+            &buffer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
+    *outBytes = data.size();
+    if (capacity < data.size()) {
+        return BufferTooSmall("The packet copy destination is too small.");
+    }
+    if (!data.empty()) {
+        std::memcpy(destination, data.data(), data.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Net.toml.
 #include "generated/Net.inc"

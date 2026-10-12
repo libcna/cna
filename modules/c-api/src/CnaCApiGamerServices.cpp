@@ -128,128 +128,101 @@ CNA_Result ReleaseBorrowedSignedInGamer(const CNA_Handle handle)
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_invite_accepted_event_info_init(
+namespace {
+
+[[nodiscard]] CNA_Result InviteAcceptedEventInfoInit(
     const CNA_SignedInGamerHandle gamer,
     const CNA_Bool isCurrentSession,
     CNA_InviteAcceptedEventInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The event description structure is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(outInfo, "The event description structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (gamer != CNA_INVALID_HANDLE) {
+        std::shared_ptr<SignedInGamerResource> resource;
+        if (const CNA_Result result = GetSignedInGamer(gamer, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // CBIND-065: the flag is validated before it is stored, unlike a plain setter, because
-        // this structure is what an invite-accepted *subscriber* reads. A byte outside
-        // {CNA_FALSE, CNA_TRUE} accepted here would hand a reader a Boolean that is neither, and
-        // docs/c-api/ABI_VERSIONING.md declares those the only valid values.
-        if (isCurrentSession != CNA_FALSE && isCurrentSession != CNA_TRUE) {
-            return InvalidArgument("The current-session flag is not a canonical CNA_Bool.");
-        }
-        if (gamer != CNA_INVALID_HANDLE) {
-            std::shared_ptr<SignedInGamerResource> resource;
-            if (const CNA_Result result = GetSignedInGamer(gamer, &resource);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        outInfo->gamer = gamer;
-        outInfo->is_current_session = isCurrentSession;
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    outInfo->gamer = gamer;
+    outInfo->is_current_session = isCurrentSession;
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_signed_in_gamer_create_ext(
+[[nodiscard]] CNA_Result SignedInGamerCreateExt(
     const CNA_StringView gamertag,
     const CNA_Bool isSignedInToLive,
     const CNA_Bool isGuest,
     const CNA_PlayerIndex playerIndex,
     CNA_SignedInGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The SignedInGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        if (const CNA_Result result =
-                ValidateCanonicalBool(isSignedInToLive, "is_signed_in_to_live");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateCanonicalBool(isGuest, "is_guest");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (playerIndex > CNA_PLAYER_INDEX_FOUR) {
-            return InvalidArgument("The requested player is not a canonical PlayerIndex identity.");
-        }
-        std::string gamertagCopy;
-        if (const CNA_Result result = ReadText(
-                gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (playerIndex > CNA_PLAYER_INDEX_FOUR) {
+        return InvalidArgument("The requested player is not a canonical PlayerIndex identity.");
+    }
+    std::string gamertagCopy;
+    if (const CNA_Result result = ReadText(
+            gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        return CreateResourceHandle<SignedInGamerResource>(
-            ObjectKind::SignedInGamer,
-            std::make_shared<SignedInGamer>(SignedInGamer::CreateInternal(
-                gamertagCopy,
-                isSignedInToLive != CNA_FALSE,
-                isGuest != CNA_FALSE,
-                static_cast<PlayerIndex>(playerIndex))),
-            outGamer);
-    });
+    return CreateResourceHandle<SignedInGamerResource>(
+        ObjectKind::SignedInGamer,
+        std::make_shared<SignedInGamer>(SignedInGamer::CreateInternal(
+            gamertagCopy,
+            isSignedInToLive != CNA_FALSE,
+            isGuest != CNA_FALSE,
+            static_cast<PlayerIndex>(playerIndex))),
+        outGamer);
 }
 
-CNA_Result cna_gamer_set_signed_in_gamers_ext(
+[[nodiscard]] CNA_Result GamerSetSignedInGamersExt(
     const CNA_SignedInGamerHandle* const gamers,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (gamers == nullptr && count != 0U) {
-            return InvalidArgument("The signed-in gamer array is invalid.");
+    if (gamers == nullptr && count != 0U) {
+        return InvalidArgument("The signed-in gamer array is invalid.");
+    }
+    std::vector<std::shared_ptr<SignedInGamerResource>> resources;
+    std::vector<SignedInGamer*> pointers;
+    resources.reserve(static_cast<std::size_t>(count));
+    pointers.reserve(static_cast<std::size_t>(count));
+    for (uint64_t index = 0U; index < count; ++index) {
+        std::shared_ptr<SignedInGamerResource> gamer;
+        if (const CNA_Result result = GetSignedInGamer(gamers[index], &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        std::vector<std::shared_ptr<SignedInGamerResource>> resources;
-        std::vector<SignedInGamer*> pointers;
-        resources.reserve(static_cast<std::size_t>(count));
-        pointers.reserve(static_cast<std::size_t>(count));
-        for (uint64_t index = 0U; index < count; ++index) {
-            std::shared_ptr<SignedInGamerResource> gamer;
-            if (const CNA_Result result = GetSignedInGamer(gamers[index], &gamer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            resources.push_back(gamer);
-            pointers.push_back(gamer->value.get());
-        }
+        resources.push_back(gamer);
+        pointers.push_back(gamer->value.get());
+    }
 
-        Gamer::setSignedInGamersProperty(
-            new SignedInGamerCollection(SignedInGamerCollection::CreateInternal(pointers)));
-        for (const std::shared_ptr<SignedInGamerResource>& previous : PublishedGamers()) {
-            previous->published = false;
-        }
-        for (const std::shared_ptr<SignedInGamerResource>& current : resources) {
-            current->published = true;
-        }
-        PublishedGamers() = std::move(resources);
-        return CNA_RESULT_SUCCESS;
-    });
+    Gamer::setSignedInGamersProperty(
+        new SignedInGamerCollection(SignedInGamerCollection::CreateInternal(pointers)));
+    for (const std::shared_ptr<SignedInGamerResource>& previous : PublishedGamers()) {
+        previous->published = false;
+    }
+    for (const std::shared_ptr<SignedInGamerResource>& current : resources) {
+        current->published = true;
+    }
+    PublishedGamers() = std::move(resources);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_gamer_get_signed_in_gamer_count(int32_t* const outCount)
+[[nodiscard]] CNA_Result GamerGetSignedInGamerCount(int32_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The signed-in gamer count output is null.");
-        }
-        SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
-        *outCount = collection == nullptr
-            ? INT32_C(0)
-            : static_cast<int32_t>(collection->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
+    SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
+    *outCount = collection == nullptr
+        ? INT32_C(0)
+        : static_cast<int32_t>(collection->getCountProperty());
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 CNA_Result CopyPictureStream(

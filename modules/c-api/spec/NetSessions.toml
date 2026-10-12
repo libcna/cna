@@ -122,3 +122,56 @@ other = { lookup = "CNA::C::Detail::BorrowPacketWriter", object = "Microsoft::Xn
 
 [local_gamer_and_packet_writer.routes]
 cna_local_network_gamer_send_packet_writer = { call = "object->SendData(*other, static_cast<SendDataOptions>(options))", validate = "ValidateSendOptions(options)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_available_network_session_create_ext = { result = "AvailableNetworkSessionCreateExt(create_info, quality_of_service, out_session)" }
+cna_available_network_session_collection_create_ext = { result = "AvailableNetworkSessionCollectionCreateExt(sessions, count, out_collection)" }
+cna_network_session_create_with_properties = { result = "NetworkSessionCreateWithProperties(session_type, max_local_gamers, max_gamers, private_gamer_slots, session_properties, out_session)" }
+cna_network_session_create_with_local_gamers = { result = "NetworkSessionCreateWithLocalGamers(session_type, local_gamers, count, max_gamers, private_gamer_slots, session_properties, out_session)" }
+cna_network_session_get_gamer_count = { result = "NetworkSessionGetGamerCount(session, roster, out_count)" }
+cna_network_session_get_gamer = { result = "NetworkSessionGetGamer(session, roster, index, out_gamer)" }
+cna_network_session_get_host = { result = "NetworkSessionGetHost(session, out_gamer)" }
+cna_network_session_find_gamer_by_id = { result = "NetworkSessionFindGamerById(session, gamer_id, out_gamer)" }
+cna_network_session_subscribe_invite_accepted = { result = "NetworkSessionSubscribeInviteAccepted(callback, context, out_registration)" }
+cna_network_session_create_async = { result = "NetworkSessionCreateAsync(session_type, max_local_gamers, max_gamers, callback, context, out_session)" }
+cna_network_session_create_with_properties_async = { result = "NetworkSessionCreateWithPropertiesAsync(session_type, max_local_gamers, max_gamers, private_gamer_slots, session_properties, callback, context, out_session)" }
+cna_network_session_create_with_local_gamers_async = { result = "NetworkSessionCreateWithLocalGamersAsync(session_type, local_gamers, count, max_gamers, private_gamer_slots, session_properties, callback, context, out_session)" }
+cna_network_session_find = { result = "NetworkSessionFind(session_type, max_local_gamers, search_properties, out_collection)" }
+cna_network_session_find_with_local_gamers = { result = "NetworkSessionFindWithLocalGamers(session_type, local_gamers, count, search_properties, out_collection)" }
+cna_network_session_find_async = { result = "NetworkSessionFindAsync(session_type, max_local_gamers, search_properties, callback, context, out_collection)" }
+cna_network_session_find_with_local_gamers_async = { result = "NetworkSessionFindWithLocalGamersAsync(session_type, local_gamers, count, search_properties, callback, context, out_collection)" }
+cna_network_session_join_async = { result = "NetworkSessionJoinAsync(available_session, callback, context, out_session)" }
+cna_network_session_join_invited_async = { result = "NetworkSessionJoinInvitedAsync(max_local_gamers, callback, context, out_session)" }
+cna_network_session_join_invited_with_local_gamers_async = { result = "NetworkSessionJoinInvitedWithLocalGamersAsync(local_gamers, count, callback, context, out_session)" }
+cna_local_network_gamer_create_ext = { result = "LocalNetworkGamerCreateExt(signed_in_gamer, session, out_gamer)" }
+cna_local_network_gamer_receive_data = { result = "LocalNetworkGamerReceiveData(gamer, destination, capacity, out_sender, out_received)" }
+cna_local_network_gamer_receive_data_at = { result = "LocalNetworkGamerReceiveDataAt(gamer, destination, capacity, offset, out_sender, out_received)" }
+cna_local_network_gamer_receive_data_into_packet_reader = { result = "LocalNetworkGamerReceiveDataIntoPacketReader(gamer, reader, out_sender, out_received)" }
+cna_available_network_session_get_quality_of_service = { result = "AvailableNetworkSessionGetQualityOfService(session, out_value)" }
+cna_network_session_subscribe_game_started = { result = "NetworkSessionSubscribeGameStarted(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_game_ended = { result = "NetworkSessionSubscribeGameEnded(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_gamer_joined = { result = "NetworkSessionSubscribeGamerJoined(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_gamer_left = { result = "NetworkSessionSubscribeGamerLeft(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_host_changed = { result = "NetworkSessionSubscribeHostChanged(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_session_ended = { result = "NetworkSessionSubscribeSessionEnded(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_write_arbitrated_leaderboard = { result = "NetworkSessionSubscribeWriteArbitratedLeaderboard(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_write_unarbitrated_leaderboard = { result = "NetworkSessionSubscribeWriteUnarbitratedLeaderboard(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_subscribe_write_true_skill = { result = "NetworkSessionSubscribeWriteTrueSkill(session, callback, context, out_registration)", optional = ["out_registration"] }
+cna_network_session_replace_session_properties = { result = "NetworkSessionReplaceSessionProperties(session, properties)" }
+cna_network_session_add_local_gamer = { result = "NetworkSessionAddLocalGamer(session, signed_in_gamer)" }
+cna_network_session_send_network_event_ext = { result = "NetworkSessionSendNetworkEventExt(session, event_info)" }
+cna_network_session_add_remote_gamer_ext = { result = "NetworkSessionAddRemoteGamerExt(session, gamer)" }
+cna_network_session_remove_gamer_ext = { result = "NetworkSessionRemoveGamerExt(session, gamer, reason)" }
+cna_network_session_unsubscribe = { result = "NetworkSessionUnsubscribe(registration)" }
+cna_local_network_gamer_send_data = { result = "LocalNetworkGamerSendData(gamer, data, count, options)" }
+cna_local_network_gamer_send_data_range = { result = "LocalNetworkGamerSendDataRange(gamer, data, count, offset, length, options)" }
+cna_local_network_gamer_send_data_to = { result = "LocalNetworkGamerSendDataTo(gamer, data, count, options, recipient)" }
+cna_local_network_gamer_send_data_range_to = { result = "LocalNetworkGamerSendDataRangeTo(gamer, data, count, offset, length, options, recipient)" }
+cna_local_network_gamer_send_packet_writer_to = { result = "LocalNetworkGamerSendPacketWriterTo(gamer, writer, options, recipient)" }
+cna_local_network_gamer_enqueue_packet_ext = { result = "LocalNetworkGamerEnqueuePacketExt(gamer, event_info)" }

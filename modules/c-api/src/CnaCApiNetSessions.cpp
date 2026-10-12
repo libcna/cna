@@ -143,155 +143,137 @@ struct NetworkSessionResource final {
         outSession);
 }
 
-} // namespace
-
-CNA_Result cna_available_network_session_create_ext(
+[[nodiscard]] CNA_Result AvailableNetworkSessionCreateExt(
     const CNA_AvailableNetworkSessionCreateInfo* const createInfo,
     const CNA_QualityOfService* const qualityOfService,
     CNA_AvailableNetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The AvailableNetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateVersionedStructure(
-                createInfo, "The discovered-session creation configuration is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        for (std::size_t index = 0U; index < sizeof(createInfo->reserved); ++index) {
-            if (createInfo->reserved[index] != 0U) {
-                return InvalidArgument(
-                    "The discovered-session creation configuration is invalid.");
-            }
-        }
-        if (createInfo->session_type > CNA_NETWORK_SESSION_TYPE_LOCAL_WITH_LEADERBOARDS) {
+    if (const CNA_Result result = ValidateVersionedStructure(
+            createInfo, "The discovered-session creation configuration is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    for (std::size_t index = 0U; index < sizeof(createInfo->reserved); ++index) {
+        if (createInfo->reserved[index] != 0U) {
             return InvalidArgument(
-                "The requested session type is not a canonical NetworkSessionType identity.");
+                "The discovered-session creation configuration is invalid.");
         }
-        if (qualityOfService != nullptr &&
-            (!IsVersionedStructure(qualityOfService))) {
-            return InvalidArgument("The quality-of-service description is invalid.");
-        }
+    }
+    if (createInfo->session_type > CNA_NETWORK_SESSION_TYPE_LOCAL_WITH_LEADERBOARDS) {
+        return InvalidArgument(
+            "The requested session type is not a canonical NetworkSessionType identity.");
+    }
+    if (qualityOfService != nullptr &&
+        (!IsVersionedStructure(qualityOfService))) {
+        return InvalidArgument("The quality-of-service description is invalid.");
+    }
 
-        std::string hostGamertag;
-        std::string hostAddress;
-        if (const CNA_Result result = ReadText(
-                createInfo->host_gamertag, "The host gamertag is not valid UTF-8.", &hostGamertag,
-                EmbeddedNul::Refused);
+    std::string hostGamertag;
+    std::string hostAddress;
+    if (const CNA_Result result = ReadText(
+            createInfo->host_gamertag, "The host gamertag is not valid UTF-8.", &hostGamertag,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            createInfo->host_address, "The host address is not valid UTF-8.", &hostAddress,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    NetworkSessionProperties properties;
+    if (createInfo->session_properties != CNA_INVALID_HANDLE) {
+        NetworkSessionProperties* source = nullptr;
+        if (const CNA_Result result = BorrowNetworkSessionProperties(
+                createInfo->session_properties,
+                &source);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ReadText(
-                createInfo->host_address, "The host address is not valid UTF-8.", &hostAddress,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+        properties = *source;
+    }
 
-        NetworkSessionProperties properties;
-        if (createInfo->session_properties != CNA_INVALID_HANDLE) {
-            NetworkSessionProperties* source = nullptr;
-            if (const CNA_Result result = BorrowNetworkSessionProperties(
-                    createInfo->session_properties,
-                    &source);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            properties = *source;
-        }
+    // The canonical quality-of-service type offers exactly two constructions: unmeasured, and
+    // one built from a single round-trip sample. Only the sample can be carried in, which is
+    // why the throughput fields of the C description are not read here.
+    const QualityOfService measured = qualityOfService == nullptr
+        ? QualityOfService::CreateInternal()
+        : QualityOfService::CreateInternal(
+              System::TimeSpan(qualityOfService->average_roundtrip_ticks));
 
-        // The canonical quality-of-service type offers exactly two constructions: unmeasured, and
-        // one built from a single round-trip sample. Only the sample can be carried in, which is
-        // why the throughput fields of the C description are not read here.
-        const QualityOfService measured = qualityOfService == nullptr
-            ? QualityOfService::CreateInternal()
-            : QualityOfService::CreateInternal(
-                  System::TimeSpan(qualityOfService->average_roundtrip_ticks));
-
-        return CreateSessionHandle(
-            AvailableNetworkSession::CreateInternal(
-                static_cast<int>(createInfo->current_gamer_count),
-                hostGamertag,
-                static_cast<int>(createInfo->open_private_gamer_slots),
-                static_cast<int>(createInfo->open_public_gamer_slots),
-                std::move(properties),
-                measured,
-                hostAddress,
-                createInfo->host_port,
-                static_cast<NetworkSessionType>(createInfo->session_type)),
-            outSession);
-    });
+    return CreateSessionHandle(
+        AvailableNetworkSession::CreateInternal(
+            static_cast<int>(createInfo->current_gamer_count),
+            hostGamertag,
+            static_cast<int>(createInfo->open_private_gamer_slots),
+            static_cast<int>(createInfo->open_public_gamer_slots),
+            std::move(properties),
+            measured,
+            hostAddress,
+            createInfo->host_port,
+            static_cast<NetworkSessionType>(createInfo->session_type)),
+        outSession);
 }
 
-CNA_Result cna_available_network_session_get_quality_of_service(
+[[nodiscard]] CNA_Result AvailableNetworkSessionGetQualityOfService(
     const CNA_AvailableNetworkSessionHandle sessionHandle,
     CNA_QualityOfService* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outValue, "The quality-of-service output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvailableSessionResource> session;
-        if (const CNA_Result result = GetSession(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const QualityOfService& quality = session->value->getQualityOfServiceProperty();
-        outValue->is_available = ToCBool(quality.getIsAvailableProperty());
-        std::memset(outValue->reserved, 0, sizeof(outValue->reserved));
-        outValue->average_roundtrip_ticks =
-            static_cast<int64_t>(quality.getAverageRoundtripTimeProperty().getTicksProperty());
-        outValue->minimum_roundtrip_ticks =
-            static_cast<int64_t>(quality.getMinimumRoundtripTimeProperty().getTicksProperty());
-        outValue->bytes_per_second_downstream =
-            static_cast<int32_t>(quality.getBytesPerSecondDownstreamProperty());
-        outValue->bytes_per_second_upstream =
-            static_cast<int32_t>(quality.getBytesPerSecondUpstreamProperty());
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outValue, "The quality-of-service output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<AvailableSessionResource> session;
+    if (const CNA_Result result = GetSession(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const QualityOfService& quality = session->value->getQualityOfServiceProperty();
+    outValue->is_available = ToCBool(quality.getIsAvailableProperty());
+    std::memset(outValue->reserved, 0, sizeof(outValue->reserved));
+    outValue->average_roundtrip_ticks =
+        static_cast<int64_t>(quality.getAverageRoundtripTimeProperty().getTicksProperty());
+    outValue->minimum_roundtrip_ticks =
+        static_cast<int64_t>(quality.getMinimumRoundtripTimeProperty().getTicksProperty());
+    outValue->bytes_per_second_downstream =
+        static_cast<int32_t>(quality.getBytesPerSecondDownstreamProperty());
+    outValue->bytes_per_second_upstream =
+        static_cast<int32_t>(quality.getBytesPerSecondUpstreamProperty());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_available_network_session_collection_create_ext(
+[[nodiscard]] CNA_Result AvailableNetworkSessionCollectionCreateExt(
     const CNA_AvailableNetworkSessionHandle* const sessions,
     const uint64_t count,
     CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The collection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        if (sessions == nullptr && count != 0U) {
-            return InvalidArgument("The discovered-session array is invalid.");
-        }
-        if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Overflow("The discovered-session count exceeds the canonical range.");
-        }
+    if (sessions == nullptr && count != 0U) {
+        return InvalidArgument("The discovered-session array is invalid.");
+    }
+    if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return Overflow("The discovered-session count exceeds the canonical range.");
+    }
 
-        std::vector<AvailableNetworkSession> copied;
-        copied.reserve(static_cast<std::size_t>(count));
-        for (uint64_t index = 0U; index < count; ++index) {
-            std::shared_ptr<AvailableSessionResource> session;
-            if (const CNA_Result result = GetSession(sessions[index], &session);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            copied.push_back(*session->value);
+    std::vector<AvailableNetworkSession> copied;
+    copied.reserve(static_cast<std::size_t>(count));
+    for (uint64_t index = 0U; index < count; ++index) {
+        std::shared_ptr<AvailableSessionResource> session;
+        if (const CNA_Result result = GetSession(sessions[index], &session);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
+        copied.push_back(*session->value);
+    }
 
-        return CreateResourceHandle<AvailableSessionCollectionResource>(
-            ObjectKind::AvailableNetworkSessionCollection,
-            std::make_shared<AvailableNetworkSessionCollection>(
-                AvailableNetworkSessionCollection::CreateInternal(std::move(copied))),
-            outCollection);
-    });
+    return CreateResourceHandle<AvailableSessionCollectionResource>(
+        ObjectKind::AvailableNetworkSessionCollection,
+        std::make_shared<AvailableNetworkSessionCollection>(
+            AvailableNetworkSessionCollection::CreateInternal(std::move(copied))),
+        outCollection);
 }
-
-namespace {
 
 [[nodiscard]] CNA_Result ValidateSessionType(const CNA_NetworkSessionType sessionType)
 {
@@ -368,9 +350,7 @@ template<typename TCallable>
     }
 }
 
-} // namespace
-
-CNA_Result cna_network_session_create_with_properties(
+[[nodiscard]] CNA_Result NetworkSessionCreateWithProperties(
     const CNA_NetworkSessionType sessionType,
     const int32_t maxLocalGamers,
     const int32_t maxGamers,
@@ -378,32 +358,26 @@ CNA_Result cna_network_session_create_with_properties(
     const CNA_NetworkSessionPropertiesHandle sessionProperties,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateSessionResourceHandle(
-            NetworkSession::Create(
-                static_cast<NetworkSessionType>(sessionType),
-                static_cast<int>(maxLocalGamers),
-                static_cast<int>(maxGamers),
-                static_cast<int>(privateGamerSlots),
-                std::move(properties)),
-            outSession);
-    });
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateSessionResourceHandle(
+        NetworkSession::Create(
+            static_cast<NetworkSessionType>(sessionType),
+            static_cast<int>(maxLocalGamers),
+            static_cast<int>(maxGamers),
+            static_cast<int>(privateGamerSlots),
+            std::move(properties)),
+        outSession);
 }
 
-CNA_Result cna_network_session_create_with_local_gamers(
+[[nodiscard]] CNA_Result NetworkSessionCreateWithLocalGamers(
     const CNA_NetworkSessionType sessionType,
     const CNA_Handle* const localGamers,
     const uint64_t count,
@@ -412,327 +386,290 @@ CNA_Result cna_network_session_create_with_local_gamers(
     const CNA_NetworkSessionPropertiesHandle sessionProperties,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (localGamers == nullptr && count != 0U) {
-            return InvalidArgument("The local-gamer array is invalid.");
-        }
-        if (const CNA_Result result = ValidateSessionType(sessionType);
+    if (localGamers == nullptr && count != 0U) {
+        return InvalidArgument("The local-gamer array is invalid.");
+    }
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Microsoft::Xna::Framework::GamerServices::SignedInGamer*> nativeGamers;
+    nativeGamers.reserve(static_cast<std::size_t>(count));
+    for (uint64_t index = 0U; index < count; ++index) {
+        Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
+                localGamers[index],
+                &gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::vector<Microsoft::Xna::Framework::GamerServices::SignedInGamer*> nativeGamers;
-        nativeGamers.reserve(static_cast<std::size_t>(count));
-        for (uint64_t index = 0U; index < count; ++index) {
-            Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
-            if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
-                    localGamers[index],
-                    &gamer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            nativeGamers.push_back(gamer);
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateSessionResourceHandle(
-            NetworkSession::Create(
-                static_cast<NetworkSessionType>(sessionType),
-                nativeGamers,
-                static_cast<int>(maxGamers),
-                static_cast<int>(privateGamerSlots),
-                std::move(properties)),
-            outSession);
-    });
+        nativeGamers.push_back(gamer);
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateSessionResourceHandle(
+        NetworkSession::Create(
+            static_cast<NetworkSessionType>(sessionType),
+            nativeGamers,
+            static_cast<int>(maxGamers),
+            static_cast<int>(privateGamerSlots),
+            std::move(properties)),
+        outSession);
 }
 
-CNA_Result cna_network_session_get_gamer_count(
+[[nodiscard]] CNA_Result NetworkSessionGetGamerCount(
     const CNA_NetworkSessionHandle sessionHandle,
     const uint32_t roster,
     int32_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr) {
-            return InvalidArgument("The gamer-count output is null.");
-        }
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Microsoft::Xna::Framework::GamerServices::GamerCollection<NetworkGamer>* all =
-            nullptr;
-        const Microsoft::Xna::Framework::GamerServices::GamerCollection<
-            Microsoft::Xna::Framework::Net::LocalNetworkGamer>* local = nullptr;
-        if (const CNA_Result result = SelectRoster(*session->value, roster, &all, &local);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = all != nullptr
-            ? static_cast<int32_t>(all->getCountProperty())
-            : static_cast<int32_t>(local->getCountProperty());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Microsoft::Xna::Framework::GamerServices::GamerCollection<NetworkGamer>* all =
+        nullptr;
+    const Microsoft::Xna::Framework::GamerServices::GamerCollection<
+        Microsoft::Xna::Framework::Net::LocalNetworkGamer>* local = nullptr;
+    if (const CNA_Result result = SelectRoster(*session->value, roster, &all, &local);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCount = all != nullptr
+        ? static_cast<int32_t>(all->getCountProperty())
+        : static_cast<int32_t>(local->getCountProperty());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_get_gamer(
+[[nodiscard]] CNA_Result NetworkSessionGetGamer(
     const CNA_NetworkSessionHandle sessionHandle,
     const uint32_t roster,
     const int32_t index,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Microsoft::Xna::Framework::GamerServices::GamerCollection<NetworkGamer>* all =
-            nullptr;
-        const Microsoft::Xna::Framework::GamerServices::GamerCollection<
-            Microsoft::Xna::Framework::Net::LocalNetworkGamer>* local = nullptr;
-        if (const CNA_Result result = SelectRoster(*session->value, roster, &all, &local);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int32_t count = all != nullptr
-            ? static_cast<int32_t>(all->getCountProperty())
-            : static_cast<int32_t>(local->getCountProperty());
-        if (index < 0 || index >= count) {
-            return OutOfRange("The gamer index is outside that roster.");
-        }
-        NetworkGamer* const value = all != nullptr
-            ? (*all)[static_cast<int>(index)]
-            : static_cast<NetworkGamer*>(
-                  static_cast<Microsoft::Xna::Framework::Net::LocalNetworkGamer*>(
-                      (*local)[static_cast<int>(index)]));
-        return CreateBorrowedNetworkGamer(
-            value,
-            session,
-            &session->activeGamerViews,
-            sessionHandle,
-            outGamer);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Microsoft::Xna::Framework::GamerServices::GamerCollection<NetworkGamer>* all =
+        nullptr;
+    const Microsoft::Xna::Framework::GamerServices::GamerCollection<
+        Microsoft::Xna::Framework::Net::LocalNetworkGamer>* local = nullptr;
+    if (const CNA_Result result = SelectRoster(*session->value, roster, &all, &local);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const int32_t count = all != nullptr
+        ? static_cast<int32_t>(all->getCountProperty())
+        : static_cast<int32_t>(local->getCountProperty());
+    if (index < 0 || index >= count) {
+        return OutOfRange("The gamer index is outside that roster.");
+    }
+    NetworkGamer* const value = all != nullptr
+        ? (*all)[static_cast<int>(index)]
+        : static_cast<NetworkGamer*>(
+              static_cast<Microsoft::Xna::Framework::Net::LocalNetworkGamer*>(
+                  (*local)[static_cast<int>(index)]));
+    return CreateBorrowedNetworkGamer(
+        value,
+        session,
+        &session->activeGamerViews,
+        sessionHandle,
+        outGamer);
 }
 
-CNA_Result cna_network_session_get_host(
+[[nodiscard]] CNA_Result NetworkSessionGetHost(
     const CNA_NetworkSessionHandle sessionHandle,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* const host = session->value->getHostProperty();
-        if (host == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return CreateBorrowedNetworkGamer(
-            host,
-            session,
-            &session->activeGamerViews,
-            sessionHandle,
-            outGamer);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* const host = session->value->getHostProperty();
+    if (host == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CreateBorrowedNetworkGamer(
+        host,
+        session,
+        &session->activeGamerViews,
+        sessionHandle,
+        outGamer);
 }
 
-CNA_Result cna_network_session_replace_session_properties(
+[[nodiscard]] CNA_Result NetworkSessionReplaceSessionProperties(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkSessionPropertiesHandle propertiesHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        NetworkSessionProperties* properties = nullptr;
-        if (const CNA_Result result = BorrowNetworkSessionProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return NetworkSessionCommand(sessionHandle, [properties](NetworkSession& session) {
-            session.getSessionPropertiesProperty() = *properties;
-        });
+    NetworkSessionProperties* properties = nullptr;
+    if (const CNA_Result result = BorrowNetworkSessionProperties(propertiesHandle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return NetworkSessionCommand(sessionHandle, [properties](NetworkSession& session) {
+        session.getSessionPropertiesProperty() = *properties;
     });
 }
 
-CNA_Result cna_network_session_add_local_gamer(
+[[nodiscard]] CNA_Result NetworkSessionAddLocalGamer(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_Handle signedInGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        // CNA_INVALID_HANDLE is the canonical null gamer, which AddLocalGamer refuses.
-        Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
-        if (signedInGamer != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result =
-                    CNA::C::Detail::BorrowSignedInGamer(signedInGamer, &gamer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
+    // CNA_INVALID_HANDLE is the canonical null gamer, which AddLocalGamer refuses.
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
+    if (signedInGamer != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result =
+                CNA::C::Detail::BorrowSignedInGamer(signedInGamer, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        return NetworkSessionCommand(sessionHandle, [gamer](NetworkSession& session) {
-            session.AddLocalGamer(gamer);
-        });
+    }
+    return NetworkSessionCommand(sessionHandle, [gamer](NetworkSession& session) {
+        session.AddLocalGamer(gamer);
     });
 }
 
-CNA_Result cna_network_session_find_gamer_by_id(
+[[nodiscard]] CNA_Result NetworkSessionFindGamerById(
     const CNA_NetworkSessionHandle sessionHandle,
     const uint8_t gamerId,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
-        }
-        *outGamer = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* const found =
-            session->value->FindGamerById(static_cast<SharpRuntime::bytecs>(gamerId));
-        if (found == nullptr) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return CreateBorrowedNetworkGamer(
-            found,
-            session,
-            &session->activeGamerViews,
-            sessionHandle,
-            outGamer);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* const found =
+        session->value->FindGamerById(static_cast<SharpRuntime::bytecs>(gamerId));
+    if (found == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CreateBorrowedNetworkGamer(
+        found,
+        session,
+        &session->activeGamerViews,
+        sessionHandle,
+        outGamer);
 }
 
-CNA_Result cna_network_session_send_network_event_ext(
+[[nodiscard]] CNA_Result NetworkSessionSendNetworkEventExt(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkEventInfo* const eventInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
+    if (const CNA_Result result =
+            ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
+        eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
+        eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
+        eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
+        return InvalidArgument("The network event description names an unknown identity.");
+    }
+    if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
+        return InvalidArgument("The network event payload is invalid.");
+    }
+
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    NetworkSession::NetworkEvent event;
+    event.Type = static_cast<NetworkSession::NetworkEventType>(eventInfo->type);
+    event.Reliable =
+        static_cast<Microsoft::Xna::Framework::Net::SendDataOptions>(eventInfo->reliable);
+    event.State = static_cast<NetworkSessionState>(eventInfo->state);
+    event.Reason = static_cast<NetworkSessionEndReason>(eventInfo->reason);
+    if (eventInfo->gamer != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = BorrowNetworkGamer(eventInfo->gamer, &event.Gamer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
-            eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
-            eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
-            eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
-            return InvalidArgument("The network event description names an unknown identity.");
-        }
-        if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
-            return InvalidArgument("The network event payload is invalid.");
-        }
-
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+    }
+    if (eventInfo->sender != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = BorrowNetworkGamer(eventInfo->sender, &event.Sender);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-
-        NetworkSession::NetworkEvent event;
-        event.Type = static_cast<NetworkSession::NetworkEventType>(eventInfo->type);
-        event.Reliable =
-            static_cast<Microsoft::Xna::Framework::Net::SendDataOptions>(eventInfo->reliable);
-        event.State = static_cast<NetworkSessionState>(eventInfo->state);
-        event.Reason = static_cast<NetworkSessionEndReason>(eventInfo->reason);
-        if (eventInfo->gamer != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = BorrowNetworkGamer(eventInfo->gamer, &event.Gamer);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        if (eventInfo->sender != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = BorrowNetworkGamer(eventInfo->sender, &event.Sender);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        if (eventInfo->packet_byte_count != 0U) {
-            event.Packet.assign(
-                eventInfo->packet,
-                eventInfo->packet + eventInfo->packet_byte_count);
-        }
-        session->value->SendNetworkEvent(std::move(event));
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    if (eventInfo->packet_byte_count != 0U) {
+        event.Packet.assign(
+            eventInfo->packet,
+            eventInfo->packet + eventInfo->packet_byte_count);
+    }
+    session->value->SendNetworkEvent(std::move(event));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_add_remote_gamer_ext(
+[[nodiscard]] CNA_Result NetworkSessionAddRemoteGamerExt(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkGamerHandle gamerHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowNetworkGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> retained;
-        if (const CNA_Result result = CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        session->value->AddRemoteGamer(gamer);
-        // The canonical call deliberately does not take ownership, so the C layer keeps the gamer
-        // resource alive for as long as the session references it.
-        session->retainedGamers.push_back(std::move(retained));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowNetworkGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<void> retained;
+    if (const CNA_Result result = CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    session->value->AddRemoteGamer(gamer);
+    // The canonical call deliberately does not take ownership, so the C layer keeps the gamer
+    // resource alive for as long as the session references it.
+    session->retainedGamers.push_back(std::move(retained));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_network_session_remove_gamer_ext(
+[[nodiscard]] CNA_Result NetworkSessionRemoveGamerExt(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkGamerHandle gamerHandle,
     const CNA_NetworkSessionEndReason reason)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
-            return InvalidArgument(
-                "The requested reason is not a canonical NetworkSessionEndReason identity.");
-        }
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowNetworkGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        session->value->RemoveGamer(gamer, static_cast<NetworkSessionEndReason>(reason));
-        std::shared_ptr<void> retained;
-        if (CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained) == CNA_RESULT_SUCCESS) {
-            for (std::size_t index = 0U; index < session->retainedGamers.size(); ++index) {
-                if (session->retainedGamers[index] == retained) {
-                    session->retainedGamers.erase(session->retainedGamers.begin() +
-                        static_cast<std::ptrdiff_t>(index));
-                    break;
-                }
+    if (reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
+        return InvalidArgument(
+            "The requested reason is not a canonical NetworkSessionEndReason identity.");
+    }
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowNetworkGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    session->value->RemoveGamer(gamer, static_cast<NetworkSessionEndReason>(reason));
+    std::shared_ptr<void> retained;
+    if (CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained) == CNA_RESULT_SUCCESS) {
+        for (std::size_t index = 0U; index < session->retainedGamers.size(); ++index) {
+            if (session->retainedGamers[index] == retained) {
+                session->retainedGamers.erase(session->retainedGamers.begin() +
+                    static_cast<std::ptrdiff_t>(index));
+                break;
             }
         }
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 
@@ -876,374 +813,344 @@ private:
     return GetSessionResource(sessionHandle, outSession);
 }
 
-} // namespace
-
-CNA_Result cna_network_session_subscribe_game_started(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeGameStarted(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_GameStartedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->GameStarted.Add(
-            [sessionHandle, callback, context](System::Object*, const GameStartedEventArgs& /*arguments*/) {
-                CNA_GameStartedEventInfo info = {sizeof(CNA_GameStartedEventInfo), UINT32_C(1)};
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.GameStarted.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->GameStarted.Add(
+        [sessionHandle, callback, context](System::Object*, const GameStartedEventArgs& /*arguments*/) {
+            CNA_GameStartedEventInfo info = {sizeof(CNA_GameStartedEventInfo), UINT32_C(1)};
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.GameStarted.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_game_ended(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeGameEnded(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_GameEndedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->GameEnded.Add(
-            [sessionHandle, callback, context](System::Object*, const GameEndedEventArgs& /*arguments*/) {
-                CNA_GameEndedEventInfo info = {sizeof(CNA_GameEndedEventInfo), UINT32_C(1)};
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.GameEnded.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->GameEnded.Add(
+        [sessionHandle, callback, context](System::Object*, const GameEndedEventArgs& /*arguments*/) {
+            CNA_GameEndedEventInfo info = {sizeof(CNA_GameEndedEventInfo), UINT32_C(1)};
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.GameEnded.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_gamer_joined(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeGamerJoined(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_GamerJoinedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->GamerJoined.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const GamerJoinedEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_GamerJoinedEventInfo info = {sizeof(CNA_GamerJoinedEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
-                info.gamer = gamer.Get();
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.GamerJoined.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->GamerJoined.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const GamerJoinedEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_GamerJoinedEventInfo info = {sizeof(CNA_GamerJoinedEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
+            info.gamer = gamer.Get();
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.GamerJoined.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_gamer_left(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeGamerLeft(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_GamerLeftCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->GamerLeft.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const GamerLeftEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_GamerLeftEventInfo info = {sizeof(CNA_GamerLeftEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
-                info.gamer = gamer.Get();
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.GamerLeft.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->GamerLeft.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const GamerLeftEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_GamerLeftEventInfo info = {sizeof(CNA_GamerLeftEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
+            info.gamer = gamer.Get();
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.GamerLeft.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_host_changed(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeHostChanged(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_HostChangedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->HostChanged.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const HostChangedEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_HostChangedEventInfo info = {sizeof(CNA_HostChangedEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle oldHost(arguments.getOldHostProperty(), alive, sessionHandle);
-                const ScopedGamerHandle newHost(arguments.getNewHostProperty(), alive, sessionHandle);
-                info.old_host = oldHost.Get();
-                info.new_host = newHost.Get();
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.HostChanged.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->HostChanged.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const HostChangedEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_HostChangedEventInfo info = {sizeof(CNA_HostChangedEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle oldHost(arguments.getOldHostProperty(), alive, sessionHandle);
+            const ScopedGamerHandle newHost(arguments.getNewHostProperty(), alive, sessionHandle);
+            info.old_host = oldHost.Get();
+            info.new_host = newHost.Get();
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.HostChanged.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_session_ended(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeSessionEnded(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkSessionEndedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->SessionEnded.Add(
-            [sessionHandle, callback, context](System::Object*, const NetworkSessionEndedEventArgs& arguments) {
-                CNA_NetworkSessionEndedEventInfo info = {sizeof(CNA_NetworkSessionEndedEventInfo), UINT32_C(1)};
-                info.end_reason =
-                    static_cast<CNA_NetworkSessionEndReason>(arguments.getEndReasonProperty());
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.SessionEnded.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->SessionEnded.Add(
+        [sessionHandle, callback, context](System::Object*, const NetworkSessionEndedEventArgs& arguments) {
+            CNA_NetworkSessionEndedEventInfo info = {sizeof(CNA_NetworkSessionEndedEventInfo), UINT32_C(1)};
+            info.end_reason =
+                static_cast<CNA_NetworkSessionEndReason>(arguments.getEndReasonProperty());
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.SessionEnded.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_write_arbitrated_leaderboard(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeWriteArbitratedLeaderboard(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_WriteLeaderboardsCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->WriteArbitratedLeaderboard.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
-                info.gamer = gamer.Get();
-                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.WriteArbitratedLeaderboard.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->WriteArbitratedLeaderboard.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
+            info.gamer = gamer.Get();
+            info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.WriteArbitratedLeaderboard.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_write_unarbitrated_leaderboard(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeWriteUnarbitratedLeaderboard(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_WriteLeaderboardsCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->WriteUnarbitratedLeaderboard.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
-                info.gamer = gamer.Get();
-                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.WriteUnarbitratedLeaderboard.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->WriteUnarbitratedLeaderboard.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
+            info.gamer = gamer.Get();
+            info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.WriteUnarbitratedLeaderboard.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_write_true_skill(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeWriteTrueSkill(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_WriteLeaderboardsCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = BeginSubscribe(
-                sessionHandle,
-                callback == nullptr,
-                outRegistration,
-                &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::weak_ptr<NetworkSessionResource> owner = session;
-        const auto token = session->value->WriteTrueSkill.Add(
-            [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
-                const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
-                if (alive == nullptr) {
-                    return;
-                }
-                CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
-                const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
-                info.gamer = gamer.Get();
-                info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
-                callback(sessionHandle, &info, context);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                owner,
-                [token](NetworkSession& native) { native.WriteTrueSkill.Remove(token); }),
-            outRegistration);
-    });
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = BeginSubscribe(
+            sessionHandle,
+            callback == nullptr,
+            outRegistration,
+            &session);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::weak_ptr<NetworkSessionResource> owner = session;
+    const auto token = session->value->WriteTrueSkill.Add(
+        [owner, sessionHandle, callback, context](System::Object*, const WriteLeaderboardsEventArgs& arguments) {
+            const std::shared_ptr<NetworkSessionResource> alive = owner.lock();
+            if (alive == nullptr) {
+                return;
+            }
+            CNA_WriteLeaderboardsEventInfo info = {sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1)};
+            const ScopedGamerHandle gamer(arguments.getGamerProperty(), alive, sessionHandle);
+            info.gamer = gamer.Get();
+            info.is_leaving = ToCBool(arguments.getIsLeavingProperty());
+            callback(sessionHandle, &info, context);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            owner,
+            [token](NetworkSession& native) { native.WriteTrueSkill.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_subscribe_invite_accepted(
+[[nodiscard]] CNA_Result NetworkSessionSubscribeInviteAccepted(
     const CNA_InviteAcceptedCallback callback,
     void* const context,
     CNA_NetworkSessionEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The event callback is null.");
-        }
-        const auto token = NetworkSession::InviteAccepted.Add(
-            [callback, context](
-                System::Object*,
-                const Microsoft::Xna::Framework::GamerServices::InviteAcceptedEventArgs&
-                    arguments) {
-                CNA_InviteAcceptedEventInfo info = {
-                    sizeof(CNA_InviteAcceptedEventInfo), UINT32_C(1)};
-                CNA_Handle gamer = CNA_INVALID_HANDLE;
-                (void)CNA::C::Detail::CreateBorrowedSignedInGamer(
-                    arguments.getGamerProperty(),
-                    &gamer);
-                info.gamer = gamer;
-                info.is_current_session =
-                    ToCBool(arguments.getIsCurrentSessionProperty());
-                callback(&info, context);
-                (void)CNA::C::Detail::ReleaseBorrowedSignedInGamer(gamer);
-            });
-        return CreateRegistrationHandle(
-            std::make_shared<SessionEventRegistration>(
-                [token]() { NetworkSession::InviteAccepted.Remove(token); }),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The event callback is null.");
+    }
+    const auto token = NetworkSession::InviteAccepted.Add(
+        [callback, context](
+            System::Object*,
+            const Microsoft::Xna::Framework::GamerServices::InviteAcceptedEventArgs&
+                arguments) {
+            CNA_InviteAcceptedEventInfo info = {
+                sizeof(CNA_InviteAcceptedEventInfo), UINT32_C(1)};
+            CNA_Handle gamer = CNA_INVALID_HANDLE;
+            (void)CNA::C::Detail::CreateBorrowedSignedInGamer(
+                arguments.getGamerProperty(),
+                &gamer);
+            info.gamer = gamer;
+            info.is_current_session =
+                ToCBool(arguments.getIsCurrentSessionProperty());
+            callback(&info, context);
+            (void)CNA::C::Detail::ReleaseBorrowedSignedInGamer(gamer);
+        });
+    return CreateRegistrationHandle(
+        std::make_shared<SessionEventRegistration>(
+            [token]() { NetworkSession::InviteAccepted.Remove(token); }),
+        outRegistration);
 }
 
-CNA_Result cna_network_session_unsubscribe(
+[[nodiscard]] CNA_Result NetworkSessionUnsubscribe(
     const CNA_NetworkSessionEventRegistrationHandle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SessionEventRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::NetworkSessionEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Release();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<SessionEventRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::NetworkSessionEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Release();
+    return ReleaseHandle(registrationHandle);
 }
-
-namespace {
 
 using SignedInGamerList = std::vector<Microsoft::Xna::Framework::GamerServices::SignedInGamer*>;
 
@@ -1290,9 +1197,7 @@ using SignedInGamerList = std::vector<Microsoft::Xna::Framework::GamerServices::
         outCollection);
 }
 
-} // namespace
-
-CNA_Result cna_network_session_create_async(
+[[nodiscard]] CNA_Result NetworkSessionCreateAsync(
     const CNA_NetworkSessionType sessionType,
     const int32_t maxLocalGamers,
     const int32_t maxGamers,
@@ -1300,26 +1205,20 @@ CNA_Result cna_network_session_create_async(
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
-            static_cast<NetworkSessionType>(sessionType),
-            static_cast<int>(maxLocalGamers),
-            static_cast<int>(maxGamers),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
-    });
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
+        static_cast<NetworkSessionType>(sessionType),
+        static_cast<int>(maxLocalGamers),
+        static_cast<int>(maxGamers),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
 }
 
-CNA_Result cna_network_session_create_with_properties_async(
+[[nodiscard]] CNA_Result NetworkSessionCreateWithPropertiesAsync(
     const CNA_NetworkSessionType sessionType,
     const int32_t maxLocalGamers,
     const int32_t maxGamers,
@@ -1329,33 +1228,27 @@ CNA_Result cna_network_session_create_with_properties_async(
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
-            static_cast<NetworkSessionType>(sessionType),
-            static_cast<int>(maxLocalGamers),
-            static_cast<int>(maxGamers),
-            static_cast<int>(privateGamerSlots),
-            std::move(properties),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
-    });
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
+        static_cast<NetworkSessionType>(sessionType),
+        static_cast<int>(maxLocalGamers),
+        static_cast<int>(maxGamers),
+        static_cast<int>(privateGamerSlots),
+        std::move(properties),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
 }
 
-CNA_Result cna_network_session_create_with_local_gamers_async(
+[[nodiscard]] CNA_Result NetworkSessionCreateWithLocalGamersAsync(
     const CNA_NetworkSessionType sessionType,
     const CNA_Handle* const localGamers,
     const uint64_t count,
@@ -1366,134 +1259,110 @@ CNA_Result cna_network_session_create_with_local_gamers_async(
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamerList gamers;
-        if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
-            static_cast<NetworkSessionType>(sessionType),
-            gamers,
-            static_cast<int>(maxGamers),
-            static_cast<int>(privateGamerSlots),
-            std::move(properties),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
-    });
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    SignedInGamerList gamers;
+    if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(sessionProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
+        static_cast<NetworkSessionType>(sessionType),
+        gamers,
+        static_cast<int>(maxGamers),
+        static_cast<int>(privateGamerSlots),
+        std::move(properties),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
 }
 
-CNA_Result cna_network_session_find(
+[[nodiscard]] CNA_Result NetworkSessionFind(
     const CNA_NetworkSessionType sessionType,
     const int32_t maxLocalGamers,
     const CNA_NetworkSessionPropertiesHandle searchProperties,
     CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The collection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateCollectionHandle(
-            NetworkSession::Find(
-                static_cast<NetworkSessionType>(sessionType),
-                static_cast<int>(maxLocalGamers),
-                std::move(properties)),
-            outCollection);
-    });
-}
-
-CNA_Result cna_network_session_find_with_local_gamers(
-    const CNA_NetworkSessionType sessionType,
-    const CNA_Handle* const localGamers,
-    const uint64_t count,
-    const CNA_NetworkSessionPropertiesHandle searchProperties,
-    CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The collection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamerList gamers;
-        if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateCollectionHandle(
-            NetworkSession::Find(
-                static_cast<NetworkSessionType>(sessionType),
-                gamers,
-                std::move(properties)),
-            outCollection);
-    });
-}
-
-CNA_Result cna_network_session_find_async(
-    const CNA_NetworkSessionType sessionType,
-    const int32_t maxLocalGamers,
-    const CNA_NetworkSessionPropertiesHandle searchProperties,
-    const CNA_NetworkSessionAsyncCallback callback,
-    void* const context,
-    CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The collection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateCollectionHandle(
+        NetworkSession::Find(
             static_cast<NetworkSessionType>(sessionType),
             static_cast<int>(maxLocalGamers),
-            std::move(properties),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
-    });
+            std::move(properties)),
+        outCollection);
 }
 
-CNA_Result cna_network_session_find_with_local_gamers_async(
+[[nodiscard]] CNA_Result NetworkSessionFindWithLocalGamers(
+    const CNA_NetworkSessionType sessionType,
+    const CNA_Handle* const localGamers,
+    const uint64_t count,
+    const CNA_NetworkSessionPropertiesHandle searchProperties,
+    CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
+{
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    SignedInGamerList gamers;
+    if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateCollectionHandle(
+        NetworkSession::Find(
+            static_cast<NetworkSessionType>(sessionType),
+            gamers,
+            std::move(properties)),
+        outCollection);
+}
+
+[[nodiscard]] CNA_Result NetworkSessionFindAsync(
+    const CNA_NetworkSessionType sessionType,
+    const int32_t maxLocalGamers,
+    const CNA_NetworkSessionPropertiesHandle searchProperties,
+    const CNA_NetworkSessionAsyncCallback callback,
+    void* const context,
+    CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
+{
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
+        static_cast<NetworkSessionType>(sessionType),
+        static_cast<int>(maxLocalGamers),
+        std::move(properties),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
+}
+
+[[nodiscard]] CNA_Result NetworkSessionFindWithLocalGamersAsync(
     const CNA_NetworkSessionType sessionType,
     const CNA_Handle* const localGamers,
     const uint64_t count,
@@ -1502,106 +1371,80 @@ CNA_Result cna_network_session_find_with_local_gamers_async(
     void* const context,
     CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The collection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateSessionType(sessionType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamerList gamers;
-        if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkSessionProperties properties;
-        if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
-            static_cast<NetworkSessionType>(sessionType),
-            gamers,
-            std::move(properties),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
-    });
+    if (const CNA_Result result = ValidateSessionType(sessionType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    SignedInGamerList gamers;
+    if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkSessionProperties properties;
+    if (const CNA_Result result = BorrowProperties(searchProperties, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
+        static_cast<NetworkSessionType>(sessionType),
+        gamers,
+        std::move(properties),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
 }
 
-CNA_Result cna_network_session_join_async(
+[[nodiscard]] CNA_Result NetworkSessionJoinAsync(
     const CNA_AvailableNetworkSessionHandle availableSessionHandle,
     const CNA_NetworkSessionAsyncCallback callback,
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        std::shared_ptr<AvailableSessionResource> available;
-        if (const CNA_Result result = GetSession(availableSessionHandle, &available);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoin(
-            available->value.get(),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndJoin(pending.get()), outSession);
-    });
+    std::shared_ptr<AvailableSessionResource> available;
+    if (const CNA_Result result = GetSession(availableSessionHandle, &available);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoin(
+        available->value.get(),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(NetworkSession::EndJoin(pending.get()), outSession);
 }
 
-CNA_Result cna_network_session_join_invited_async(
+[[nodiscard]] CNA_Result NetworkSessionJoinInvitedAsync(
     const int32_t maxLocalGamers,
     const CNA_NetworkSessionAsyncCallback callback,
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
-            static_cast<int>(maxLocalGamers),
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(
-            NetworkSession::EndJoinInvited(pending.get()), outSession);
-    });
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
+        static_cast<int>(maxLocalGamers),
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(
+        NetworkSession::EndJoinInvited(pending.get()), outSession);
 }
 
-CNA_Result cna_network_session_join_invited_with_local_gamers_async(
+[[nodiscard]] CNA_Result NetworkSessionJoinInvitedWithLocalGamersAsync(
     const CNA_Handle* const localGamers,
     const uint64_t count,
     const CNA_NetworkSessionAsyncCallback callback,
     void* const context,
     CNA_NetworkSessionHandle* const outSession)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The NetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        SignedInGamerList gamers;
-        if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
-            gamers,
-            CompletionDelegate(callback, context),
-            std::any{}));
-        return CreateSessionResourceHandle(
-            NetworkSession::EndJoinInvited(pending.get()), outSession);
-    });
+    SignedInGamerList gamers;
+    if (const CNA_Result result = BorrowSignedInGamers(localGamers, count, &gamers);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
+        gamers,
+        CompletionDelegate(callback, context),
+        std::any{}));
+    return CreateSessionResourceHandle(
+        NetworkSession::EndJoinInvited(pending.get()), outSession);
 }
-
-namespace {
 
 using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
 using Microsoft::Xna::Framework::Net::SendDataOptions;
@@ -1688,78 +1531,66 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
         outSender);
 }
 
-} // namespace
-
-CNA_Result cna_local_network_gamer_create_ext(
+[[nodiscard]] CNA_Result LocalNetworkGamerCreateExt(
     const CNA_SignedInGamerHandle signedInGamerHandle,
     const CNA_NetworkSessionHandle sessionHandle,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGamer == nullptr) {
-            return InvalidArgument("The NetworkGamer output handle is null.");
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedIn = nullptr;
+    if (signedInGamerHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
+                signedInGamerHandle,
+                &signedIn);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        *outGamer = CNA_INVALID_HANDLE;
-        Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedIn = nullptr;
-        if (signedInGamerHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
-                    signedInGamerHandle,
-                    &signedIn);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
+    }
+    NetworkSession* session = nullptr;
+    if (sessionHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
+                sessionHandle,
+                &session);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-        NetworkSession* session = nullptr;
-        if (sessionHandle != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
-                    sessionHandle,
-                    &session);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        return CNA::C::Detail::CreateOwnedLocalNetworkGamer(
-            signedIn,
-            session,
-            sessionHandle,
-            outGamer);
-    });
+    }
+    return CNA::C::Detail::CreateOwnedLocalNetworkGamer(
+        signedIn,
+        session,
+        sessionHandle,
+        outGamer);
 }
 
-CNA_Result cna_local_network_gamer_receive_data(
+[[nodiscard]] CNA_Result LocalNetworkGamerReceiveData(
     const CNA_NetworkGamerHandle gamerHandle,
     uint8_t* const destination,
     const uint64_t capacity,
     CNA_NetworkGamerHandle* const outSender,
     uint64_t* const outReceived)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSender == nullptr || outReceived == nullptr ||
-            (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The receive output is invalid.");
-        }
-        *outSender = CNA_INVALID_HANDLE;
-        *outReceived = 0U;
-        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Overflow("The receive capacity exceeds the canonical range.");
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
-        NetworkGamer* sender = nullptr;
-        const int received = gamer->ReceiveData(buffer, sender);
-        if (received > 0) {
-            std::memcpy(destination, buffer.data(), static_cast<std::size_t>(received));
-        }
-        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
-        return PublishSender(sender, gamerHandle, outSender);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The receive output is invalid.");
+    }
+    *outReceived = 0U;
+    if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return Overflow("The receive capacity exceeds the canonical range.");
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
+    NetworkGamer* sender = nullptr;
+    const int received = gamer->ReceiveData(buffer, sender);
+    if (received > 0) {
+        std::memcpy(destination, buffer.data(), static_cast<std::size_t>(received));
+    }
+    *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+    return PublishSender(sender, gamerHandle, outSender);
 }
 
-CNA_Result cna_local_network_gamer_receive_data_at(
+[[nodiscard]] CNA_Result LocalNetworkGamerReceiveDataAt(
     const CNA_NetworkGamerHandle gamerHandle,
     uint8_t* const destination,
     const uint64_t capacity,
@@ -1767,88 +1598,76 @@ CNA_Result cna_local_network_gamer_receive_data_at(
     CNA_NetworkGamerHandle* const outSender,
     uint64_t* const outReceived)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSender == nullptr || outReceived == nullptr ||
-            (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The receive output is invalid.");
-        }
-        *outSender = CNA_INVALID_HANDLE;
-        *outReceived = 0U;
-        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Overflow("The receive capacity exceeds the canonical range.");
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
-        NetworkGamer* sender = nullptr;
-        const int received = gamer->ReceiveData(buffer, static_cast<int>(offset), sender);
-        if (received > 0) {
-            std::memcpy(destination, buffer.data(), buffer.size());
-        }
-        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
-        return PublishSender(sender, gamerHandle, outSender);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The receive output is invalid.");
+    }
+    *outReceived = 0U;
+    if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return Overflow("The receive capacity exceeds the canonical range.");
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
+    NetworkGamer* sender = nullptr;
+    const int received = gamer->ReceiveData(buffer, static_cast<int>(offset), sender);
+    if (received > 0) {
+        std::memcpy(destination, buffer.data(), buffer.size());
+    }
+    *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+    return PublishSender(sender, gamerHandle, outSender);
 }
 
-CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
+[[nodiscard]] CNA_Result LocalNetworkGamerReceiveDataIntoPacketReader(
     const CNA_NetworkGamerHandle gamerHandle,
     const CNA_PacketReaderHandle readerHandle,
     CNA_NetworkGamerHandle* const outSender,
     uint64_t* const outReceived)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSender == nullptr || outReceived == nullptr) {
-            return InvalidArgument("The receive output is invalid.");
-        }
-        *outSender = CNA_INVALID_HANDLE;
-        *outReceived = 0U;
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::Net::PacketReader* reader = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::BorrowPacketReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* sender = nullptr;
-        const int received = gamer->ReceiveData(*reader, sender);
-        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
-        return PublishSender(sender, gamerHandle, outSender);
-    });
+    *outReceived = 0U;
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::Net::PacketReader* reader = nullptr;
+    if (const CNA_Result result = CNA::C::Detail::BorrowPacketReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* sender = nullptr;
+    const int received = gamer->ReceiveData(*reader, sender);
+    *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+    return PublishSender(sender, gamerHandle, outSender);
 }
 
-CNA_Result cna_local_network_gamer_send_data(
+[[nodiscard]] CNA_Result LocalNetworkGamerSendData(
     const CNA_NetworkGamerHandle gamerHandle,
     const uint8_t* const data,
     const uint64_t count,
     const CNA_SendDataOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> payload;
-        if (const CNA_Result result = CopyPayload(data, count, &payload);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(payload, static_cast<SendDataOptions>(options));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateSendOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> payload;
+    if (const CNA_Result result = CopyPayload(data, count, &payload);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    gamer->SendData(payload, static_cast<SendDataOptions>(options));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_local_network_gamer_send_data_range(
+[[nodiscard]] CNA_Result LocalNetworkGamerSendDataRange(
     const CNA_NetworkGamerHandle gamerHandle,
     const uint8_t* const data,
     const uint64_t count,
@@ -1856,63 +1675,59 @@ CNA_Result cna_local_network_gamer_send_data_range(
     const int32_t length,
     const CNA_SendDataOptions options)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> payload;
-        if (const CNA_Result result = CopyPayload(data, count, &payload);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(
-            payload,
-            static_cast<int>(offset),
-            static_cast<int>(length),
-            static_cast<SendDataOptions>(options));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateSendOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> payload;
+    if (const CNA_Result result = CopyPayload(data, count, &payload);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    gamer->SendData(
+        payload,
+        static_cast<int>(offset),
+        static_cast<int>(length),
+        static_cast<SendDataOptions>(options));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_local_network_gamer_send_data_to(
+[[nodiscard]] CNA_Result LocalNetworkGamerSendDataTo(
     const CNA_NetworkGamerHandle gamerHandle,
     const uint8_t* const data,
     const uint64_t count,
     const CNA_SendDataOptions options,
     const CNA_NetworkGamerHandle recipientHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* recipient = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> payload;
-        if (const CNA_Result result = CopyPayload(data, count, &payload);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(payload, static_cast<SendDataOptions>(options), recipient);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateSendOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* recipient = nullptr;
+    if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> payload;
+    if (const CNA_Result result = CopyPayload(data, count, &payload);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    gamer->SendData(payload, static_cast<SendDataOptions>(options), recipient);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_local_network_gamer_send_data_range_to(
+[[nodiscard]] CNA_Result LocalNetworkGamerSendDataRangeTo(
     const CNA_NetworkGamerHandle gamerHandle,
     const uint8_t* const data,
     const uint64_t count,
@@ -1921,114 +1736,110 @@ CNA_Result cna_local_network_gamer_send_data_range_to(
     const CNA_SendDataOptions options,
     const CNA_NetworkGamerHandle recipientHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* recipient = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<SharpRuntime::bytecs> payload;
-        if (const CNA_Result result = CopyPayload(data, count, &payload);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(
-            payload,
-            static_cast<int>(offset),
-            static_cast<int>(length),
-            static_cast<SendDataOptions>(options),
-            recipient);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateSendOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* recipient = nullptr;
+    if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<SharpRuntime::bytecs> payload;
+    if (const CNA_Result result = CopyPayload(data, count, &payload);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    gamer->SendData(
+        payload,
+        static_cast<int>(offset),
+        static_cast<int>(length),
+        static_cast<SendDataOptions>(options),
+        recipient);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_local_network_gamer_send_packet_writer_to(
+[[nodiscard]] CNA_Result LocalNetworkGamerSendPacketWriterTo(
     const CNA_NetworkGamerHandle gamerHandle,
     const CNA_PacketWriterHandle writerHandle,
     const CNA_SendDataOptions options,
     const CNA_NetworkGamerHandle recipientHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        NetworkGamer* recipient = nullptr;
-        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::Net::PacketWriter* writer = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::BorrowPacketWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(*writer, static_cast<SendDataOptions>(options), recipient);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateSendOptions(options);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    NetworkGamer* recipient = nullptr;
+    if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::Net::PacketWriter* writer = nullptr;
+    if (const CNA_Result result = CNA::C::Detail::BorrowPacketWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    gamer->SendData(*writer, static_cast<SendDataOptions>(options), recipient);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_local_network_gamer_enqueue_packet_ext(
+[[nodiscard]] CNA_Result LocalNetworkGamerEnqueuePacketExt(
     const CNA_NetworkGamerHandle gamerHandle,
     const CNA_NetworkEventInfo* const eventInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
-            eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
-            eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
-            eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
-            return InvalidArgument("The network event description names an unknown identity.");
-        }
-        if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
-            return InvalidArgument("The network event payload is invalid.");
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result =
+            ValidateVersionedStructure(eventInfo, "The network event description is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
+        eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
+        eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
+        eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
+        return InvalidArgument("The network event description names an unknown identity.");
+    }
+    if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
+        return InvalidArgument("The network event payload is invalid.");
+    }
+    LocalNetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        NetworkSession::NetworkEvent event;
-        event.Type = static_cast<NetworkSession::NetworkEventType>(eventInfo->type);
-        event.Reliable = static_cast<SendDataOptions>(eventInfo->reliable);
-        event.State = static_cast<NetworkSessionState>(eventInfo->state);
-        event.Reason = static_cast<NetworkSessionEndReason>(eventInfo->reason);
-        if (const CNA_Result result = BorrowOptionalGamer(eventInfo->gamer, &event.Gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = BorrowOptionalGamer(eventInfo->sender, &event.Sender);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (eventInfo->packet_byte_count != 0U) {
-            event.Packet.assign(
-                eventInfo->packet,
-                eventInfo->packet + eventInfo->packet_byte_count);
-        }
-        gamer->EnqueuePacket(std::move(event));
-        return CNA_RESULT_SUCCESS;
-    });
+    NetworkSession::NetworkEvent event;
+    event.Type = static_cast<NetworkSession::NetworkEventType>(eventInfo->type);
+    event.Reliable = static_cast<SendDataOptions>(eventInfo->reliable);
+    event.State = static_cast<NetworkSessionState>(eventInfo->state);
+    event.Reason = static_cast<NetworkSessionEndReason>(eventInfo->reason);
+    if (const CNA_Result result = BorrowOptionalGamer(eventInfo->gamer, &event.Gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = BorrowOptionalGamer(eventInfo->sender, &event.Sender);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (eventInfo->packet_byte_count != 0U) {
+        event.Packet.assign(
+            eventInfo->packet,
+            eventInfo->packet + eventInfo->packet_byte_count);
+    }
+    gamer->EnqueuePacket(std::move(event));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/NetSessions.toml.
 #include "generated/NetSessions.inc"

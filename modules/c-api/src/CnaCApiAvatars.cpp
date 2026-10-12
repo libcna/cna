@@ -141,329 +141,277 @@ struct AvatarRendererResource final {
         outDescription);
 }
 
-} // namespace
-
-CNA_Result cna_avatar_description_create(
+[[nodiscard]] CNA_Result AvatarDescriptionCreate(
     const uint8_t* const description,
     const uint64_t byteCount,
     CNA_AvatarDescriptionHandle* const outDescription)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDescription == nullptr) {
-            return InvalidArgument("The AvatarDescription output handle is null.");
-        }
-        *outDescription = CNA_INVALID_HANDLE;
-        if (description == nullptr && byteCount != UINT64_C(0)) {
-            return InvalidArgument("The description byte array is null.");
-        }
-        const std::vector<SharpRuntime::bytecs> bytes(
-            description,
-            description + static_cast<std::size_t>(byteCount));
-        return PublishDescription(AvatarDescription(bytes), outDescription);
-    });
+    if (description == nullptr && byteCount != UINT64_C(0)) {
+        return InvalidArgument("The description byte array is null.");
+    }
+    const std::vector<SharpRuntime::bytecs> bytes(
+        description,
+        description + static_cast<std::size_t>(byteCount));
+    return PublishDescription(AvatarDescription(bytes), outDescription);
 }
 
-CNA_Result cna_avatar_description_get_from_gamer(
+[[nodiscard]] CNA_Result AvatarDescriptionGetFromGamer(
     const CNA_GamerHandle gamerHandle,
     const CNA_GamerAsyncCallback callback,
     void* const context,
     CNA_AvatarDescriptionHandle* const outDescription)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDescription == nullptr) {
-            return InvalidArgument("The AvatarDescription output handle is null.");
-        }
-        *outDescription = CNA_INVALID_HANDLE;
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowAnyGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical read completes before its own begin route returns, so the operation is
-        // released here rather than handed to a caller that has nothing to do with it.
-        const std::unique_ptr<System::IAsyncResult> action(
-            AvatarDescription::BeginGetFromGamer(gamer, System::AsyncCallback{}, std::any{}));
-        if (const CNA_Result result =
-                PublishDescription(AvatarDescription::EndGetFromGamer(action.get()), outDescription);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    Gamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowAnyGamer(gamerHandle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical read completes before its own begin route returns, so the operation is
+    // released here rather than handed to a caller that has nothing to do with it.
+    const std::unique_ptr<System::IAsyncResult> action(
+        AvatarDescription::BeginGetFromGamer(gamer, System::AsyncCallback{}, std::any{}));
+    if (const CNA_Result result =
+            PublishDescription(AvatarDescription::EndGetFromGamer(action.get()), outDescription);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (callback != nullptr) {
+        callback(context);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_description_subscribe_changed_ext(
+[[nodiscard]] CNA_Result AvatarDescriptionSubscribeChangedExt(
     const CNA_AvatarDescriptionHandle descriptionHandle,
     const CNA_GamerAsyncCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The avatar event callback is null.");
-        }
-        // AvatarDescription.Changed is an instance event, so the subscription names one
-        // description rather than a process-wide source.
-        std::shared_ptr<AvatarDescriptionResource> description;
-        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto* const source = &description->value->Changed;
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return CreateHandle(ObjectKind::GamerEventRegistration,
-            std::static_pointer_cast<CNA::C::Detail::GamerRegistrationBase>(
-                std::make_shared<CNA::C::Detail::GamerRegistration<System::EventArgs>>(
-                    source,
-                    token)),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The avatar event callback is null.");
+    }
+    // AvatarDescription.Changed is an instance event, so the subscription names one
+    // description rather than a process-wide source.
+    std::shared_ptr<AvatarDescriptionResource> description;
+    if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const source = &description->value->Changed;
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return CreateHandle(ObjectKind::GamerEventRegistration,
+        std::static_pointer_cast<CNA::C::Detail::GamerRegistrationBase>(
+            std::make_shared<CNA::C::Detail::GamerRegistration<System::EventArgs>>(
+                source,
+                token)),
+        outRegistration);
 }
 
-CNA_Result cna_avatar_animation_get_bone_transform_at(
+[[nodiscard]] CNA_Result AvatarAnimationGetBoneTransformAt(
     const CNA_AvatarAnimationHandle animationHandle,
     const int32_t index,
     CNA_Matrix* const outTransform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTransform == nullptr) {
-            return InvalidArgument("The bone transform output is null.");
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto transforms = animation->value->getBoneTransformsProperty();
-        if (index < 0 || index >= transforms.getCountProperty()) {
-            return InvalidArgument("The bone index is outside the animation's skeleton.");
-        }
-        *outTransform = ToC(transforms[static_cast<int>(index)]);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarAnimationResource> animation;
+    if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto transforms = animation->value->getBoneTransformsProperty();
+    if (index < 0 || index >= transforms.getCountProperty()) {
+        return InvalidArgument("The bone index is outside the animation's skeleton.");
+    }
+    *outTransform = ToC(transforms[static_cast<int>(index)]);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_create(
+[[nodiscard]] CNA_Result AvatarRendererCreate(
     const CNA_AvatarDescriptionHandle descriptionHandle,
     const CNA_Bool useLoadingEffect,
     CNA_AvatarRendererHandle* const outRenderer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRenderer == nullptr) {
-            return InvalidArgument("The AvatarRenderer output handle is null.");
-        }
-        *outRenderer = CNA_INVALID_HANDLE;
-        if (useLoadingEffect != CNA_FALSE && useLoadingEffect != CNA_TRUE) {
-            return InvalidArgument("The loading-effect flag is invalid.");
-        }
-        std::shared_ptr<AvatarDescriptionResource> description;
-        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<AvatarRendererResource>();
-        resource->description = description;
-        resource->value = std::make_shared<AvatarRenderer>(
-            description->value.get(),
-            useLoadingEffect == CNA_TRUE);
-        return CreateHandle(ObjectKind::AvatarRenderer, resource, outRenderer);
-    });
+    std::shared_ptr<AvatarDescriptionResource> description;
+    if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<AvatarRendererResource>();
+    resource->description = description;
+    resource->value = std::make_shared<AvatarRenderer>(
+        description->value.get(),
+        useLoadingEffect == CNA_TRUE);
+    return CreateHandle(ObjectKind::AvatarRenderer, resource, outRenderer);
 }
 
-CNA_Result cna_avatar_renderer_get_transforms(
+[[nodiscard]] CNA_Result AvatarRendererGetTransforms(
     const CNA_AvatarRendererHandle rendererHandle,
     CNA_Matrix* const outWorld,
     CNA_Matrix* const outView,
     CNA_Matrix* const outProjection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outWorld != nullptr) {
-            *outWorld = ToC(renderer->value->getWorldProperty());
-        }
-        if (outView != nullptr) {
-            *outView = ToC(renderer->value->getViewProperty());
-        }
-        if (outProjection != nullptr) {
-            *outProjection = ToC(renderer->value->getProjectionProperty());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (outWorld != nullptr) {
+        *outWorld = ToC(renderer->value->getWorldProperty());
+    }
+    if (outView != nullptr) {
+        *outView = ToC(renderer->value->getViewProperty());
+    }
+    if (outProjection != nullptr) {
+        *outProjection = ToC(renderer->value->getProjectionProperty());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_set_transforms(
+[[nodiscard]] CNA_Result AvatarRendererSetTransforms(
     const CNA_AvatarRendererHandle rendererHandle,
     const CNA_Matrix* const world,
     const CNA_Matrix* const view,
     const CNA_Matrix* const projection)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (world != nullptr) {
-            renderer->value->setWorldProperty(ToNative(*world));
-        }
-        if (view != nullptr) {
-            renderer->value->setViewProperty(ToNative(*view));
-        }
-        if (projection != nullptr) {
-            renderer->value->setProjectionProperty(ToNative(*projection));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (world != nullptr) {
+        renderer->value->setWorldProperty(ToNative(*world));
+    }
+    if (view != nullptr) {
+        renderer->value->setViewProperty(ToNative(*view));
+    }
+    if (projection != nullptr) {
+        renderer->value->setProjectionProperty(ToNative(*projection));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_get_lighting(
+[[nodiscard]] CNA_Result AvatarRendererGetLighting(
     const CNA_AvatarRendererHandle rendererHandle,
     CNA_Vector3* const outLightColor,
     CNA_Vector3* const outLightDirection,
     CNA_Vector3* const outAmbientLightColor)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outLightColor != nullptr) {
-            const Vector3 value = renderer->value->getLightColorProperty();
-            *outLightColor = CNA_Vector3{value.X, value.Y, value.Z};
-        }
-        if (outLightDirection != nullptr) {
-            const Vector3 value = renderer->value->getLightDirectionProperty();
-            *outLightDirection = CNA_Vector3{value.X, value.Y, value.Z};
-        }
-        if (outAmbientLightColor != nullptr) {
-            const Vector3 value = renderer->value->getAmbientLightColorProperty();
-            *outAmbientLightColor = CNA_Vector3{value.X, value.Y, value.Z};
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (outLightColor != nullptr) {
+        const Vector3 value = renderer->value->getLightColorProperty();
+        *outLightColor = CNA_Vector3{value.X, value.Y, value.Z};
+    }
+    if (outLightDirection != nullptr) {
+        const Vector3 value = renderer->value->getLightDirectionProperty();
+        *outLightDirection = CNA_Vector3{value.X, value.Y, value.Z};
+    }
+    if (outAmbientLightColor != nullptr) {
+        const Vector3 value = renderer->value->getAmbientLightColorProperty();
+        *outAmbientLightColor = CNA_Vector3{value.X, value.Y, value.Z};
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_set_lighting(
+[[nodiscard]] CNA_Result AvatarRendererSetLighting(
     const CNA_AvatarRendererHandle rendererHandle,
     const CNA_Vector3* const lightColor,
     const CNA_Vector3* const lightDirection,
     const CNA_Vector3* const ambientLightColor)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if ((lightColor != nullptr && !IsFinite(*lightColor)) ||
-            (lightDirection != nullptr && !IsFinite(*lightDirection)) ||
-            (ambientLightColor != nullptr && !IsFinite(*ambientLightColor))) {
-            return InvalidArgument("The lighting vectors must be finite.");
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (lightColor != nullptr) {
-            renderer->value->setLightColorProperty(
-                Vector3{lightColor->x, lightColor->y, lightColor->z});
-        }
-        if (lightDirection != nullptr) {
-            renderer->value->setLightDirectionProperty(
-                Vector3{lightDirection->x, lightDirection->y, lightDirection->z});
-        }
-        if (ambientLightColor != nullptr) {
-            renderer->value->setAmbientLightColorProperty(
-                Vector3{ambientLightColor->x, ambientLightColor->y, ambientLightColor->z});
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((lightColor != nullptr && !IsFinite(*lightColor)) ||
+        (lightDirection != nullptr && !IsFinite(*lightDirection)) ||
+        (ambientLightColor != nullptr && !IsFinite(*ambientLightColor))) {
+        return InvalidArgument("The lighting vectors must be finite.");
+    }
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (lightColor != nullptr) {
+        renderer->value->setLightColorProperty(
+            Vector3{lightColor->x, lightColor->y, lightColor->z});
+    }
+    if (lightDirection != nullptr) {
+        renderer->value->setLightDirectionProperty(
+            Vector3{lightDirection->x, lightDirection->y, lightDirection->z});
+    }
+    if (ambientLightColor != nullptr) {
+        renderer->value->setAmbientLightColorProperty(
+            Vector3{ambientLightColor->x, ambientLightColor->y, ambientLightColor->z});
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_get_parent_bone_at(
+[[nodiscard]] CNA_Result AvatarRendererGetParentBoneAt(
     const CNA_AvatarRendererHandle rendererHandle,
     const int32_t index,
     int32_t* const outParentIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outParentIndex == nullptr) {
-            return InvalidArgument("The parent-bone output is null.");
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto parents = renderer->value->getParentBonesProperty();
-        if (index < 0 || index >= parents.getCountProperty()) {
-            return InvalidArgument("The bone index is outside the avatar skeleton.");
-        }
-        *outParentIndex = static_cast<int32_t>(parents[static_cast<int>(index)]);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto parents = renderer->value->getParentBonesProperty();
+    if (index < 0 || index >= parents.getCountProperty()) {
+        return InvalidArgument("The bone index is outside the avatar skeleton.");
+    }
+    *outParentIndex = static_cast<int32_t>(parents[static_cast<int>(index)]);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_get_bind_pose_at(
+[[nodiscard]] CNA_Result AvatarRendererGetBindPoseAt(
     const CNA_AvatarRendererHandle rendererHandle,
     const int32_t index,
     CNA_Matrix* const outTransform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTransform == nullptr) {
-            return InvalidArgument("The bind-pose output is null.");
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto bindPose = renderer->value->getBindPoseProperty();
-        if (index < 0 || index >= bindPose.getCountProperty()) {
-            return InvalidArgument("The bone index is outside the avatar skeleton.");
-        }
-        *outTransform = ToC(bindPose[static_cast<int>(index)]);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto bindPose = renderer->value->getBindPoseProperty();
+    if (index < 0 || index >= bindPose.getCountProperty()) {
+        return InvalidArgument("The bone index is outside the avatar skeleton.");
+    }
+    *outTransform = ToC(bindPose[static_cast<int>(index)]);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_avatar_renderer_draw_bones(
+[[nodiscard]] CNA_Result AvatarRendererDrawBones(
     const CNA_AvatarRendererHandle rendererHandle,
     const CNA_Matrix* const bones,
     const uint64_t boneCount,
     const CNA_AvatarExpression* const expression)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (bones == nullptr && boneCount != UINT64_C(0)) {
-            return InvalidArgument("The bone array is null.");
-        }
-        AvatarExpression nativeExpression;
-        if (const CNA_Result result = ToNativeExpression(expression, &nativeExpression);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<Matrix> nativeBones;
-        nativeBones.reserve(static_cast<std::size_t>(boneCount));
-        for (uint64_t index = UINT64_C(0); index < boneCount; ++index) {
-            nativeBones.push_back(ToNative(bones[index]));
-        }
-        renderer->value->Draw(nativeBones, nativeExpression);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (bones == nullptr && boneCount != UINT64_C(0)) {
+        return InvalidArgument("The bone array is null.");
+    }
+    AvatarExpression nativeExpression;
+    if (const CNA_Result result = ToNativeExpression(expression, &nativeExpression);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<AvatarRendererResource> renderer;
+    if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<Matrix> nativeBones;
+    nativeBones.reserve(static_cast<std::size_t>(boneCount));
+    for (uint64_t index = UINT64_C(0); index < boneCount; ++index) {
+        nativeBones.push_back(ToNative(bones[index]));
+    }
+    renderer->value->Draw(nativeBones, nativeExpression);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Avatars.toml.
 #include "generated/Avatars.inc"

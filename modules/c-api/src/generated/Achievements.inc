@@ -481,3 +481,94 @@ CNA_Result cna_signed_in_gamer_begin_get_achievements(
         return CompleteAtOnce(cna_signed_in_gamer_get_achievements(gamer, out_achievements), callback, context);
     });
 }
+
+CNA_Result cna_achievement_create_ext(
+    const CNA_StringView key,
+    const CNA_StringView name,
+    const CNA_StringView description,
+    const CNA_Bool display_before_earned,
+    const CNA_Bool is_earned,
+    const int64_t earned_date_time_ticks,
+    CNA_AchievementHandle* const out_achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_achievement == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_create_ext: out_achievement is null.");
+        }
+        *out_achievement = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(display_before_earned, "display_before_earned");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(is_earned, "is_earned");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return AchievementCreateExt(key, name, description, display_before_earned, is_earned, earned_date_time_ticks, out_achievement);
+    });
+}
+
+CNA_Result cna_achievement_get_picture_size(
+    const CNA_AchievementHandle achievement,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_get_picture_size: out_bytes is null.");
+        }
+        return AchievementGetPictureSize(achievement, out_bytes);
+    });
+}
+
+CNA_Result cna_achievement_collection_create_ext(
+    const CNA_AchievementHandle* const achievements,
+    const uint64_t count,
+    CNA_AchievementCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_create_ext: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return AchievementCollectionCreateExt(achievements, count, out_collection);
+    });
+}
+
+CNA_Result cna_achievement_collection_get_by_key(
+    const CNA_AchievementCollectionHandle collection,
+    const CNA_StringView key,
+    CNA_AchievementHandle* const out_achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_achievement == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_get_by_key: out_achievement is null.");
+        }
+        *out_achievement = CNA_INVALID_HANDLE;
+        return AchievementCollectionGetByKey(collection, key, out_achievement);
+    });
+}
+
+CNA_Result cna_achievement_collection_copy_to(
+    const CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle* const destination,
+    const uint64_t capacity,
+    const int32_t index,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_collection_copy_to: out_count is null.");
+        }
+        return AchievementCollectionCopyTo(collection, destination, capacity, index, out_count);
+    });
+}
+
+CNA_Result cna_achievement_collection_insert(
+    const CNA_AchievementCollectionHandle collection,
+    const int32_t index,
+    const CNA_AchievementHandle achievement)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AchievementCollectionInsert(collection, index, achievement);
+    });
+}
