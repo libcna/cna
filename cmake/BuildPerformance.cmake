@@ -368,11 +368,13 @@ endif()
 # in a multi-renderer 2D game, the gamer-services backend, the system Guide and the 30 MB avatar
 # catalog. Named first, the runtime owns the symbols it exports, and a member is extracted only for
 # a CNA symbol. As-needed, so it adds no dependency; GNU ld and lld link the same members with or
-# without it. Skipped for a static runtime, which this would replace with the shared one.
+# without it. Skipped for a static runtime, which this would replace with the shared one: a flag
+# that links the whole program or the C++ runtime statically. -static-libgcc does neither.
 set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION "")
 if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
    AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"
-   AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-static")
+   AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES
+       "(^|[^A-Za-z0-9_+-])-(static|static-pie|static-libstdc\\+\\+)($|[^A-Za-z0-9_+-])")
     foreach(_cna_cxx_runtime IN ITEMS stdc++ c++)
         if(_cna_cxx_runtime IN_LIST CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
             set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION
