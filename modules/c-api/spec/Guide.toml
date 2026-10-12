@@ -37,6 +37,8 @@ cna_gamer_services_dispatcher_update = { call = "GamerServicesDispatcher::Update
 cna_gamer_services_dispatcher_update_async = { value = "GamerServicesDispatcher::UpdateAsync()" }
 cna_gamer_services_dispatcher_get_freed_gamer_count_ext = { value = "GamerServicesDispatcher::GetFreedGamerCountForTesting()" }
 cna_guide_set_notification_position = { call = "Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position))", invalid_if = "position > CNA_NOTIFICATION_POSITION_MAXIMUM" }
+cna_guide_end_show_keyboard_input_size = { size = "KeyboardInputAnswer()", validate = 'InvalidStateIf(PendingKeyboardInput() == nullptr, "No keyboard input has been started.")' }
+cna_guide_end_show_keyboard_input = { copy = "KeyboardInputAnswer()", validate = 'InvalidStateIf(PendingKeyboardInput() == nullptr, "No keyboard input has been started.")' }
 
 # `object` is the canonical PlayerIndex the C player index maps to; `other` the gamer shown.
 cna_guide_show_game_invite_for_session = { call = "Guide::ShowGameInvite(session_id)" }

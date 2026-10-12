@@ -291,6 +291,39 @@ CNA_Result cna_guide_set_notification_position(
     });
 }
 
+CNA_Result cna_guide_end_show_keyboard_input_size(
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_guide_end_show_keyboard_input_size: out_bytes is null.");
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(PendingKeyboardInput() == nullptr, "No keyboard input has been started.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(KeyboardInputAnswer(), out_bytes);
+    });
+}
+
+CNA_Result cna_guide_end_show_keyboard_input(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(PendingKeyboardInput() == nullptr, "No keyboard input has been started.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(KeyboardInputAnswer(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_guide_show_game_invite_for_session(
     const CNA_StringView c_session_id)
 {

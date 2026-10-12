@@ -276,8 +276,6 @@ class Route:
         if self.requirements and not self.has_lookup:
             raise SpecError(f"{name}: require reads the looked-up object; without a lookup, "
                             "write validate")
-        if (self.refusals or self.validations) and self.kind == "copy" and not self.has_lookup:
-            raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if or validate")
         if self.versioned and self.kind not in ("value", "get"):
             raise SpecError(f"{name}: only a 'value' or 'get' output can be versioned")
 
@@ -476,6 +474,7 @@ class Route:
         i = " " * 8
         reads_text = any(self.types.kind_of(p.type) == "text" for p in self.inputs)
         if (self.kind == "copy" and not self.has_lookup and not reads_text
+                and not self.refusals and not self.validations
                 and self.outputs[0].type == "char"):
             destination, capacity, out_bytes = (p.name for p in self.outputs)
             return ([f"    return {DETAIL}CopyFormattedText({destination}, {capacity}, "

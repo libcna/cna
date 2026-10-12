@@ -316,6 +316,8 @@ static CNA_Vector3 v_CNA_Vector3;
 static CNA_Vector4 v_CNA_Vector4;
 static CNA_VertexBufferHandle v_CNA_VertexBufferHandle;
 static CNA_VertexDeclarationHandle v_CNA_VertexDeclarationHandle;
+static CNA_VertexElement v_CNA_VertexElement;
+static CNA_VertexType v_CNA_VertexType;
 static CNA_VideoHandle v_CNA_VideoHandle;
 static CNA_VideoPlayerHandle v_CNA_VideoPlayerHandle;
 static CNA_Viewport v_CNA_Viewport;
@@ -1296,6 +1298,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_gamer_services_dispatcher_get_window_handle(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_services_dispatcher_get_window_handle", "a null out_window_handle");
     failures += expect(cna_gamer_services_dispatcher_update_async(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_services_dispatcher_update_async", "a null out_did_work");
     failures += expect(cna_gamer_services_dispatcher_get_freed_gamer_count_ext(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_services_dispatcher_get_freed_gamer_count_ext", "a null out_count");
+    failures += expect(cna_guide_end_show_keyboard_input_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_end_show_keyboard_input_size", "a null out_bytes");
+    failures += expect(cna_guide_end_show_keyboard_input(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_end_show_keyboard_input", "a null destination with a capacity");
+    failures += expect(cna_guide_end_show_keyboard_input(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_end_show_keyboard_input", "a null out_bytes");
     failures += expect(cna_index_buffer_get_type_name_byte_count(v_CNA_IndexBufferHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_index_buffer_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_index_buffer_copy_type_name(v_CNA_IndexBufferHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_index_buffer_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_index_buffer_copy_type_name(v_CNA_IndexBufferHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_index_buffer_copy_type_name", "a null out_bytes");
@@ -1743,6 +1748,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_media_library_get_type_name_size(v_CNA_MediaLibraryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_get_type_name_size", "a null out_bytes");
     failures += expect(cna_media_library_copy_type_name(v_CNA_MediaLibraryHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_media_library_copy_type_name(v_CNA_MediaLibraryHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_copy_type_name", "a null out_bytes");
+    failures += expect(cna_media_library_get_media_source_name_size(v_CNA_MediaLibraryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_get_media_source_name_size", "a null out_bytes");
+    failures += expect(cna_media_library_copy_media_source_name(v_CNA_MediaLibraryHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_copy_media_source_name", "a null destination with a capacity");
+    failures += expect(cna_media_library_copy_media_source_name(v_CNA_MediaLibraryHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_copy_media_source_name", "a null out_bytes");
     failures += expect(cna_picture_get_name_size(v_CNA_PictureHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_picture_get_name_size", "a null out_bytes");
     failures += expect(cna_picture_copy_name(v_CNA_PictureHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_picture_copy_name", "a null destination with a capacity");
     failures += expect(cna_picture_copy_name(v_CNA_PictureHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_picture_copy_name", "a null out_bytes");
@@ -2335,6 +2343,26 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_vertex_declaration_get_stride(v_CNA_VertexDeclarationHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_get_stride", "a null out_vertex_stride");
     failures += expect(cna_vertex_declaration_get_type_name_byte_count(v_CNA_VertexDeclarationHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_vertex_declaration_create_empty(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_create_empty", "a null out_declaration");
+    failures += expect(cna_vertex_value_get_string_byte_count(v_CNA_VertexType, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_get_string_byte_count", "a null out_byte_count");
+    failures += expect(cna_vertex_value_get_string_byte_count(v_CNA_VertexType, NULL, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_get_string_byte_count", "a null value");
+    failures += expect(cna_vertex_value_copy_string(v_CNA_VertexType, NULL, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_copy_string", "a null destination with a capacity");
+    failures += expect(cna_vertex_value_copy_string(v_CNA_VertexType, NULL, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_copy_string", "a null out_bytes");
+    failures += expect(cna_vertex_value_copy_string(v_CNA_VertexType, NULL, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_copy_string", "a null value");
+    failures += expect(cna_vertex_value_init_default(v_CNA_VertexType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_init_default", "a null out_value");
+    failures += expect(cna_vertex_value_equals(v_CNA_VertexType, NULL, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_equals", "a null out_equal");
+    failures += expect(cna_vertex_value_equals(v_CNA_VertexType, NULL, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_equals", "a null left");
+    failures += expect(cna_vertex_value_equals(v_CNA_VertexType, NULL, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_equals", "a null right");
+    failures += expect(cna_vertex_value_not_equals(v_CNA_VertexType, NULL, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_not_equals", "a null out_not_equal");
+    failures += expect(cna_vertex_value_not_equals(v_CNA_VertexType, NULL, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_not_equals", "a null left");
+    failures += expect(cna_vertex_value_not_equals(v_CNA_VertexType, NULL, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_not_equals", "a null right");
+    failures += expect(cna_vertex_value_get_hash_code(v_CNA_VertexType, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_get_hash_code", "a null out_hash");
+    failures += expect(cna_vertex_value_get_hash_code(v_CNA_VertexType, NULL, &o_int32_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_value_get_hash_code", "a null value");
+    failures += expect(cna_vertex_element_equals(v_CNA_VertexElement, v_CNA_VertexElement, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_equals", "a null out_equal");
+    failures += expect(cna_vertex_element_not_equals(v_CNA_VertexElement, v_CNA_VertexElement, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_not_equals", "a null out_not_equal");
+    failures += expect(cna_vertex_element_get_hash_code(v_CNA_VertexElement, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_get_hash_code", "a null out_hash");
+    failures += expect(cna_vertex_element_get_string_byte_count(v_CNA_VertexElement, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_get_string_byte_count", "a null out_byte_count");
+    failures += expect(cna_vertex_element_copy_string(v_CNA_VertexElement, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_copy_string", "a null destination with a capacity");
+    failures += expect(cna_vertex_element_copy_string(v_CNA_VertexElement, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_element_copy_string", "a null out_bytes");
     failures += expect(cna_video_get_width(v_CNA_VideoHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_get_width", "a null out_width");
     failures += expect(cna_video_get_height(v_CNA_VideoHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_get_height", "a null out_height");
     failures += expect(cna_video_get_frames_per_second(v_CNA_VideoHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_get_frames_per_second", "a null out_fps");
@@ -3534,6 +3562,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_media_library_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_media_library_get_type_name_size", what);
     failures += expect(cna_media_library_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_media_library_copy_type_name", what);
     failures += expect(cna_media_library_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_media_library_destroy", what);
+    failures += expect(cna_media_library_get_media_source_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_media_library_get_media_source_name_size", what);
+    failures += expect(cna_media_library_copy_media_source_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_media_library_copy_media_source_name", what);
     failures += expect(cna_picture_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_picture_dispose", what);
     failures += expect(cna_picture_get_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_picture_get_name_size", what);
     failures += expect(cna_picture_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_picture_copy_name", what);
@@ -4533,6 +4563,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2236 generated routes\n", failures);
+    printf("%d failed checks across 2251 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

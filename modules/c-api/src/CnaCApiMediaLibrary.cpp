@@ -37,6 +37,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -265,48 +266,6 @@ CNA_Result cna_media_library_get_media_source_type(
         }
         *outType = static_cast<CNA_MediaSourceType>(source->getMediaSourceTypeProperty());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_library_get_media_source_name_size(
-    const CNA_MediaLibraryHandle library,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The media source name byte-count output is null.");
-        }
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const MediaSource* const source = resource->value->getMediaSourceProperty();
-        if (source == nullptr) {
-            return InvalidState("The media library has no media source.");
-        }
-        *outBytes = source->getNameProperty().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_media_library_copy_media_source_name(
-    const CNA_MediaLibraryHandle library,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MediaLibraryResource> resource;
-        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const MediaSource* const source = resource->value->getMediaSourceProperty();
-        if (source == nullptr) {
-            return InvalidState("The media library has no media source.");
-        }
-        return CopyText(source->getNameProperty(), destination, capacity, outBytes);
     });
 }
 

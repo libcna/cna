@@ -1201,6 +1201,51 @@ CNA_Result cna_media_library_destroy(
     });
 }
 
+CNA_Result cna_media_library_get_media_source_name_size(
+    const CNA_MediaLibraryHandle library,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_get_media_source_name_size: out_bytes is null.");
+        }
+        std::shared_ptr<MediaLibraryResource> object{};
+        if (const CNA_Result routeResult = BorrowLibraryResource(library, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->value->getMediaSourceProperty() == nullptr, "The media library has no media source.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->getMediaSourceProperty()->getNameProperty(), out_bytes);
+    });
+}
+
+CNA_Result cna_media_library_copy_media_source_name(
+    const CNA_MediaLibraryHandle library,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MediaLibraryResource> object{};
+        if (const CNA_Result routeResult = BorrowLibraryResource(library, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->value->getMediaSourceProperty() == nullptr, "The media library has no media source.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getMediaSourceProperty()->getNameProperty(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_picture_dispose(
     const CNA_PictureHandle picture)
 {

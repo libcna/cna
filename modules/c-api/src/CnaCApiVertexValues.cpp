@@ -24,7 +24,6 @@ namespace {
 
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
@@ -204,135 +203,28 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
     }
 }
 
-[[nodiscard]] bool TryToNative(
-    const CNA_VertexElement value,
-    VertexElement* const outValue)
+[[nodiscard]] CNA_Result ValidateVertexElement(const CNA_VertexElement value) noexcept
 {
     VertexElementFormat format{};
     VertexElementUsage usage{};
-    if (outValue == nullptr || !TryMapVertexElementFormat(value.format, &format) ||
+    if (!TryMapVertexElementFormat(value.format, &format) ||
         !TryMapVertexElementUsage(value.usage, &usage)) {
-        return false;
+        return InvalidArgument("A vertex element contains an invalid format or usage identity.");
     }
-    *outValue = VertexElement(value.offset, format, usage, value.usage_index);
-    return true;
+    return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result InvalidVertexElement() noexcept
+/** A vertex element ValidateVertexElement accepted, as the canonical value. */
+[[nodiscard]] VertexElement ToNativeElement(const CNA_VertexElement value)
 {
-    return InvalidArgument("A vertex element contains an invalid format or usage identity.");
+    return VertexElement(
+        value.offset,
+        static_cast<VertexElementFormat>(value.format),
+        static_cast<VertexElementUsage>(value.usage),
+        value.usage_index);
 }
 
 } // namespace
-
-CNA_Result cna_vertex_value_init_default(
-    const CNA_VertexType type,
-    CNA_VertexValue* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The vertex-value output is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_VertexValue value = DefaultValueForType(type);
-        *outValue = value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_value_equals(
-    const CNA_VertexType type,
-    const CNA_VertexValue* const left,
-    const CNA_VertexValue* const right,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (left == nullptr || right == nullptr || outEqual == nullptr) {
-            return InvalidArgument("A vertex-value equality argument is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Bool equal = ToCBool(CompareVertexValues(type, *left, *right, false));
-        *outEqual = equal;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_value_not_equals(
-    const CNA_VertexType type,
-    const CNA_VertexValue* const left,
-    const CNA_VertexValue* const right,
-    CNA_Bool* const outNotEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (left == nullptr || right == nullptr || outNotEqual == nullptr) {
-            return InvalidArgument("A vertex-value inequality argument is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Bool notEqual = ToCBool(CompareVertexValues(type, *left, *right, true));
-        *outNotEqual = notEqual;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_value_get_hash_code(
-    const CNA_VertexType type,
-    const CNA_VertexValue* const value,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr || outHash == nullptr) {
-            return InvalidArgument("A vertex-value hash argument is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int32_t hash = VertexHashCode(type, *value);
-        *outHash = hash;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_value_get_string_byte_count(
-    const CNA_VertexType type,
-    const CNA_VertexValue* const value,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr || outByteCount == nullptr) {
-            return InvalidArgument("A vertex-value string-count argument is null.");
-        }
-        if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t byteCount = VertexString(type, *value).size();
-        *outByteCount = byteCount;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_value_copy_string(
-    const CNA_VertexType type,
-    const CNA_VertexValue* const value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    if (value == nullptr) {
-        return InvalidArgument("The vertex value is null.");
-    }
-    if (const CNA_Result result = ValidateVertexType(type); result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CopyFormattedText(destination, capacity, outByteCount, [=] {
-        return VertexString(type, *value);
-    });
-}
 
 CNA_Result cna_vertex_type_get_stride(
     const CNA_VertexType type,
@@ -380,93 +272,5 @@ CNA_Result cna_vertex_type_copy_elements(
     });
 }
 
-CNA_Result cna_vertex_element_equals(
-    const CNA_VertexElement left,
-    const CNA_VertexElement right,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The Boolean output is null.");
-        }
-        VertexElement nativeLeft;
-        VertexElement nativeRight;
-        if (!TryToNative(left, &nativeLeft) || !TryToNative(right, &nativeRight)) {
-            return InvalidVertexElement();
-        }
-        const CNA_Bool equal = ToCBool(nativeLeft == nativeRight);
-        *outEqual = equal;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_element_not_equals(
-    const CNA_VertexElement left,
-    const CNA_VertexElement right,
-    CNA_Bool* const outNotEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNotEqual == nullptr) {
-            return InvalidArgument("The Boolean output is null.");
-        }
-        VertexElement nativeLeft;
-        VertexElement nativeRight;
-        if (!TryToNative(left, &nativeLeft) || !TryToNative(right, &nativeRight)) {
-            return InvalidVertexElement();
-        }
-        const CNA_Bool notEqual = ToCBool(nativeLeft != nativeRight);
-        *outNotEqual = notEqual;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_element_get_hash_code(
-    const CNA_VertexElement value,
-    int32_t* const outHash)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHash == nullptr) {
-            return InvalidArgument("The hash-code output is null.");
-        }
-        VertexElement native;
-        if (!TryToNative(value, &native)) {
-            return InvalidVertexElement();
-        }
-        const int32_t hash = static_cast<int32_t>(native.GetHashCode());
-        *outHash = hash;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_element_get_string_byte_count(
-    const CNA_VertexElement value,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The string byte-count output is null.");
-        }
-        VertexElement native;
-        if (!TryToNative(value, &native)) {
-            return InvalidVertexElement();
-        }
-        const uint64_t byteCount = native.ToString().size();
-        *outByteCount = byteCount;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_vertex_element_copy_string(
-    const CNA_VertexElement value,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    VertexElement native;
-    if (!TryToNative(value, &native)) {
-        return InvalidVertexElement();
-    }
-    return CopyFormattedText(destination, capacity, outByteCount, [&] {
-        return native.ToString();
-    });
-}
+// The routes generated from modules/c-api/spec/VertexValues.toml.
+#include "generated/VertexValues.inc"

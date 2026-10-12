@@ -1,0 +1,22 @@
+# VertexValues routes, generated into src/generated/VertexValues.inc,
+# which src/CnaCApiVertexValues.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[values]
+[values.routes]
+cna_vertex_value_get_string_byte_count = { size = "VertexString(type, *value)", invalid_if = "value == nullptr", validate = "ValidateVertexType(type)" }
+cna_vertex_value_copy_string = { copy = "VertexString(type, *value)", invalid_if = "value == nullptr", validate = "ValidateVertexType(type)" }
+cna_vertex_value_init_default = { value = "DefaultValueForType(type)", validate = "ValidateVertexType(type)" }
+cna_vertex_value_equals = { value = "CompareVertexValues(type, *left, *right, false)", invalid_if = ["left == nullptr", "right == nullptr"], validate = "ValidateVertexType(type)" }
+cna_vertex_value_not_equals = { value = "CompareVertexValues(type, *left, *right, true)", invalid_if = ["left == nullptr", "right == nullptr"], validate = "ValidateVertexType(type)" }
+cna_vertex_value_get_hash_code = { value = "VertexHashCode(type, *value)", invalid_if = "value == nullptr", validate = "ValidateVertexType(type)" }
+
+# CNA_VertexElement has no ToNative of its own: its identities are validated first.
+[elements]
+raw = true
+
+[elements.routes]
+cna_vertex_element_equals = { value = "ToNativeElement(left) == ToNativeElement(right)", validate = ["ValidateVertexElement(left)", "ValidateVertexElement(right)"] }
+cna_vertex_element_not_equals = { value = "ToNativeElement(left) != ToNativeElement(right)", validate = ["ValidateVertexElement(left)", "ValidateVertexElement(right)"] }
+cna_vertex_element_get_hash_code = { value = "ToNativeElement(value).GetHashCode()", validate = "ValidateVertexElement(value)" }
+cna_vertex_element_get_string_byte_count = { size = "ToNativeElement(value).ToString()", validate = "ValidateVertexElement(value)" }
+cna_vertex_element_copy_string = { copy = "ToNativeElement(value).ToString()", validate = "ValidateVertexElement(value)" }

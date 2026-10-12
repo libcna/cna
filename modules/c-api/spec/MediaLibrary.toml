@@ -128,6 +128,8 @@ cna_media_library_dispose = { call = "object->value->Dispose()" }
 cna_media_library_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_media_library_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_media_library_destroy = { release = true }
+cna_media_library_get_media_source_name_size = { size = "object->value->getMediaSourceProperty()->getNameProperty()", require = 'InvalidStateIf(object->value->getMediaSourceProperty() == nullptr, "The media library has no media source.")' }
+cna_media_library_copy_media_source_name = { copy = "object->value->getMediaSourceProperty()->getNameProperty()", require = 'InvalidStateIf(object->value->getMediaSourceProperty() == nullptr, "The media library has no media source.")' }
 
 [picture]
 lookup = "Borrow<Picture>"

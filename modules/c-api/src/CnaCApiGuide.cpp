@@ -44,6 +44,7 @@ using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::SpriteFontResource;
@@ -265,37 +266,6 @@ CNA_Result cna_guide_begin_show_keyboard_input(
         PendingKeyboardInput().reset(action);
         EndedKeyboardInput().reset();
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The keyboard-input size output is null.");
-        }
-        if (PendingKeyboardInput() == nullptr) {
-            return InvalidState("No keyboard input has been started.");
-        }
-        *outBytes = KeyboardInputAnswer().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_end_show_keyboard_input(
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (PendingKeyboardInput() == nullptr) {
-            return InvalidState("No keyboard input has been started.");
-        }
-        return CopyText(
-            KeyboardInputAnswer(),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 
