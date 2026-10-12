@@ -1491,7 +1491,7 @@
     },
     {
       "id": "effect-lifecycle-and-concrete-effects-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::IsStockEffectEXT$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Effect|EffectMaterial|ShaderEffect|SpriteEffect)\\.hpp$",
       "kinds": [
         "class",
@@ -1581,7 +1581,7 @@
     },
     {
       "id": "basic-effect-directional-light-and-interfaces-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::IsStockEffectEXT$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:BasicEffect|DirectionalLight|IEffectFog|IEffectLights|IEffectMatrices)\\.hpp$",
       "kinds": [
         "class",
@@ -1694,7 +1694,7 @@
     },
     {
       "id": "alpha-dual-and-environment-map-effects-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::IsStockEffectEXT$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect)\\.hpp$",
       "kinds": [
         "class",
@@ -1828,7 +1828,7 @@
     },
     {
       "id": "skinned-effect-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!.*::IsStockEffectEXT$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedEffect\\.hpp$",
       "kinds": [
         "class",
@@ -5479,6 +5479,20 @@
         "CPP-624179F398A3",
         "CPP-CB81C793362F",
         "CPP-F8AEB07CB5E6"
+      ]
+    },
+    {
+      "id": "content-manager-builtin-content-friend",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::BuiltinContent$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a friendship declaration granting ContentManager's per-type built-in reader registration (detail::BuiltinContent) access to the manager's reader table, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F95BF29C7616"
       ]
     },
     {
@@ -14318,6 +14332,25 @@
       "task": "CBIND-058",
       "approved_symbols": [
         "CPP-39044E370C4E"
+      ]
+    },
+    {
+      "id": "effect-stock-effect-query",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect|BasicEffect|AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect|SkinnedEffect)::IsStockEffectEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No separate C route: a C program creates each stock effect through its own typed create route and can read `cna_effect_get_type_name_*`, and C cannot derive from an effect, so the type it created answers what this virtual answers for C++ subclasses. SpriteBatch's own use needs no C surface",
+      "tests": "Doxygen declaration inventory; `EffectSmoke.c` covers the type-name routes",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-1B0D28855471",
+        "CPP-3FDB7AAAD576",
+        "CPP-B23523A95295",
+        "CPP-ECCB78162C37",
+        "CPP-F1C48B4B10DD",
+        "CPP-F6780A203857"
       ]
     },
     {
