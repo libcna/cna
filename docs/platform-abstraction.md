@@ -102,7 +102,13 @@ An implementation opts into only behavior it actually provides.
 - Filesystem and system-information services are always non-null. Their individual queries may
   return an unavailable/unknown result.
 - `GetDialogs()` is non-null when either message boxes or native file dialogs are supported.
-- Capabilities do not change during an instance's lifetime.
+- Capabilities do not change during an instance's lifetime, with one exception: the camera and
+  the tray are optional services a consumer enables (`EnableCameraService()`,
+  `EnableTrayService()`, `CNA/Platform/OptionalServices.hpp`). Until then `camera` and `tray` are
+  false and their accessors null; enabling one turns its capability to what the platform supports,
+  and it never turns back. A program that never uses them neither links them nor starts the camera
+  subsystem (docs/link-size-architecture.md). `CNA::Devices::Camera` and `SystemTray` enable their
+  service before reading it; any other consumer must do the same.
 
 Unsupported behavior refuses deterministically with `PlatformNotSupportedException`, naming the
 missing capability. It must not silently succeed. Ordinary absence uses a status, empty value or

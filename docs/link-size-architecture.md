@@ -51,7 +51,10 @@ dependency is not real.
 | Every `.xnb` reader | `XnbBuiltInReaders.cpp` | a `Load<T>` of a type CNA does not know, an untyped external reference, `RegisterBuiltinLoaders()`, and the registry queried by name (`ContentTypeReaderManagerQueries.cpp`, `GetXnbReaderUsageSummary`) |
 | Every `.cnb` loader | `CnbLoaderRegistryQueries.cpp` | `CnbLoaderRegistry::Find` and `ResolveForDocument` asked for a built-in loader by hand |
 | `.xnb` canonical decoders | `XnbCanonicalTextures/Sound/Model/Asset/Data.cpp` | that family's readers; the pipeline for `Asset` |
+| `.cnb` encoders and `CnbWriter` | `Cnb*Encode.cpp`, `CnbModelCodec.cpp`, `CnbModelV2Codec.cpp` (decoders: `Cnb*Codec.cpp`, `CnbModel*Decode.cpp`) | content tools; loading never encodes |
+| `TextureCube`, `RenderTargetCube`, `Texture3D` | their own translation units; the device binds through `IRenderTargetBindingSource`, renderers ask `Texture::AsTextureCubeEXT`/`AsTexture3DEXT` | a program that creates, loads or binds one |
 | Streaming audio, capture, media updates | slots of `FrameworkDispatcher` (`FrameworkUpdates.hpp`) | the subsystem installs its slot on first use |
+| Camera and tray | `Sdl3OptionalServices.cpp` (`CNA/Platform/OptionalServices.hpp`) | `CNA::Devices::Camera` and `SystemTray`, which enable them; until then the platform neither links them nor starts its camera subsystem |
 | Audio capture backend | `AudioRecordingDeviceFactory.cpp` | `Microphone` |
 | Other platforms | `PlatformFactory.cpp` (by name) | the platform conformance suite; games use `PlatformFactoryDefault.cpp` |
 | Renderers | the generated registry lists only the renderers this build compiles | single renderer by default; a multi-renderer build is requested with `CNA_GRAPHICS_RENDERERS` |
@@ -78,7 +81,12 @@ Each file at a boundary says so in a short `Link boundary:` comment, so that nob
 - **One translation unit per family.** Split a large `.cpp` where its functions serve different
   callers. Methods of one class may live in several files.
 - **Ask, do not cast, in always-linked code.** `dynamic_cast<Concrete*>` references the concrete
-  class's typeinfo and so links the class. Use a virtual query (`Effect::IsStockEffectEXT`).
+  class's typeinfo and so links the class. Use a virtual query (`Effect::IsStockEffectEXT`,
+  `Texture::AsTextureCubeEXT`) or an interface the concrete classes implement
+  (`IRenderTargetBindingSource`), whose typeinfo every user emits for itself.
+- **An optional platform service is enabled by its consumer.** A virtual service accessor links its
+  implementation; one installed by `EnableCameraService()` is linked, and started, only by the
+  program that uses it.
 - **Large data is its own library**, referenced by the one function that serves it.
 - **Test doubles are their own translation unit**, referenced only by tests.
 - **Pass capabilities instead of looking them up.** The service client does not ask the avatar
@@ -123,8 +131,10 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   chain of references that pulled X in, and `--top 40`/`--modules` rank what costs the most.
   `tools/link_audit/link_closure.py` lists *every* reference into a member, so a cut can be
   planned against all of them.
-- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 24 subsystem
-  families it does not use; `LinkFootprint_FullFeatures` fails if a game that uses them lacks any
+- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 31 subsystem
+  families it does not use; `LinkFootprint_GamerServicesGame` pins what the same game with a
+  `GamerServicesComponent` contains (the system Guide and avatars, nothing else);
+  `LinkFootprint_FullFeatures` fails if a game that uses everything lacks any of it
   (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
   (`ModuleLinkClosure_*`) pin which archives each module's consumer links.
 
@@ -132,7 +142,9 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
 
 An external `avatar_catalog` pack was considered and not adopted. The catalog is now its own
 library that only avatar code references, so a program that does not draw avatars no longer
-contains it, which was the defect. Keeping it embedded preserves single-file deployment and
+contains it, which was the defect. A game with a `GamerServicesComponent` does draw them: its
+players open the system Guide with Home or the Guide button, and its panels show their avatars,
+in all three catalog versions an existing profile may use (~30 MB, no duplicate files). Keeping it embedded preserves single-file deployment and
 offline avatars for programs that do use them. External packs already exist for catalog *updates*
 (`installedCatalogRoot()`, `CNA_GAMER_SERVICES_CATALOGS_DIR`), verified by size and SHA-256.
 
@@ -143,41 +155,42 @@ this work; the game's source is the same in both.
 
 | Debug executable | Before | After |
 |---|---:|---:|
-| Unstripped | 208,287,328 | 64,154,912 |
-| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 14,170,112 |
-| Fully stripped | 44,607,184 | 6,338,536 |
-| `.text` | 9,363,703 | 4,158,480 |
-| `.rodata` | 30,863,125 | 337,141 |
+| Unstripped | 208,287,328 | 62,248,736 |
+| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,847,360 |
+| Fully stripped | 44,607,184 | 6,183,024 |
+| `.text` | 9,363,703 | 4,061,716 |
+| `.rodata` | 30,863,125 | 325,589 |
 | ... of which the avatar catalog | 29,999,928 | 0 |
-| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 55,080 / 23,536 |
-| `.eh_frame` | 2,786,336 | 1,134,448 |
+| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,112 / 23,504 |
+| `.eh_frame` | 2,786,336 | 1,109,160 |
 
-Debug information is most of a Debug executable (143 MB before, 50 MB after) and shrinks with the
+Debug information is most of a Debug executable (143 MB before, 48 MB after) and shrinks with the
 code it describes; the stripped size is what ships.
 
 | Release executable, static CNA (after) | `CNA_OPTIMIZE_FOR_SIZE=OFF` | `ON` |
 |---|---:|---:|
-| Unstripped | 6,647,288 | 4,274,056 |
-| Fully stripped | 4,831,304 | 3,046,768 |
-| `.text` | 3,661,018 | 2,252,602 |
-| `.rodata` | 95,043 | 75,043 |
+| Unstripped | 6,461,240 | 4,254,552 |
+| Fully stripped | 4,689,944 | 3,037,504 |
+| `.text` | 3,554,586 | 2,247,674 |
+| `.rodata` | 93,507 | 74,467 |
 | `.data` | 8,144 | 3,504 |
 
 Neither build contains a symbol of the avatar catalog, `AvatarRenderer`, the glTF importer,
-cgltf, Draco, `MediaPlayer`, `Microphone`, `Microsoft::Xna::Framework::Net`, ENet, libcurl or
-the Headless and Terminal platforms; its shared-library dependencies are SDL3, SDL3_mixer, zstd
+cgltf, Draco, `MediaPlayer`, `Microphone`, `Microsoft::Xna::Framework::Net`, ENet, libcurl,
+`TextureCube`, `Texture3D`, `RenderTargetCube`, the camera, the tray, `CnbWriter` or the Headless
+and Terminal platforms; its shared-library dependencies are SDL3, SDL3_mixer, zstd
 and the C/C++ runtime. The footprint consumers stay within the same bounds on MinGW (DIRECTX11)
 and with `CNA_ENABLE_NET=OFF`, and the browser 2D demo (wasm, linking the whole `CNA` target)
 contains none of them either.
 
-## Remaining small couplings
+## What a 2D game still contains, and why
 
-Measured in the 2D consumer after this work; each is small, and each would need a design change
-rather than a file split:
+The largest members of the 2D consumer are the renderer, image decoding, the device, `Game`,
+sharp-runtime's strings and the Guide UI that `ShowMarketplace` and the message box draw. Three
+items are reachable without being used, and each needs a change beyond CNA's module structure:
 
-| Linked | Size | Through |
+| Linked | Size (EasyGL) | Through |
 |---|---|---|
-| `TextureCube`, `RenderTargetCube`, DDS cube decoding | ~50 KB | `GraphicsDevice`'s render-target binding handles cube targets inline (`dynamic_cast`, renderer calls) |
-| `Texture3D` | ~20 KB | `EffectParameter::GetValueTexture3D`'s `dynamic_cast` |
-| SDL camera and tray providers | ~34 KB | `Sdl3Platform`'s service accessors are virtual and construct them |
-| `CnbWriter` | ~35 KB | the `.cnb` texture and sound codecs keep encoder and decoder in one file |
+| MojoShader and the renderer's compiled-effect support | ~330 KB | every renderer can draw XNA compiled effects, and SpriteBatch's custom-effect path applies XNA's SpriteEffect through them; separating them means installing each renderer's compiled-effect factory on the first `Effect` |
+| MojoShader's SPIR-V profile in a GL-only build | ~87 KB | MojoShader's own profile table names every profile it is compiled with; trimming it is a per-build MojoShader configuration |
+| sharp-runtime's `Decimal` | ~30 KB | `System::IO::BinaryReader::ReadDecimal` sits in `BinaryReader.cpp`, which every `.xnb` load uses |

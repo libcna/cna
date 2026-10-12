@@ -12,11 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 ### Changed
 
 - **A program links only the CNA subsystems it uses.** Mobile Eggbert (textures, sounds,
-  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 64.2 MB as a Debug executable
-  and from 44.6 MB to 6.3 MB stripped (3.0 MB as a Release build with `CNA_OPTIMIZE_FOR_SIZE`): it
+  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 62.2 MB as a Debug executable
+  and from 44.6 MB to 6.2 MB stripped (3.0 MB as a Release build with `CNA_OPTIMIZE_FOR_SIZE`): it
   no longer contains the 30 MB embedded avatar catalog, the avatar system, the system Guide, the
   Gamer Services service client, the Model reader, glTF, Draco, MediaPlayer, Video, Microphone,
-  networking or the Headless and Terminal platforms. Nothing was removed or disabled; a program
+  networking, cube and volume textures, the camera, the tray, the `.cnb` writer or the Headless
+  and Terminal platforms. Nothing was removed or disabled; a program
   that uses those features links them. See `docs/link-size-architecture.md`. A `Game` and every
   `ContentManager` still register every built-in reader and `.cnb` loader as far as any API can
   observe -- `ContentTypeReaderManager`, `CnbLoaderRegistry` and `GetXnbReaderUsageSummary()`
@@ -29,6 +30,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   compiles CNA into per-function sections and collects unreferenced ones in every program that
   links it. SDL3_image is no longer built: nothing in CNA used it.
 - `Effect::IsStockEffectEXT()` (CNAEXT) reports XNA's five stock effects without RTTI.
+- `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
+  `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses
+  them, so a program that never makes a cube map or a volume links neither.
+- The platform's camera and tray are optional services: `PlatformCapabilities::camera`/`tray` are
+  false, and `IPlatform::GetCamera()`/`GetTray()` null, until `CNA::Platform::EnableCameraService()`
+  / `EnableTrayService()` runs. `CNA::Devices::Camera` and `SystemTray` enable them first, so
+  nothing an application sees through them changes; an SDL3 game that uses no camera no longer
+  starts SDL's camera subsystem when its graphics device is created.
 - **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
   (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
   `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their
