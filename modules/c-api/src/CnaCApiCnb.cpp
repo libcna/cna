@@ -46,12 +46,14 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ValidateBuffer;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -283,10 +285,10 @@ void WriteLimits(const Cnb::CnbReadLimits& limits, CNA_CnbReadLimits* const out)
     return CNA_RESULT_SUCCESS;
 }
 
-/// Copies a caller string view into an owned std::string, applying this ABI's UTF-8 input rule.
-[[nodiscard]] CNA_Result BorrowText(const CNA_StringView value, std::string* const out)
+/// The file path the DDS and WAV import routes take, read as their spec group's lookup.
+[[nodiscard]] CNA_Result ReadImportPath(const CNA_StringView value, std::string* const out)
 {
-    return CopyStringView(value, false, out);
+    return ReadText(value, "The import path is not valid UTF-8.", out);
 }
 
 /// CBIND-108: the decoded texture description. Nested vectors, so a handle rather than a POD.
@@ -849,7 +851,8 @@ CNA_Result cna_cnb_asset_type_id_from_name(
             return InvalidArgument("The asset-type-identifier output is null.");
         }
         std::string value;
-        if (const CNA_Result result = CopyStringView(name, true, &value);
+        if (const CNA_Result result = ReadText(
+                name, "The asset type name is not valid UTF-8.", &value, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1103,7 +1106,8 @@ CNA_Result cna_cnb_document_parse(
             return result;
         }
         std::string originText;
-        if (const CNA_Result result = BorrowText(origin, &originText);
+        if (const CNA_Result result =
+                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1130,7 +1134,8 @@ CNA_Result cna_cnb_document_parse_file(
         }
         *outDocument = CNA_INVALID_HANDLE;
         std::string pathText;
-        if (const CNA_Result result = BorrowText(path, &pathText);
+        if (const CNA_Result result =
+                ReadText(path, "The path text is not valid UTF-8.", &pathText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1405,7 +1410,10 @@ CNA_Result cna_cnb_document_get_external_reference(
                 "The external-reference structure is not a known size and version.");
         }
         std::string what;
-        if (const CNA_Result result = BorrowText(whatForDiagnostics, &what);
+        if (const CNA_Result result = ReadText(
+                whatForDiagnostics,
+                "The what_for_diagnostics text is not valid UTF-8.",
+                &what);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1515,7 +1523,8 @@ CNA_Result cna_cnb_reader_create(
             return result;
         }
         std::string contextText;
-        if (const CNA_Result result = BorrowText(context, &contextText);
+        if (const CNA_Result result =
+                ReadText(context, "The context text is not valid UTF-8.", &contextText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1594,7 +1603,10 @@ CNA_Result cna_cnb_reader_read_count(
             return InvalidArgument("The element-count output is null.");
         }
         std::string what;
-        if (const CNA_Result result = BorrowText(whatIsBeingCounted, &what);
+        if (const CNA_Result result = ReadText(
+                whatIsBeingCounted,
+                "The what_is_being_counted text is not valid UTF-8.",
+                &what);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1648,7 +1660,8 @@ CNA_Result cna_cnb_reader_fail(
             return result;
         }
         std::string detailText;
-        if (const CNA_Result result = BorrowText(detail, &detailText);
+        if (const CNA_Result result =
+                ReadText(detail, "The detail text is not valid UTF-8.", &detailText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1725,7 +1738,7 @@ CNA_Result cna_cnb_byte_writer_write_string(
             return result;
         }
         std::string text;
-        if (const CNA_Result result = BorrowText(value, &text);
+        if (const CNA_Result result = ReadText(value, "The value text is not valid UTF-8.", &text);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1868,11 +1881,13 @@ CNA_Result cna_cnb_writer_set_metadata(
         }
         std::string typeName;
         std::string content;
-        if (const CNA_Result result = BorrowText(assetTypeName, &typeName);
+        if (const CNA_Result result =
+                ReadText(assetTypeName, "The asset_type_name text is not valid UTF-8.", &typeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = BorrowText(contentName, &content);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &content);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1900,7 +1915,8 @@ CNA_Result cna_cnb_writer_add_external_reference(
                 "The external-reference structure is not a known size and version.");
         }
         std::string name;
-        if (const CNA_Result result = BorrowText(logicalName, &name);
+        if (const CNA_Result result =
+                ReadText(logicalName, "The logical_name text is not valid UTF-8.", &name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2061,7 +2077,8 @@ CNA_Result cna_cnb_writer_write_to_file(
             return result;
         }
         std::string pathText;
-        if (const CNA_Result result = BorrowText(path, &pathText);
+        if (const CNA_Result result =
+                ReadText(path, "The path text is not valid UTF-8.", &pathText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2385,7 +2402,8 @@ using TextureEncoder =
         return InvalidArgument("The encoded-texture output buffer is invalid.");
     }
     std::string name;
-    if (const CNA_Result result = BorrowText(contentName, &name);
+    if (const CNA_Result result =
+            ReadText(contentName, "The content_name text is not valid UTF-8.", &name);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -2431,7 +2449,8 @@ CNA_Result cna_cnb_writer_append_embedded_texture2d(
             return result;
         }
         std::string labelText;
-        if (const CNA_Result result = BorrowText(label, &labelText);
+        if (const CNA_Result result =
+                ReadText(label, "The label text is not valid UTF-8.", &labelText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2456,7 +2475,8 @@ CNA_Result cna_cnb_document_read_embedded_texture2d(
             return result;
         }
         std::string labelText;
-        if (const CNA_Result result = BorrowText(label, &labelText);
+        if (const CNA_Result result =
+                ReadText(label, "The label text is not valid UTF-8.", &labelText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2546,7 +2566,8 @@ CNA_Result cna_cnb_model_add_bone(
             return InvalidArgument("The bone transform is null.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(name, &nameText);
+        if (const CNA_Result result =
+                ReadText(name, "The name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2656,12 +2677,16 @@ CNA_Result cna_cnb_model_add_part(
             return result;
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(name, &nameText);
+        if (const CNA_Result result =
+                ReadText(name, "The name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         std::string effectText;
-        if (const CNA_Result result = BorrowText(externalEffect, &effectText);
+        if (const CNA_Result result = ReadText(
+                externalEffect,
+                "The external_effect text is not valid UTF-8.",
+                &effectText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2994,7 +3019,8 @@ CNA_Result cna_cnb_model_set_material_texture(
             return InvalidArgument("The material texture slot is not a named slot.");
         }
         std::string assetText;
-        if (const CNA_Result result = BorrowText(assetName, &assetText);
+        if (const CNA_Result result =
+                ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3557,7 +3583,8 @@ CNA_Result cna_cnb_model_add_mesh(
             return result;
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(name, &nameText);
+        if (const CNA_Result result =
+                ReadText(name, "The name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3885,7 +3912,8 @@ CNA_Result cna_cnb_model_add_animation(
             return InvalidArgument("The clip duration must fit a finite TimeSpan.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(name, &nameText);
+        if (const CNA_Result result =
+                ReadText(name, "The name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4173,7 +4201,8 @@ CNA_Result cna_cnb_encode_model(
             return InvalidArgument("The encoded model output is invalid.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4211,12 +4240,14 @@ CNA_Result cna_cnb_build_model_from_cnj(
         }
         *outResult = CNA_INVALID_HANDLE;
         std::string pathText;
-        if (const CNA_Result result = BorrowText(cnjPath, &pathText);
+        if (const CNA_Result result =
+                ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         std::string rootText;
-        if (const CNA_Result result = BorrowText(contentRoot, &rootText);
+        if (const CNA_Result result =
+                ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4594,7 +4625,8 @@ CNA_Result cna_cnb_encode_sprite_font(
             return InvalidArgument("The encoded font output is invalid.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4718,7 +4750,8 @@ CNA_Result cna_cnb_encode_sound_effect(
             return InvalidArgument("The encoded sound output is invalid.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4759,17 +4792,22 @@ CNA_Result cna_cnb_encode_song(
             return InvalidArgument("The encoded song output is invalid.");
         }
         Cnb::CnbSongData data;
-        if (const CNA_Result result = BorrowText(streamReference, &data.streamReference);
+        if (const CNA_Result result = ReadText(
+                streamReference,
+                "The stream_reference text is not valid UTF-8.",
+                &data.streamReference);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = BorrowText(name, &data.name);
+        if (const CNA_Result result =
+                ReadText(name, "The name text is not valid UTF-8.", &data.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         data.durationMs = durationMilliseconds;
         std::string contentText;
-        if (const CNA_Result result = BorrowText(contentName, &contentText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &contentText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4797,7 +4835,10 @@ CNA_Result cna_cnb_encode_video(
             return result;
         }
         Cnb::CnbVideoData data;
-        if (const CNA_Result result = BorrowText(streamReference, &data.streamReference);
+        if (const CNA_Result result = ReadText(
+                streamReference,
+                "The stream_reference text is not valid UTF-8.",
+                &data.streamReference);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4807,7 +4848,8 @@ CNA_Result cna_cnb_encode_video(
         data.framesPerSecond = info->frames_per_second;
         data.soundtrackType = info->soundtrack_type;
         std::string contentText;
-        if (const CNA_Result result = BorrowText(contentName, &contentText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &contentText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4860,7 +4902,8 @@ CNA_Result cna_cnb_encode_curve(
             return InvalidArgument("The encoded curve output is invalid.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4907,7 +4950,8 @@ CNA_Result cna_cnb_encode_animation_clip(
             return result;
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5002,7 +5046,8 @@ CNA_Result cna_cnb_reader_read_seconds(
             return InvalidArgument("The seconds output is null.");
         }
         std::string whatText;
-        if (const CNA_Result result = BorrowText(what, &whatText);
+        if (const CNA_Result result =
+                ReadText(what, "The what text is not valid UTF-8.", &whatText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5083,7 +5128,10 @@ CNA_Result cna_cnb_loader_registry_register(
             return InvalidArgument("The CNB loader callback is null.");
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(canonicalTypeName, &nameText);
+        if (const CNA_Result result = ReadText(
+                canonicalTypeName,
+                "The canonical_type_name text is not valid UTF-8.",
+                &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5170,7 +5218,8 @@ CNA_Result cna_cnb_loader_invoke(
         }
         *outObject = nullptr;
         std::string assetNameText;
-        if (const CNA_Result result = BorrowText(assetName, &assetNameText);
+        if (const CNA_Result result =
+                ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetNameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5226,7 +5275,8 @@ CNA_Result cna_cnb_import_image_as_texture2d(
             }
         }
         std::string pathText;
-        if (const CNA_Result result = BorrowText(imagePath, &pathText);
+        if (const CNA_Result result =
+                ReadText(imagePath, "The image_path text is not valid UTF-8.", &pathText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5263,7 +5313,8 @@ CNA_Result cna_cnb_decode_dds_as_texture_cube(
             return result;
         }
         std::string originText;
-        if (const CNA_Result result = BorrowText(origin, &originText);
+        if (const CNA_Result result =
+                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5289,7 +5340,8 @@ CNA_Result cna_cnb_decode_wav_as_sound_effect(
             return result;
         }
         std::string originText;
-        if (const CNA_Result result = BorrowText(origin, &originText);
+        if (const CNA_Result result =
+                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5310,17 +5362,20 @@ CNA_Result cna_cnb_compile_cnj(
         }
         *outResult = CNA_INVALID_HANDLE;
         std::string pathText;
-        if (const CNA_Result result = BorrowText(cnjPath, &pathText);
+        if (const CNA_Result result =
+                ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         std::string rootText;
-        if (const CNA_Result result = BorrowText(contentRoot, &rootText);
+        if (const CNA_Result result =
+                ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         std::string nameText;
-        if (const CNA_Result result = BorrowText(contentName, &nameText);
+        if (const CNA_Result result =
+                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

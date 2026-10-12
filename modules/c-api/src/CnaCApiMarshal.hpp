@@ -8,6 +8,7 @@
 // ever reinterpreted as a C++ type, so the C layout and the C++ layout are free to differ.
 
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiOutput.hpp"
 
 #include "CNA/C/core.h"
 #include "CNA/C/curve.h"
@@ -294,6 +295,25 @@ namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
     constexpr CNA_DisplayOrientation Valid = CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT |
         CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT | CNA_DISPLAY_ORIENTATION_PORTRAIT;
     return (value & ~Valid) == 0U;
+}
+
+/**
+ * @brief Whether caller presentation parameters are a current structure whose every field holds a
+ * defined value: formats, interval, orientation and usage known, `CNA_Bool` fields canonical, a
+ * non-negative sample count and zeroed reserved bytes.
+ */
+[[nodiscard]] inline bool IsPresentationParameters(
+    const CNA_PresentationParameters* const parameters) noexcept
+{
+    return IsVersionedStructure(parameters) &&
+        IsSurfaceFormat(parameters->back_buffer_format) &&
+        IsDepthFormat(parameters->depth_stencil_format) &&
+        parameters->multi_sample_count >= 0 &&
+        IsPresentInterval(parameters->presentation_interval) &&
+        IsDisplayOrientation(parameters->display_orientation) &&
+        IsRenderTargetUsage(parameters->render_target_usage) &&
+        IsCanonicalBool(parameters->is_full_screen) && IsCanonicalBool(parameters->headless_ext) &&
+        parameters->reserved[0] == 0U && parameters->reserved[1] == 0U;
 }
 
 [[nodiscard]] inline bool TryMapVertexElementFormat(

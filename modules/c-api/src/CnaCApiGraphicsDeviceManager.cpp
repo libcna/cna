@@ -23,6 +23,7 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::IsPresentationParameters;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -59,18 +60,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 // A display orientation is a bit set rather than a single identity, so it is validated as one.
-
-[[nodiscard]] bool IsPresentationParameters(
-    const CNA_PresentationParameters& parameters) noexcept
-{
-    return parameters.struct_size >= sizeof(CNA_PresentationParameters) &&
-        parameters.struct_version == StructureVersion &&
-        IsSurfaceFormat(parameters.back_buffer_format) &&
-        IsDepthFormat(parameters.depth_stencil_format) && parameters.multi_sample_count >= 0 &&
-        IsPresentInterval(parameters.presentation_interval) &&
-        IsDisplayOrientation(parameters.display_orientation) &&
-        IsRenderTargetUsage(parameters.render_target_usage);
-}
 
 // The canonical configuration names an adapter by pointer; C names it by the index every adapter
 // query in this ABI already uses, because a pointer into the runtime's adapter list is nothing a C
@@ -119,7 +108,7 @@ void ToCDeviceInformation(
 {
     return IsVersionedStructure(information) &&
         IsGraphicsProfile(information->graphics_profile) &&
-        IsPresentationParameters(information->presentation_parameters);
+        IsPresentationParameters(&information->presentation_parameters);
 }
 
 struct ManagerResource final {

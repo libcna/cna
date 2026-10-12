@@ -534,28 +534,29 @@ template<typename TEnum>
     bool rejectEmbeddedNul,
     std::string* outValue) noexcept;
 
+/** @brief Whether a text argument may contain a NUL byte; names and paths may not. */
+enum class EmbeddedNul { Allowed, Refused };
+
 /**
- * @brief Copies a caller's UTF-8 text, recording `message` when it is refused.
+ * @brief Copies a caller's UTF-8 text, recording `message` when it is refused -- the one reader of
+ * every text argument in this ABI.
  *
  * The contract docs/c-api/STRINGS_AND_BUFFERS.md sets for text input: null data only with a zero
- * length, well-formed UTF-8 (CNA_RESULT_ENCODING otherwise). Embedded NUL is accepted.
+ * length, well-formed UTF-8 (CNA_RESULT_ENCODING otherwise), and an embedded NUL only where `nul`
+ * allows it.
+ *
+ * @param value The caller's text.
+ * @param message What the error record says when the text is refused.
+ * @param outValue Receives the text.
+ * @param nul Whether a NUL byte is part of the text or a refusal.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT`, `CNA_RESULT_ENCODING` or
+ *         `CNA_RESULT_OUT_OF_MEMORY`.
  */
 [[nodiscard]] CNA_Result ReadText(
     CNA_StringView value,
     std::string_view message,
-    std::string* outValue) noexcept;
-
-/**
- * @brief Copies a caller's text bytes without validating them as UTF-8.
- *
- * Only a null pointer with a nonzero length is refused. The achievement, gamer, gamer-property,
- * guide and XACT routes have always read their text this way; new routes use ReadText, which
- * enforces the UTF-8 contract.
- */
-[[nodiscard]] CNA_Result ReadTextBytes(
-    CNA_StringView value,
-    std::string_view message,
-    std::string* outValue);
+    std::string* outValue,
+    EmbeddedNul nul = EmbeddedNul::Allowed) noexcept;
 
 [[nodiscard]] CNA_Result ValidateBuffer(
     const void* data,

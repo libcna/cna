@@ -26,6 +26,7 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -36,6 +37,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
@@ -706,9 +708,13 @@ CNA_Result cna_game_create(
         }
 
         std::string title;
-        if (const CNA_Result titleResult = CopyStringView(createInfo->window_title, true, &title);
+        if (const CNA_Result titleResult = ReadText(
+                createInfo->window_title,
+                "The initial window title could not be copied.",
+                &title,
+                EmbeddedNul::Refused);
             titleResult != CNA_RESULT_SUCCESS) {
-            return Fail(titleResult, ErrorCategoryForResult(titleResult), "The initial window title could not be copied.");
+            return titleResult;
         }
 
         RuntimeState& state = GetRuntimeState();
@@ -821,9 +827,13 @@ CNA_Result cna_game_set_window_title(
         }
 
         std::string titleCopy;
-        if (const CNA_Result titleResult = CopyStringView(title, true, &titleCopy);
+        if (const CNA_Result titleResult = ReadText(
+                title,
+                "The window title is not valid UTF-8.",
+                &titleCopy,
+                EmbeddedNul::Refused);
             titleResult != CNA_RESULT_SUCCESS) {
-            return Fail(titleResult, ErrorCategoryForResult(titleResult), "The window title is not valid UTF-8.");
+            return titleResult;
         }
         game->SetWindowTitle(titleCopy);
         return CNA_RESULT_SUCCESS;

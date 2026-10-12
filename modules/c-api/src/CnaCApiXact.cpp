@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -39,7 +40,7 @@ using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::PublishAudioRegistration;
-using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
 using CNA::C::Detail::StructureVersion;
@@ -233,14 +234,14 @@ template<typename TResource>
     *outEngine = CNA_INVALID_HANDLE;
     std::string nativeSettingsFile;
     if (const CNA_Result result =
-            ReadTextBytes(settingsFile, "The settings-file path is invalid.", &nativeSettingsFile);
+            ReadText(settingsFile, "The settings-file path is invalid.", &nativeSettingsFile);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     std::string nativeRendererId;
     if (withRenderer) {
         if (const CNA_Result result =
-                ReadTextBytes(rendererId, "The renderer identifier is invalid.", &nativeRendererId);
+                ReadText(rendererId, "The renderer identifier is invalid.", &nativeRendererId);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -361,7 +362,7 @@ CNA_Result cna_audio_engine_get_global_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(name, "The global-variable name is invalid.", &nativeName);
+                ReadText(name, "The global-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -386,7 +387,7 @@ CNA_Result cna_audio_engine_set_global_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(name, "The global-variable name is invalid.", &nativeName);
+                ReadText(name, "The global-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -440,7 +441,7 @@ CNA_Result cna_audio_engine_get_category(
         *outCategory = CNA_INVALID_HANDLE;
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(name, "The category name is invalid.", &nativeName);
+                ReadText(name, "The category name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -512,7 +513,7 @@ CNA_Result cna_wave_bank_create(
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ReadTextBytes(filename, "The wave-bank path is invalid.", &nativeFilename);
+                ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -550,7 +551,7 @@ CNA_Result cna_wave_bank_create_streaming(
         *outWaveBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ReadTextBytes(filename, "The wave-bank path is invalid.", &nativeFilename);
+                ReadText(filename, "The wave-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -632,7 +633,7 @@ CNA_Result cna_sound_bank_create(
         *outSoundBank = CNA_INVALID_HANDLE;
         std::string nativeFilename;
         if (const CNA_Result result =
-                ReadTextBytes(filename, "The sound-bank path is invalid.", &nativeFilename);
+                ReadText(filename, "The sound-bank path is invalid.", &nativeFilename);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -689,7 +690,7 @@ CNA_Result cna_sound_bank_get_cue(
         }
         *outCue = CNA_INVALID_HANDLE;
         std::string nativeName;
-        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -717,7 +718,7 @@ CNA_Result cna_sound_bank_play_cue(const CNA_Handle soundBankHandle, const CNA_S
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
-        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -739,7 +740,7 @@ CNA_Result cna_sound_bank_play_cue_3d(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
-        if (const CNA_Result result = ReadTextBytes(name, "The cue name is invalid.", &nativeName);
+        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -840,7 +841,7 @@ CNA_Result cna_cue_get_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(name, "The cue-variable name is invalid.", &nativeName);
+                ReadText(name, "The cue-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -865,7 +866,7 @@ CNA_Result cna_cue_set_variable(
         }
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(name, "The cue-variable name is invalid.", &nativeName);
+                ReadText(name, "The cue-variable name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

@@ -1414,7 +1414,7 @@ CNA_Result cna_cnb_import_dds_as_texture_cube(
         }
         *out_texture = CNA_INVALID_HANDLE;
         std::string object{};
-        if (const CNA_Result routeResult = BorrowText(dds_path, &object);
+        if (const CNA_Result routeResult = ReadImportPath(dds_path, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1432,7 +1432,7 @@ CNA_Result cna_cnb_import_wav_as_sound_effect(
         }
         *out_sound = CNA_INVALID_HANDLE;
         std::string object{};
-        if (const CNA_Result routeResult = BorrowText(wav_path, &object);
+        if (const CNA_Result routeResult = ReadImportPath(wav_path, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

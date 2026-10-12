@@ -5,6 +5,7 @@
 #include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
@@ -47,6 +48,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateBorrowedNetworkGamer;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -55,6 +57,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -179,19 +182,21 @@ CNA_Result cna_available_network_session_create_ext(
 
         std::string hostGamertag;
         std::string hostAddress;
-        if (const CNA_Result result = CopyStringView(createInfo->host_gamertag, true, &hostGamertag);
+        if (const CNA_Result result = ReadText(
+                createInfo->host_gamertag,
+                "The host gamertag is not valid UTF-8.",
+                &hostGamertag,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The host gamertag is not valid UTF-8.");
+            return result;
         }
-        if (const CNA_Result result = CopyStringView(createInfo->host_address, true, &hostAddress);
+        if (const CNA_Result result = ReadText(
+                createInfo->host_address,
+                "The host address is not valid UTF-8.",
+                &hostAddress,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The host address is not valid UTF-8.");
+            return result;
         }
 
         NetworkSessionProperties properties;

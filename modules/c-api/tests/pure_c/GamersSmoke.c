@@ -53,6 +53,10 @@ static int validate_base_surface(const CNA_GamerHandle gamer, const char* const 
         !text_is(cna_gamer_copy_gamertag(gamer, text, sizeof(text), &size), size, text, gamertag)) {
         return 0;
     }
+    /* Text arguments are UTF-8 here as everywhere: a malformed name is refused, not stored. */
+    if (cna_gamer_set_display_name(gamer, view("Bad \xC3(")) != CNA_RESULT_ENCODING) {
+        return 0;
+    }
     if (cna_gamer_set_display_name(gamer, view("Renamed")) != CNA_RESULT_SUCCESS ||
         cna_gamer_get_display_name_size(gamer, &size) != CNA_RESULT_SUCCESS ||
         !text_is(cna_gamer_copy_display_name(gamer, text, sizeof(text), &size), size, text,

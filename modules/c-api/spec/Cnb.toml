@@ -173,11 +173,11 @@ cna_cnb_crc32c = { get = "Cnb::Crc32c(object)" }
 cna_cnb_crc32c_portable = { get = "Cnb::Crc32cPortableEXT(object)" }
 cna_cnb_has_magic = { get = "Cnb::CnbDocument::HasMagic(object)" }
 
-[text]
-lookup = "BorrowText"
+[import_path]
+lookup = "ReadImportPath"
 object = "std::string"
 
-[text.routes]
+[import_path.routes]
 cna_cnb_import_dds_as_texture_cube = { result = "CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(object), out_texture)" }
 cna_cnb_import_wav_as_sound_effect = { result = "CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound)" }
 

@@ -341,21 +341,19 @@ CNA_Result cna_haptic_capabilities_equals(
         }
         std::string leftText;
         std::string rightText;
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(leftName, false, &leftText);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                leftName,
+                "The first haptic device name is not valid UTF-8.",
+                &leftText);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The first haptic device name is not valid UTF-8.");
+            return result;
         }
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(rightName, false, &rightText);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                rightName,
+                "The second haptic device name is not valid UTF-8.",
+                &rightText);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The second haptic device name is not valid UTF-8.");
+            return result;
         }
         HapticCapabilitiesEXT nativeLeft;
         nativeLeft.isOpen = left->is_open != CNA_FALSE;

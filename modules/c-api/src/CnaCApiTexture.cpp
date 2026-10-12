@@ -44,6 +44,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateOwnedTexture2D;
 using CNA::C::Detail::CreateStandaloneTexture2D;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -53,6 +54,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::TextureResourceView;
@@ -663,9 +665,13 @@ CNA_Result cna_texture2d_create_from_file(
         }
         *outTexture = CNA_INVALID_HANDLE;
         std::string copiedPath;
-        if (const CNA_Result result = CopyStringView(path, true, &copiedPath);
+        if (const CNA_Result result = ReadText(
+                path,
+                "The texture path is invalid UTF-8.",
+                &copiedPath,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(result, ErrorCategoryForResult(result), "The texture path is invalid UTF-8.");
+            return result;
         }
         return CreateStandaloneTexture2D(
             std::make_shared<Texture2D>(copiedPath), outTexture);
@@ -683,9 +689,13 @@ CNA_Result cna_texture2d_create_from_file_with_device(
         }
         *outTexture = CNA_INVALID_HANDLE;
         std::string copiedPath;
-        if (const CNA_Result result = CopyStringView(path, true, &copiedPath);
+        if (const CNA_Result result = ReadText(
+                path,
+                "The texture path is invalid UTF-8.",
+                &copiedPath,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(result, ErrorCategoryForResult(result), "The texture path is invalid UTF-8.");
+            return result;
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result = GetBorrowedGraphicsDevice(
@@ -1022,9 +1032,13 @@ CNA_Result cna_texture2d_save_file(
             return InvalidArgument("The encoded Texture2D image format is invalid.");
         }
         std::string copiedPath;
-        if (const CNA_Result result = CopyStringView(path, true, &copiedPath);
+        if (const CNA_Result result = ReadText(
+                path,
+                "The texture path is invalid UTF-8.",
+                &copiedPath,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(result, ErrorCategoryForResult(result), "The texture path is invalid UTF-8.");
+            return result;
         }
         std::shared_ptr<Texture2DResource> texture;
         if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);

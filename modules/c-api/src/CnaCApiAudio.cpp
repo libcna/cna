@@ -530,13 +530,12 @@ CNA_Result cna_sound_effect_create_from_asset_ext(
             return result;
         }
         std::string path;
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(assetName, false, &path);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                assetName,
+                "The audio asset name is not valid UTF-8.",
+                &path);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The audio asset name is not valid UTF-8.");
+            return result;
         }
         // An empty path is not an error: the canonical constructor answers an effect with no audio.
         auto nativeSoundEffect = std::make_shared<SoundEffect>(path);
@@ -555,12 +554,10 @@ CNA_Result cna_sound_effect_set_name(
             return result;
         }
         std::string value;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &value);
+        if (const CNA_Result result =
+                CNA::C::Detail::ReadText(name, "The SoundEffect name is not valid UTF-8.", &value);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The SoundEffect name is not valid UTF-8.");
+            return result;
         }
         soundEffect->value->setNameProperty(std::move(value));
         return CNA_RESULT_SUCCESS;

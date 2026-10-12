@@ -676,13 +676,12 @@ CNA_Result cna_media_library_get_picture_from_token(
             return result;
         }
         std::string nativeToken;
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(token, false, &nativeToken);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                token,
+                "The picture token is not valid UTF-8.",
+                &nativeToken);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The picture token is not valid UTF-8.");
+            return result;
         }
         Picture* const picture = resource->value->GetPictureFromToken(nativeToken);
         if (picture == nullptr) {
@@ -747,12 +746,10 @@ CNA_Result cna_media_library_save_picture(
             return result;
         }
         std::string nativeName;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &nativeName);
+        if (const CNA_Result result =
+                CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The picture name is not valid UTF-8.");
+            return result;
         }
         const std::vector<uint8_t> bytes(
             imageData,
@@ -781,12 +778,10 @@ CNA_Result cna_media_library_save_picture_from_stream(
             return result;
         }
         std::string nativeName;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &nativeName);
+        if (const CNA_Result result =
+                CNA::C::Detail::ReadText(name, "The picture name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The picture name is not valid UTF-8.");
+            return result;
         }
         // A storage stream is the only byte source this ABI owns, so it is what the canonical
         // stream overload accepts. The borrow keeps it open for the call and hands it straight

@@ -6,6 +6,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 
@@ -38,6 +39,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -49,6 +51,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
 using CNA::C::Detail::SpriteFontResource;
@@ -103,12 +106,13 @@ CNA_Handle& BorrowedGameContentHandle()
 
 [[nodiscard]] CNA_Result CopyAssetName(const CNA_StringView value, std::string* const outValue)
 {
-    if (const CNA_Result result = CopyStringView(value, true, outValue);
+    if (const CNA_Result result = ReadText(
+            value,
+            "The content asset name is not valid UTF-8.",
+            outValue,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The content asset name is not valid UTF-8.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -192,15 +196,13 @@ CNA_Result cna_content_manager_create(
         }
 
         std::string rootDirectory;
-        if (const CNA_Result result = CopyStringView(
+        if (const CNA_Result result = ReadText(
                 createInfo->root_directory,
-                true,
-                &rootDirectory);
+                "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectory,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ContentManager root directory is not valid UTF-8.");
+            return result;
         }
 
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -271,15 +273,13 @@ CNA_Result cna_content_manager_set_root_directory(
 {
     return CallWithExceptionBarrier([&]() {
         std::string rootDirectoryCopy;
-        if (const CNA_Result result = CopyStringView(
+        if (const CNA_Result result = ReadText(
                 rootDirectory,
-                true,
-                &rootDirectoryCopy);
+                "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectoryCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ContentManager root directory is not valid UTF-8.");
+            return result;
         }
         std::shared_ptr<ContentManagerResource> contentManager;
         if (const CNA_Result result = GetContentManager(
@@ -305,12 +305,13 @@ CNA_Result cna_content_manager_load_texture2d(
         *outTexture = CNA_INVALID_HANDLE;
 
         std::string assetNameCopy;
-        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+        if (const CNA_Result result = ReadText(
+                assetName,
+                "The content asset name is not valid UTF-8.",
+                &assetNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The content asset name is not valid UTF-8.");
+            return result;
         }
         if (assetNameCopy.empty()) {
             return InvalidArgument("The content asset name must not be empty.");
@@ -364,15 +365,13 @@ CNA_Result cna_content_manager_create_resource(
         }
 
         std::string rootDirectory;
-        if (const CNA_Result result = CopyStringView(
+        if (const CNA_Result result = ReadText(
                 createInfo->root_directory,
-                true,
-                &rootDirectory);
+                "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectory,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ContentManager root directory is not valid UTF-8.");
+            return result;
         }
 
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -522,12 +521,13 @@ CNA_Result cna_content_manager_load_sprite_font(
         *outTexture = CNA_INVALID_HANDLE;
 
         std::string assetNameCopy;
-        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+        if (const CNA_Result result = ReadText(
+                assetName,
+                "The content asset name is not valid UTF-8.",
+                &assetNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The content asset name is not valid UTF-8.");
+            return result;
         }
         if (assetNameCopy.empty()) {
             return InvalidArgument("The content asset name must not be empty.");
@@ -611,12 +611,13 @@ CNA_Result cna_content_manager_load_foreign_ext(
         *outObject = nullptr;
 
         std::string assetNameCopy;
-        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+        if (const CNA_Result result = ReadText(
+                assetName,
+                "The content asset name is not valid UTF-8.",
+                &assetNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The content asset name is not valid UTF-8.");
+            return result;
         }
         if (assetNameCopy.empty()) {
             return InvalidArgument("The content asset name must not be empty.");
@@ -663,12 +664,13 @@ CNA_Result cna_content_manager_register_cnj_loader_ext(
             return InvalidArgument("The .cnj loader callback is null.");
         }
         std::string typeNameCopy;
-        if (const CNA_Result result = CopyStringView(typeName, true, &typeNameCopy);
+        if (const CNA_Result result = ReadText(
+                typeName,
+                "The .cnj type name is not valid UTF-8.",
+                &typeNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The .cnj type name is not valid UTF-8.");
+            return result;
         }
         if (typeNameCopy.empty()) {
             return InvalidArgument("The .cnj type name must not be empty.");

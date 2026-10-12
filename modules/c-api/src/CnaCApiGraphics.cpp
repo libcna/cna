@@ -5,6 +5,7 @@
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
@@ -61,6 +62,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
@@ -1643,7 +1645,8 @@ CNA_Result cna_sprite_batch_draw_string(
             return InvalidArgument("The SpriteBatch text command is invalid.");
         }
         std::string text;
-        if (const CNA_Result result = CopyStringView(command->text, false, &text);
+        if (const CNA_Result result =
+                ReadText(command->text, "The SpriteBatch text is not valid UTF-8.", &text);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

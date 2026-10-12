@@ -27,8 +27,10 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ValidateCanonicalBool;
 
 namespace {
@@ -136,11 +138,7 @@ using CNA::C::Detail::ValidateVersionedStructure;
 // project's embedded-NUL rejection.
 [[nodiscard]] CNA_Result CopyMessage(const CNA_StringView message, std::string* const outValue)
 {
-    const CNA_Result result = CopyStringView(message, true, outValue);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(result, ErrorCategoryForResult(result), "The log message is invalid.");
+    return ReadText(message, "The log message is invalid.", outValue, EmbeddedNul::Refused);
 }
 
 using LoggerRoute = void (*)(std::string_view, CNA::LogCategory);
@@ -650,12 +648,13 @@ CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(const CNA_StringView 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string text;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, true, &text);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                name,
+                "The renderer name is not valid UTF-8 text.",
+                &text,
+                CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The renderer name is not valid UTF-8 text.");
+            return result;
         }
         CNA::GraphicsRendererSelection::SetPreferred(std::string_view(text));
         return CNA_RESULT_SUCCESS;
@@ -751,12 +750,13 @@ CNA_Result cna_graphics_renderer_try_parse_name_ext(
         *outType = CNA_GRAPHICS_RENDERER_UNKNOWN;
         *outRecognized = CNA_FALSE;
         std::string text;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, true, &text);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                name,
+                "The renderer name is not valid UTF-8 text.",
+                &text,
+                CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The renderer name is not valid UTF-8 text.");
+            return result;
         }
         CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
         // An unrecognized name is an answer, not a failure, exactly as the canonical route reports
@@ -778,11 +778,13 @@ CNA_Result cna_assembly_set_title_ext(const CNA_StringView title)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copied;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(title, true, &copied);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                title,
+                "The assembly title is not valid UTF-8 text.",
+                &copied,
+                CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return CNA::C::Detail::Fail(
-                result, CNA::C::Detail::ErrorCategoryForResult(result),
-                "The assembly title is not valid UTF-8 text.");
+            return result;
         }
         CNA::SetAssemblyTitleEXT(copied);
         return CNA_RESULT_SUCCESS;

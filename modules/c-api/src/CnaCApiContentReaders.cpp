@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -43,6 +44,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -52,6 +54,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseStorageStream;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
@@ -119,12 +122,13 @@ struct ContentTypeReaderResource final {
 
 [[nodiscard]] CNA_Result CopyReaderName(const CNA_StringView value, std::string* const outValue)
 {
-    if (const CNA_Result result = CopyStringView(value, true, outValue);
+    if (const CNA_Result result = ReadText(
+            value,
+            "The canonical reader name is not valid UTF-8.",
+            outValue,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The canonical reader name is not valid UTF-8.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -184,12 +188,13 @@ CNA_Result cna_content_reader_create(
         }
 
         std::string assetName;
-        if (const CNA_Result result = CopyStringView(createInfo->asset_name, true, &assetName);
+        if (const CNA_Result result = ReadText(
+                createInfo->asset_name,
+                "The ContentReader asset name is not valid UTF-8.",
+                &assetName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The ContentReader asset name is not valid UTF-8.");
+            return result;
         }
 
         const auto resource = std::make_shared<ContentReaderResource>();
@@ -653,24 +658,24 @@ CNA_Result cna_content_type_reader_manager_register(
 
         const auto registration = std::make_shared<ForeignReaderRegistration>();
         registration->callbacks = *callbacks;
-        if (const CNA_Result result =
-                CopyStringView(canonicalName, true, &registration->canonicalName);
+        if (const CNA_Result result = ReadText(
+                canonicalName,
+                "The canonical reader name is not valid UTF-8.",
+                &registration->canonicalName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The canonical reader name is not valid UTF-8.");
+            return result;
         }
         if (registration->canonicalName.empty()) {
             return InvalidArgument("The canonical reader name must not be empty.");
         }
-        if (const CNA_Result result = CopyStringView(
-                callbacks->target_type_name, true, &registration->targetTypeName);
+        if (const CNA_Result result = ReadText(
+                callbacks->target_type_name,
+                "The reader target type name is not valid UTF-8.",
+                &registration->targetTypeName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The reader target type name is not valid UTF-8.");
+            return result;
         }
         if (registration->targetTypeName.empty()) {
             return InvalidArgument("The reader target type name must not be empty.");
@@ -1055,11 +1060,13 @@ struct ReflectiveBuilderResource final {
         return InvalidArgument("The canonical-name byte-count output is null.");
     }
     std::string nameText;
-    if (const CNA_Result result = CopyStringView(targetTypeName, true, &nameText);
+    if (const CNA_Result result = ReadText(
+            targetTypeName,
+            "The target type name is not valid UTF-8.",
+            &nameText,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The target type name is not valid UTF-8.");
+        return result;
     }
     *outBytes = static_cast<uint64_t>(compose(nameText).size());
     return CNA_RESULT_SUCCESS;
@@ -1076,11 +1083,13 @@ struct ReflectiveBuilderResource final {
         return InvalidArgument("The canonical-name output is invalid.");
     }
     std::string nameText;
-    if (const CNA_Result result = CopyStringView(targetTypeName, true, &nameText);
+    if (const CNA_Result result = ReadText(
+            targetTypeName,
+            "The target type name is not valid UTF-8.",
+            &nameText,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result),
-            "The target type name is not valid UTF-8.");
+        return result;
     }
     const std::string composed = compose(nameText);
     *outBytes = static_cast<uint64_t>(composed.size());
@@ -1114,12 +1123,13 @@ CNA_Result cna_reflective_type_reader_builder_create(
         }
         const auto resource = std::make_shared<ReflectiveBuilderResource>();
         resource->registration = std::make_shared<ReflectiveRegistration>();
-        if (const CNA_Result result = CopyStringView(
-                targetTypeName, true, &resource->registration->targetTypeName);
+        if (const CNA_Result result = ReadText(
+                targetTypeName,
+                "The target type name is not valid UTF-8.",
+                &resource->registration->targetTypeName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The target type name is not valid UTF-8.");
+            return result;
         }
         if (resource->registration->targetTypeName.empty()) {
             return InvalidArgument("The target type name must not be empty.");
@@ -1162,11 +1172,13 @@ CNA_Result cna_reflective_type_reader_builder_add_enum_field(
             return result;
         }
         std::string enumText;
-        if (const CNA_Result result = CopyStringView(enumTypeName, true, &enumText);
+        if (const CNA_Result result = ReadText(
+                enumTypeName,
+                "The enum type name is not valid UTF-8.",
+                &enumText,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The enum type name is not valid UTF-8.");
+            return result;
         }
         if (enumText.empty()) {
             return InvalidArgument("The enum type name must not be empty.");
@@ -1563,10 +1575,10 @@ template <typename T>
         return result;
     }
     std::string keyText;
-    if (const CNA_Result result = CopyStringView(key, true, &keyText);
+    if (const CNA_Result result =
+            ReadText(key, "The dictionary key is not valid UTF-8.", &keyText, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result, ErrorCategoryForResult(result), "The dictionary key is not valid UTF-8.");
+        return result;
     }
     const auto& values = (*outDictionary)->value->getValuesProperty();
     const auto found = values.find(keyText);
@@ -1596,10 +1608,13 @@ CNA_Result cna_object_dictionary_ext_contains_key(
             return result;
         }
         std::string keyText;
-        if (const CNA_Result result = CopyStringView(key, true, &keyText);
+        if (const CNA_Result result = ReadText(
+                key,
+                "The dictionary key is not valid UTF-8.",
+                &keyText,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result), "The dictionary key is not valid UTF-8.");
+            return result;
         }
         *outContains = ToCBool(dictionary->value->ContainsKey(keyText));
         return CNA_RESULT_SUCCESS;
@@ -1978,11 +1993,13 @@ CNA_Result cna_content_manager_load_object_dictionary_ext(
         }
         *outDictionary = CNA_INVALID_HANDLE;
         std::string assetNameText;
-        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameText);
+        if (const CNA_Result result = ReadText(
+                assetName,
+                "The content asset name is not valid UTF-8.",
+                &assetNameText,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The content asset name is not valid UTF-8.");
+            return result;
         }
         if (assetNameText.empty()) {
             return InvalidArgument("The content asset name must not be empty.");

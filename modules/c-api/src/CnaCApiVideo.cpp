@@ -171,13 +171,12 @@ CNA_Result cna_video_create(
             return result;
         }
         std::string nativeName;
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(fileName, false, &nativeName);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                fileName,
+                "The video file name is not valid UTF-8.",
+                &nativeName);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video file name is not valid UTF-8.");
+            return result;
         }
         return PublishVideo(
             std::make_unique<Video>(std::move(nativeName), device->value),
@@ -211,13 +210,12 @@ CNA_Result cna_video_create_with_metadata(
             return result;
         }
         std::string nativeName;
-        if (const CNA_Result result =
-                CNA::C::Detail::CopyStringView(fileName, false, &nativeName);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                fileName,
+                "The video file name is not valid UTF-8.",
+                &nativeName);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video file name is not valid UTF-8.");
+            return result;
         }
         return PublishVideo(
             std::make_unique<Video>(
@@ -248,12 +246,10 @@ CNA_Result cna_video_create_from_uri_ext(
             return result;
         }
         std::string nativeUri;
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(uri, false, &nativeUri);
+        if (const CNA_Result result =
+                CNA::C::Detail::ReadText(uri, "The video URI is not valid UTF-8.", &nativeUri);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The video URI is not valid UTF-8.");
+            return result;
         }
         return PublishVideo(
             std::unique_ptr<Video>(Video::FromUriEXT(nativeUri, device->value)),

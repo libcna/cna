@@ -29,6 +29,7 @@ using CNA::C::Detail::BorrowGameGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
@@ -40,6 +41,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::Texture3DResource;
@@ -352,12 +354,13 @@ CNA_Result cna_graphics_resource_set_name(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
-        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+        if (const CNA_Result result = ReadText(
+                name,
+                "The graphics-resource name is not valid UTF-8.",
+                &copiedName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The graphics-resource name is not valid UTF-8.");
+            return result;
         }
         GraphicsResourceView resource;
         if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);

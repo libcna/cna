@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
@@ -31,7 +32,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -108,7 +109,7 @@ using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary,
     std::string* const outKey)
 {
-    if (const CNA_Result result = ReadTextBytes(key, "The property key is invalid.", outKey);
+    if (const CNA_Result result = ReadText(key, "The property key is invalid.", outKey);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -125,7 +126,7 @@ using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
     std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource>* const outDictionary,
     std::string* const outKey)
 {
-    if (const CNA_Result result = ReadTextBytes(key, "The property key is invalid.", outKey);
+    if (const CNA_Result result = ReadText(key, "The property key is invalid.", outKey);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -628,7 +629,7 @@ CNA_Result cna_property_dictionary_set_string(
             return result;
         }
         if (const CNA_Result result =
-                ReadTextBytes(value, "The property text is invalid.", &nativeValue);
+                ReadText(value, "The property text is invalid.", &nativeValue);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

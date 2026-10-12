@@ -4,6 +4,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
@@ -23,6 +24,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -30,6 +32,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -189,12 +192,13 @@ CNA_Result cna_signed_in_gamer_create_ext(
             return InvalidArgument("The requested player is not a canonical PlayerIndex identity.");
         }
         std::string gamertagCopy;
-        if (const CNA_Result result = CopyStringView(gamertag, true, &gamertagCopy);
+        if (const CNA_Result result = ReadText(
+                gamertag,
+                "The gamertag is not valid UTF-8.",
+                &gamertagCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The gamertag is not valid UTF-8.");
+            return result;
         }
 
         const auto resource = std::make_shared<SignedInGamerResource>();

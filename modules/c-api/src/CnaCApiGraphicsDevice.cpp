@@ -51,11 +51,13 @@ namespace {
 
 using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 
 namespace NativeGraphics = Microsoft::Xna::Framework::Graphics;
@@ -1535,7 +1537,8 @@ CNA_Result cna_graphics_device_set_string_marker_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string text;
-        if (const CNA_Result result = CopyStringView(marker, true, &text);
+        if (const CNA_Result result = ReadText(
+                marker, "The string marker is not valid UTF-8.", &text, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

@@ -24,6 +24,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Fixed
 
+- **Every C API text argument is read by one reader, under the documented UTF-8 rule.** The
+  achievement, gamer, gamer-property, guide and XACT routes accepted malformed UTF-8 (they copied
+  the bytes unchecked); they now refuse it with `CNA_RESULT_ENCODING` like every other route, as
+  `docs/c-api/STRINGS_AND_BUFFERS.md` always required. Text refusals that returned a result without
+  recording an error message (CNB, the string marker, SpriteBatch text) now record one.
+- **The GraphicsDeviceManager's device information checks its presentation parameters fully.** It
+  accepted non-canonical `CNA_Bool` fields and non-zero reserved bytes that the Display routes refuse;
+  both now share one check and refuse them with `CNA_RESULT_INVALID_ARGUMENT`.
 - **The C API package works on a machine without wgpu-native.** With the `WEBGPU` renderer
   compiled in, `libcna_c_api.so` needs the wgpu-native runtime (`DT_NEEDED libwgpu_native.so`, the
   official release having no SONAME), but the package shipped only SDL3, so an installed consumer

@@ -4,6 +4,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/Achievement.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
@@ -25,7 +26,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -102,17 +103,17 @@ CNA_Result cna_achievement_create_ext(
         std::string nativeKey;
         std::string nativeName;
         std::string nativeDescription;
-        if (const CNA_Result result = ReadTextBytes(key, "The achievement key is invalid.", &nativeKey);
+        if (const CNA_Result result = ReadText(key, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ReadTextBytes(name, "The achievement name is invalid.", &nativeName);
+                ReadText(name, "The achievement name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ReadTextBytes(description, "The achievement description is invalid.", &nativeDescription);
+                ReadText(description, "The achievement description is invalid.", &nativeDescription);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -199,7 +200,7 @@ CNA_Result cna_achievement_collection_get_by_key(
         }
         *outAchievement = CNA_INVALID_HANDLE;
         std::string nativeKey;
-        if (const CNA_Result result = ReadTextBytes(key, "The achievement key is invalid.", &nativeKey);
+        if (const CNA_Result result = ReadText(key, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

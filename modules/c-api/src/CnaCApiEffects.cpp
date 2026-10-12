@@ -65,6 +65,7 @@ using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -80,6 +81,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::TextureCubeResourceView;
@@ -406,19 +408,21 @@ struct EffectState final {
     }
     std::string name;
     std::string semantic;
-    if (const CNA_Result result = CopyStringView(createInfo->name, true, &name);
+    if (const CNA_Result result = ReadText(
+            createInfo->name,
+            "The EffectParameter name is not valid UTF-8 text.",
+            &name,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The EffectParameter name is not valid UTF-8 text.");
+        return result;
     }
-    if (const CNA_Result result = CopyStringView(createInfo->semantic, true, &semantic);
+    if (const CNA_Result result = ReadText(
+            createInfo->semantic,
+            "The EffectParameter semantic is not valid UTF-8 text.",
+            &semantic,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The EffectParameter semantic is not valid UTF-8 text.");
+        return result;
     }
     *outParameter = std::make_unique<EffectParameter>(
         std::move(name),
@@ -526,11 +530,7 @@ template<typename TNative, typename TC, typename TConvert>
     std::string* const outName,
     const char* const failureMessage)
 {
-    const CNA_Result result = CopyStringView(name, true, outName);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(result, ErrorCategoryForResult(result), failureMessage);
+    return ReadText(name, failureMessage, outName, EmbeddedNul::Refused);
 }
 
 [[nodiscard]] CNA_Result GetPass(
@@ -917,13 +917,8 @@ template<typename TGetter>
     const CNA_StringView name,
     std::string* const outName)
 {
-    const CNA_Result result = CopyStringView(name, true, outName);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The shader uniform name is not valid UTF-8 text.");
+    return ReadText(
+        name, "The shader uniform name is not valid UTF-8 text.", outName, EmbeddedNul::Refused);
 }
 
 [[nodiscard]] CNA_Result ValidateEffectTextureOwner(
@@ -1079,28 +1074,29 @@ CNA_Result cna_effect_annotation_create(
         std::string name;
         std::string semantic;
         std::string cachedString;
-        if (const CNA_Result result = CopyStringView(createInfo->name, true, &name);
+        if (const CNA_Result result = ReadText(
+                createInfo->name,
+                "The EffectAnnotation name is not valid UTF-8 text.",
+                &name,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectAnnotation name is not valid UTF-8 text.");
+            return result;
         }
-        if (const CNA_Result result = CopyStringView(
-                createInfo->semantic, true, &semantic);
+        if (const CNA_Result result = ReadText(
+                createInfo->semantic,
+                "The EffectAnnotation semantic is not valid UTF-8 text.",
+                &semantic,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectAnnotation semantic is not valid UTF-8 text.");
+            return result;
         }
-        if (const CNA_Result result = CopyStringView(
-                createInfo->cached_string, true, &cachedString);
+        if (const CNA_Result result = ReadText(
+                createInfo->cached_string,
+                "The EffectAnnotation cached string is not valid UTF-8 text.",
+                &cachedString,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectAnnotation cached string is not valid UTF-8 text.");
+            return result;
         }
         std::vector<float> data;
         if (dataByteCount != 0U) {
@@ -1231,12 +1227,13 @@ CNA_Result cna_effect_annotation_collection_find(
             return result;
         }
         std::string copiedName;
-        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+        if (const CNA_Result result = ReadText(
+                name,
+                "The EffectAnnotation lookup name is not valid UTF-8 text.",
+                &copiedName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectAnnotation lookup name is not valid UTF-8 text.");
+            return result;
         }
         const EffectAnnotation* const annotation =
             static_cast<const EffectAnnotationCollection&>(*collection->value)[copiedName];
@@ -1734,12 +1731,13 @@ CNA_Result cna_effect_parameter_set_value_string(
             return result;
         }
         std::string copied;
-        if (const CNA_Result result = CopyStringView(value, true, &copied);
+        if (const CNA_Result result = ReadText(
+                value,
+                "The EffectParameter string value is not valid UTF-8 text.",
+                &copied,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectParameter string value is not valid UTF-8 text.");
+            return result;
         }
         parameter->value->SetValue(copied);
         return CNA_RESULT_SUCCESS;
@@ -2029,12 +2027,13 @@ CNA_Result cna_effect_parameter_collection_find_name(
             return result;
         }
         std::string copiedName;
-        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+        if (const CNA_Result result = ReadText(
+                name,
+                "The EffectParameter lookup name is not valid UTF-8 text.",
+                &copiedName,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectParameter lookup name is not valid UTF-8 text.");
+            return result;
         }
         EffectParameter* const parameter = (*collection->state->value)[copiedName];
         if (parameter == nullptr) {
@@ -2067,12 +2066,13 @@ CNA_Result cna_effect_parameter_collection_find_semantic(
             return result;
         }
         std::string copiedSemantic;
-        if (const CNA_Result result = CopyStringView(semantic, true, &copiedSemantic);
+        if (const CNA_Result result = ReadText(
+                semantic,
+                "The EffectParameter lookup semantic is not valid UTF-8 text.",
+                &copiedSemantic,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The EffectParameter lookup semantic is not valid UTF-8 text.");
+            return result;
         }
         EffectParameter* const parameter =
             collection->state->value->GetParameterBySemantic(copiedSemantic);
@@ -2576,11 +2576,13 @@ CNA_Result cna_content_manager_load_effect(
         }
         *outEffect = CNA_INVALID_HANDLE;
         std::string assetNameCopy;
-        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameCopy);
+        if (const CNA_Result result = ReadText(
+                assetName,
+                "The content asset name is not valid UTF-8.",
+                &assetNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The content asset name is not valid UTF-8.");
+            return result;
         }
         if (assetNameCopy.empty()) {
             return InvalidArgument("The content asset name must not be empty.");
@@ -2628,17 +2630,21 @@ CNA_Result cna_shader_effect_create(
         *outEffect = CNA_INVALID_HANDLE;
         std::string vertex;
         std::string fragment;
-        if (const CNA_Result result = CopyStringView(vertexSource, true, &vertex);
+        if (const CNA_Result result = ReadText(
+                vertexSource,
+                "The ShaderEffect vertex source is not valid UTF-8 text.",
+                &vertex,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The ShaderEffect vertex source is not valid UTF-8 text.");
+            return result;
         }
-        if (const CNA_Result result = CopyStringView(fragmentSource, true, &fragment);
+        if (const CNA_Result result = ReadText(
+                fragmentSource,
+                "The ShaderEffect fragment source is not valid UTF-8 text.",
+                &fragment,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result, ErrorCategoryForResult(result),
-                "The ShaderEffect fragment source is not valid UTF-8 text.");
+            return result;
         }
         // CBIND-075: an effect with no source at all is the caller's mistake, and renderers
         // disagreed about it -- one threw, which the barrier reported as CNA_RESULT_INTERNAL and so

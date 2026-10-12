@@ -1661,12 +1661,13 @@ using KeyLookupRoute = Keys (*)(const std::string&);
         return InvalidArgument("The key identity output is null.");
     }
     std::string text;
-    if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, true, &text);
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            name,
+            "The key name is invalid.",
+            &text,
+            CNA::C::Detail::EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            CNA::C::Detail::ErrorCategoryForResult(result),
-            "The key name is invalid.");
+        return result;
     }
     if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
         result != CNA_RESULT_SUCCESS) {
@@ -2483,12 +2484,12 @@ CNA_Result cna_text_input_raise_text_editing_ext(
         std::string copied;
         // Composition text is byte-length delimited on both sides, so an embedded NUL is
         // representable and is not rejected; invalid UTF-8 still is.
-        if (const CNA_Result result = CNA::C::Detail::CopyStringView(text, false, &copied);
+        if (const CNA_Result result = CNA::C::Detail::ReadText(
+                text,
+                "The text-editing composition is not valid UTF-8.",
+                &copied);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                CNA::C::Detail::ErrorCategoryForResult(result),
-                "The text-editing composition is not valid UTF-8.");
+            return result;
         }
         if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -2524,13 +2525,12 @@ CNA_Result cna_text_input_raise_text_editing_candidates_ext(
         copied.reserve(static_cast<std::size_t>(candidateCount));
         for (int32_t index = 0; index < candidateCount; ++index) {
             std::string candidate;
-            if (const CNA_Result result =
-                    CNA::C::Detail::CopyStringView(candidates[index], false, &candidate);
+            if (const CNA_Result result = CNA::C::Detail::ReadText(
+                    candidates[index],
+                    "A text-editing candidate is not valid UTF-8.",
+                    &candidate);
                 result != CNA_RESULT_SUCCESS) {
-                return Fail(
-                    result,
-                    CNA::C::Detail::ErrorCategoryForResult(result),
-                    "A text-editing candidate is not valid UTF-8.");
+                return result;
             }
             copied.push_back(std::move(candidate));
         }

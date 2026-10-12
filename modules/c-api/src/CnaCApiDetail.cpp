@@ -591,26 +591,13 @@ CNA_Result CopyStringView(
 CNA_Result ReadText(
     const CNA_StringView value,
     const std::string_view message,
-    std::string* const outValue) noexcept
+    std::string* const outValue,
+    const EmbeddedNul nul) noexcept
 {
-    if (const CNA_Result result = CopyStringView(value, false, outValue);
+    if (const CNA_Result result = CopyStringView(value, nul == EmbeddedNul::Refused, outValue);
         result != CNA_RESULT_SUCCESS) {
         return Fail(result, ErrorCategoryForResult(result), message);
     }
-    return CNA_RESULT_SUCCESS;
-}
-
-CNA_Result ReadTextBytes(
-    const CNA_StringView value,
-    const std::string_view message,
-    std::string* const outValue)
-{
-    if (value.data == nullptr && value.byte_length != UINT64_C(0)) {
-        return InvalidArgument(message);
-    }
-    outValue->assign(
-        value.data == nullptr ? "" : value.data,
-        static_cast<std::size_t>(value.byte_length));
     return CNA_RESULT_SUCCESS;
 }
 

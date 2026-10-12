@@ -123,6 +123,17 @@ static int validate_device_information(void)
         if (cna_graphics_device_information_clone(&broken, &clone) != CNA_RESULT_INVALID_ARGUMENT) {
             return 0;
         }
+        /* The presentation parameters inside are held to the rules the Display routes apply. */
+        broken = information;
+        broken.presentation_parameters.is_full_screen = (CNA_Bool)2;
+        if (cna_graphics_device_information_clone(&broken, &clone) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        broken = information;
+        broken.presentation_parameters.reserved[0] = UINT8_C(1);
+        if (cna_graphics_device_information_clone(&broken, &clone) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
     }
     memset(text, 0, sizeof(text));
     return cna_graphics_device_information_get_type_name_size(&bytes) == CNA_RESULT_SUCCESS &&

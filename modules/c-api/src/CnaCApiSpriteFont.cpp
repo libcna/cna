@@ -4,6 +4,7 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -35,6 +36,7 @@ using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::SpriteFontResource;
@@ -293,12 +295,10 @@ CNA_Result cna_sprite_font_measure_utf8(
             return InvalidArgument("The SpriteFont measurement output is null.");
         }
         std::string textCopy;
-        if (const CNA_Result result = CopyStringView(text, false, &textCopy);
+        if (const CNA_Result result =
+                ReadText(text, "The SpriteFont measurement text is not valid UTF-8.", &textCopy);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The SpriteFont measurement text is not valid UTF-8.");
+            return result;
         }
         std::shared_ptr<SpriteFontResource> spriteFont;
         if (const CNA_Result result = GetSpriteFont(spriteFontHandle, &spriteFont);

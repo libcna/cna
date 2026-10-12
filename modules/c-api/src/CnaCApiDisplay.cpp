@@ -38,6 +38,7 @@ using CNA::C::Detail::IsDepthFormat;
 using CNA::C::Detail::IsDisplayOrientation;
 using CNA::C::Detail::IsGraphicsProfile;
 using CNA::C::Detail::IsPresentInterval;
+using CNA::C::Detail::IsPresentationParameters;
 using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsVersionedStructure;
@@ -172,20 +173,6 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
         outModes->assign(collection.begin(), collection.end());
     }
     return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] bool IsPresentationParameters(
-    const CNA_PresentationParameters* const parameters) noexcept
-{
-    return IsVersionedStructure(parameters) &&
-        IsSurfaceFormat(parameters->back_buffer_format) &&
-        IsDepthFormat(parameters->depth_stencil_format) &&
-        parameters->multi_sample_count >= 0 &&
-        IsPresentInterval(parameters->presentation_interval) &&
-        IsDisplayOrientation(parameters->display_orientation) &&
-        IsRenderTargetUsage(parameters->render_target_usage) && IsCanonicalBool(parameters->is_full_screen) &&
-        IsCanonicalBool(parameters->headless_ext) && parameters->reserved[0] == 0U &&
-        parameters->reserved[1] == 0U;
 }
 
 [[nodiscard]] CNA_Result QueryFormat(

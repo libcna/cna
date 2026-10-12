@@ -7,6 +7,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
@@ -46,7 +47,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::ReadTextBytes;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
@@ -297,7 +298,7 @@ CNA_Result cna_gamer_set_display_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeName;
         if (const CNA_Result result =
-                ReadTextBytes(displayName, "The display name is invalid.", &nativeName);
+                ReadText(displayName, "The display name is invalid.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -360,7 +361,7 @@ CNA_Result cna_gamer_get_from_gamertag(
         *outGamer = CNA_INVALID_HANDLE;
         std::string nativeGamertag;
         if (const CNA_Result result =
-                ReadTextBytes(gamertag, "The gamertag is invalid.", &nativeGamertag);
+                ReadText(gamertag, "The gamertag is invalid.", &nativeGamertag);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -401,7 +402,7 @@ CNA_Result cna_gamer_get_partner_token_size(
         }
         std::string nativeAudienceUri;
         if (const CNA_Result result =
-                ReadTextBytes(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
+                ReadText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -419,7 +420,7 @@ CNA_Result cna_gamer_copy_partner_token(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeAudienceUri;
         if (const CNA_Result result =
-                ReadTextBytes(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
+                ReadText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -611,7 +612,7 @@ CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeMode;
-        if (const CNA_Result result = ReadTextBytes(mode, "The presence mode is invalid.", &nativeMode);
+        if (const CNA_Result result = ReadText(mode, "The presence mode is invalid.", &nativeMode);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -710,7 +711,7 @@ CNA_Result cna_signed_in_gamer_award_achievement(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string nativeKey;
         if (const CNA_Result result =
-                ReadTextBytes(achievementKey, "The achievement key is invalid.", &nativeKey);
+                ReadText(achievementKey, "The achievement key is invalid.", &nativeKey);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -883,12 +884,12 @@ CNA_Result cna_friend_gamer_create_ext(
         std::string nativeGamertag;
         std::string nativeDisplayName;
         if (const CNA_Result result =
-                ReadTextBytes(gamertag, "The gamertag is invalid.", &nativeGamertag);
+                ReadText(gamertag, "The gamertag is invalid.", &nativeGamertag);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result =
-                ReadTextBytes(displayName, "The display name is invalid.", &nativeDisplayName);
+                ReadText(displayName, "The display name is invalid.", &nativeDisplayName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

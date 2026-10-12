@@ -4,6 +4,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageContainer.hpp"
@@ -33,6 +34,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -42,6 +44,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -222,12 +225,13 @@ private:
     std::vector<std::string>* const outNames)
 {
     std::string pattern;
-    if (const CNA_Result result = CopyStringView(searchPattern, true, &pattern);
+    if (const CNA_Result result = ReadText(
+            searchPattern,
+            "The storage search pattern is not valid UTF-8.",
+            &pattern,
+            EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The storage search pattern is not valid UTF-8.");
+        return result;
     }
     if (pattern.empty()) {
         *outNames = directories
@@ -303,12 +307,10 @@ private:
     const CNA_StringView value,
     std::string* const outPath)
 {
-    if (const CNA_Result result = CopyStringView(value, true, outPath);
+    if (const CNA_Result result =
+            ReadText(value, "The storage path is not valid UTF-8.", outPath, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The storage path is not valid UTF-8.");
+        return result;
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -527,12 +529,13 @@ CNA_Result cna_storage_set_app_name_ext(const CNA_StringView appName)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string appNameCopy;
-        if (const CNA_Result result = CopyStringView(appName, true, &appNameCopy);
+        if (const CNA_Result result = ReadText(
+                appName,
+                "The storage application name is not valid UTF-8.",
+                &appNameCopy,
+                EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The storage application name is not valid UTF-8.");
+            return result;
         }
         StorageDevice::SetAppNameEXT(appNameCopy);
         return CNA_RESULT_SUCCESS;
