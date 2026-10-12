@@ -38,6 +38,19 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
     endif()
 
     if(Python3_Interpreter_FOUND)
+        # Volume and cube textures, by what only their implementation defines: constructors,
+        # vtables and every out-of-line member. A renderer that binds an effect's textures emits
+        # the classes' header-inline renderer accessors without linking either class, so those
+        # are not evidence. The full-feature gate requires each pattern, which shows that each
+        # still finds a real implementation.
+        set(_cna_footprint_cube_and_volume
+            "Graphics::Texture3D::(?!GetRenderer\\(\\) const$)"
+            "vtable for Microsoft::Xna::Framework::Graphics::Texture3D$"
+            "Graphics::TextureCube::(?!GetRenderer(Raw)?\\(\\) const$)"
+            "vtable for Microsoft::Xna::Framework::Graphics::TextureCube$"
+            "Graphics::RenderTargetCube::(?!getIsContentLostProperty\\(\\) const$)"
+            "vtable for Microsoft::Xna::Framework::Graphics::RenderTargetCube$")
+
         # What a game that loads textures, fonts and sounds, plays them and asks the Guide about
         # its license must not contain. Each family is one subsystem that used to ride along.
         set(_cna_footprint_absent
@@ -69,17 +82,17 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             # Networking: the Guide and profiles need no network session or ENet.
             "Microsoft::Xna::Framework::Net::"
             "^enet_"
-            # The platform's camera and tray, installed only by CNA::Devices::Camera/SystemTray.
+            # The platform's camera and tray, and the accessors that create and link them.
             "CNA::Platform::Sdl3::Sdl3CameraProvider::"
             "CNA::Platform::Sdl3::Sdl3Tray::"
+            "CNA::Platform::IPlatform::GetCamera\\(\\)"
+            "CNA::Platform::IPlatform::GetTray\\(\\)"
             # The Decimal/DateTime .xnb readers, which no font or plain value holds.
             "CNA::Internal::Xnb::RegisterDecimalDateTimeXnbReaders"
             # The .cnb writer, which only content tools need.
             "CNA::Content::Cnb::CnbWriter::"
             # Volume and cube textures, which a 2D game binds nowhere.
-            "Graphics::Texture3D::"
-            "Graphics::TextureCube::"
-            "Graphics::RenderTargetCube::")
+            ${_cna_footprint_cube_and_volume})
         # Platforms other than the build's own.
         foreach(_platform IN ITEMS "SDL3:Sdl3" "HEADLESS:Headless" "TERMINAL:Terminal")
             string(REPLACE ":" ";" _platform "${_platform}")
@@ -116,8 +129,7 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             "Audio::Microphone::CheckAllBuffers"
             "Audio::DynamicSoundEffectInstance::Update"
             "Graphics::RenderTargetCube::DescribeRenderTargetBindingEXT"
-            "Graphics::TextureCube::"
-            "Graphics::Texture3D::")
+            ${_cna_footprint_cube_and_volume})
         if(CNA_DRACO_AVAILABLE)
             list(APPEND _cna_footprint_present "^draco::")
         endif()
@@ -149,11 +161,11 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 "Microsoft::Xna::Framework::Net::"
                 "^enet_"
                 "CNA::Internal::GamerServices::makeFakeBackend"
-                "Graphics::Texture3D::"
-                "Graphics::TextureCube::"
-                "Graphics::RenderTargetCube::"
+                ${_cna_footprint_cube_and_volume}
                 "CNA::Platform::Sdl3::Sdl3CameraProvider::"
                 "CNA::Platform::Sdl3::Sdl3Tray::"
+                "CNA::Platform::IPlatform::GetCamera\\(\\)"
+                "CNA::Platform::IPlatform::GetTray\\(\\)"
                 "CNA::Content::Cnb::CnbWriter::")
             list(APPEND _cna_footprint_args --forbid "${_pattern}")
         endforeach()
@@ -169,12 +181,12 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         set_tests_properties(LinkFootprint_GamerServicesGame PROPERTIES
             LABELS "configuration;link-footprint")
         # A program that asks whether a camera and a tray are supported and uses neither: support
-        # is reported without the services, which only enabling one links.
+        # is reported without the services, which only their accessors link.
         set(_cna_footprint_args
             --forbid "CNA::Platform::Sdl3::Sdl3CameraProvider::"
             --forbid "CNA::Platform::Sdl3::Sdl3Tray::"
-            --forbid "CNA::Platform::EnableCameraService"
-            --forbid "CNA::Platform::EnableTrayService"
+            --forbid "CNA::Platform::IPlatform::GetCamera\\(\\)"
+            --forbid "CNA::Platform::IPlatform::GetTray\\(\\)"
             --require "CNA::Platform::IPlatform::Supports|Platform::.*Platform::Supports")
         if(CNA_PLATFORM STREQUAL "SDL3")
             list(APPEND _cna_footprint_args
@@ -199,16 +211,17 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                     --binary $<TARGET_FILE:cna_link_footprint_camera_only>
                     --require "CNA::Platform::Sdl3::Sdl3CameraProvider::"
                     --forbid "CNA::Platform::Sdl3::Sdl3Tray::"
-                    --forbid "CNA::Platform::EnableTrayService")
+                    --forbid "CNA::Platform::IPlatform::GetTray\\(\\)")
             add_test(NAME LinkFootprint_TrayOnly
                 COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
                     --binary $<TARGET_FILE:cna_link_footprint_tray_only>
                     --require "CNA::Platform::Sdl3::Sdl3Tray::"
                     --forbid "CNA::Platform::Sdl3::Sdl3CameraProvider::"
-                    --forbid "CNA::Platform::EnableCameraService")
+                    --forbid "CNA::Platform::IPlatform::GetCamera\\(\\)")
             set_tests_properties(LinkFootprint_CameraOnly LinkFootprint_TrayOnly PROPERTIES
                 LABELS "configuration;link-footprint")
         endif()
+        unset(_cna_footprint_cube_and_volume)
         unset(_cna_footprint_absent)
         unset(_cna_footprint_present)
         unset(_cna_footprint_args)
