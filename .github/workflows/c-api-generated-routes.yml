@@ -13,6 +13,7 @@ on:
       - 'modules/c-api/src/CnaCApiMarshal.hpp'
       - 'modules/c-api/include/**'
       - 'tools/c-api/generate_routes.py'
+      - 'modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c'
       - '.github/workflows/c-api-generated-routes.yml'
   pull_request:
     branches: [next, develop, main]
@@ -23,6 +24,7 @@ on:
       - 'modules/c-api/src/CnaCApiMarshal.hpp'
       - 'modules/c-api/include/**'
       - 'tools/c-api/generate_routes.py'
+      - 'modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c'
   workflow_dispatch:
 
 concurrency:
