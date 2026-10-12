@@ -150,6 +150,7 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -235,7 +236,7 @@ struct TextureCubeTransferView final {
         static_cast<uint64_t>(startIndex) + static_cast<uint64_t>(elementCount);
     if (data == nullptr || capacity < requiredCapacity) {
         return capacity < requiredCapacity
-            ? Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message)
+            ? BufferTooSmall(message)
             : InvalidArgument(message);
     }
     return CNA_RESULT_SUCCESS;
@@ -346,10 +347,7 @@ template<typename TResource>
     const std::string& name = resource.GetTypeName();
     *outByteCount = static_cast<uint64_t>(name.size());
     if (capacity < name.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The texture type-name output buffer is too small.");
+        return BufferTooSmall("The texture type-name output buffer is too small.");
     }
     if (!name.empty()) {
         std::memcpy(destination, name.data(), name.size());

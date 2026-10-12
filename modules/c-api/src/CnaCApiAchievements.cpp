@@ -20,10 +20,10 @@
 namespace {
 
 using CNA::C::Detail::BorrowSignedIn;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -257,10 +257,7 @@ CNA_Result cna_achievement_collection_copy_to(
         collection->value->CopyTo(values, 0);
         *outCount = static_cast<uint64_t>(values.size());
         if (capacity < static_cast<uint64_t>(index) + values.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the collection.");
+            return BufferTooSmall("The destination capacity is smaller than the collection.");
         }
         for (std::size_t slot = 0U; slot < values.size(); ++slot) {
             CNA_Handle published = CNA_INVALID_HANDLE;

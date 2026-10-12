@@ -56,6 +56,8 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
@@ -273,10 +275,7 @@ CNA_Result cna_available_network_session_collection_create_ext(
             return InvalidArgument("The discovered-session array is invalid.");
         }
         if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The discovered-session count exceeds the canonical range.");
+            return Overflow("The discovered-session count exceeds the canonical range.");
         }
 
         std::vector<AvailableNetworkSession> copied;
@@ -323,10 +322,7 @@ CNA_Result cna_available_network_session_collection_copy_session(
             return result;
         }
         if (index < 0 || index >= static_cast<int32_t>(collection->value->getCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The discovered-session index is outside the collection.");
+            return OutOfRange("The discovered-session index is outside the collection.");
         }
         return CreateSessionHandle(collection->value->getItem(index), outSession);
     });
@@ -564,10 +560,7 @@ CNA_Result cna_network_session_get_gamer(
             ? static_cast<int32_t>(all->getCountProperty())
             : static_cast<int32_t>(local->getCountProperty());
         if (index < 0 || index >= count) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The gamer index is outside that roster.");
+            return OutOfRange("The gamer index is outside that roster.");
         }
         NetworkGamer* const value = all != nullptr
             ? (*all)[static_cast<int>(index)]
@@ -1737,10 +1730,7 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
         return InvalidArgument("The payload is invalid.");
     }
     if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The payload exceeds the canonical range.");
+        return Overflow("The payload exceeds the canonical range.");
     }
     outPayload->assign(data, data + count);
     return CNA_RESULT_SUCCESS;
@@ -1827,10 +1817,7 @@ CNA_Result cna_local_network_gamer_receive_data(
         *outSender = CNA_INVALID_HANDLE;
         *outReceived = 0U;
         if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The receive capacity exceeds the canonical range.");
+            return Overflow("The receive capacity exceeds the canonical range.");
         }
         LocalNetworkGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
@@ -1864,10 +1851,7 @@ CNA_Result cna_local_network_gamer_receive_data_at(
         *outSender = CNA_INVALID_HANDLE;
         *outReceived = 0U;
         if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The receive capacity exceeds the canonical range.");
+            return Overflow("The receive capacity exceeds the canonical range.");
         }
         LocalNetworkGamer* gamer = nullptr;
         if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);

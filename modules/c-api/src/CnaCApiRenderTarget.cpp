@@ -7,6 +7,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -29,6 +30,7 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CreateHandle;
@@ -48,6 +50,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::RenderTargetCubeResource;
@@ -128,10 +131,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
             "The render-target binding array is invalid.");
     }
     if (bindingCount > outNative->max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The render-target binding count exceeds the native collection range.");
+        return Overflow("The render-target binding count exceeds the native collection range.");
     }
     outNative->reserve(static_cast<std::size_t>(bindingCount));
     outNormalized->reserve(static_cast<std::size_t>(bindingCount));
@@ -576,10 +576,7 @@ CNA_Result cna_graphics_device_copy_render_targets(
         const uint64_t count = found == activeBindings.end() ? 0U : found->second.size();
         *outCount = count;
         if (capacity < count) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The render-target binding output buffer is too small.");
+            return BufferTooSmall("The render-target binding output buffer is too small.");
         }
         if (count != 0U) {
             std::memcpy(

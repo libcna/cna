@@ -44,6 +44,7 @@
 #include <utility>
 #include <vector>
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
@@ -52,6 +53,8 @@ using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ValidateBuffer;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -93,10 +96,7 @@ using CNA::C::Detail::ToCBool;
         return InvalidArgument("The byte range is null with a non-zero count.");
     }
     if (byteCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The byte count does not fit in this host's size type.");
+        return Overflow("The byte count does not fit in this host's size type.");
     }
     *outSpan = byteCount == 0U
         ? std::span<const uint8_t>{}
@@ -279,7 +279,7 @@ void WriteLimits(const Cnb::CnbReadLimits& limits, CNA_CnbReadLimits* const out)
     const char* const what)
 {
     if (index >= static_cast<uint64_t>(count)) {
-        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, what);
+        return OutOfRange(what);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -377,10 +377,7 @@ template<typename TElement>
         return InvalidArgument("The element range is null with a non-zero count.");
     }
     if (count > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TElement))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The element count does not fit in this host's size type.");
+        return Overflow("The element count does not fit in this host's size type.");
     }
     *outSpan = count == 0U
         ? std::span<const TElement>{}
@@ -681,10 +678,7 @@ struct CnbAnimationClipResource final {
     const auto& keys = clip.Tracks[static_cast<std::size_t>(track)].Keys;
     *outCount = static_cast<uint64_t>(keys.size());
     if (capacity < static_cast<uint64_t>(keys.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the keyframe count.");
+        return BufferTooSmall("The destination capacity is smaller than the keyframe count.");
     }
     for (std::size_t keyIndex = 0U; keyIndex < keys.size(); ++keyIndex) {
         const auto& key = keys[keyIndex];
@@ -911,10 +905,7 @@ CNA_Result cna_cnb_checked_add(const uint64_t a, const uint64_t b, uint64_t* con
         // performs the arithmetic: if this condition ever drifted from its guard, the canonical
         // throw would fire and the disagreement would surface as CNA_RESULT_IO rather than hide.
         if (a > std::numeric_limits<uint64_t>::max() - b) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The declared offset and size overflow a 64-bit byte count.");
+            return Overflow("The declared offset and size overflow a 64-bit byte count.");
         }
         *outSum = Cnb::CheckedAdd(a, b, "cna_cnb_checked_add");
         return CNA_RESULT_SUCCESS;
@@ -928,9 +919,7 @@ CNA_Result cna_cnb_checked_multiply(const uint64_t a, const uint64_t b, uint64_t
             return InvalidArgument("The product output is null.");
         }
         if (a != 0U && b > std::numeric_limits<uint64_t>::max() / a) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
+            return Overflow(
                 "The declared element count and element size overflow a 64-bit byte count.");
         }
         *outProduct = Cnb::CheckedMultiply(a, b, "cna_cnb_checked_multiply");
@@ -1230,10 +1219,7 @@ CNA_Result cna_cnb_document_copy_chunk_data(
             document->value->ChunkData(static_cast<std::size_t>(index));
         *outByteCount = static_cast<uint64_t>(data.size());
         if (capacity < static_cast<uint64_t>(data.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the chunk.");
+            return BufferTooSmall("The destination capacity is smaller than the chunk.");
         }
         if (!data.empty()) {
             std::memcpy(destination, data.data(), data.size());
@@ -1292,9 +1278,7 @@ CNA_Result cna_cnb_document_find_all(
         const std::vector<std::size_t> found = document->value->FindAll(Cnb::CnbChunkId{type});
         *outCount = static_cast<uint64_t>(found.size());
         if (capacity < static_cast<uint64_t>(found.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination capacity is smaller than the number of matching chunks.");
         }
         for (std::size_t i = 0; i < found.size(); ++i) {
@@ -1347,8 +1331,7 @@ CNA_Result cna_cnb_document_require_mandatory_chunks_understood(
                 "The known chunk-identifier array is null with a non-zero count.");
         }
         if (knownTypeCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+            return Overflow(
                 "The known chunk-identifier count does not fit in this host's size type.");
         }
         std::vector<Cnb::CnbChunkId> native;
@@ -1557,9 +1540,7 @@ CNA_Result cna_cnb_reader_read_bytes(
         // capacity that cannot hold it is settled BEFORE the cursor advances: a refused call
         // consumes nothing and can simply be repeated with a larger buffer.
         if (capacity < byteCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination capacity is smaller than the requested byte count.");
         }
         const std::span<const uint8_t> bytes = reader->value->ReadBytes(byteCount);
@@ -1680,9 +1661,7 @@ CNA_Result cna_cnb_byte_writer_write_zeros(
             return result;
         }
         if (byteCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The zero count does not fit in this host's size type.");
+            return Overflow("The zero count does not fit in this host's size type.");
         }
         writer->value->WriteZeros(static_cast<std::size_t>(byteCount));
         return CNA_RESULT_SUCCESS;
@@ -1707,10 +1686,7 @@ CNA_Result cna_cnb_byte_writer_copy_bytes(
         const std::span<const uint8_t> view = writer->value->View();
         *outByteCount = static_cast<uint64_t>(view.size());
         if (capacity < static_cast<uint64_t>(view.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the written bytes.");
+            return BufferTooSmall("The destination capacity is smaller than the written bytes.");
         }
         if (!view.empty()) {
             std::memcpy(destination, view.data(), view.size());
@@ -1738,10 +1714,7 @@ CNA_Result cna_cnb_byte_writer_take(
         // Taking is destructive, so the capacity is settled first: a refused take leaves the bytes
         // where they were and can simply be repeated with a larger buffer.
         if (capacity < *outByteCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the written bytes.");
+            return BufferTooSmall("The destination capacity is smaller than the written bytes.");
         }
         const std::vector<uint8_t> taken = writer->value->Take();
         if (!taken.empty()) {
@@ -3353,10 +3326,7 @@ CNA_Result cna_cnb_model_copy_mesh_part_indices(
             model->value->meshes[static_cast<std::size_t>(index)].partIndices;
         *outCount = static_cast<uint64_t>(indices.size());
         if (capacity < static_cast<uint64_t>(indices.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the part-index count.");
+            return BufferTooSmall("The destination capacity is smaller than the part-index count.");
         }
         if (!indices.empty()) {
             std::memcpy(destination, indices.data(), indices.size() * sizeof(uint32_t));
@@ -3483,10 +3453,7 @@ CNA_Result cna_cnb_model_copy_skeleton_hierarchy(
         const std::vector<int32_t>& hierarchy = model->value->skeleton.value().hierarchy;
         *outCount = static_cast<uint64_t>(hierarchy.size());
         if (capacity < static_cast<uint64_t>(hierarchy.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the joint count.");
+            return BufferTooSmall("The destination capacity is smaller than the joint count.");
         }
         if (!hierarchy.empty()) {
             std::memcpy(destination, hierarchy.data(), hierarchy.size() * sizeof(int32_t));
@@ -3525,9 +3492,7 @@ CNA_Result cna_cnb_model_copy_skeleton_matrices(
         const uint64_t required = static_cast<uint64_t>(source->size()) * 16U;
         *outCount = required;
         if (capacity < required) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination capacity is smaller than the matrix float count.");
         }
         for (std::size_t joint = 0U; joint < source->size(); ++joint) {
@@ -3714,10 +3679,7 @@ CNA_Result cna_cnb_model_copy_animation_keyframes(
         const auto& keys = tracks[static_cast<std::size_t>(track)].Keys;
         *outKeyframeCount = static_cast<uint64_t>(keys.size());
         if (capacity < static_cast<uint64_t>(keys.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the keyframe count.");
+            return BufferTooSmall("The destination capacity is smaller than the keyframe count.");
         }
         for (std::size_t keyIndex = 0U; keyIndex < keys.size(); ++keyIndex) {
             const auto& key = keys[keyIndex];

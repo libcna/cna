@@ -62,6 +62,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
@@ -405,10 +406,7 @@ CNA_Result cna_keyboard_state_copy_pressed_keys(
         const uint32_t requiredCount = CountPressedKeys(*state);
         *outCount = requiredCount;
         if (capacity < requiredCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The pressed-key output buffer is too small.");
+            return BufferTooSmall("The pressed-key output buffer is too small.");
         }
 
         uint32_t destinationIndex = 0U;
@@ -2262,9 +2260,7 @@ CNA_Result cna_touch_state_copy_to(
         const uint64_t required = count + added;
         *outCount = required;
         if (required > capacity) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination array cannot hold the inserted touch locations.");
         }
         if (added == UINT64_C(0)) {
@@ -2298,10 +2294,7 @@ CNA_Result cna_touch_state_add(
             return result;
         }
         if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The touch snapshot is already at its fixed capacity.");
+            return BufferTooSmall("The touch snapshot is already at its fixed capacity.");
         }
         state->touches[state->touch_count] = *item;
         state->touch_count += 1U;
@@ -2385,10 +2378,7 @@ CNA_Result cna_touch_state_insert(
             return InvalidArgument("The touch-location index is out of range.");
         }
         if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The touch snapshot is already at its fixed capacity.");
+            return BufferTooSmall("The touch snapshot is already at its fixed capacity.");
         }
         for (uint32_t shift = state->touch_count; shift > static_cast<uint32_t>(index); --shift) {
             state->touches[shift] = state->touches[shift - 1U];

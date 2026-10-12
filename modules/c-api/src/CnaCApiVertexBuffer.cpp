@@ -34,6 +34,7 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -48,6 +49,8 @@ using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::StructureVersion;
@@ -115,20 +118,14 @@ struct TransferView final {
     }
     if (transfer->start_index > capacity ||
         transfer->element_count > capacity - transfer->start_index) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The caller array cannot hold the complete vertex transfer window.");
+        return BufferTooSmall("The caller array cannot hold the complete vertex transfer window.");
     }
     if (capacity != 0U && data == nullptr) {
         return InvalidArgument("The vertex-buffer caller array is null.");
     }
     if (transfer->element_count >
         static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The vertex transfer count exceeds the native Int32 range.");
+        return Overflow("The vertex transfer count exceeds the native Int32 range.");
     }
     *outView = TransferView{
         transfer->vertex_type,
@@ -157,9 +154,7 @@ template<typename TC, typename TNative>
     }
     if (transfer.start >
         static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TC))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The vertex source byte offset is too large.");
+        return Overflow("The vertex source byte offset is too large.");
     }
     const auto* const bytes = static_cast<const uint8_t*>(source) +
         static_cast<std::size_t>(transfer.start) * sizeof(TC);
@@ -233,9 +228,7 @@ template<typename TC, typename TNative>
     }
     if (transfer.start >
         static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TC))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The vertex destination byte offset is too large.");
+        return Overflow("The vertex destination byte offset is too large.");
     }
     std::vector<TNative> native;
     native.reserve(static_cast<std::size_t>(transfer.count));
@@ -466,10 +459,7 @@ CNA_Result cna_vertex_buffer_copy_declaration_elements(
             buffer->value->getVertexDeclarationProperty().GetVertexElements();
         *outElementCount = static_cast<uint64_t>(elements.size());
         if (capacity < elements.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete VertexDeclaration.");
+            return BufferTooSmall("The destination cannot hold the complete VertexDeclaration.");
         }
         for (std::size_t index = 0U; index < elements.size(); ++index) {
             destination[index] = ToC(elements[index]);
@@ -507,10 +497,7 @@ CNA_Result cna_vertex_buffer_set_data(
         }
         if (view.count >
             static_cast<uint64_t>(buffer->value->getVertexCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The upload exceeds the VertexBuffer's logical capacity.");
+            return OutOfRange("The upload exceeds the VertexBuffer's logical capacity.");
         }
         return DispatchSet(*buffer, view, data);
     });
@@ -573,10 +560,7 @@ CNA_Result cna_vertex_buffer_set_data_raw(
             return InvalidArgument("The raw VertexBuffer count or stride is invalid.");
         }
         if (vertexCount > std::numeric_limits<uint64_t>::max() / vertexStride) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The raw VertexBuffer byte count overflows UInt64.");
+            return Overflow("The raw VertexBuffer byte count overflows UInt64.");
         }
         const uint64_t requiredBytes = vertexCount * vertexStride;
         if (dataByteCount < requiredBytes ||
@@ -605,10 +589,7 @@ namespace {
         return InvalidArgument("The raw VertexBuffer count or stride is invalid.");
     }
     if (vertexCount > std::numeric_limits<uint64_t>::max() / vertexStride) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The raw VertexBuffer byte count overflows UInt64.");
+        return Overflow("The raw VertexBuffer byte count overflows UInt64.");
     }
     *outRequiredBytes = vertexCount * vertexStride;
     if (accessibleBytes < *outRequiredBytes ||

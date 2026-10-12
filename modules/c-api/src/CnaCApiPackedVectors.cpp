@@ -31,8 +31,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -252,10 +252,7 @@ template<typename TPackedVector>
     const uint64_t packed) noexcept
 {
     if (!PackedValueFits(format, packed)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The packed value exceeds the selected format's storage width.");
+        return OutOfRange("The packed value exceeds the selected format's storage width.");
     }
     return CNA_RESULT_SUCCESS;
 }

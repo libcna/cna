@@ -37,6 +37,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -48,6 +49,8 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -147,7 +150,7 @@ struct PacketReaderResource final {
 {
     const int32_t limit = allowEnd ? count : count - 1;
     if (index < 0 || index > limit) {
-        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, message);
+        return OutOfRange(message);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -512,10 +515,7 @@ CNA_Result cna_network_session_properties_copy_to(
         *outCount = count;
         const uint64_t required = count + static_cast<uint64_t>(index);
         if (capacity < required) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The property copy destination is too small.");
+            return BufferTooSmall("The property copy destination is too small.");
         }
 
         std::vector<std::optional<int>> native(static_cast<std::size_t>(required));
@@ -684,10 +684,7 @@ CNA_Result cna_packet_writer_copy_data_ext(
         const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
         *outBytes = data.size();
         if (capacity < data.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The packet copy destination is too small.");
+            return BufferTooSmall("The packet copy destination is too small.");
         }
         if (!data.empty()) {
             std::memcpy(destination, data.data(), data.size());
@@ -731,10 +728,7 @@ CNA_Result cna_packet_reader_set_data_ext(
             return InvalidArgument("The packet payload is invalid.");
         }
         if (count > static_cast<uint64_t>(std::numeric_limits<SharpRuntime::intcs>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The packet payload exceeds the canonical range.");
+            return Overflow("The packet payload exceeds the canonical range.");
         }
         std::shared_ptr<PacketReaderResource> reader;
         if (const CNA_Result result = GetReader(readerHandle, &reader);
@@ -783,10 +777,7 @@ CNA_Result cna_packet_reader_copy_data_ext(
         const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
         *outBytes = data.size();
         if (capacity < data.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The packet copy destination is too small.");
+            return BufferTooSmall("The packet copy destination is too small.");
         }
         if (!data.empty()) {
             std::memcpy(destination, data.data(), data.size());

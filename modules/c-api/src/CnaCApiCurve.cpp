@@ -18,12 +18,13 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
@@ -371,10 +372,7 @@ CNA_Result cna_curve_key_collection_copy_to(
             return InvalidArgument("The key destination or count output is invalid.");
         }
         if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > capacity) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination index is out of range.");
+            return OutOfRange("The destination index is out of range.");
         }
         std::shared_ptr<CurveKeyCollection> collection;
         if (const CNA_Result result = GetCollection(collectionHandle, &collection);
@@ -385,10 +383,7 @@ CNA_Result cna_curve_key_collection_copy_to(
         *outCount = count;
         const uint64_t start = static_cast<uint64_t>(destinationIndex);
         if (count > capacity - start) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all CurveKeyCollection items.");
+            return BufferTooSmall("The destination cannot hold all CurveKeyCollection items.");
         }
         for (uint64_t index = 0U; index < count; ++index) {
             destination[start + index] = ToC(

@@ -23,9 +23,9 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -36,6 +36,7 @@ using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -97,10 +98,7 @@ CNA_Result cna_sprite_font_create(
         std::vector<SharpRuntime::charcs> characters;
         std::vector<Vector3> kerning;
         if (createInfo->glyph_count > glyphBounds.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteFont glyph count exceeds the native collection range.");
+            return Overflow("The SpriteFont glyph count exceeds the native collection range.");
         }
         const std::size_t count = static_cast<std::size_t>(createInfo->glyph_count);
         glyphBounds.reserve(count);
@@ -152,10 +150,7 @@ CNA_Result cna_sprite_font_create(
         if (texture->activeFontReferenceCount == std::numeric_limits<uint64_t>::max()) {
             static_cast<void>(GetRuntimeHandles().Release(*outSpriteFont));
             *outSpriteFont = CNA_INVALID_HANDLE;
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteFont texture reference count overflowed.");
+            return Overflow("The SpriteFont texture reference count overflowed.");
         }
         ++texture->activeFontReferenceCount;
         AddOwnedGraphicsResourceFor(texture->parentGame);
@@ -214,10 +209,7 @@ CNA_Result cna_sprite_font_copy_characters(
             spriteFont->value->getCharactersProperty();
         *outCount = characters.size();
         if (capacity < characters.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteFont character output buffer is too small.");
+            return BufferTooSmall("The SpriteFont character output buffer is too small.");
         }
         for (std::size_t index = 0U; index < characters.size(); ++index) {
             destination[index] = static_cast<CNA_Char16>(characters[index]);
@@ -258,10 +250,7 @@ CNA_Result cna_sprite_font_copy_glyphs(
                 "The SpriteFont glyph tables disagree on their length.");
         }
         if (capacity < characters.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteFont glyph output buffer is too small.");
+            return BufferTooSmall("The SpriteFont glyph output buffer is too small.");
         }
         for (std::size_t index = 0U; index < characters.size(); ++index) {
             CNA_SpriteFontGlyph& glyph = destination[index];

@@ -40,6 +40,7 @@ using CNA::C::Detail::AcquireStorageStream;
 using CNA::C::Detail::BorrowContentManager;
 using CNA::C::Detail::BorrowedContentManager;
 using CNA::C::Detail::BorrowedStorageStream;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
@@ -53,6 +54,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReleaseStorageStream;
@@ -480,10 +482,7 @@ CNA_Result cna_content_reader_read_bytes_exact(
         if (count >= 0) {
             *outBytes = static_cast<uint64_t>(count);
             if (capacity < *outBytes) {
-                return Fail(
-                    CNA_RESULT_BUFFER_TOO_SMALL,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "The exact-read output buffer is too small.");
+                return BufferTooSmall("The exact-read output buffer is too small.");
             }
         } else {
             *outBytes = 0U;
@@ -1035,10 +1034,7 @@ struct ReflectiveBuilderResource final {
     const std::string composed = compose(nameText);
     *outBytes = static_cast<uint64_t>(composed.size());
     if (capacity < static_cast<uint64_t>(composed.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the canonical name.");
+        return BufferTooSmall("The destination capacity is smaller than the canonical name.");
     }
     if (!composed.empty()) {
         std::memcpy(destination, composed.data(), composed.size());
@@ -1546,9 +1542,7 @@ CNA_Result cna_object_dictionary_ext_get_key_size_at(
         }
         const auto& values = dictionary->value->getValuesProperty();
         if (index >= static_cast<uint64_t>(values.size())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
-                "The dictionary key index is past the end.");
+            return OutOfRange("The dictionary key index is past the end.");
         }
         auto entry = values.begin();
         std::advance(entry, static_cast<std::ptrdiff_t>(index));
@@ -1575,18 +1569,14 @@ CNA_Result cna_object_dictionary_ext_copy_key_at(
         }
         const auto& values = dictionary->value->getValuesProperty();
         if (index >= static_cast<uint64_t>(values.size())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
-                "The dictionary key index is past the end.");
+            return OutOfRange("The dictionary key index is past the end.");
         }
         auto entry = values.begin();
         std::advance(entry, static_cast<std::ptrdiff_t>(index));
         const std::string& name = entry->first;
         *outBytes = static_cast<uint64_t>(name.size());
         if (capacity < static_cast<uint64_t>(name.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the dictionary key.");
+            return BufferTooSmall("The destination capacity is smaller than the dictionary key.");
         }
         if (!name.empty()) {
             std::memcpy(destination, name.data(), name.size());
@@ -1643,9 +1633,7 @@ CNA_Result cna_object_dictionary_ext_copy_type_name(
         const std::size_t length = std::strlen(name);
         *outBytes = static_cast<uint64_t>(length);
         if (capacity < static_cast<uint64_t>(length)) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the entry type name.");
+            return BufferTooSmall("The destination capacity is smaller than the entry type name.");
         }
         if (length != 0U) {
             std::memcpy(destination, name, length);
@@ -1689,9 +1677,7 @@ CNA_Result cna_object_dictionary_ext_copy_value(
             return InvalidArgument("That dictionary entry does not hold the requested kind.");
         }
         if (capacity < shape.elementByteSize) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the entry value.");
+            return BufferTooSmall("The destination capacity is smaller than the entry value.");
         }
         const void* source = nullptr;
         bool booleanValue = false;
@@ -1772,9 +1758,7 @@ CNA_Result cna_object_dictionary_ext_copy_array(
         const uint64_t required = shape.elementCount * shape.elementByteSize;
         *outBytes = required;
         if (capacity < required) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the entry array.");
+            return BufferTooSmall("The destination capacity is smaller than the entry array.");
         }
         auto* const bytes = static_cast<std::uint8_t*>(destination);
         const bool written =
@@ -1847,9 +1831,7 @@ CNA_Result cna_object_dictionary_ext_copy_string(
         const auto& text = std::any_cast<const std::string&>(*value);
         *outBytes = static_cast<uint64_t>(text.size());
         if (capacity < static_cast<uint64_t>(text.size())) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the entry string.");
+            return BufferTooSmall("The destination capacity is smaller than the entry string.");
         }
         if (!text.empty()) {
             std::memcpy(destination, text.data(), text.size());

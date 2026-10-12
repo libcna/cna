@@ -34,6 +34,7 @@
 namespace {
 
 using CNA::C::Detail::BorrowSignedIn;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CopyText;
@@ -932,10 +933,7 @@ CNA_Result cna_gamer_collection_copy_to(
         const uint64_t count = static_cast<uint64_t>(collection->handles.size());
         *outCount = count;
         if (capacity < static_cast<uint64_t>(index) + count) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the collection.");
+            return BufferTooSmall("The destination capacity is smaller than the collection.");
         }
         for (uint64_t slot = UINT64_C(0); slot < count; ++slot) {
             destination[static_cast<uint64_t>(index) + slot] =

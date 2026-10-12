@@ -23,6 +23,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -131,10 +132,7 @@ CNA_Result cna_bounding_box_copy_corners(
         constexpr uint64_t RequiredCount = CNA_BOUNDING_BOX_CORNER_COUNT;
         *outCount = RequiredCount;
         if (capacity < RequiredCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all BoundingBox corners.");
+            return BufferTooSmall("The destination cannot hold all BoundingBox corners.");
         }
         const std::vector<Vector3> corners = ToNative(value).GetCorners();
         for (uint64_t index = 0U; index < RequiredCount; ++index) {
@@ -259,10 +257,7 @@ CNA_Result cna_bounding_frustum_copy_corners(
         constexpr uint64_t RequiredCount = CNA_BOUNDING_FRUSTUM_CORNER_COUNT;
         *outCount = RequiredCount;
         if (capacity < RequiredCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all BoundingFrustum corners.");
+            return BufferTooSmall("The destination cannot hold all BoundingFrustum corners.");
         }
         const std::vector<Vector3> corners = ToNative(value).GetCorners();
         for (uint64_t index = 0U; index < RequiredCount; ++index) {

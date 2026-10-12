@@ -19,8 +19,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToNative;
 using Microsoft::Xna::Framework::Matrix;
@@ -48,10 +48,7 @@ template<typename TElement>
     constexpr uint64_t MaximumSize = static_cast<uint64_t>(
         std::numeric_limits<std::size_t>::max());
     if (sourceCount > MaximumSize || destinationCount > MaximumSize) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "An array count cannot be represented by the native platform.");
+        return Overflow("An array count cannot be represented by the native platform.");
     }
     return CNA_RESULT_SUCCESS;
 }

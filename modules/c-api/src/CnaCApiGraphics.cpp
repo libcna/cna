@@ -46,9 +46,9 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -62,6 +62,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -671,10 +672,7 @@ CNA_Result cna_graphics_device_copy_renderer_name(
         const std::string_view rendererName = graphicsDevice->value->GetGraphicsRendererName();
         *outBytes = rendererName.size();
         if (capacity < rendererName.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The renderer-name output buffer is too small.");
+            return BufferTooSmall("The renderer-name output buffer is too small.");
         }
         if (!rendererName.empty()) {
             std::memcpy(destination, rendererName.data(), rendererName.size());
@@ -804,10 +802,7 @@ CNA_Result cna_graphics_device_copy_capability_report_ext(
             graphicsDevice->value->GetRendererCapabilityReportEXT();
         *outBytes = report.size();
         if (capacity < report.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The renderer-capability report output buffer is too small.");
+            return BufferTooSmall("The renderer-capability report output buffer is too small.");
         }
         if (!report.empty()) {
             std::memcpy(destination, report.data(), report.size());
@@ -888,24 +883,15 @@ CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
             static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
         *outPixels = requiredPixels;
         if (requiredPixels > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The backbuffer pixel count exceeds the native readback range.");
+            return Overflow("The backbuffer pixel count exceeds the native readback range.");
         }
         if (capacity < requiredPixels) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The backbuffer readback output buffer is too small.");
+            return BufferTooSmall("The backbuffer readback output buffer is too small.");
         }
 
         std::vector<Color> nativePixels;
         if (requiredPixels > nativePixels.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The backbuffer pixel count exceeds the native collection range.");
+            return Overflow("The backbuffer pixel count exceeds the native collection range.");
         }
         nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
         for (uint64_t index = 0U; index < requiredPixels; ++index) {
@@ -951,10 +937,7 @@ CNA_Result cna_texture2d_create(
             createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             static_cast<uint64_t>(createInfo->width) * createInfo->height >
                 static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The Texture2D dimensions exceed the native transfer range.");
+            return Overflow("The Texture2D dimensions exceed the native transfer range.");
         }
 
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -1064,10 +1047,7 @@ CNA_Result cna_texture2d_get_data_rgba8(
         const uint64_t requiredPixels = GetTexturePixelCount(*texture->value);
         *outPixels = requiredPixels;
         if (capacity < requiredPixels) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The Texture2D readback buffer is too small.");
+            return BufferTooSmall("The Texture2D readback buffer is too small.");
         }
 
         std::vector<Color> nativePixels;
@@ -1392,10 +1372,7 @@ CNA_Result cna_sprite_batch_submit_many(
 
         std::vector<ResolvedSpriteCommand> resolvedCommands;
         if (commandCount > resolvedCommands.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteBatch command count exceeds the native collection range.");
+            return Overflow("The SpriteBatch command count exceeds the native collection range.");
         }
         resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
         constexpr CNA_SpriteEffects ValidEffects =
@@ -1429,10 +1406,7 @@ CNA_Result cna_sprite_batch_submit_many(
         for (const ResolvedSpriteCommand& resolved : resolvedCommands) {
             if (resolved.texture->activeBatchReferenceCount ==
                 std::numeric_limits<uint64_t>::max()) {
-                return Fail(
-                    CNA_RESULT_OVERFLOW,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "The SpriteBatch texture reference count overflowed.");
+                return Overflow("The SpriteBatch texture reference count overflowed.");
             }
             spriteBatch->retainedTextures.push_back(resolved.texture);
             ++resolved.texture->activeBatchReferenceCount;
@@ -1494,10 +1468,7 @@ CNA_Result cna_sprite_batch_submit_scaled_many(
 
         std::vector<ResolvedScaledCommand> resolvedCommands;
         if (commandCount > resolvedCommands.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The SpriteBatch command count exceeds the native collection range.");
+            return Overflow("The SpriteBatch command count exceeds the native collection range.");
         }
         resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
         constexpr CNA_SpriteEffects ValidEffects =
@@ -1529,10 +1500,7 @@ CNA_Result cna_sprite_batch_submit_scaled_many(
         for (const ResolvedScaledCommand& resolved : resolvedCommands) {
             if (resolved.texture->activeBatchReferenceCount ==
                 std::numeric_limits<uint64_t>::max()) {
-                return Fail(
-                    CNA_RESULT_OVERFLOW,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "The SpriteBatch texture reference count overflowed.");
+                return Overflow("The SpriteBatch texture reference count overflowed.");
             }
             spriteBatch->retainedTextures.push_back(resolved.texture);
             ++resolved.texture->activeBatchReferenceCount;
@@ -1622,10 +1590,7 @@ CNA_Result cna_sprite_batch_copy_type_name(
         const std::string& text = spriteBatch->value->GetTypeName();
         *outBytes = static_cast<uint64_t>(text.size());
         if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete type name.");
+            return BufferTooSmall("The destination cannot hold the complete type name.");
         }
         if (!text.empty()) {
             std::memcpy(destination, text.data(), text.size());

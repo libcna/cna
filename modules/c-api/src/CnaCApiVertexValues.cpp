@@ -22,6 +22,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::Fail;
@@ -373,10 +374,7 @@ CNA_Result cna_vertex_type_copy_elements(
         const uint64_t required = static_cast<uint64_t>(elements.size());
         *outElementCount = required;
         if (capacity < required) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The vertex-element output buffer is too small.");
+            return BufferTooSmall("The vertex-element output buffer is too small.");
         }
         for (uint64_t index = 0U; index < required; ++index) {
             destination[index] = ToC(elements[static_cast<std::size_t>(index)]);

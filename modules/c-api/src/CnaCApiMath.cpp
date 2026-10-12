@@ -19,8 +19,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::StoreOutput;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::MathHelper;
@@ -114,10 +114,7 @@ CNA_Result cna_point_divide(
         constexpr int32_t Minimum = std::numeric_limits<int32_t>::min();
         if ((left.x == Minimum && right.x == -1) ||
             (left.y == Minimum && right.y == -1)) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The point quotient cannot be represented as a signed 32-bit integer.");
+            return Overflow("The point quotient cannot be represented as a signed 32-bit integer.");
         }
         const CNA_Point result{left.x / right.x, left.y / right.y};
         *outValue = result;

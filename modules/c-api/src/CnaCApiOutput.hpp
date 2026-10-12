@@ -117,10 +117,7 @@ template<typename TElement>
     }
     *outCount = static_cast<uint64_t>(values.size());
     if (capacity < static_cast<uint64_t>(values.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination capacity is smaller than the data.");
+        return BufferTooSmall("The destination capacity is smaller than the data.");
     }
     if (!values.empty()) {
         std::memcpy(destination, values.data(), values.size_bytes());

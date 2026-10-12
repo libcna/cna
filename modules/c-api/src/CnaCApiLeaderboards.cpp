@@ -4,6 +4,7 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
@@ -22,10 +23,10 @@
 namespace {
 
 using CNA::C::Detail::BorrowAnyGamer;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedPropertyDictionary;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -97,10 +98,7 @@ struct LeaderboardEntryResource final {
 {
     const std::string key = identity.getKeyProperty();
     if (key.size() >= sizeof(outIdentity->key)) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The leaderboard key does not fit the identity's inline capacity.");
+        return BufferTooSmall("The leaderboard key does not fit the identity's inline capacity.");
     }
     CNA_LeaderboardIdentity value = {
         sizeof(CNA_LeaderboardIdentity),

@@ -35,6 +35,7 @@ namespace {
 using CNA::C::Detail::AddOwnedContentManager;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
@@ -50,6 +51,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
@@ -125,10 +127,7 @@ CNA_Handle& BorrowedGameContentHandle()
     const std::vector<ContentManifestEntry>& manifest =
         (*outContentManager)->value->GetContentManifest();
     if (index >= manifest.size()) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The content manifest index is outside the manifest snapshot.");
+        return OutOfRange("The content manifest index is outside the manifest snapshot.");
     }
     *outEntry = &manifest[static_cast<std::size_t>(index)];
     return CNA_RESULT_SUCCESS;
@@ -248,10 +247,7 @@ CNA_Result cna_content_manager_copy_root_directory(
             contentManager->value->getRootDirectoryProperty();
         *outBytes = rootDirectory.size();
         if (capacity < rootDirectory.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The root-directory output buffer is too small.");
+            return BufferTooSmall("The root-directory output buffer is too small.");
         }
         if (!rootDirectory.empty()) {
             std::memcpy(destination, rootDirectory.data(), rootDirectory.size());
@@ -880,10 +876,7 @@ CNA_Result cna_content_manager_copy_manifest_native_extension(
             return result;
         }
         if (extensionIndex >= entry->nativeExtensions.size()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The native-extension index is outside this manifest entry.");
+            return OutOfRange("The native-extension index is outside this manifest entry.");
         }
         return CopyText(
             entry->nativeExtensions[static_cast<std::size_t>(extensionIndex)],
@@ -913,10 +906,7 @@ CNA_Result cna_content_manager_copy_manifest_xnb_reader_name(
             return result;
         }
         if (nameIndex >= entry->xnbReaderNames.size()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The reader-name index is outside this manifest entry.");
+            return OutOfRange("The reader-name index is outside this manifest entry.");
         }
         return CopyText(
             entry->xnbReaderNames[static_cast<std::size_t>(nameIndex)],
@@ -944,10 +934,7 @@ CNA_Result cna_content_manager_get_xnb_reader_usage(
         }
         const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
         if (index >= usage.size()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The reader-usage index is outside the summary.");
+            return OutOfRange("The reader-usage index is outside the summary.");
         }
         const ContentManifestReaderUsage& row = usage[static_cast<std::size_t>(index)];
         outUsage->is_registered = ToCBool(row.isRegistered);
@@ -972,10 +959,7 @@ CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
         }
         const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
         if (index >= usage.size()) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The reader-usage index is outside the summary.");
+            return OutOfRange("The reader-usage index is outside the summary.");
         }
         return CopyText(
             usage[static_cast<std::size_t>(index)].readerName,

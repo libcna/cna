@@ -37,6 +37,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
@@ -358,10 +359,7 @@ CNA_Result cna_network_machine_get_gamer(
         }
         const auto& gamers = machine->value->getGamersProperty();
         if (index < 0 || index >= static_cast<int32_t>(gamers.getCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The gamer index is outside the machine's collection.");
+            return OutOfRange("The gamer index is outside the machine's collection.");
         }
 
         const auto resource = std::make_shared<NetworkGamerResource>();

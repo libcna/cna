@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetGameWindow;
@@ -376,10 +377,7 @@ CNA_Result cna_title_container_read_ext(
         }
         *outBytes = static_cast<uint64_t>(length);
         if (capacity < *outBytes) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the title file.");
+            return BufferTooSmall("The destination capacity is smaller than the title file.");
         }
         if (*outBytes != UINT64_C(0)) {
             const auto read = static_cast<uint64_t>(

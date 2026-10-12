@@ -54,6 +54,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetGameWindow;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -588,10 +589,7 @@ void DeliverFileDialogResult(
         return result;
     }
     if (index >= static_cast<uint64_t>(locales.size())) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The locale index is at or past the reported count.");
+        return OutOfRange("The locale index is at or past the reported count.");
     }
     *outLocale = locales[static_cast<std::size_t>(index)];
     return CNA_RESULT_SUCCESS;
@@ -716,10 +714,7 @@ struct CameraResource final {
     }
     const std::vector<CameraDeviceInfo> cameras = Camera::getAvailableCamerasProperty();
     if (index >= static_cast<uint64_t>(cameras.size())) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The camera index is at or past the reported count.");
+        return OutOfRange("The camera index is at or past the reported count.");
     }
     *outInfo = cameras[static_cast<std::size_t>(index)];
     return CNA_RESULT_SUCCESS;
@@ -1346,10 +1341,7 @@ CNA_Result cna_system_tray_click_entry_for_tests_ext(
         {
             const std::lock_guard<std::mutex> lock(resource->testState->mutex);
             if (index >= static_cast<uint64_t>(resource->testState->entries.size())) {
-                return Fail(
-                    CNA_RESULT_INVALID_ARGUMENT,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "The tray entry index is at or past the entry count.");
+                return OutOfRange("The tray entry index is at or past the entry count.");
             }
             handler = resource->testState->entries[static_cast<std::size_t>(index)].onClick;
         }

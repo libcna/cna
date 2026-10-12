@@ -43,6 +43,8 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
@@ -288,10 +290,7 @@ private:
         return result;
     }
     if (index >= names.size()) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The storage name index is outside the matching names.");
+        return OutOfRange("The storage name index is outside the matching names.");
     }
     return CopyText(
         names[static_cast<std::size_t>(index)],
@@ -468,7 +467,7 @@ private:
     }
     if (value < static_cast<int64_t>(std::numeric_limits<System::IO::intcs>::min()) ||
         value > static_cast<int64_t>(std::numeric_limits<System::IO::intcs>::max())) {
-        return Fail(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE, message);
+        return Overflow(message);
     }
     *outValue = static_cast<System::IO::intcs>(value);
     return CNA_RESULT_SUCCESS;
@@ -480,7 +479,7 @@ private:
     System::IO::intcs* const outValue)
 {
     if (value > static_cast<uint64_t>(std::numeric_limits<System::IO::intcs>::max())) {
-        return Fail(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE, message);
+        return Overflow(message);
     }
     *outValue = static_cast<System::IO::intcs>(value);
     return CNA_RESULT_SUCCESS;

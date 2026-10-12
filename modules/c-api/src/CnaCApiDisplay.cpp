@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -27,9 +28,9 @@ namespace {
 
 using CNA::C::Detail::ApplyPresentationParameters;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
@@ -41,6 +42,7 @@ using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
@@ -112,10 +114,7 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     }
     const auto& adapters = GraphicsAdapter::getAdaptersProperty();
     if (adapterIndex >= adapters.size()) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The graphics-adapter index is out of range.");
+        return OutOfRange("The graphics-adapter index is out of range.");
     }
     *outAdapter = adapters[adapterIndex].get();
     return CNA_RESULT_SUCCESS;
@@ -144,10 +143,7 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         : adapter->getDeviceNameProperty();
     *outBytes = value.size();
     if (capacity < value.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The graphics-adapter string output buffer is too small.");
+        return BufferTooSmall("The graphics-adapter string output buffer is too small.");
     }
     if (!value.empty()) {
         std::memcpy(destination, value.data(), value.size());
@@ -309,10 +305,7 @@ CNA_Result cna_graphics_adapter_copy_display_modes(
         }
         *outCount = modes.size();
         if (capacity < modes.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The display-mode output buffer is too small.");
+            return BufferTooSmall("The display-mode output buffer is too small.");
         }
         for (std::size_t index = 0U; index < modes.size(); ++index) {
             destination[index] = ToCDisplayMode(modes[index]);

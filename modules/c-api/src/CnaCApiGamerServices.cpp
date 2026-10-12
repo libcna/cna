@@ -22,6 +22,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -237,10 +238,7 @@ CNA_Result cna_signed_in_gamer_copy_gamertag(
         const std::string& gamertag = gamer->value->getGamertagProperty();
         *outBytes = gamertag.size();
         if (capacity < gamertag.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The gamertag output buffer is too small.");
+            return BufferTooSmall("The gamertag output buffer is too small.");
         }
         if (!gamertag.empty()) {
             std::memcpy(destination, gamertag.data(), gamertag.size());
@@ -332,10 +330,7 @@ CNA_Result CopyPictureStream(
     }
     *outBytes = static_cast<uint64_t>(length);
     if (capacity < *outBytes) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The picture destination is too small.");
+        return BufferTooSmall("The picture destination is too small.");
     }
     int position = 0;
     while (position < length) {

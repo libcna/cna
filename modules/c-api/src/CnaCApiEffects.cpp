@@ -60,6 +60,7 @@ namespace {
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::BorrowGameGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyElements;
@@ -80,6 +81,8 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -512,10 +515,7 @@ template<typename TNative, typename TC, typename TConvert>
     int* const outCount)
 {
     if (count > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The requested EffectParameter value count exceeds the native range.");
+        return Overflow("The requested EffectParameter value count exceeds the native range.");
     }
     *outCount = static_cast<int>(count);
     return CNA_RESULT_SUCCESS;
@@ -899,10 +899,7 @@ template<typename TGetter>
     const std::string& text = std::forward<TGetter>(getter)(*effect->value);
     *outByteCount = static_cast<uint64_t>(text.size());
     if (capacity < text.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The destination cannot hold the complete Effect string.");
+        return BufferTooSmall("The destination cannot hold the complete Effect string.");
     }
     if (!text.empty()) {
         std::memcpy(destination, text.data(), text.size());
@@ -963,10 +960,7 @@ template<typename TSetter>
         return InvalidState("A disposed Texture2D cannot be assigned to a stock effect.");
     }
     if (texture->activeEffectReferenceCount == UINT64_MAX) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The Texture2D effect-reference count cannot be incremented.");
+        return Overflow("The Texture2D effect-reference count cannot be incremented.");
     }
     std::forward<TSetter>(setter)(texture->value);
     retained.Set(
@@ -1003,10 +997,7 @@ template<typename TSetter>
     }
     if (texture.activeEffectReferenceCount == nullptr ||
         *texture.activeEffectReferenceCount == UINT64_MAX) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The TextureCube effect-reference count cannot be incremented.");
+        return Overflow("The TextureCube effect-reference count cannot be incremented.");
     }
     std::forward<TSetter>(setter)(texture.value);
     retained.Set(
@@ -1144,10 +1135,7 @@ CNA_Result cna_effect_annotation_collection_get_at(
         }
         if (index >= static_cast<uint64_t>(collection->value->getCountProperty()) ||
             index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The EffectAnnotationCollection index is outside the collection.");
+            return OutOfRange("The EffectAnnotationCollection index is outside the collection.");
         }
         // The index overloads of the effect collections return a pointer and answer null for an
         // index they do not hold, which is XNA's own semantics. The range check above is what makes
@@ -1795,10 +1783,7 @@ CNA_Result cna_effect_parameter_set_value_texture(
             return InvalidState("A disposed texture cannot be assigned to an EffectParameter.");
         }
         if (referenceCount == nullptr || *referenceCount == UINT64_MAX) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The EffectParameter texture retention count cannot be increased.");
+            return Overflow("The EffectParameter texture retention count cannot be increased.");
         }
 
         switch (textureType) {
@@ -1881,10 +1866,7 @@ CNA_Result cna_effect_parameter_collection_get_at(
         }
         if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
             index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The EffectParameterCollection index is outside the collection.");
+            return OutOfRange("The EffectParameterCollection index is outside the collection.");
         }
         EffectParameter* const parameter =
             (*collection->state->value)[static_cast<int>(index)];
@@ -2081,9 +2063,7 @@ CNA_Result cna_effect_pass_collection_get_at(
         }
         if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
             index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
-                "The EffectPassCollection index is outside the collection.");
+            return OutOfRange("The EffectPassCollection index is outside the collection.");
         }
         EffectPass* const pass = (*collection->state->value)[static_cast<int>(index)];
         return CreatePassHandle(
@@ -2295,9 +2275,7 @@ CNA_Result cna_effect_technique_collection_get_at(
         }
         if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
             index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
-                "The EffectTechniqueCollection index is outside the collection.");
+            return OutOfRange("The EffectTechniqueCollection index is outside the collection.");
         }
         EffectTechnique* const technique =
             (*collection->state->value)[static_cast<int>(index)];
@@ -3255,10 +3233,7 @@ CNA_Result cna_skinned_effect_copy_bone_transforms(
         }
         *outCount = requestedCount;
         if (capacity < requestedCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the requested bone transforms.");
+            return BufferTooSmall("The destination cannot hold the requested bone transforms.");
         }
         SkinnedEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
@@ -3641,10 +3616,7 @@ CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
         }
         *outCount = requestedCount;
         if (capacity < requestedCount) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the requested bone transforms.");
+            return BufferTooSmall("The destination cannot hold the requested bone transforms.");
         }
         SkinnedPbrEffect* skinned = nullptr;
         if (const CNA_Result result = GetStockEffect(
@@ -3925,10 +3897,7 @@ CNA_Result cna_shader_effect_copy_compile_error_ext(
         const std::string text = shader->GetCompileErrorEXT();
         *outBytes = static_cast<uint64_t>(text.size());
         if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the complete compile error.");
+            return BufferTooSmall("The destination cannot hold the complete compile error.");
         }
         if (!text.empty()) {
             std::memcpy(destination, text.data(), text.size());

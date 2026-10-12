@@ -47,6 +47,7 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyText;
@@ -65,6 +66,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
@@ -161,10 +163,7 @@ struct PartRetainedSlot final {
     {
         if (newReferenceCount == nullptr ||
             *newReferenceCount == std::numeric_limits<uint64_t>::max()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The ModelMeshPart resource retention count overflowed.");
+            return Overflow("The ModelMeshPart resource retention count overflowed.");
         }
         Reset();
         handle = newHandle;
@@ -668,9 +667,7 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
     AnimationClipEXT copied;
     copied.Duration = System::TimeSpan::FromSeconds(descriptor.duration_seconds);
     if (descriptor.track_count > copied.Tracks.max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The AnimationClipEXT track count is too large.");
+        return Overflow("The AnimationClipEXT track count is too large.");
     }
     copied.Tracks.reserve(static_cast<std::size_t>(descriptor.track_count));
     for (uint64_t trackIndex = 0U; trackIndex < descriptor.track_count; ++trackIndex) {
@@ -691,9 +688,7 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
         BoneTrackEXT copiedTrack;
         copiedTrack.BoneIndex = sourceTrack.bone_index;
         if (sourceTrack.keyframe_count > copiedTrack.Keys.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The BoneTrackEXT keyframe count is too large.");
+            return Overflow("The BoneTrackEXT keyframe count is too large.");
         }
         copiedTrack.Keys.reserve(static_cast<std::size_t>(sourceTrack.keyframe_count));
         double previousTime = 0.0;
@@ -844,9 +839,7 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
         copied.SkeletonRootPrefix.push_back(ToNative(descriptor.skeleton_root_prefix[index]));
     }
     if (descriptor.clip_count > copied.AnimationClips.max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The SkinningData clip count is too large.");
+        return Overflow("The SkinningData clip count is too large.");
     }
     copied.AnimationClips.reserve(static_cast<std::size_t>(descriptor.clip_count));
     for (uint64_t index = 0U; index < descriptor.clip_count; ++index) {
@@ -941,9 +934,7 @@ template<typename T>
         if (!hasTrackWeightCount) {
             if (key.weight_count > static_cast<uint64_t>(
                     std::numeric_limits<std::size_t>::max())) {
-                return Fail(
-                    CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                    "The MorphWeightTrackEXT weight count is too large.");
+                return Overflow("The MorphWeightTrackEXT weight count is too large.");
             }
             trackWeightCount = static_cast<std::size_t>(key.weight_count);
             hasTrackWeightCount = true;
@@ -1030,7 +1021,7 @@ template<typename TNative, typename TC, typename TConvert>
     }
     *outCount = static_cast<uint64_t>(source.size());
     if (capacity < source.size()) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, smallMessage);
+        return BufferTooSmall(smallMessage);
     }
     for (std::size_t index = 0U; index < source.size(); ++index) {
         destination[index] = convert(source[index]);
@@ -1180,10 +1171,7 @@ void AddMeshEffect(
         const uint64_t addedReferences = addNew ? 2U : 1U;
         if (effect->activeModelReferenceCount >
             std::numeric_limits<uint64_t>::max() - addedReferences) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The ModelMeshPart Effect retention count overflowed.");
+            return Overflow("The ModelMeshPart Effect retention count overflowed.");
         }
     }
 
@@ -1242,10 +1230,7 @@ void AddMeshEffect(
         return CNA_RESULT_SUCCESS;
     }
     if (buffer->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The ModelMeshPart VertexBuffer retention count overflowed.");
+        return Overflow("The ModelMeshPart VertexBuffer retention count overflowed.");
     }
     part->value->SetVertexBuffer(buffer->value.get());
     if (part->detachedValue != nullptr) {
@@ -1285,10 +1270,7 @@ void AddMeshEffect(
         return CNA_RESULT_SUCCESS;
     }
     if (buffer->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The ModelMeshPart IndexBuffer retention count overflowed.");
+        return Overflow("The ModelMeshPart IndexBuffer retention count overflowed.");
     }
     part->value->SetIndexBuffer(buffer->value.get());
     if (part->detachedValue != nullptr) {
@@ -1328,10 +1310,7 @@ void AddMeshEffect(
     std::vector<ModelMeshPart*> nativeParts;
     std::vector<std::shared_ptr<ModelMeshPart>> detachedParts;
     if (partCount > parts.max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The ModelMesh part count is too large.");
+        return Overflow("The ModelMesh part count is too large.");
     }
     parts.reserve(static_cast<std::size_t>(partCount));
     nativeParts.reserve(static_cast<std::size_t>(partCount));
@@ -1441,10 +1420,7 @@ void AddMeshEffect(
 
     auto model = std::make_shared<ModelResource>();
     if (boneCount > model->bones.max_size() || meshCount > model->meshes.max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The Model collection count is too large.");
+        return Overflow("The Model collection count is too large.");
     }
     model->bones.reserve(static_cast<std::size_t>(boneCount));
     model->meshes.reserve(static_cast<std::size_t>(meshCount));
@@ -1541,9 +1517,7 @@ void AddMeshEffect(
     }
     static_cast<void>(targetBytes);
     if (descriptor.target_count > copied.PositionDeltas.max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The MorphTargetDataEXT target count is too large.");
+        return Overflow("The MorphTargetDataEXT target count is too large.");
     }
     copied.PositionDeltas.reserve(static_cast<std::size_t>(descriptor.target_count));
     copied.NormalDeltas.reserve(static_cast<std::size_t>(descriptor.target_count));
@@ -1587,9 +1561,7 @@ void AddMeshEffect(
     }
     if (descriptor.target_count > static_cast<uint64_t>(
             std::numeric_limits<std::size_t>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-            "The MorphTargetDataEXT target count is too large.");
+        return Overflow("The MorphTargetDataEXT target count is too large.");
     }
     if (const CNA_Result result = CopyTrackDescriptor(
             descriptor.weight_track,
@@ -1994,10 +1966,7 @@ CNA_Result cna_model_mesh_part_collection_create(
         static_cast<void>(byteCount);
         auto collection = std::make_shared<PartCollectionResource>();
         if (partCount > collection->parts.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The ModelMeshPart collection is too large.");
+            return Overflow("The ModelMeshPart collection is too large.");
         }
         collection->parts.reserve(static_cast<std::size_t>(partCount));
         for (uint64_t index = 0U; index < partCount; ++index) {
@@ -2173,10 +2142,7 @@ CNA_Result cna_model_mesh_collection_create(
         static_cast<void>(byteCount);
         auto collection = std::make_shared<MeshCollectionResource>();
         if (meshCount > collection->meshes.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The ModelMesh collection is too large.");
+            return Overflow("The ModelMesh collection is too large.");
         }
         collection->meshes.reserve(static_cast<std::size_t>(meshCount));
         for (uint64_t index = 0U; index < meshCount; ++index) {
@@ -2299,10 +2265,7 @@ CNA_Result cna_model_effect_collection_add(
                 "A ModelEffectCollection Effect must belong to its mesh graphics device.");
         }
         if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The ModelEffectCollection retention count overflowed.");
+            return Overflow("The ModelEffectCollection retention count overflowed.");
         }
         collection->mesh->effects.reserve(collection->mesh->effects.size() + 1U);
         collection->mesh->value->getEffectsPropertyMutable().Add(effect->value.get());
@@ -2480,9 +2443,7 @@ CNA_Result cna_model_copy_absolute_bone_transforms(
         }
         *outCount = static_cast<uint64_t>(model->bones.size());
         if (capacity < model->bones.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination cannot hold all absolute Model bone transforms.");
         }
         std::vector<Matrix> transforms(model->bones.size());
@@ -2545,10 +2506,7 @@ CNA_Result cna_model_copy_bone_transforms(
         }
         *outCount = static_cast<uint64_t>(model->bones.size());
         if (capacity < model->bones.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all local Model bone transforms.");
+            return BufferTooSmall("The destination cannot hold all local Model bone transforms.");
         }
         std::vector<Matrix> transforms(model->bones.size());
         model->value->CopyBoneTransformsTo(transforms);
@@ -2908,9 +2866,7 @@ CNA_Result cna_morph_target_data_ext_copy_type_name(
         const std::string& name = data->value->GetTypeName();
         *outByteCount = static_cast<uint64_t>(name.size());
         if (capacity < name.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the MorphTargetDataEXT type name.");
+            return BufferTooSmall("The destination cannot hold the MorphTargetDataEXT type name.");
         }
         if (!name.empty()) {
             std::memcpy(destination, name.data(), name.size());
@@ -2937,9 +2893,7 @@ CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
         const auto& bytes = data->value->BaseVertexBytes;
         *outByteCount = static_cast<uint64_t>(bytes.size());
         if (capacity < bytes.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all MorphTargetDataEXT base bytes.");
+            return BufferTooSmall("The destination cannot hold all MorphTargetDataEXT base bytes.");
         }
         if (!bytes.empty()) {
             std::memcpy(destination, bytes.data(), bytes.size());
@@ -3110,9 +3064,7 @@ CNA_Result cna_morph_target_data_ext_copy_weight_keyframe(
         if (weightCapacity < key.Weights.size() ||
             inTangentCapacity < key.InTangent.size() ||
             outTangentCapacity < key.OutTangent.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "A destination cannot hold the complete MorphWeightKeyframeEXT.");
+            return BufferTooSmall("A destination cannot hold the complete MorphWeightKeyframeEXT.");
         }
         *outTimeSeconds = key.Time.getTotalSecondsProperty();
         if (!key.Weights.empty()) {
@@ -3158,9 +3110,7 @@ CNA_Result cna_morph_target_data_ext_blend(
         }
         *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
         if (capacity < data->value->BaseVertexBytes.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all blended morph bytes.");
+            return BufferTooSmall("The destination cannot hold all blended morph bytes.");
         }
         const std::vector<std::uint8_t> blended =
             Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT(
@@ -3199,9 +3149,7 @@ CNA_Result cna_morph_weight_track_ext_evaluate(
                 copied, timeSeconds);
         *outWeightCount = static_cast<uint64_t>(evaluated.size());
         if (capacity < evaluated.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all evaluated morph weights.");
+            return BufferTooSmall("The destination cannot hold all evaluated morph weights.");
         }
         if (!evaluated.empty()) {
             std::copy(evaluated.begin(), evaluated.end(), destination);
@@ -3354,9 +3302,7 @@ CNA_Result cna_skinned_model_ext_create(
         resource->value->BindPoseLocal = std::move(bindPose);
         resource->value->InverseBindPoseGlobal = std::move(inverseBindPose);
         if (descriptor->clip_count > resource->value->Clips.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The SkinnedModelEXT clip count is too large.");
+            return Overflow("The SkinnedModelEXT clip count is too large.");
         }
         resource->value->Clips.reserve(static_cast<std::size_t>(descriptor->clip_count));
         for (uint64_t index = 0U; index < descriptor->clip_count; ++index) {
@@ -3617,9 +3563,7 @@ CNA_Result cna_skinned_model_ext_copy_clip_track(
         const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
         *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
         if (capacity < track.Keys.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all BoneTrackEXT keyframes.");
+            return BufferTooSmall("The destination cannot hold all BoneTrackEXT keyframes.");
         }
         *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
         for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
@@ -3666,9 +3610,7 @@ CNA_Result cna_skinned_model_ext_compute_bone_transforms(
         }
         *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
         if (capacity < static_cast<uint64_t>(model->value->BoneCount)) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all computed bone transforms.");
+            return BufferTooSmall("The destination cannot hold all computed bone transforms.");
         }
         std::vector<Matrix> computed;
         model->value->ComputeBoneTransformsEXT(
@@ -3755,14 +3697,10 @@ CNA_Result cna_skinned_model_ext_add_part(
             (indexBufferHandle != part->indexBuffer.handle &&
              indexBuffer->activeModelReferenceCount ==
                 std::numeric_limits<uint64_t>::max())) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "A SkinnedModelEXT resource retention count overflowed.");
+            return Overflow("A SkinnedModelEXT resource retention count overflowed.");
         }
         if (model->parts.size() == model->parts.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The SkinnedModelEXT part count is too large.");
+            return Overflow("The SkinnedModelEXT part count is too large.");
         }
         model->parts.reserve(model->parts.size() + 1U);
         if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
@@ -3821,9 +3759,7 @@ CNA_Result cna_skinned_model_ext_attach_parts(
             return CNA_RESULT_SUCCESS;
         }
         if (other->parts.size() > model->parts.max_size() - model->parts.size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The attached SkinnedModelEXT part count is too large.");
+            return Overflow("The attached SkinnedModelEXT part count is too large.");
         }
         model->parts.reserve(model->parts.size() + other->parts.size());
         for (SkinnedPartEntry& incoming : other->parts) {
@@ -4128,9 +4064,7 @@ CNA_Result cna_skinning_data_copy_clip_track(
         const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
         *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
         if (capacity < track.Keys.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold all SkinningData keyframes.");
+            return BufferTooSmall("The destination cannot hold all SkinningData keyframes.");
         }
         *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
         for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
@@ -4836,9 +4770,7 @@ CNA_Result cna_model_animations_ext_create(
         }
         auto resource = std::make_shared<ModelAnimationsResource>();
         if (clipCount > resource->value->Clips.max_size()) {
-            return Fail(
-                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
-                "The ModelAnimationsEXT clip count is too large.");
+            return Overflow("The ModelAnimationsEXT clip count is too large.");
         }
         resource->value->Clips.reserve(static_cast<std::size_t>(clipCount));
         for (uint64_t index = 0U; index < clipCount; ++index) {

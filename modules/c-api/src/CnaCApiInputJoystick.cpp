@@ -22,8 +22,8 @@
 #include <utility>
 #include <vector>
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -121,9 +121,7 @@ template<typename TSource, typename TDestination, typename TMap>
     }
     *outCount = static_cast<uint64_t>(source.size());
     if (capacity < static_cast<uint64_t>(source.size())) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
+        return BufferTooSmall(
             "The destination capacity is smaller than the joystick snapshot array.");
     }
     for (std::size_t index = 0U; index < source.size(); ++index) {

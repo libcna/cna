@@ -20,6 +20,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -28,6 +29,8 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::TryMapVertexElementFormat;
@@ -83,10 +86,7 @@ static_assert(sizeof(int) == sizeof(int32_t));
     }
     static_cast<void>(byteCount);
     if (elementCount > outElements->max_size()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The vertex-element count is too large.");
+        return Overflow("The vertex-element count is too large.");
     }
 
     std::vector<VertexElement> converted;
@@ -105,10 +105,7 @@ static_assert(sizeof(int) == sizeof(int32_t));
         if (computeStride) {
             const int32_t formatSize = FormatByteSize(element.format);
             if (element.offset > std::numeric_limits<int32_t>::max() - formatSize) {
-                return Fail(
-                    CNA_RESULT_OVERFLOW,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "The computed vertex stride overflows Int32.");
+                return Overflow("The computed vertex stride overflows Int32.");
             }
             computedStride = std::max(computedStride, element.offset + formatSize);
         }
@@ -181,10 +178,7 @@ CNA_Result cna_vertex_declaration_create_with_stride(
         }
         *outDeclaration = CNA_INVALID_HANDLE;
         if (vertexStride <= 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The explicit vertex stride must be positive.");
+            return OutOfRange("The explicit vertex stride must be positive.");
         }
         std::vector<VertexElement> nativeElements;
         int32_t ignoredStride = 0;
@@ -219,10 +213,7 @@ CNA_Result cna_vertex_declaration_copy_elements(
         const uint64_t required = static_cast<uint64_t>(elements.size());
         *outElementCount = required;
         if (capacity < required) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The vertex-element output buffer is too small.");
+            return BufferTooSmall("The vertex-element output buffer is too small.");
         }
         for (uint64_t index = 0U; index < required; ++index) {
             destination[index] = ToC(elements[static_cast<std::size_t>(index)]);
@@ -246,10 +237,7 @@ CNA_Result cna_vertex_buffer_binding_init(
                 "A non-default vertex-buffer binding requires a nonzero handle token.");
         }
         if (vertexOffset < 0 || instanceFrequency < 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The vertex offset and instance frequency must be nonnegative.");
+            return OutOfRange("The vertex offset and instance frequency must be nonnegative.");
         }
         const CNA_VertexBufferBinding binding{
             vertexBuffer, vertexOffset, instanceFrequency};

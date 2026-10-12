@@ -40,13 +40,11 @@
 namespace {
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateOwnedTexture2D;
 using CNA::C::Detail::CreateStandaloneTexture2D;
 using CNA::C::Detail::EmbeddedNul;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetOwnedTexture;
@@ -54,6 +52,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
@@ -170,10 +169,7 @@ struct TransferView final {
     if (width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
         height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
         count > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "Texture2D dimensions exceed the native element range.");
+        return Overflow("Texture2D dimensions exceed the native element range.");
     }
     *outPixelCount = count;
     return CNA_RESULT_SUCCESS;
@@ -578,7 +574,7 @@ void DispatchGetData(
     const uint64_t requiredCapacity =
         static_cast<uint64_t>(transfer.startIndex) + transfer.elementCount;
     if (capacity < requiredCapacity) {
-        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
+        return BufferTooSmall(message);
     }
     if (data == nullptr) {
         return InvalidArgument(message);
@@ -603,10 +599,7 @@ void DispatchGetData(
     const std::string& name = texture->value->GetTypeName();
     *outByteCount = name.size();
     if (capacity < name.size()) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The Texture2D type-name output buffer is too small.");
+        return BufferTooSmall("The Texture2D type-name output buffer is too small.");
     }
     if (!name.empty()) {
         std::memcpy(destination, name.data(), name.size());
@@ -1004,10 +997,7 @@ CNA_Result cna_texture2d_copy_encoded(
         }
         *outByteCount = encoded.size();
         if (capacity < encoded.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The encoded Texture2D output buffer is too small.");
+            return BufferTooSmall("The encoded Texture2D output buffer is too small.");
         }
         if (!encoded.empty()) {
             std::memcpy(destination, encoded.data(), encoded.size());

@@ -279,6 +279,24 @@ void SetLastError(
     return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, message);
 }
 
+/** @brief Records and returns the refusal of an argument outside its range. */
+[[nodiscard]] inline CNA_Result OutOfRange(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, message);
+}
+
+/** @brief Records and returns the size-then-copy answer for a too-small destination. */
+[[nodiscard]] inline CNA_Result BufferTooSmall(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, message);
+}
+
+/** @brief Records and returns the refusal of a size, count or offset whose arithmetic overflows. */
+[[nodiscard]] inline CNA_Result Overflow(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE, message);
+}
+
 void SetLastJoinError(uint32_t joinError) noexcept;
 
 void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;

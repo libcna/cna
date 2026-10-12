@@ -49,6 +49,7 @@
 
 namespace {
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CopyFormattedText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
@@ -57,6 +58,8 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 
@@ -84,7 +87,6 @@ static_assert(
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -168,35 +170,14 @@ template<typename TCallable>
     });
 }
 
+// A draw route that a 2D-only backend cannot serve is reported as an explicit capability refusal
+// rather than as whatever generic failure that backend's first unsupported call happens to raise.
 [[nodiscard]] CNA_Result EnsureThreeDSupported(GraphicsDevice& device) noexcept
 {
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
         return NotSupported("The selected graphics backend does not support 3D draw submission.");
     }
     return CNA_RESULT_SUCCESS;
-}
-
-// A draw route that a 2D-only backend cannot serve is reported as an explicit capability refusal
-// rather than as whatever generic failure that backend's first unsupported call happens to raise.
-template<typename TCallable>
-[[nodiscard]] CNA_Result DeviceGuardedCommand(
-    const CNA_Handle graphicsDeviceHandle,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = EnsureThreeDSupported(*graphicsDevice->value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::forward<TCallable>(callable)(*graphicsDevice->value);
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 // Callback-scoped view over native text. The event payload never owns bytes: the canonical string
@@ -299,10 +280,7 @@ struct TextureSlotState final {
         return InvalidArgument("The shader stage is not recognized.");
     }
     if (slot >= CNA_TEXTURE_COLLECTION_MAX_TEXTURES) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The texture sampler slot is out of range.");
+        return OutOfRange("The texture sampler slot is out of range.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -433,34 +411,6 @@ struct DeviceBindingState final {
         return InvalidArgument("The primitive topology is not recognized.");
     }
     return CNA_RESULT_SUCCESS;
-}
-
-template<typename TCallable>
-[[nodiscard]] CNA_Result DeviceBooleanCommand(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Bool value,
-    const bool requiresThreeD,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value != CNA_TRUE && value != CNA_FALSE) {
-            return InvalidArgument("The Boolean argument must be CNA_TRUE or CNA_FALSE.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (requiresThreeD) {
-            if (const CNA_Result result = EnsureThreeDSupported(*graphicsDevice->value);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        std::forward<TCallable>(callable)(*graphicsDevice->value, value == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 // One resolved user-primitive draw. The vertex source and the optional declaration together select
@@ -1159,16 +1109,10 @@ CNA_Result cna_graphics_device_get_backbuffer_data_window(
         }
         if (readback->start_index > static_cast<uint64_t>(INT32_MAX) ||
             readback->element_count > static_cast<uint64_t>(INT32_MAX)) {
-            return Fail(
-                CNA_RESULT_OVERFLOW,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The back-buffer readback window exceeds the native element range.");
+            return Overflow("The back-buffer readback window exceeds the native element range.");
         }
         if (readback->start_index + readback->element_count > capacity) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination cannot hold the requested back-buffer window.");
+            return BufferTooSmall("The destination cannot hold the requested back-buffer window.");
         }
 
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
@@ -1183,9 +1127,7 @@ CNA_Result cna_graphics_device_get_backbuffer_data_window(
         // a capacity error, reported before any native read begins.
         const uint64_t regionPixels = RequestedRegionPixels(*graphicsDevice->value, *readback);
         if (readback->element_count < regionPixels) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The requested element count is smaller than the selected back-buffer region.");
         }
 
@@ -1228,10 +1170,7 @@ CNA_Result cna_graphics_device_set_vertex_buffer_offset(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (vertexOffset < 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The vertex offset must not be negative.");
+            return OutOfRange("The vertex offset must not be negative.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
         if (const CNA_Result result =
@@ -1284,10 +1223,7 @@ CNA_Result cna_graphics_device_set_vertex_buffers(
         for (uint64_t index = 0U; index < bindingCount; ++index) {
             const CNA_VertexBufferBinding& binding = bindings[index];
             if (binding.vertex_offset < 0 || binding.instance_frequency < 0) {
-                return Fail(
-                    CNA_RESULT_INVALID_ARGUMENT,
-                    CNA_ERROR_CATEGORY_RANGE,
-                    "A vertex-buffer binding offset or frequency is negative.");
+                return OutOfRange("A vertex-buffer binding offset or frequency is negative.");
             }
             std::shared_ptr<VertexBufferResource> buffer;
             if (binding.vertex_buffer != CNA_INVALID_HANDLE) {
@@ -1336,9 +1272,7 @@ CNA_Result cna_graphics_device_copy_vertex_buffers(
             graphicsDevice->value->GetVertexBuffers();
         *outCount = static_cast<uint64_t>(nativeBindings.size());
         if (capacity < nativeBindings.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination cannot hold every active vertex-buffer binding.");
         }
         for (std::size_t index = 0U; index < nativeBindings.size(); ++index) {
@@ -1400,70 +1334,6 @@ CNA_Result cna_graphics_device_get_index_buffer(
     });
 }
 
-CNA_Result cna_graphics_device_draw_primitives(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_PrimitiveType primitiveType,
-    const int32_t vertexStart,
-    const int32_t primitiveCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.DrawPrimitives(
-                static_cast<PrimitiveType>(primitiveType), vertexStart, primitiveCount);
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_draw_indexed_primitives(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_PrimitiveType primitiveType,
-    const int32_t baseVertex,
-    const int32_t minVertexIndex,
-    const int32_t numVertices,
-    const int32_t startIndex,
-    const int32_t primitiveCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.DrawIndexedPrimitives(
-                static_cast<PrimitiveType>(primitiveType),
-                baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount);
-        });
-    });
-}
-
-CNA_Result cna_graphics_device_draw_instanced_primitives(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_PrimitiveType primitiveType,
-    const int32_t baseVertex,
-    const int32_t minVertexIndex,
-    const int32_t numVertices,
-    const int32_t startIndex,
-    const int32_t primitiveCount,
-    const int32_t instanceCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
-            device.DrawInstancedPrimitives(
-                static_cast<PrimitiveType>(primitiveType),
-                baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount,
-                instanceCount);
-        });
-    });
-}
-
 CNA_Result cna_graphics_device_draw_user_primitives(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_UserPrimitives* const primitives)
@@ -1503,53 +1373,6 @@ CNA_Result cna_graphics_device_draw_user_indexed_primitives(
     });
 }
 
-CNA_Result cna_graphics_device_set_depth_test_enabled(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Bool enabled)
-{
-    return DeviceBooleanCommand(
-        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
-            device.SetDepthTestEnabled(value);
-        });
-}
-
-CNA_Result cna_graphics_device_set_blend_enabled(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Bool enabled)
-{
-    return DeviceBooleanCommand(
-        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
-            device.SetBlendEnabled(value);
-        });
-}
-
-CNA_Result cna_graphics_device_set_depth_write_enabled(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_Bool enabled)
-{
-    return DeviceBooleanCommand(
-        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
-            device.SetDepthWriteEnabled(value);
-        });
-}
-
-CNA_Result cna_graphics_device_set_string_marker_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_StringView marker)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string text;
-        if (const CNA_Result result = ReadText(
-                marker, "The string marker is not valid UTF-8.", &text, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return DeviceCommand(graphicsDeviceHandle, [&](GraphicsDevice& device) {
-            device.SetStringMarkerEXT(text);
-        });
-    });
-}
-
 CNA_Result cna_graphics_device_set_current_effect(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_EffectHandle effectHandle)
@@ -1585,10 +1408,7 @@ CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (multiSampleCount < 0) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The multisample count must not be negative.");
+            return OutOfRange("The multisample count must not be negative.");
         }
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.RecreateRendererForMultiSampleCount(multiSampleCount);
@@ -1664,48 +1484,6 @@ namespace {
 }
 
 } // namespace
-
-CNA_Result cna_graphics_device_set_display_color_space_ext(
-    const CNA_Handle graphicsDeviceHandle, const uint32_t space, CNA_Bool* const outChanged)
-{
-    if (const CNA_Result result = ValidateDisplayColorSpaceOrdinal(space);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    // Reports whether it worked rather than refusing: a display that cannot enter a space is an
-    // ordinary answer, not a caller mistake.
-    return DeviceQuery<CNA_Bool>(
-        graphicsDeviceHandle, outChanged, [space](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(
-                device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space)));
-        });
-}
-
-CNA_Result cna_graphics_device_supports_display_color_space_ext(
-    const CNA_Handle graphicsDeviceHandle, const uint32_t space, CNA_Bool* const outSupported)
-{
-    if (const CNA_Result result = ValidateDisplayColorSpaceOrdinal(space);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return DeviceQuery<CNA_Bool>(
-        graphicsDeviceHandle, outSupported, [space](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(device.SupportsDisplayColorSpaceEXT(
-                       static_cast<CNA::DisplayColorSpace>(space)));
-        });
-}
-
-CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
-    const CNA_Handle graphicsDeviceHandle, const int32_t axis, int32_t* const outCount)
-{
-    // An axis outside zero to two answers zero rather than being refused, which is the canonical
-    // behaviour: a caller looping over axes gets a usable number instead of an error to special-case.
-    return DeviceQuery<int32_t>(
-        graphicsDeviceHandle, outCount, [axis](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return static_cast<int32_t>(
-                device.GetMaxComputeWorkGroupCountEXT(static_cast<int>(axis)));
-        });
-}
 
 // The routes generated from modules/c-api/spec/GraphicsDevice.toml.
 #include "generated/GraphicsDevice.inc"

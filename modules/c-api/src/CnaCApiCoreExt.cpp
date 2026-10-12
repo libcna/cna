@@ -25,6 +25,7 @@
 #include <span>
 #include <utility>
 
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -564,9 +565,7 @@ CNA_Result cna_graphics_renderer_copy_available_ext(
             CNA::GraphicsRendererSelection::GetAvailable();
         *outCount = static_cast<uint64_t>(available.size());
         if (capacity < available.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination capacity is smaller than the available renderer set.");
         }
         for (std::size_t index = 0U; index < available.size(); ++index) {
@@ -687,9 +686,7 @@ CNA_Result cna_assembly_copy_title_ext(
         const std::string& title = CNA::GetAssemblyTitleEXT();
         *outBytes = static_cast<uint64_t>(title.size());
         if (capacity < title.size()) {
-            return CNA::C::Detail::Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return CNA::C::Detail::BufferTooSmall(
                 "The destination cannot hold the complete title.");
         }
         if (!title.empty()) {

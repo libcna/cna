@@ -23,6 +23,7 @@ namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -38,6 +39,8 @@ using CNA::C::Detail::IsZero;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
+using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::StructureVersion;
@@ -90,20 +93,14 @@ struct TransferView final {
     }
     if (transfer->start_index > capacity ||
         transfer->element_count > capacity - transfer->start_index) {
-        return Fail(
-            CNA_RESULT_BUFFER_TOO_SMALL,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The caller array cannot hold the complete index transfer window.");
+        return BufferTooSmall("The caller array cannot hold the complete index transfer window.");
     }
     if (capacity != 0U && data == nullptr) {
         return InvalidArgument("The index-buffer caller array is null.");
     }
     if (transfer->element_count >
         static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The index transfer count exceeds the native Int32 range.");
+        return Overflow("The index transfer count exceeds the native Int32 range.");
     }
     *outView = TransferView{
         static_cast<IndexElementSize>(transfer->index_element_size),
@@ -124,10 +121,7 @@ template<typename TIndex>
     }
     if (transfer.start >
         static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TIndex))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The index source byte offset is too large.");
+        return Overflow("The index source byte offset is too large.");
     }
     const auto* const bytes = static_cast<const uint8_t*>(source) +
         static_cast<std::size_t>(transfer.start) * sizeof(TIndex);
@@ -156,10 +150,7 @@ template<typename TIndex>
     }
     if (transfer.start >
         static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TIndex))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The index destination byte offset is too large.");
+        return Overflow("The index destination byte offset is too large.");
     }
     std::vector<TIndex> native(static_cast<std::size_t>(transfer.count));
     if (transfer.start == 0U) {
@@ -308,10 +299,7 @@ template<typename TIndex>
     }
     if (transfer.start >
         static_cast<uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(TIndex))) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The index source byte offset is too large.");
+        return Overflow("The index source byte offset is too large.");
     }
     const auto* const bytes = static_cast<const uint8_t*>(source) +
         static_cast<std::size_t>(transfer.start) * sizeof(TIndex);
@@ -404,10 +392,7 @@ CNA_Result cna_index_buffer_set_data(
         }
         if (view.count >
             static_cast<uint64_t>(buffer->value->getIndexCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The upload exceeds the IndexBuffer's logical capacity.");
+            return OutOfRange("The upload exceeds the IndexBuffer's logical capacity.");
         }
         if (view.elementSize == IndexElementSize::ThirtyTwoBits) {
             return SetTyped<uint32_t>(*buffer, view, data);

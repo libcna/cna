@@ -26,7 +26,6 @@
 #include <utility>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -36,6 +35,7 @@ namespace {
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
@@ -613,10 +613,7 @@ CNA_Result cna_game_components_get_at(
             return result;
         }
         if (index >= static_cast<uint64_t>(components->getCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The component index is at or past the collection count.");
+            return OutOfRange("The component index is at or past the collection count.");
         }
         *outComponent = HandleForComponent(
             (*components)[static_cast<GameComponentCollection::size_type>(index)]);
@@ -641,10 +638,7 @@ CNA_Result cna_game_components_insert(
             return result;
         }
         if (index > static_cast<uint64_t>(components->getCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The insert index is past the collection count.");
+            return OutOfRange("The insert index is past the collection count.");
         }
         components->Insert(
             static_cast<GameComponentCollection::size_type>(index),
@@ -662,10 +656,7 @@ CNA_Result cna_game_components_remove_at(const CNA_Handle gameHandle, const uint
             return result;
         }
         if (index >= static_cast<uint64_t>(components->getCountProperty())) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The component index is at or past the collection count.");
+            return OutOfRange("The component index is at or past the collection count.");
         }
         components->RemoveAt(static_cast<GameComponentCollection::size_type>(index));
         return CNA_RESULT_SUCCESS;

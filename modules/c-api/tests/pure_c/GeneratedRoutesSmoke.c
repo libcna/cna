@@ -1124,6 +1124,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_device_get_max_compute_work_group_size_ext(v_CNA_Handle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_max_compute_work_group_size_ext", "a null out_size");
     failures += expect(cna_graphics_device_get_max_compute_work_group_invocations_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_max_compute_work_group_invocations_ext", "a null out_invocations");
     failures += expect(cna_graphics_device_copy_type_name(v_CNA_Handle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_copy_type_name", "a null out_bytes");
+    failures += expect(cna_graphics_device_set_display_color_space_ext(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_set_display_color_space_ext", "a null out_changed");
+    failures += expect(cna_graphics_device_supports_display_color_space_ext(v_CNA_Handle, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_supports_display_color_space_ext", "a null out_supported");
+    failures += expect(cna_graphics_device_get_max_compute_work_group_count_ext(v_CNA_Handle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_max_compute_work_group_count_ext", "a null out_count");
     failures += expect(cna_occlusion_query_get_is_complete(v_CNA_OcclusionQueryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_occlusion_query_get_is_complete", "a null out_is_complete");
     failures += expect(cna_occlusion_query_get_pixel_count(v_CNA_OcclusionQueryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_occlusion_query_get_pixel_count", "a null out_pixel_count");
     failures += expect(cna_occlusion_query_get_is_pixel_count_precise_ext(v_CNA_OcclusionQueryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_occlusion_query_get_is_pixel_count_precise_ext", "a null out_is_precise");
@@ -2999,6 +3002,16 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_graphics_device_get_max_compute_work_group_invocations_ext(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_max_compute_work_group_invocations_ext", what);
     failures += expect(cna_graphics_device_copy_type_name(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_copy_type_name", what);
     failures += expect(cna_graphics_device_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_dispose", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_draw_primitives(handle, v_CNA_PrimitiveType, v_int32_t, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_draw_primitives", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_draw_indexed_primitives(handle, v_CNA_PrimitiveType, v_int32_t, v_int32_t, v_int32_t, v_int32_t, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_draw_indexed_primitives", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_draw_instanced_primitives(handle, v_CNA_PrimitiveType, v_int32_t, v_int32_t, v_int32_t, v_int32_t, v_int32_t, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_draw_instanced_primitives", what);
+    failures += expect(cna_graphics_device_set_depth_test_enabled(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_depth_test_enabled", what);
+    failures += expect(cna_graphics_device_set_blend_enabled(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_blend_enabled", what);
+    failures += expect(cna_graphics_device_set_depth_write_enabled(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_depth_write_enabled", what);
+    failures += expect(cna_graphics_device_set_string_marker_ext(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_string_marker_ext", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_set_display_color_space_ext(handle, v_uint32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_set_display_color_space_ext", what);
+    failures += expect_unless_arguments_refused(cna_graphics_device_supports_display_color_space_ext(handle, v_uint32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_supports_display_color_space_ext", what);
+    failures += expect(cna_graphics_device_get_max_compute_work_group_count_ext(handle, v_int32_t, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_max_compute_work_group_count_ext", what);
     failures += expect(cna_occlusion_query_begin(handle), CNA_RESULT_INVALID_HANDLE, "cna_occlusion_query_begin", what);
     failures += expect(cna_occlusion_query_end(handle), CNA_RESULT_INVALID_HANDLE, "cna_occlusion_query_end", what);
     failures += expect(cna_occlusion_query_get_is_complete(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_occlusion_query_get_is_complete", what);
@@ -4264,6 +4277,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2112 generated routes\n", failures);
+    printf("%d failed checks across 2122 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

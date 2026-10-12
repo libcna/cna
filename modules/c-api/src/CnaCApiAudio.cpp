@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -48,6 +49,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedAudioResource;
@@ -654,10 +656,7 @@ using Microsoft::Xna::Framework::Audio::MicrophoneState;
     const auto& microphones = Microphone::getAllProperty();
     if (index >= static_cast<uint64_t>(microphones.size()) ||
         microphones[static_cast<std::size_t>(index)] == nullptr) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The microphone index is at or past the reported count.");
+        return OutOfRange("The microphone index is at or past the reported count.");
     }
     *outMicrophone = microphones[static_cast<std::size_t>(index)];
     return CNA_RESULT_SUCCESS;

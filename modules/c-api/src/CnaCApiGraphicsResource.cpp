@@ -26,6 +26,7 @@ namespace {
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::BorrowGameGraphicsDevice;
+using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::EmbeddedNul;
@@ -259,9 +260,7 @@ template<typename TCallable>
         const std::string text = std::forward<TCallable>(callable)(*resource.value);
         *outByteCount = static_cast<uint64_t>(text.size());
         if (capacity < text.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
+            return BufferTooSmall(
                 "The destination cannot hold the complete graphics-resource string.");
         }
         if (!text.empty()) {
