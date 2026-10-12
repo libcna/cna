@@ -139,6 +139,11 @@ The single authoritative list. Every entry below was checked against the code on
    refuses malformed text with `CNA_RESULT_ENCODING` (`ReadText`). And the GraphicsDeviceManager's
    `IsPresentationParameters` (`CnaCApiGraphicsDeviceManager.cpp`) accepts non-canonical
    `CNA_Bool` fields and non-zero `reserved` bytes that the Display routes' check refuses.
+9. **Two pure-C suites fail on Windows for reasons outside the C API** (found 2026-10-12 running the
+   MinGW-w64 build under Wine; 101 of the 107 suites pass). `ContentSmoke` writes its fixture with
+   the narrow `fopen` and a UTF-8 file name, which the C runtime reads in the ANSI code page, so CNA
+   (correctly UTF-8) cannot find the file. `GraphicsSurfaceSmoke` passes every check and returns
+   from `main`, then the process never exits (100% CPU in teardown) -- unconfirmed on real Windows.
 
 ### 5.2 Limitations
 
