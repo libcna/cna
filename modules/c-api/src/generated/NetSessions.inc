@@ -209,6 +209,19 @@ CNA_Result cna_network_session_join(
     });
 }
 
+CNA_Result cna_available_network_session_destroy(
+    const CNA_AvailableNetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AvailableSessionResource> object{};
+        if (const CNA_Result routeResult = GetSession(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(session);
+    });
+}
+
 CNA_Result cna_available_network_session_collection_get_count(
     const CNA_AvailableNetworkSessionCollectionHandle collection,
     int32_t* const out_count)
@@ -256,6 +269,20 @@ CNA_Result cna_available_network_session_collection_dispose(
         }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_available_network_session_collection_destroy(
+    const CNA_AvailableNetworkSessionCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AvailableSessionCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Dispose();
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -945,6 +972,31 @@ CNA_Result cna_local_network_gamer_enable_send_voice(
         }
         const bool enable = CNA::C::Detail::FromCBool(c_enable);
         object->EnableSendVoice(other, enable);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_packet_writer(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_PacketWriterHandle writer,
+    const CNA_SendDataOptions options)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateSendOptions(options);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        LocalNetworkGamer* object{};
+        if (const CNA_Result routeResult = BorrowLocalGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Microsoft::Xna::Framework::Net::PacketWriter* other{};
+        if (const CNA_Result routeResult = CNA::C::Detail::BorrowPacketWriter(writer, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->SendData(*other, static_cast<SendDataOptions>(options));
         return CNA_RESULT_SUCCESS;
     });
 }

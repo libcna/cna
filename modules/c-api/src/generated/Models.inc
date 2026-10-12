@@ -116,6 +116,19 @@ CNA_Result cna_model_bone_get_children(
     });
 }
 
+CNA_Result cna_model_bone_destroy(
+    const CNA_ModelBoneHandle bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BoneResource> object{};
+        if (const CNA_Result routeResult = GetBone(bone, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(bone);
+    });
+}
+
 CNA_Result cna_model_bone_collection_get_count(
     const CNA_ModelBoneCollectionHandle collection,
     uint64_t* const out_count)
@@ -131,6 +144,19 @@ CNA_Result cna_model_bone_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(CollectionNodes(*object).size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_bone_collection_destroy(
+    const CNA_ModelBoneCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BoneCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -341,6 +367,19 @@ CNA_Result cna_model_mesh_part_set_primitive_type_ext(
     });
 }
 
+CNA_Result cna_model_mesh_part_destroy(
+    const CNA_ModelMeshPartHandle part)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(part);
+    });
+}
+
 CNA_Result cna_model_mesh_part_collection_get_count(
     const CNA_ModelMeshPartCollectionHandle collection,
     uint64_t* const out_count)
@@ -356,6 +395,19 @@ CNA_Result cna_model_mesh_part_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(PartList(*object).size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_collection_destroy(
+    const CNA_ModelMeshPartCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartCollectionResource> object{};
+        if (const CNA_Result routeResult = GetPartCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -481,6 +533,19 @@ CNA_Result cna_model_mesh_get_effects(
     });
 }
 
+CNA_Result cna_model_mesh_destroy(
+    const CNA_ModelMeshHandle mesh)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> object{};
+        if (const CNA_Result routeResult = GetMesh(mesh, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(mesh);
+    });
+}
+
 CNA_Result cna_model_mesh_collection_get_count(
     const CNA_ModelMeshCollectionHandle collection,
     uint64_t* const out_count)
@@ -499,6 +564,19 @@ CNA_Result cna_model_mesh_collection_get_count(
     });
 }
 
+CNA_Result cna_model_mesh_collection_destroy(
+    const CNA_ModelMeshCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshCollectionResource> object{};
+        if (const CNA_Result routeResult = GetMeshCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
+    });
+}
+
 CNA_Result cna_model_effect_collection_get_count(
     const CNA_ModelEffectCollectionHandle collection,
     uint64_t* const out_count)
@@ -514,6 +592,19 @@ CNA_Result cna_model_effect_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(object->mesh->effects.size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_destroy(
+    const CNA_ModelEffectCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectCollectionResource> object{};
+        if (const CNA_Result routeResult = GetEffectCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -816,6 +907,19 @@ CNA_Result cna_morph_target_data_ext_set_recompute_flat_normals_ext(
     });
 }
 
+CNA_Result cna_morph_target_data_ext_destroy(
+    const CNA_MorphTargetDataEXTHandle data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> object{};
+        if (const CNA_Result routeResult = GetMorphData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(data);
+    });
+}
+
 CNA_Result cna_skinned_model_ext_get_bone_count(
     const CNA_SkinnedModelEXTHandle model,
     uint64_t* const out_bone_count)
@@ -944,6 +1048,19 @@ CNA_Result cna_skinned_model_ext_remove_clip(
         }
         object->value->Clips.erase(name);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_destroy(
+    const CNA_SkinnedModelEXTHandle model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(model);
     });
 }
 
@@ -1186,6 +1303,19 @@ CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
     });
 }
 
+CNA_Result cna_skinning_data_destroy(
+    const CNA_SkinningDataHandle data)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(data);
+    });
+}
+
 CNA_Result cna_animation_player_get_current_position(
     const CNA_AnimationPlayerHandle player,
     double* const out_position_seconds)
@@ -1298,6 +1428,19 @@ CNA_Result cna_animation_player_copy_skin_transforms(
     });
 }
 
+CNA_Result cna_animation_player_destroy(
+    const CNA_AnimationPlayerHandle player)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> object{};
+        if (const CNA_Result routeResult = GetAnimationPlayer(player, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(player);
+    });
+}
+
 CNA_Result cna_model_animations_ext_get_type_name_byte_count(
     const CNA_ModelAnimationsEXTHandle animations,
     uint64_t* const out_byte_count)
@@ -1350,6 +1493,19 @@ CNA_Result cna_model_animations_ext_get_clip_count(
         }
         *out_count = static_cast<uint64_t>(object->value->Clips.size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_animations_ext_destroy(
+    const CNA_ModelAnimationsEXTHandle animations)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelAnimationsResource> object{};
+        if (const CNA_Result routeResult = GetModelAnimations(animations, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(animations);
     });
 }
 

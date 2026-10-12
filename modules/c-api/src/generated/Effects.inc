@@ -272,6 +272,19 @@ CNA_Result cna_effect_annotation_get_info(
     });
 }
 
+CNA_Result cna_effect_annotation_destroy(
+    const CNA_EffectAnnotationHandle annotation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnnotationResource> object{};
+        if (const CNA_Result routeResult = GetAnnotation(annotation, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(annotation);
+    });
+}
+
 CNA_Result cna_effect_annotation_collection_get_count(
     const CNA_EffectAnnotationCollectionHandle collection,
     uint64_t* const out_count)
@@ -287,6 +300,19 @@ CNA_Result cna_effect_annotation_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(object->value->getCountProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_annotation_collection_destroy(
+    const CNA_EffectAnnotationCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnnotationCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -447,6 +473,19 @@ CNA_Result cna_effect_parameter_set_value_string(
     });
 }
 
+CNA_Result cna_effect_parameter_destroy(
+    const CNA_EffectParameterHandle parameter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> object{};
+        if (const CNA_Result routeResult = GetParameter(parameter, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(parameter);
+    });
+}
+
 CNA_Result cna_effect_parameter_collection_get_count(
     const CNA_EffectParameterCollectionHandle collection,
     uint64_t* const out_count)
@@ -462,6 +501,19 @@ CNA_Result cna_effect_parameter_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(object->state->value->getCountProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_destroy(
+    const CNA_EffectParameterCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterCollectionResource> object{};
+        if (const CNA_Result routeResult = GetParameterCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -552,6 +604,19 @@ CNA_Result cna_effect_pass_get_annotations(
     });
 }
 
+CNA_Result cna_effect_pass_destroy(
+    const CNA_EffectPassHandle pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassResource> object{};
+        if (const CNA_Result routeResult = GetPass(pass, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(pass);
+    });
+}
+
 CNA_Result cna_effect_pass_collection_get_count(
     const CNA_EffectPassCollectionHandle collection,
     uint64_t* const out_count)
@@ -567,6 +632,19 @@ CNA_Result cna_effect_pass_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(object->state->value->getCountProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_pass_collection_destroy(
+    const CNA_EffectPassCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassCollectionResource> object{};
+        if (const CNA_Result routeResult = GetPassCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -661,6 +739,19 @@ CNA_Result cna_effect_technique_get_annotations(
     });
 }
 
+CNA_Result cna_effect_technique_destroy(
+    const CNA_EffectTechniqueHandle technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueResource> object{};
+        if (const CNA_Result routeResult = GetTechnique(technique, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(technique);
+    });
+}
+
 CNA_Result cna_effect_technique_collection_get_count(
     const CNA_EffectTechniqueCollectionHandle collection,
     uint64_t* const out_count)
@@ -676,6 +767,19 @@ CNA_Result cna_effect_technique_collection_get_count(
         }
         *out_count = static_cast<uint64_t>(object->state->value->getCountProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_technique_collection_destroy(
+    const CNA_EffectTechniqueCollectionHandle collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueCollectionResource> object{};
+        if (const CNA_Result routeResult = GetTechniqueCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(collection);
     });
 }
 
@@ -1076,6 +1180,19 @@ CNA_Result cna_directional_light_set_enabled(
         const bool value = CNA::C::Detail::FromCBool(c_value);
         object->value->setEnabledProperty(value);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_destroy(
+    const CNA_DirectionalLightHandle light)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DirectionalLightResource> object{};
+        if (const CNA_Result routeResult = GetDirectionalLight(light, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(light);
     });
 }
 

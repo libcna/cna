@@ -28,6 +28,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::TryMapVertexElementFormat;
 using CNA::C::Detail::TryMapVertexElementUsage;
@@ -196,27 +197,6 @@ CNA_Result cna_vertex_declaration_create_with_stride(
             std::make_shared<VertexDeclaration>(
                 vertexStride, std::move(nativeElements)),
             outDeclaration);
-    });
-}
-
-CNA_Result cna_vertex_declaration_destroy(
-    const CNA_VertexDeclarationHandle declarationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<VertexDeclaration> declaration;
-        if (const CNA_Result result = GetDeclaration(declarationHandle, &declaration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        declaration->Dispose();
-        const CNA_Result result = GetRuntimeHandles().Release(declarationHandle);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The VertexDeclaration handle could not be destroyed.");
     });
 }
 

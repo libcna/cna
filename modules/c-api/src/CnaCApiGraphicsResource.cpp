@@ -41,6 +41,7 @@ using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::Texture3DResource;
@@ -465,14 +466,7 @@ CNA_Result cna_graphics_resource_unsubscribe_disposing(
             return getResult;
         }
         registration->Unsubscribe();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The graphics-resource event-registration handle could not be released.");
+        return ReleaseHandle(registrationHandle);
     });
 }
 

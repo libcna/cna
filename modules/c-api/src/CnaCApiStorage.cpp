@@ -583,14 +583,7 @@ CNA_Result cna_storage_device_unsubscribe_device_changed(const CNA_Handle regist
             return getResult;
         }
         registration->Unsubscribe();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The DeviceChanged registration handle could not be released.");
+        return ReleaseHandle(registrationHandle);
     });
 }
 
@@ -606,14 +599,7 @@ CNA_Result cna_storage_device_destroy(const CNA_StorageDeviceHandle deviceHandle
             return InvalidState(
                 "Every container opened from this StorageDevice must be destroyed first.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(deviceHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned StorageDevice handle could not be released.");
+        return ReleaseHandle(deviceHandle);
     });
 }
 
@@ -745,14 +731,7 @@ CNA_Result cna_storage_container_unsubscribe_disposing(const CNA_Handle registra
             return getResult;
         }
         registration->Unsubscribe();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The Disposing registration handle could not be released.");
+        return ReleaseHandle(registrationHandle);
     });
 }
 

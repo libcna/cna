@@ -95,6 +95,7 @@ object = "std::shared_ptr<MouseCursorResource>"
 
 [cursor.routes]
 cna_mouse_cursor_dispose = { call = "object->value->Dispose()" }
+cna_mouse_cursor_destroy = { release = true }
 
 [touch_state]
 lookup = "ValidateTouchState"
@@ -221,6 +222,7 @@ cna_keyboard_get_state_for_player = { versioned = true, get = "SnapshotKeyboard(
 cna_gamepad_get_touchpad_finger_count_ext = { get = "GamePad::GetTouchpadFingerCountEXT(object, static_cast<int>(touchpad))" }
 
 # Snapshots built from their fields: the vectors are the C structures themselves.
+cna_gamepad_get_button_label_ext = { get = "MapButtonLabel(GamePad::GetButtonLabelEXT(object, static_cast<Buttons>(button)))", validate = "ValidateMask(button)" }
 [touch_values]
 raw = true
 

@@ -11,6 +11,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -68,6 +69,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryMapPlayerIndex;
@@ -862,7 +864,6 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     return snapshot;
 }
 
-
 } // namespace
 
 CNA_Result cna_gamepad_buttons_init_from_button_array(
@@ -1196,31 +1197,6 @@ CNA_Result cna_gamepad_get_power_info_ext(
         int percent = 0;
         *outState = MapPowerState(GamePad::GetPowerInfoEXT(nativePlayerIndex, percent));
         *outPercent = static_cast<int32_t>(percent);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamepad_get_button_label_ext(
-    const CNA_Handle gameHandle,
-    const CNA_PlayerIndex playerIndex,
-    const CNA_GamePadButtonFlags button,
-    CNA_GamePadButtonLabel* const outLabel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLabel == nullptr) {
-            return InvalidArgument("The button-label output is null.");
-        }
-        if (const CNA_Result result = ValidateMask(button); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        PlayerIndex nativePlayerIndex = PlayerIndex::One;
-        if (const CNA_Result result =
-                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outLabel = MapButtonLabel(
-            GamePad::GetButtonLabelEXT(nativePlayerIndex, static_cast<Buttons>(button)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1562,15 +1538,7 @@ CNA_Result cna_mouse_unsubscribe_clicked_ext(
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
-            "The mouse clicked registration handle could not be released.");
+        return ReleaseHandle(registration);
     });
 }
 
@@ -1716,25 +1684,6 @@ CNA_Result cna_mouse_cursor_create_from_texture2d(
             static_cast<int>(originY)));
         resource->value = resource->owned.get();
         return CreateCursorHandle(std::move(resource), outCursor);
-    });
-}
-
-CNA_Result cna_mouse_cursor_destroy(const CNA_MouseCursorHandle cursor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MouseCursorResource> resource;
-        if (const CNA_Result result = GetCursorResource(cursor, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = CNA::C::Detail::GetRuntimeHandles().Release(cursor);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
-            "The MouseCursor handle could not be released.");
     });
 }
 
@@ -1962,15 +1911,7 @@ CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle 
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
-        const CNA_Result releaseResult =
-            CNA::C::Detail::GetRuntimeHandles().Release(registration);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
-            "The text-input registration handle could not be released.");
+        return ReleaseHandle(registration);
     });
 }
 

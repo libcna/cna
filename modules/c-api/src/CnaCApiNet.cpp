@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -47,7 +48,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::StructureVersion;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateVersionedStructure;
@@ -615,26 +616,6 @@ CNA_Result cna_network_session_property_enumerator_reset(
     });
 }
 
-CNA_Result cna_network_session_property_enumerator_destroy(
-    const CNA_NetworkSessionPropertyEnumeratorHandle enumeratorHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PropertyEnumeratorResource> enumerator;
-        if (const CNA_Result result = GetEnumerator(enumeratorHandle, &enumerator);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(enumeratorHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned session-property enumerator handle could not be released.");
-    });
-}
-
 CNA_Result cna_network_session_properties_destroy(
     const CNA_NetworkSessionPropertiesHandle propertiesHandle)
 {
@@ -648,14 +629,7 @@ CNA_Result cna_network_session_properties_destroy(
             return InvalidState(
                 "Every enumerator over this property list must be destroyed first.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(propertiesHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned NetworkSessionProperties handle could not be released.");
+        return ReleaseHandle(propertiesHandle);
     });
 }
 
@@ -719,25 +693,6 @@ CNA_Result cna_packet_writer_copy_data_ext(
             std::memcpy(destination, data.data(), data.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_packet_writer_destroy(const CNA_PacketWriterHandle writerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PacketWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(writerHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned PacketWriter handle could not be released.");
     });
 }
 
@@ -837,25 +792,6 @@ CNA_Result cna_packet_reader_copy_data_ext(
             std::memcpy(destination, data.data(), data.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_packet_reader_destroy(const CNA_PacketReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PacketReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(readerHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned PacketReader handle could not be released.");
     });
 }
 

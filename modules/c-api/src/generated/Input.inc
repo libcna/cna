@@ -1104,6 +1104,19 @@ CNA_Result cna_mouse_cursor_dispose(
     });
 }
 
+CNA_Result cna_mouse_cursor_destroy(
+    const CNA_MouseCursorHandle cursor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MouseCursorResource> object{};
+        if (const CNA_Result routeResult = GetCursorResource(cursor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(cursor);
+    });
+}
+
 CNA_Result cna_touch_state_get_is_read_only(
     const CNA_TouchState* const state,
     CNA_Bool* const out_read_only)
@@ -2309,6 +2322,30 @@ CNA_Result cna_gamepad_get_touchpad_finger_count_ext(
             return routeResult;
         }
         *out_count = static_cast<int32_t>(GamePad::GetTouchpadFingerCountEXT(object, static_cast<int>(touchpad)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_button_label_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const CNA_GamePadButtonFlags button,
+    CNA_GamePadButtonLabel* const out_label)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_label == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_button_label_ext: out_label is null.");
+        }
+        if (const CNA_Result routeResult = ValidateMask(button);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        PlayerIndex object{};
+        if (const CNA_Result routeResult = BeginGamePadCall(game, player_index, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_label = static_cast<CNA_GamePadButtonLabel>(MapButtonLabel(GamePad::GetButtonLabelEXT(object, static_cast<Buttons>(button))));
         return CNA_RESULT_SUCCESS;
     });
 }

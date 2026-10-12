@@ -27,6 +27,7 @@ cna_packet_reader_read_quaternion = { get = "object->value->ReadQuaternion()" }
 cna_packet_reader_read_vector2 = { get = "object->value->ReadVector2()" }
 cna_packet_reader_read_vector3 = { get = "object->value->ReadVector3()" }
 cna_packet_reader_read_vector4 = { get = "object->value->ReadVector4()" }
+cna_packet_reader_destroy = { release = true }
 
 [writer]
 lookup = "GetWriter"
@@ -44,8 +45,16 @@ cna_packet_writer_write_quaternion = { call = "object->value->Write(value)" }
 cna_packet_writer_write_vector2 = { call = "object->value->Write(value)" }
 cna_packet_writer_write_vector3 = { call = "object->value->Write(value)" }
 cna_packet_writer_write_vector4 = { call = "object->value->Write(value)" }
+cna_packet_writer_destroy = { release = true }
 
 [calls]
 [calls.routes]
 cna_quality_of_service_init = { result = "StoreQualityOfService(QualityOfService::CreateInternal(), out_value)" }
 cna_quality_of_service_init_measured = { result = "StoreQualityOfService(QualityOfService::CreateInternal(System::TimeSpan(roundtrip_ticks)), out_value)" }
+
+[enumerator]
+lookup = "GetEnumerator"
+object = "std::shared_ptr<PropertyEnumeratorResource>"
+
+[enumerator.routes]
+cna_network_session_property_enumerator_destroy = { release = true }

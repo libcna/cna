@@ -81,6 +81,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::TextureCubeResourceView;
@@ -1108,25 +1109,6 @@ CNA_Result cna_effect_annotation_create(
     });
 }
 
-CNA_Result cna_effect_annotation_destroy(const CNA_EffectAnnotationHandle annotationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationResource> annotation;
-        if (const CNA_Result result = GetAnnotation(annotationHandle, &annotation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(annotationHandle);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned EffectAnnotation handle could not be released.");
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_create(
     CNA_EffectAnnotationCollectionHandle* const outCollection)
 {
@@ -1146,26 +1128,6 @@ CNA_Result cna_effect_annotation_collection_create(
             result,
             ErrorCategoryForResult(result),
             "The owned EffectAnnotationCollection handle could not be created.");
-    });
-}
-
-CNA_Result cna_effect_annotation_collection_destroy(
-    const CNA_EffectAnnotationCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnnotationCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned EffectAnnotationCollection handle could not be released.");
     });
 }
 
@@ -1234,25 +1196,6 @@ CNA_Result cna_effect_annotation_collection_find(
             *outFound = CNA_TRUE;
         }
         return result;
-    });
-}
-
-CNA_Result cna_effect_parameter_destroy(const CNA_EffectParameterHandle parameterHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(parameterHandle);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned EffectParameter handle could not be released.");
     });
 }
 
@@ -1897,26 +1840,6 @@ CNA_Result cna_effect_parameter_collection_create(
     });
 }
 
-CNA_Result cna_effect_parameter_collection_destroy(
-    const CNA_EffectParameterCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned EffectParameterCollection handle could not be released.");
-    });
-}
-
 CNA_Result cna_effect_parameter_collection_add_create(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_EffectParameterCreateInfo* const createInfo,
@@ -2097,22 +2020,6 @@ CNA_Result cna_effect_pass_create_indexed_ext(
     });
 }
 
-CNA_Result cna_effect_pass_destroy(const CNA_EffectPassHandle passHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PassResource> pass;
-        if (const CNA_Result result = GetPass(passHandle, &pass);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(passHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(result, ErrorCategoryForResult(result),
-                   "The owned EffectPass handle could not be released.");
-    });
-}
-
 CNA_Result cna_effect_pass_collection_create(
     CNA_EffectPassCollectionHandle* const outCollection)
 {
@@ -2124,23 +2031,6 @@ CNA_Result cna_effect_pass_collection_create(
         auto state = std::make_shared<PassCollectionState>();
         state->value = std::make_shared<EffectPassCollection>();
         return CreatePassCollectionHandle(std::move(state), outCollection);
-    });
-}
-
-CNA_Result cna_effect_pass_collection_destroy(
-    const CNA_EffectPassCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PassCollectionResource> collection;
-        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(result, ErrorCategoryForResult(result),
-                   "The owned EffectPassCollection handle could not be released.");
     });
 }
 
@@ -2295,23 +2185,6 @@ CNA_Result cna_effect_technique_create_reflected_ext(
     });
 }
 
-CNA_Result cna_effect_technique_destroy(
-    const CNA_EffectTechniqueHandle techniqueHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<TechniqueResource> technique;
-        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(techniqueHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(result, ErrorCategoryForResult(result),
-                   "The owned EffectTechnique handle could not be released.");
-    });
-}
-
 CNA_Result cna_effect_technique_get_passes(
     const CNA_EffectTechniqueHandle techniqueHandle,
     CNA_EffectPassCollectionHandle* const outCollection)
@@ -2349,23 +2222,6 @@ CNA_Result cna_effect_technique_collection_create(
         auto state = std::make_shared<TechniqueCollectionState>();
         state->value = std::make_shared<EffectTechniqueCollection>();
         return CreateTechniqueCollectionHandle(std::move(state), outCollection);
-    });
-}
-
-CNA_Result cna_effect_technique_collection_destroy(
-    const CNA_EffectTechniqueCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(result, ErrorCategoryForResult(result),
-                   "The owned EffectTechniqueCollection handle could not be released.");
     });
 }
 
@@ -2634,12 +2490,7 @@ CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
         if (effect->activeModelReferenceCount != 0U) {
             return InvalidState("The Effect is retained by a ModelMeshPart.");
         }
-        const CNA_Result result = GetRuntimeHandles().Release(effectHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned Effect handle could not be released.");
+        return ReleaseHandle(effectHandle);
     });
 }
 
@@ -3185,24 +3036,6 @@ CNA_Result cna_shader_effect_set_texture3d(
             texture,
             &texture->activeEffectReferenceCount);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_directional_light_destroy(
-    const CNA_DirectionalLightHandle lightHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DirectionalLightResource> light;
-        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(lightHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned DirectionalLight handle could not be released.");
     });
 }
 

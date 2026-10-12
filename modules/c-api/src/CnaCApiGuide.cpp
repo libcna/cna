@@ -131,14 +131,6 @@ private:
     Token token_;
 };
 
-[[nodiscard]] CNA_Result ValidateBoolean(const CNA_Bool value, const char* const message)
-{
-    if (value != CNA_FALSE && value != CNA_TRUE) {
-        return InvalidArgument(message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 // Validating a guide screen's player index is the boundary's job, so a caller learns about a bad
 // identity as an argument failure before the canonical screen sees it.
 [[nodiscard]] CNA_Result ValidatePlayer(const CNA_PlayerIndex player, PlayerIndex* const outPlayer)
@@ -216,40 +208,6 @@ struct GuideRenderSurfaces final {
 
 } // namespace
 
-CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(isEnabled, "is_enabled");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateBoolean(isEnabled, "The screen-saver flag is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::setIsScreenSaverEnabledProperty(isEnabled == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_set_simulate_trial_mode(const CNA_Bool simulate)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(simulate, "simulate");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateBoolean(simulate, "The simulate-trial-mode flag is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::setSimulateTrialModeProperty(simulate == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_begin_show_keyboard_input(
     const CNA_PlayerIndex player,
     const CNA_StringView title,
@@ -269,8 +227,7 @@ CNA_Result cna_guide_begin_show_keyboard_input(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result =
-                ValidateBoolean(usePasswordMode, "The password-mode flag is invalid.");
+        if (const CNA_Result result = ValidateCanonicalBool(usePasswordMode, "use_password_mode");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -577,23 +534,6 @@ CNA_Result cna_guide_show_game_invite(
             return result;
         }
         Guide::ShowGameInvite(nativePlayer, nativeRecipients);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool onlineOnly)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(onlineOnly, "online_only");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateBoolean(onlineOnly, "The online-only flag is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowSignIn(static_cast<int>(paneCount), onlineOnly == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
     });
 }

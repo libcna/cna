@@ -23,7 +23,6 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -33,6 +32,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -261,14 +261,7 @@ CNA_Result cna_signed_in_gamer_destroy(const CNA_SignedInGamerHandle gamerHandle
             return InvalidState(
                 "The process-wide signed-in collection still references this gamer.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(gamerHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned SignedInGamer handle could not be released.");
+        return ReleaseHandle(gamerHandle);
     });
 }
 

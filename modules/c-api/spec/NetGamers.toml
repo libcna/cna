@@ -22,6 +22,7 @@ cna_network_gamer_set_is_ready = { call = "object->value->setIsReadyProperty(val
 cna_network_gamer_get_is_talking = { get = "object->value->getIsTalkingProperty()" }
 cna_network_gamer_get_roundtrip_ticks = { get = "object->value->getRoundtripTimeProperty() .getTicksProperty()" }
 cna_network_gamer_set_roundtrip_ticks_ext = { call = "object->value->SetRoundtripTime(System::TimeSpan(ticks))" }
+cna_network_gamer_destroy = { release = true }
 
 [machine]
 lookup = "GetMachine"

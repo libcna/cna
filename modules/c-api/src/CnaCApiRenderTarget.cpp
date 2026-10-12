@@ -720,14 +720,7 @@ CNA_Result cna_render_target_unsubscribe_content_lost(
             return getResult;
         }
         registration->Unsubscribe();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The ContentLost registration handle could not be released.");
+        return ReleaseHandle(registrationHandle);
     });
 }
 

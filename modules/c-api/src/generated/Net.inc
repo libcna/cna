@@ -269,6 +269,19 @@ CNA_Result cna_packet_reader_read_vector4(
     });
 }
 
+CNA_Result cna_packet_reader_destroy(
+    const CNA_PacketReaderHandle reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(reader);
+    });
+}
+
 CNA_Result cna_packet_writer_get_length(
     const CNA_PacketWriterHandle writer,
     int32_t* const out_length)
@@ -446,6 +459,19 @@ CNA_Result cna_packet_writer_write_vector4(
     });
 }
 
+CNA_Result cna_packet_writer_destroy(
+    const CNA_PacketWriterHandle writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PacketWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(writer);
+    });
+}
+
 CNA_Result cna_quality_of_service_init(
     CNA_QualityOfService* const out_value)
 {
@@ -466,5 +492,18 @@ CNA_Result cna_quality_of_service_init_measured(
             return CNA::C::Detail::InvalidArgument("cna_quality_of_service_init_measured: out_value is null.");
         }
         return StoreQualityOfService(QualityOfService::CreateInternal(System::TimeSpan(roundtrip_ticks)), out_value);
+    });
+}
+
+CNA_Result cna_network_session_property_enumerator_destroy(
+    const CNA_NetworkSessionPropertyEnumeratorHandle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PropertyEnumeratorResource> object{};
+        if (const CNA_Result routeResult = GetEnumerator(enumerator, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(enumerator);
     });
 }

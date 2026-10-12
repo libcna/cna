@@ -15,6 +15,9 @@ cna_curve_key_collection_clear = { call = "object->Clear()" }
 cna_curve_key_collection_remove_at = { call = "object->RemoveAt(index)" }
 cna_curve_key_collection_destroy = { release = true }
 cna_curve_key_collection_get_count = { get = "static_cast<uint64_t>(object->getCountProperty())" }
+cna_curve_key_collection_set = { call = "object->setItemProperty(index, key)", validate = "ValidateKey(key)" }
+cna_curve_key_collection_add = { call = "object->Add(key)", validate = "ValidateKey(key)" }
+cna_curve_key_collection_index_of = { get = "object->IndexOf(key)", validate = "ValidateKey(key)" }
 
 [curve]
 lookup = "GetCurve"
@@ -25,6 +28,10 @@ cna_curve_destroy = { release = true }
 cna_curve_evaluate = { get = "object->Evaluate(position)" }
 
 # A key is validated first: its continuity must be one CNA_CurveContinuity defines.
+cna_curve_set_pre_loop = { call = "object->setPreLoopProperty(static_cast<CurveLoopType>(loop_type))", validate = "ValidateLoopType(loop_type)" }
+cna_curve_set_post_loop = { call = "object->setPostLoopProperty(static_cast<CurveLoopType>(loop_type))", validate = "ValidateLoopType(loop_type)" }
+cna_curve_compute_tangents = { call = "object->ComputeTangents(static_cast<CurveTangent>(tangent_type))", validate = "ValidateTangent(tangent_type)" }
+cna_curve_compute_tangent = { call = "object->ComputeTangent(key_index, static_cast<CurveTangent>(tangent_type))", validate = "ValidateTangent(tangent_type)" }
 [validated_key]
 lookup = "ValidateKey"
 

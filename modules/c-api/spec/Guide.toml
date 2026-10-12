@@ -40,6 +40,9 @@ cna_guide_set_notification_position = { call = "Guide::setNotificationPositionPr
 
 # `object` is the canonical PlayerIndex the C player index maps to; `other` the gamer shown.
 cna_guide_show_game_invite_for_session = { call = "Guide::ShowGameInvite(session_id)" }
+cna_guide_set_is_screen_saver_enabled = { call = "Guide::setIsScreenSaverEnabledProperty(is_enabled)" }
+cna_guide_set_simulate_trial_mode = { call = "Guide::setSimulateTrialModeProperty(simulate)" }
+cna_guide_show_sign_in = { call = "Guide::ShowSignIn(static_cast<int>(pane_count), online_only)" }
 [player_and_gamer]
 lookup = "ValidatePlayer"
 object = "PlayerIndex"

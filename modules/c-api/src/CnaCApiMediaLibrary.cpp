@@ -208,21 +208,6 @@ template<typename TCollection, typename TElement>
     return PublishChildOf<TElement, TCollection>(resource, element, outElement);
 }
 
-template<typename TValue>
-[[nodiscard]] CNA_Result ReleaseHandle(const CNA_Handle handle, const char* const message)
-{
-    std::shared_ptr<MediaChildResource<TValue>> resource;
-    if (const CNA_Result result = Borrow<TValue>(handle, &resource);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(handle);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(result, ErrorCategoryForResult(result), message);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 } // namespace
 
 CNA_Result cna_media_library_create(

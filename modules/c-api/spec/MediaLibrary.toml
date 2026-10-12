@@ -17,6 +17,7 @@ cna_album_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_album_get_duration = { get = "object->value->getDurationProperty().getTicksProperty()" }
 cna_album_get_has_art = { get = "object->value->getHasArtProperty()" }
 cna_album_get_songs = { result = "PublishChildOf<SongCollection, Album>(object, object->value->getSongsProperty(), out_songs)" }
+cna_album_destroy = { release = true }
 
 [album_collection]
 lookup = "Borrow<AlbumCollection>"
@@ -28,6 +29,7 @@ cna_album_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_album_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_album_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_album_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_album_collection_destroy = { release = true }
 
 [artist]
 lookup = "Borrow<Artist>"
@@ -44,6 +46,7 @@ cna_artist_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_artist_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_artist_get_songs = { result = "PublishChildOf<SongCollection, Artist>(object, object->value->getSongsProperty(), out_songs)" }
 cna_artist_get_albums = { result = "PublishChildOf<AlbumCollection, Artist>(object, object->value->getAlbumsProperty(), out_albums)" }
+cna_artist_destroy = { release = true }
 
 [artist_collection]
 lookup = "Borrow<ArtistCollection>"
@@ -55,6 +58,7 @@ cna_artist_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_artist_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_artist_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_artist_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_artist_collection_destroy = { release = true }
 
 [genre]
 lookup = "Borrow<Genre>"
@@ -71,6 +75,7 @@ cna_genre_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_genre_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_genre_get_songs = { result = "PublishChildOf<SongCollection, Genre>(object, object->value->getSongsProperty(), out_songs)" }
 cna_genre_get_albums = { result = "PublishChildOf<AlbumCollection, Genre>(object, object->value->getAlbumsProperty(), out_albums)" }
+cna_genre_destroy = { release = true }
 
 [genre_collection]
 lookup = "Borrow<GenreCollection>"
@@ -82,6 +87,7 @@ cna_genre_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_genre_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_genre_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_genre_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_genre_collection_destroy = { release = true }
 
 [playlist]
 lookup = "Borrow<Playlist>"
@@ -98,6 +104,7 @@ cna_playlist_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_playlist_copy_type_name = { copy = "object->value->GetTypeName()" }
 cna_playlist_get_duration = { get = "object->value->getDurationProperty().getTicksProperty()" }
 cna_playlist_get_songs = { result = "PublishChildOf<SongCollection, Playlist>(object, object->value->getSongsProperty(), out_songs)" }
+cna_playlist_destroy = { release = true }
 
 [playlist_collection]
 lookup = "Borrow<PlaylistCollection>"
@@ -109,6 +116,7 @@ cna_playlist_collection_get_count = { get = "object->value->getCountProperty()" 
 cna_playlist_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_playlist_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_playlist_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_playlist_collection_destroy = { release = true }
 
 [library]
 lookup = "BorrowLibraryResource"
@@ -141,6 +149,7 @@ cna_picture_get_height = { get = "object->value->getHeightProperty()" }
 # A point in time, not a duration: the ABI's 100-nanosecond tick counted from the Unix
 # epoch, which is exactly what the canonical clock's own epoch already is.
 cna_picture_get_date_unix_ticks = { get = "std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(object->value->getDateProperty().time_since_epoch()).count()" }
+cna_picture_destroy = { release = true }
 
 [picture_album]
 lookup = "Borrow<PictureAlbum>"
@@ -155,6 +164,7 @@ cna_picture_album_get_is_disposed = { get = "object->value->getIsDisposedPropert
 cna_picture_album_get_hash_code = { get = "object->value->GetHashCode()" }
 cna_picture_album_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_picture_album_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_picture_album_destroy = { release = true }
 
 [picture_collection]
 lookup = "Borrow<PictureCollection>"
@@ -166,6 +176,7 @@ cna_picture_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_picture_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_picture_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_picture_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_picture_collection_destroy = { release = true }
 
 [picture_album_collection]
 lookup = "Borrow<PictureAlbumCollection>"
@@ -177,21 +188,14 @@ cna_picture_album_collection_get_count = { get = "object->value->getCountPropert
 cna_picture_album_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_picture_album_collection_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_picture_album_collection_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_picture_album_collection_destroy = { release = true }
 
 [calls]
 [calls.routes]
-cna_album_destroy = { result = "ReleaseHandle<Album>(album, \"The album handle could not be released.\")" }
 cna_album_collection_get_at = { result = "CollectionElementAt<AlbumCollection, Album>(collection, index, out_album)" }
-cna_album_collection_destroy = { result = "ReleaseHandle<AlbumCollection>(collection, \"The album collection handle could not be released.\")" }
-cna_artist_destroy = { result = "ReleaseHandle<Artist>(artist, \"The artist handle could not be released.\")" }
 cna_artist_collection_get_at = { result = "CollectionElementAt<ArtistCollection, Artist>(collection, index, out_artist)" }
-cna_artist_collection_destroy = { result = "ReleaseHandle<ArtistCollection>(collection, \"The artist collection handle could not be released.\")" }
-cna_genre_destroy = { result = "ReleaseHandle<Genre>(genre, \"The genre handle could not be released.\")" }
 cna_genre_collection_get_at = { result = "CollectionElementAt<GenreCollection, Genre>(collection, index, out_genre)" }
-cna_genre_collection_destroy = { result = "ReleaseHandle<GenreCollection>(collection, \"The genre collection handle could not be released.\")" }
-cna_playlist_destroy = { result = "ReleaseHandle<Playlist>(playlist, \"The playlist handle could not be released.\")" }
 cna_playlist_collection_get_at = { result = "CollectionElementAt<PlaylistCollection, Playlist>(collection, index, out_playlist)" }
-cna_playlist_collection_destroy = { result = "ReleaseHandle<PlaylistCollection>(collection, \"The playlist collection handle could not be released.\")" }
 cna_media_library_get_songs = { result = "LibraryCollection<SongCollection>(library, out_songs, [](const MediaLibrary& value) { return value.getSongsProperty(); }, \"The song collection output is null.\")" }
 cna_media_library_get_albums = { result = "LibraryCollection<AlbumCollection>(library, out_albums, [](const MediaLibrary& value) { return value.getAlbumsProperty(); }, \"The album collection output is null.\")" }
 cna_media_library_get_artists = { result = "LibraryCollection<ArtistCollection>(library, out_artists, [](const MediaLibrary& value) { return value.getArtistsProperty(); }, \"The artist collection output is null.\")" }
@@ -202,12 +206,8 @@ cna_album_get_genre = { result = "OptionalChild<Album, Genre>(album, out_genre, 
 cna_song_get_album = { result = "OptionalChild<Song, Album>(song, out_album, out_available, [](const Song& value) { return value.getAlbumProperty(); })" }
 cna_song_get_artist = { result = "OptionalChild<Song, Artist>(song, out_artist, out_available, [](const Song& value) { return value.getArtistProperty(); })" }
 cna_song_get_genre = { result = "OptionalChild<Song, Genre>(song, out_genre, out_available, [](const Song& value) { return value.getGenreProperty(); })" }
-cna_picture_destroy = { result = "ReleaseHandle<Picture>(picture, \"The picture picture could not be released.\")" }
-cna_picture_album_destroy = { result = "ReleaseHandle<PictureAlbum>(album, \"The picture album album could not be released.\")" }
 cna_picture_collection_get_at = { result = "CollectionElementAt<PictureCollection, Picture>(collection, index, out_picture)" }
-cna_picture_collection_destroy = { result = "ReleaseHandle<PictureCollection>(collection, \"The collection handle could not be released.\")" }
 cna_picture_album_collection_get_at = { result = "CollectionElementAt<PictureAlbumCollection, PictureAlbum>(collection, index, out_album)" }
-cna_picture_album_collection_destroy = { result = "ReleaseHandle<PictureAlbumCollection>(collection, \"The collection handle could not be released.\")" }
 cna_picture_get_album = { result = "OptionalChild<Picture, PictureAlbum>(picture, out_album, out_available, [](const Picture& value) { return value.getAlbumProperty(); })" }
 cna_picture_album_get_parent = { result = "OptionalChild<PictureAlbum, PictureAlbum>(album, out_parent, out_available, [](const PictureAlbum& value) { return value.getParentProperty(); })" }
 cna_media_library_get_pictures = { result = "LibraryCollection<PictureCollection>(library, out_pictures, [](const MediaLibrary& value) { return value.getPicturesProperty(); }, \"The picture collection output is null.\")" }

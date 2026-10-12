@@ -28,7 +28,6 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -39,6 +38,7 @@ using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
@@ -318,25 +318,6 @@ CNA_Result cna_network_gamer_get_session(
     });
 }
 
-CNA_Result cna_network_gamer_destroy(const CNA_NetworkGamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkGamerResource> gamer;
-        if (const CNA_Result result = GetGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(gamerHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned NetworkGamer handle could not be released.");
-    });
-}
-
 CNA_Result cna_network_machine_create(CNA_NetworkMachineHandle* const outMachine)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -416,14 +397,7 @@ CNA_Result cna_network_machine_destroy(const CNA_NetworkMachineHandle machineHan
             return InvalidState(
                 "Every gamer view taken from this machine must be released first.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(machineHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned NetworkMachine handle could not be released.");
+        return ReleaseHandle(machineHandle);
     });
 }
 

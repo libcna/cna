@@ -315,43 +315,6 @@ CNA_Result cna_curve_key_collection_get(
     });
 }
 
-CNA_Result cna_curve_key_collection_set(
-    const CNA_CurveKeyCollectionHandle collectionHandle,
-    const int32_t index,
-    const CNA_CurveKey key)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->setItemProperty(index, ToNative(key));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_curve_key_collection_add(
-    const CNA_CurveKeyCollectionHandle collectionHandle,
-    const CNA_CurveKey key)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->Add(ToNative(key));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_curve_key_collection_clone(
     const CNA_CurveKeyCollectionHandle collectionHandle,
     CNA_CurveKeyCollectionHandle* const outCollection)
@@ -431,29 +394,6 @@ CNA_Result cna_curve_key_collection_copy_to(
             destination[start + index] = ToC(
                 collection->getItemProperty(static_cast<int32_t>(index)));
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_curve_key_collection_index_of(
-    const CNA_CurveKeyCollectionHandle collectionHandle,
-    const CNA_CurveKey key,
-    int32_t* const outIndex)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outIndex == nullptr) {
-            return InvalidArgument("The index output is null.");
-        }
-        if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const int32_t result = collection->IndexOf(ToNative(key));
-        *outIndex = result;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -555,25 +495,6 @@ CNA_Result cna_curve_get_pre_loop(
     });
 }
 
-CNA_Result cna_curve_set_pre_loop(
-    const CNA_CurveHandle curveHandle,
-    const CNA_CurveLoopType loopType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateLoopType(loopType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        curve->setPreLoopProperty(static_cast<CurveLoopType>(loopType));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_curve_get_post_loop(
     const CNA_CurveHandle curveHandle,
     CNA_CurveLoopType* const outLoopType)
@@ -590,25 +511,6 @@ CNA_Result cna_curve_get_post_loop(
         const CNA_CurveLoopType result =
             static_cast<CNA_CurveLoopType>(curve->getPostLoopProperty());
         *outLoopType = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_curve_set_post_loop(
-    const CNA_CurveHandle curveHandle,
-    const CNA_CurveLoopType loopType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateLoopType(loopType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        curve->setPostLoopProperty(static_cast<CurveLoopType>(loopType));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -634,25 +536,6 @@ CNA_Result cna_curve_clone(
     });
 }
 
-CNA_Result cna_curve_compute_tangents(
-    const CNA_CurveHandle curveHandle,
-    const CNA_CurveTangent tangentType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateTangent(tangentType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        curve->ComputeTangents(static_cast<CurveTangent>(tangentType));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_curve_compute_tangents_in_out(
     const CNA_CurveHandle curveHandle,
     const CNA_CurveTangent tangentInType,
@@ -674,26 +557,6 @@ CNA_Result cna_curve_compute_tangents_in_out(
         curve->ComputeTangents(
             static_cast<CurveTangent>(tangentInType),
             static_cast<CurveTangent>(tangentOutType));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_curve_compute_tangent(
-    const CNA_CurveHandle curveHandle,
-    const int32_t keyIndex,
-    const CNA_CurveTangent tangentType)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateTangent(tangentType);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Curve> curve;
-        if (const CNA_Result result = GetCurve(curveHandle, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        curve->ComputeTangent(keyIndex, static_cast<CurveTangent>(tangentType));
         return CNA_RESULT_SUCCESS;
     });
 }

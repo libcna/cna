@@ -1666,24 +1666,6 @@ CNA_Result cna_model_bone_create(
     });
 }
 
-CNA_Result cna_model_bone_destroy(const CNA_ModelBoneHandle boneHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BoneResource> bone;
-        if (const CNA_Result result = GetBone(boneHandle, &bone);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(boneHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelBone handle could not be released.");
-    });
-}
-
 CNA_Result cna_model_bone_get_parent(
     const CNA_ModelBoneHandle boneHandle,
     CNA_Bool* const outHasParent,
@@ -1740,25 +1722,6 @@ CNA_Result cna_model_bone_add_child(
         bone->node->children.push_back(child->node);
         child->node->parent = bone->node;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_bone_collection_destroy(
-    const CNA_ModelBoneCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BoneCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelBoneCollection handle could not be released.");
     });
 }
 
@@ -1872,24 +1835,6 @@ CNA_Result GetOwnedModelMeshPartValue(
 }
 
 } // namespace CNA::C::Detail
-
-CNA_Result cna_model_mesh_part_destroy(const CNA_ModelMeshPartHandle partHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(partHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelMeshPart handle could not be released.");
-    });
-}
 
 CNA_Result cna_model_mesh_part_set_num_vertices(
     const CNA_ModelMeshPartHandle partHandle,
@@ -2067,25 +2012,6 @@ CNA_Result cna_model_mesh_part_collection_create(
     });
 }
 
-CNA_Result cna_model_mesh_part_collection_destroy(
-    const CNA_ModelMeshPartCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<PartCollectionResource> collection;
-        if (const CNA_Result result = GetPartCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelMeshPartCollection handle could not be released.");
-    });
-}
-
 CNA_Result cna_model_mesh_part_collection_get_at(
     const CNA_ModelMeshPartCollectionHandle collectionHandle,
     const uint64_t index,
@@ -2132,24 +2058,6 @@ CNA_Result cna_model_mesh_create_named(
         }
         return CreateMesh(
             graphicsDevice, copiedName, true, parts, partCount, outMesh);
-    });
-}
-
-CNA_Result cna_model_mesh_destroy(const CNA_ModelMeshHandle meshHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(meshHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelMesh handle could not be released.");
     });
 }
 
@@ -2283,25 +2191,6 @@ CNA_Result cna_model_mesh_collection_create(
     });
 }
 
-CNA_Result cna_model_mesh_collection_destroy(
-    const CNA_ModelMeshCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshCollectionResource> collection;
-        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelMeshCollection handle could not be released.");
-    });
-}
-
 CNA_Result cna_model_mesh_collection_get_at(
     const CNA_ModelMeshCollectionHandle collectionHandle,
     const uint64_t index,
@@ -2364,25 +2253,6 @@ CNA_Result cna_model_mesh_collection_find(
         }
         *outFound = CNA_TRUE;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_effect_collection_destroy(
-    const CNA_ModelEffectCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectCollectionResource> collection;
-        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned ModelEffectCollection handle could not be released.");
     });
 }
 
@@ -3020,24 +2890,6 @@ CNA_Result cna_morph_target_data_ext_create(
     });
 }
 
-CNA_Result cna_morph_target_data_ext_destroy(
-    const CNA_MorphTargetDataEXTHandle dataHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(dataHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned MorphTargetDataEXT handle could not be released.");
-    });
-}
-
 CNA_Result cna_morph_target_data_ext_copy_type_name(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     char* const destination,
@@ -3527,24 +3379,6 @@ CNA_Result cna_skinned_model_ext_create(
             resource->value->Clips.emplace(std::move(name), std::move(clip));
         }
         return CreateSkinnedModelHandle(std::move(resource), outModel);
-    });
-}
-
-CNA_Result cna_skinned_model_ext_destroy(
-    const CNA_SkinnedModelEXTHandle modelHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned SkinnedModelEXT handle could not be released.");
     });
 }
 
@@ -4175,23 +4009,6 @@ CNA_Result cna_skinning_data_create(
     });
 }
 
-CNA_Result cna_skinning_data_destroy(const CNA_SkinningDataHandle dataHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(dataHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned SkinningData handle could not be released.");
-    });
-}
-
 CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
     const CNA_SkinningDataHandle dataHandle,
     const uint64_t clipIndex,
@@ -4341,24 +4158,6 @@ CNA_Result cna_animation_player_create(
         resource->data = std::move(data);
         resource->value = std::make_shared<AnimationPlayer>(*resource->data->value);
         return CreateAnimationPlayerHandle(std::move(resource), outPlayer);
-    });
-}
-
-CNA_Result cna_animation_player_destroy(
-    const CNA_AnimationPlayerHandle playerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AnimationPlayerResource> player;
-        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(playerHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The owned AnimationPlayer handle could not be released.");
     });
 }
 
@@ -5063,23 +4862,6 @@ CNA_Result cna_model_animations_ext_create(
         }
         return GetRuntimeHandles().Create(
             ObjectKind::ModelAnimationsEXT, std::move(resource), outAnimations);
-    });
-}
-
-CNA_Result cna_model_animations_ext_destroy(const CNA_ModelAnimationsEXTHandle handle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelAnimationsResource> animations;
-        if (const CNA_Result result = GetModelAnimations(handle, &animations);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result result = GetRuntimeHandles().Release(handle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
-                result, ErrorCategoryForResult(result),
-                "The ModelAnimationsEXT handle could not be released.");
     });
 }
 

@@ -242,6 +242,19 @@ CNA_Result cna_content_type_reader_supports_version(
     });
 }
 
+CNA_Result cna_content_type_reader_destroy(
+    const CNA_ContentTypeReaderHandle type_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ContentTypeReaderResource> object{};
+        if (const CNA_Result routeResult = GetTypeReader(type_reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(type_reader);
+    });
+}
+
 CNA_Result cna_object_dictionary_ext_get_runtime_type_name_size(
     const CNA_ObjectDictionaryHandle dictionary,
     uint64_t* const out_byte_count)
@@ -432,5 +445,19 @@ CNA_Result cna_object_dictionary_ext_get_type_name_size(
         }
         *out_byte_count = static_cast<uint64_t>(std::strlen(object->type().name()));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_unregister(
+    const CNA_Handle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ForeignReaderRegistration> object{};
+        if (const CNA_Result routeResult = GetForeignRegistration(registration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        static_cast<void>(ContentTypeReaderManager::RemoveTypeCreatorEXT(object->canonicalName));
+        return CNA::C::Detail::ReleaseHandle(registration);
     });
 }

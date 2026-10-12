@@ -1431,54 +1431,6 @@ CNA_Result cna_cnb_document_get_external_reference(
     });
 }
 
-CNA_Result cna_cnb_document_get_external_reference_name_size(
-    const CNA_CnbDocumentHandle documentHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ExternalReferences().size(),
-                "The external-reference index is outside the table.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            document->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName,
-            outByteCount);
-    });
-}
-
-CNA_Result cna_cnb_document_copy_external_reference_name(
-    const CNA_CnbDocumentHandle documentHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ExternalReferences().size(),
-                "The external-reference index is outside the table.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            document->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName,
-            destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_cnb_document_get_limits(
     const CNA_CnbDocumentHandle documentHandle,
     CNA_CnbReadLimits* const outLimits)
@@ -2143,58 +2095,6 @@ CNA_Result cna_cnb_texture_data_add_representation(
     });
 }
 
-CNA_Result cna_cnb_texture_data_get_representation_format(
-    const CNA_CnbTextureDataHandle textureHandle,
-    const uint64_t representation,
-    CNA_CnbTextureFormat* const outFormat)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outFormat == nullptr) {
-            return InvalidArgument("The representation-format output is null.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                representation, texture->value->representations.size(),
-                "The representation index is outside this texture's list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outFormat = static_cast<CNA_CnbTextureFormat>(
-            texture->value->representations[static_cast<std::size_t>(representation)].format);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_texture_data_get_level_count(
-    const CNA_CnbTextureDataHandle textureHandle,
-    const uint64_t representation,
-    uint64_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The level-count output is null.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                representation, texture->value->representations.size(),
-                "The representation index is outside this texture's list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = static_cast<uint64_t>(
-            texture->value->representations[static_cast<std::size_t>(representation)].levels.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_texture_data_set_level(
     const CNA_CnbTextureDataHandle textureHandle,
     const uint64_t representation,
@@ -2504,50 +2404,6 @@ CNA_Result cna_cnb_model_get_bone(
         outBone->reserved = 0U;
         std::memcpy(outBone->transform, bone.transform.data(), bone.transform.size() * sizeof(float));
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_get_bone_name_size(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->bones.size(), "The bone index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(model->value->bones[static_cast<std::size_t>(index)].name, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_copy_bone_name(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->bones.size(), "The bone index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            model->value->bones[static_cast<std::size_t>(index)].name,
-            destination, capacity, outBytes);
     });
 }
 
@@ -2917,61 +2773,6 @@ CNA_Result cna_cnb_model_set_material_texture(
             return result;
         }
         *name = std::move(assetText);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_get_material_texture_coordinate_set(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t part,
-    const uint64_t slot,
-    uint8_t* const outSet)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSet == nullptr) {
-            return InvalidArgument("The coordinate-set output is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSet = target->material.textureCoordinateSets[static_cast<std::size_t>(slot)];
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_set_material_texture_coordinate_set(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t part,
-    const uint64_t slot,
-    const uint8_t coordinateSet)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        target->material.textureCoordinateSets[static_cast<std::size_t>(slot)] = coordinateSet;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3527,50 +3328,6 @@ CNA_Result cna_cnb_model_get_mesh(
     });
 }
 
-CNA_Result cna_cnb_model_get_mesh_name_size(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(model->value->meshes[static_cast<std::size_t>(index)].name, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_copy_mesh_name(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            model->value->meshes[static_cast<std::size_t>(index)].name,
-            destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_model_copy_mesh_part_indices(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
@@ -3858,51 +3615,6 @@ CNA_Result cna_cnb_model_add_animation(
     });
 }
 
-CNA_Result cna_cnb_model_get_animation_name_size(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->animations.size(), "The animation index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            model->value->animations[static_cast<std::size_t>(index)].name, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_copy_animation_name(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->animations.size(), "The animation index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            model->value->animations[static_cast<std::size_t>(index)].name,
-            destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_model_get_animation(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
@@ -4156,100 +3868,6 @@ CNA_Result cna_cnb_model_from_cnj_take_model(
         }
         compiled->modelTaken = true;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_size(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->absorbedFiles.size(),
-                "The absorbed-file index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            compiled->value->absorbedFiles[static_cast<std::size_t>(index)], outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_from_cnj_copy_absorbed_file(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->absorbedFiles.size(),
-                "The absorbed-file index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            compiled->value->absorbedFiles[static_cast<std::size_t>(index)],
-            destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_from_cnj_get_external_reference_size(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->externalReferences.size(),
-                "The external-reference index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            compiled->value->externalReferences[static_cast<std::size_t>(index)], outBytes);
-    });
-}
-
-CNA_Result cna_cnb_model_from_cnj_copy_external_reference(
-    const CNA_CnbModelFromCnjHandle resultHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->externalReferences.size(),
-                "The external-reference index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            compiled->value->externalReferences[static_cast<std::size_t>(index)],
-            destination, capacity, outBytes);
     });
 }
 
@@ -5155,100 +4773,6 @@ CNA_Result cna_cnb_cnj_result_copy_bytes(
             return InvalidArgument("The compiled-byte output is invalid.");
         }
         return CopyBytes(compiled->value->bytes, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_get_absorbed_file_size(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->absorbedFiles.size(),
-                "The absorbed-file index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            compiled->value->absorbedFiles[static_cast<std::size_t>(index)], outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_copy_absorbed_file(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->absorbedFiles.size(),
-                "The absorbed-file index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            compiled->value->absorbedFiles[static_cast<std::size_t>(index)],
-            destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_get_external_reference_size(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    const uint64_t index,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->externalReferences.size(),
-                "The external-reference index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(
-            compiled->value->externalReferences[static_cast<std::size_t>(index)], outBytes);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_copy_external_reference(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, compiled->value->externalReferences.size(),
-                "The external-reference index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            compiled->value->externalReferences[static_cast<std::size_t>(index)],
-            destination, capacity, outBytes);
     });
 }
 

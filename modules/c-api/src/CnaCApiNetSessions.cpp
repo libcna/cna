@@ -45,7 +45,6 @@ namespace {
 using CNA::C::Detail::BorrowNetworkGamer;
 using CNA::C::Detail::BorrowNetworkSessionProperties;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CreateBorrowedNetworkGamer;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
 using CNA::C::Detail::EmbeddedNul;
@@ -58,7 +57,7 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
-using CNA::C::Detail::StructureVersion;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
@@ -260,26 +259,6 @@ CNA_Result cna_available_network_session_get_quality_of_service(
     });
 }
 
-CNA_Result cna_available_network_session_destroy(
-    const CNA_AvailableNetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvailableSessionResource> session;
-        if (const CNA_Result result = GetSession(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(sessionHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned AvailableNetworkSession handle could not be released.");
-    });
-}
-
 CNA_Result cna_available_network_session_collection_create_ext(
     const CNA_AvailableNetworkSessionHandle* const sessions,
     const uint64_t count,
@@ -350,27 +329,6 @@ CNA_Result cna_available_network_session_collection_copy_session(
                 "The discovered-session index is outside the collection.");
         }
         return CreateSessionHandle(collection->value->getItem(index), outSession);
-    });
-}
-
-CNA_Result cna_available_network_session_collection_destroy(
-    const CNA_AvailableNetworkSessionCollectionHandle collectionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvailableSessionCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        collection->value->Dispose();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(collectionHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned AvailableNetworkSessionCollection handle could not be released.");
     });
 }
 
@@ -846,14 +804,7 @@ CNA_Result cna_network_session_destroy(const CNA_NetworkSessionHandle sessionHan
             return InvalidState(
                 "Every gamer view taken from this session must be released first.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(sessionHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned NetworkSession handle could not be released.");
+        return ReleaseHandle(sessionHandle);
     });
 }
 
@@ -1362,14 +1313,7 @@ CNA_Result cna_network_session_unsubscribe(
             return getResult;
         }
         registration->Release();
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The session event registration handle could not be released.");
+        return ReleaseHandle(registrationHandle);
     });
 }
 
@@ -2095,31 +2039,6 @@ CNA_Result cna_local_network_gamer_send_data_range_to(
             static_cast<int>(length),
             static_cast<SendDataOptions>(options),
             recipient);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_local_network_gamer_send_packet_writer(
-    const CNA_NetworkGamerHandle gamerHandle,
-    const CNA_PacketWriterHandle writerHandle,
-    const CNA_SendDataOptions options)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateSendOptions(options);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        LocalNetworkGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::Net::PacketWriter* writer = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::BorrowPacketWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->SendData(*writer, static_cast<SendDataOptions>(options));
         return CNA_RESULT_SUCCESS;
     });
 }

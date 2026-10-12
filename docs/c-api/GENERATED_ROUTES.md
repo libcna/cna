@@ -120,6 +120,13 @@ success is the route's answer:
 cna_keyboard_state_equals = { value = "NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))", validate = ["ValidateKeyboardState(left)", "ValidateKeyboardState(right)"] }
 ```
 
+A check that reads the looked-up object -- an index against its count -- is a `require`, the
+same kind of call made after the lookup:
+
+```toml
+cna_cnb_model_get_bone_name_size = { size = "object->value->bones[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->bones.size(), "The bone index is out of range.")' }
+```
+
 A structure the route reads through a const pointer is accepted only when an `invalid_if` or a
 `validate` names it, because that check is what refuses a null or malformed one
 (`invalid_if = "!IsPresentationParameters(source)"`); the contract test checks that a null one
@@ -131,7 +138,7 @@ null destination with a capacity; for `versioned`, a structure of the wrong size
 `result`, every non-const `out_*` pointer, and a handle
 output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
 `invalid_if` conditions and `validate` calls, then text inputs, then the lookup (and `other`'s),
-whose own result is returned when it refuses. So a call with two faults always reports the null output.
+whose own result is returned when it refuses, then the `require` calls. So a call with two faults always reports the null output.
 
 A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
 a child handle, filling an info structure, copying an array — and the spec line only calls it:
@@ -184,8 +191,8 @@ unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing 
   which `result` routes call (`OWNERSHIP.md` has the ownership rules they implement);
 - routes with more lookups than an object and an `other`, or with several statements of work
   after them;
-- routes that check an argument against the object (an index against its count, a state the
-  object is in), or need an output that may be null;
+- routes whose checks against the object are interleaved with the work, or that need an output
+  that may be null;
 - routes whose text is a path, a name to resolve, or a key the lookup itself takes: they follow
   the rules of what the text names (`RelativePath`, `ReadImportPath`), not only the UTF-8 rule.
 

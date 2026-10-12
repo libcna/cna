@@ -54,6 +54,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReleaseStorageStream;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
@@ -510,14 +511,7 @@ CNA_Result cna_content_reader_destroy(const CNA_ContentReaderHandle readerHandle
                 "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is "
                 "released when the callback that received it returns.");
         }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(readerHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned ContentReader handle could not be released.");
+        return ReleaseHandle(readerHandle);
     });
 }
 
@@ -695,27 +689,6 @@ CNA_Result cna_content_type_reader_manager_register(
     });
 }
 
-CNA_Result cna_content_type_reader_manager_unregister(const CNA_Handle registrationHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ForeignReaderRegistration> registration;
-        if (const CNA_Result result = GetForeignRegistration(registrationHandle, &registration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        static_cast<void>(
-            ContentTypeReaderManager::RemoveTypeCreatorEXT(registration->canonicalName));
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The content type-reader registration handle could not be released.");
-    });
-}
-
 CNA_Result cna_content_type_reader_manager_create_reader(
     const CNA_StringView canonicalName,
     CNA_ContentTypeReaderHandle* const outTypeReader)
@@ -777,25 +750,6 @@ CNA_Result cna_content_type_reader_read_untyped(
         const std::any value = typeReader->value->ReadUntyped(*reader->value, std::any{});
         *outHasValue = ToCBool(value.has_value());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_type_reader_destroy(const CNA_ContentTypeReaderHandle typeReaderHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Result releaseResult = GetRuntimeHandles().Release(typeReaderHandle);
-        if (releaseResult == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            releaseResult,
-            ErrorCategoryForResult(releaseResult),
-            "The owned content type-reader handle could not be released.");
     });
 }
 

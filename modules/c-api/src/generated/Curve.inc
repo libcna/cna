@@ -99,6 +99,71 @@ CNA_Result cna_curve_key_collection_get_count(
     });
 }
 
+CNA_Result cna_curve_key_collection_set(
+    const CNA_CurveKeyCollectionHandle collection,
+    const int32_t index,
+    const CNA_CurveKey c_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateKey(c_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto key = CNA::C::Detail::ToNative(c_key);
+        object->setItemProperty(index, key);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_add(
+    const CNA_CurveKeyCollectionHandle collection,
+    const CNA_CurveKey c_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateKey(c_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto key = CNA::C::Detail::ToNative(c_key);
+        object->Add(key);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_index_of(
+    const CNA_CurveKeyCollectionHandle collection,
+    const CNA_CurveKey c_key,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_index_of: out_index is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto key = CNA::C::Detail::ToNative(c_key);
+        *out_index = static_cast<int32_t>(object->IndexOf(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_curve_destroy(
     const CNA_CurveHandle curve)
 {
@@ -127,6 +192,83 @@ CNA_Result cna_curve_evaluate(
             return routeResult;
         }
         *out_value = static_cast<float>(object->Evaluate(position));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_set_pre_loop(
+    const CNA_CurveHandle curve,
+    const CNA_CurveLoopType loop_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateLoopType(loop_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setPreLoopProperty(static_cast<CurveLoopType>(loop_type));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_set_post_loop(
+    const CNA_CurveHandle curve,
+    const CNA_CurveLoopType loop_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateLoopType(loop_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setPostLoopProperty(static_cast<CurveLoopType>(loop_type));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangents(
+    const CNA_CurveHandle curve,
+    const CNA_CurveTangent tangent_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateTangent(tangent_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->ComputeTangents(static_cast<CurveTangent>(tangent_type));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangent(
+    const CNA_CurveHandle curve,
+    const int32_t key_index,
+    const CNA_CurveTangent tangent_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateTangent(tangent_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->ComputeTangent(key_index, static_cast<CurveTangent>(tangent_type));
         return CNA_RESULT_SUCCESS;
     });
 }

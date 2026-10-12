@@ -297,6 +297,19 @@ CNA_Result cna_network_gamer_set_roundtrip_ticks_ext(
     });
 }
 
+CNA_Result cna_network_gamer_destroy(
+    const CNA_NetworkGamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkGamerResource> object{};
+        if (const CNA_Result routeResult = GetGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(gamer);
+    });
+}
+
 CNA_Result cna_network_machine_get_gamer_count(
     const CNA_NetworkMachineHandle machine,
     int32_t* const out_count)

@@ -17,6 +17,7 @@ cna_available_network_session_get_connect_port_ext = { get = "object->value->Get
 cna_available_network_session_get_session_type_ext = { get = "object->value->GetSessionType()" }
 cna_available_network_session_copy_session_properties = { result = "CreateOwnedNetworkSessionProperties(object->value->getSessionPropertiesProperty(), out_properties)" }
 cna_network_session_join = { result = "CreateSessionResourceHandle(NetworkSession::Join(object->value.get()), out_session)" }
+cna_available_network_session_destroy = { release = true }
 
 [collection]
 lookup = "GetCollection"
@@ -26,6 +27,7 @@ object = "std::shared_ptr<AvailableSessionCollectionResource>"
 cna_available_network_session_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_available_network_session_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_available_network_session_collection_dispose = { call = "object->value->Dispose()" }
+cna_available_network_session_collection_destroy = { release = "object->value->Dispose()" }
 
 [session_network_session]
 lookup = "GetSessionResource"
@@ -110,3 +112,11 @@ other = { lookup = "BorrowOptionalGamer", object = "NetworkGamer*" }
 
 [local_gamer_and_optional_gamer.routes]
 cna_local_network_gamer_enable_send_voice = { call = "object->EnableSendVoice(other, enable)" }
+
+[local_gamer_and_packet_writer]
+lookup = "BorrowLocalGamer"
+object = "LocalNetworkGamer*"
+other = { lookup = "CNA::C::Detail::BorrowPacketWriter", object = "Microsoft::Xna::Framework::Net::PacketWriter*" }
+
+[local_gamer_and_packet_writer.routes]
+cna_local_network_gamer_send_packet_writer = { call = "object->SendData(*other, static_cast<SendDataOptions>(options))", validate = "ValidateSendOptions(options)" }

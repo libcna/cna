@@ -80,13 +80,15 @@ before the lookup. A check that needs its own result code or message is a call i
 ``validate = "ValidateKey(key)"`` (or a list): any CNA_Result but success is returned as it is.
 An input structure passed by const pointer is accepted only when a condition or a validate call
 names it and so refuses an invalid one, null included (``!IsPresentationParameters(source)``);
-the contract test holds it to refusing null.
+the contract test holds it to refusing null. A check that reads the looked-up object -- an index
+against its count -- is ``require = "RequireIndex(index, object->value->bones.size(), ...)"``,
+the same kind of call made after the lookup.
 
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
 null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
 doing anything else, then validates CNA_Bool inputs, then its
-``invalid_if`` conditions and ``validate`` calls, then reads its text, and returns whatever the lookup returns when the
-handle is refused.
+``invalid_if`` conditions and ``validate`` calls, then reads its text, and returns whatever the
+lookup returns when the handle is refused; ``require`` calls come last, before the work.
 
 Usage::
 
@@ -229,7 +231,8 @@ class Route:
         if not isinstance(entry, dict) or len([k for k in entry if k in KINDS]) != 1:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
-        unknown = set(entry) - set(KINDS) - {"invalid_if", "validate", "versioned", "refuse_nul"}
+        unknown = set(entry) - set(KINDS) - {"invalid_if", "validate", "require", "versioned",
+                                             "refuse_nul"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         refusals = entry.get("invalid_if", [])
@@ -242,6 +245,11 @@ class Route:
         if not isinstance(self.validations, list) or not all(
                 isinstance(v, str) and v for v in self.validations):
             raise SpecError(f"{name}: validate takes a C++ call returning CNA_Result, or a list")
+        requirements = entry.get("require", [])
+        self.requirements = [requirements] if isinstance(requirements, str) else requirements
+        if not isinstance(self.requirements, list) or not all(
+                isinstance(r, str) and r for r in self.requirements):
+            raise SpecError(f"{name}: require takes a C++ call returning CNA_Result, or a list")
         self.refuse_nul = entry.get("refuse_nul", [])
         if not isinstance(self.refuse_nul, list) or not all(
                 isinstance(n, str) for n in self.refuse_nul):
@@ -263,6 +271,9 @@ class Route:
         self.has_lookup = "lookup" in group
         self.other: Param | None = None
         self._check_shape()
+        if self.requirements and not self.has_lookup:
+            raise SpecError(f"{name}: require reads the looked-up object; without a lookup, "
+                            "write validate")
         if (self.refusals or self.validations) and self.kind == "copy" and not self.has_lookup:
             raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if or validate")
         if self.versioned and self.kind not in ("value", "get"):
@@ -489,6 +500,8 @@ class Route:
         lines += self._text_reads(i)
         lines += self._lookup(i)
         lines += self._locals(i)
+        for requirement in self.requirements:
+            lines += returns_on_failure(requirement, i)
         if self.kind in ("value", "get"):
             lines += [f"{i}*{self.outputs[0].name} = {self._converted_result()};",
                       f"{i}return CNA_RESULT_SUCCESS;"]

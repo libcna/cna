@@ -9,6 +9,7 @@ object = "std::shared_ptr<VertexDeclaration>"
 cna_vertex_declaration_copy_type_name = { copy = "object->GetTypeName()" }
 cna_vertex_declaration_get_stride = { get = "object->getVertexStrideProperty()" }
 cna_vertex_declaration_get_type_name_byte_count = { size = "object->GetTypeName()" }
+cna_vertex_declaration_destroy = { release = "object->Dispose()" }
 
 [calls]
 [calls.routes]

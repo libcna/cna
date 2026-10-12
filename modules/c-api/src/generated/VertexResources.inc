@@ -64,6 +64,20 @@ CNA_Result cna_vertex_declaration_get_type_name_byte_count(
     });
 }
 
+CNA_Result cna_vertex_declaration_destroy(
+    const CNA_VertexDeclarationHandle declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Dispose();
+        return CNA::C::Detail::ReleaseHandle(declaration);
+    });
+}
+
 CNA_Result cna_vertex_declaration_create_empty(
     CNA_VertexDeclarationHandle* const out_declaration)
 {

@@ -32,6 +32,8 @@ cna_cnb_decode_sprite_font = { result = "CreateSpriteFont(Cnb::DecodeSpriteFontF
 cna_cnb_decode_sound_effect = { result = "CreateSoundEffect(Cnb::DecodeSoundEffectFromCnb(*object->value), out_sound)" }
 cna_cnb_decode_animation_clip = { result = "CreateAnimationClip(Cnb::DecodeAnimationClipFromCnb(*object->value), out_clip)" }
 cna_cnb_loader_registry_resolve_for_document = { result = "CreateLoader(CNA::Content::CnbLoaderRegistry::ResolveForDocument(*object->value), out_loader)" }
+cna_cnb_document_get_external_reference_name_size = { size = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
+cna_cnb_document_copy_external_reference_name = { copy = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
 
 [reader]
 lookup = "GetReader"
@@ -65,6 +67,12 @@ object = "std::shared_ptr<CnbModelResource>"
 [model.routes]
 cna_cnb_model_clear_skeleton = { call = "object->value->skeleton.reset()" }
 cna_cnb_model_destroy = { release = true }
+cna_cnb_model_get_bone_name_size = { size = "object->value->bones[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->bones.size(), "The bone index is out of range.")' }
+cna_cnb_model_copy_bone_name = { copy = "object->value->bones[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->bones.size(), "The bone index is out of range.")' }
+cna_cnb_model_get_mesh_name_size = { size = "object->value->meshes[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->meshes.size(), "The mesh index is out of range.")' }
+cna_cnb_model_copy_mesh_name = { copy = "object->value->meshes[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->meshes.size(), "The mesh index is out of range.")' }
+cna_cnb_model_get_animation_name_size = { size = "object->value->animations[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->animations.size(), "The animation index is out of range.")' }
+cna_cnb_model_copy_animation_name = { copy = "object->value->animations[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->animations.size(), "The animation index is out of range.")' }
 
 [compiled_cnj]
 lookup = "GetCompiledCnj"
@@ -77,6 +85,10 @@ cna_cnb_cnj_result_get_asset_type_id = { get = "object->value->assetTypeId" }
 cna_cnb_cnj_result_get_asset_type_name_size = { size = "object->value->assetTypeName" }
 cna_cnb_cnj_result_get_absorbed_file_count = { get = "object->value->absorbedFiles.size()" }
 cna_cnb_cnj_result_get_external_reference_count = { get = "object->value->externalReferences.size()" }
+cna_cnb_cnj_result_get_absorbed_file_size = { size = "object->value->absorbedFiles[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->absorbedFiles.size(), "The absorbed-file index is out of range.")' }
+cna_cnb_cnj_result_copy_absorbed_file = { copy = "object->value->absorbedFiles[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->absorbedFiles.size(), "The absorbed-file index is out of range.")' }
+cna_cnb_cnj_result_get_external_reference_size = { size = "object->value->externalReferences[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->externalReferences.size(), "The external-reference index is out of range.")' }
+cna_cnb_cnj_result_copy_external_reference = { copy = "object->value->externalReferences[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->externalReferences.size(), "The external-reference index is out of range.")' }
 
 [byte_writer]
 lookup = "GetByteWriter"
@@ -110,6 +122,8 @@ object = "std::shared_ptr<CnbTextureDataResource>"
 [texture_data.routes]
 cna_cnb_texture_data_destroy = { release = true }
 cna_cnb_texture_data_get_representation_count = { get = "object->value->representations.size()" }
+cna_cnb_texture_data_get_representation_format = { get = "object->value->representations[static_cast<std::size_t>(representation)].format", require = "RequireIndex(representation, object->value->representations.size(), \"The representation index is outside this texture's list.\")" }
+cna_cnb_texture_data_get_level_count = { get = "object->value->representations[static_cast<std::size_t>(representation)].levels.size()", require = "RequireIndex(representation, object->value->representations.size(), \"The representation index is outside this texture's list.\")" }
 
 [compile_result]
 lookup = "GetCompileResult"
@@ -119,6 +133,10 @@ object = "std::shared_ptr<CnbModelFromCnjResource>"
 cna_cnb_model_from_cnj_destroy = { release = true }
 cna_cnb_model_from_cnj_get_absorbed_file_count = { get = "object->value->absorbedFiles.size()" }
 cna_cnb_model_from_cnj_get_external_reference_count = { get = "object->value->externalReferences.size()" }
+cna_cnb_model_from_cnj_get_absorbed_file_size = { size = "object->value->absorbedFiles[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->absorbedFiles.size(), "The absorbed-file index is out of range.")' }
+cna_cnb_model_from_cnj_copy_absorbed_file = { copy = "object->value->absorbedFiles[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->absorbedFiles.size(), "The absorbed-file index is out of range.")' }
+cna_cnb_model_from_cnj_get_external_reference_size = { size = "object->value->externalReferences[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->externalReferences.size(), "The external-reference index is out of range.")' }
+cna_cnb_model_from_cnj_copy_external_reference = { copy = "object->value->externalReferences[static_cast<std::size_t>(index)]", require = 'RequireIndex(index, object->value->externalReferences.size(), "The external-reference index is out of range.")' }
 
 [sprite_font]
 lookup = "GetSpriteFont"
@@ -229,6 +247,8 @@ cna_cnb_model_copy_part_name = { copy = "object->name" }
 cna_cnb_model_get_part_external_effect_size = { size = "object->externalEffect" }
 cna_cnb_model_copy_part_external_effect = { copy = "object->externalEffect" }
 cna_cnb_model_clear_morph = { call = "object->morph.reset()" }
+cna_cnb_model_get_material_texture_coordinate_set = { get = "object->material.textureCoordinateSets[static_cast<std::size_t>(slot)]", validate = "RequireTextureSlot(slot)" }
+cna_cnb_model_set_material_texture_coordinate_set = { call = "object->material.textureCoordinateSets[static_cast<std::size_t>(slot)] = coordinate_set", validate = "RequireTextureSlot(slot)" }
 
 [model_morph]
 lookup = "GetModelMorph"

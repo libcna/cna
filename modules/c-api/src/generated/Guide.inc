@@ -305,6 +305,49 @@ CNA_Result cna_guide_show_game_invite_for_session(
     });
 }
 
+CNA_Result cna_guide_set_is_screen_saver_enabled(
+    const CNA_Bool c_is_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_is_enabled, "is_enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool is_enabled = CNA::C::Detail::FromCBool(c_is_enabled);
+        Guide::setIsScreenSaverEnabledProperty(is_enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_set_simulate_trial_mode(
+    const CNA_Bool c_simulate)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_simulate, "simulate");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool simulate = CNA::C::Detail::FromCBool(c_simulate);
+        Guide::setSimulateTrialModeProperty(simulate);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_guide_show_sign_in(
+    const int32_t pane_count,
+    const CNA_Bool c_online_only)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_online_only, "online_only");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool online_only = CNA::C::Detail::FromCBool(c_online_only);
+        Guide::ShowSignIn(static_cast<int>(pane_count), online_only);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_guide_show_friend_request(
     const CNA_PlayerIndex player,
     const CNA_GamerHandle gamer)
