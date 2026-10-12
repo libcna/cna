@@ -43,9 +43,18 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             "Media::Song::"
             "Audio::Microphone::"
             "Audio::DynamicSoundEffectInstance::"
-            # Platforms other than the build's own.
-            "CNA::Platform::Terminal::"
-            "CNA::Platform::Headless::")
+            # Networking: the Guide and profiles need no network session or ENet.
+            "Microsoft::Xna::Framework::Net::"
+            "^enet_")
+        # Platforms other than the build's own.
+        foreach(_platform IN ITEMS "SDL3:Sdl3" "HEADLESS:Headless" "TERMINAL:Terminal")
+            string(REPLACE ":" ";" _platform "${_platform}")
+            list(GET _platform 0 _platform_option)
+            list(GET _platform 1 _platform_namespace)
+            if(NOT CNA_PLATFORM STREQUAL _platform_option)
+                list(APPEND _cna_footprint_absent "CNA::Platform::${_platform_namespace}::")
+            endif()
+        endforeach()
         set(_cna_footprint_args)
         foreach(_pattern IN LISTS _cna_footprint_absent)
             list(APPEND _cna_footprint_args --forbid "${_pattern}")
@@ -88,5 +97,8 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         unset(_cna_footprint_present)
         unset(_cna_footprint_args)
         unset(_pattern)
+        unset(_platform)
+        unset(_platform_option)
+        unset(_platform_namespace)
     endif()
 endif()
