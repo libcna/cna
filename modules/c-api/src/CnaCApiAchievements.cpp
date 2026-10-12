@@ -22,6 +22,7 @@ namespace {
 using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CompleteAtOnce;
 using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
@@ -266,25 +267,6 @@ CNA_Result cna_achievement_collection_copy_to(
                 return result;
             }
             destination[static_cast<uint64_t>(index) + static_cast<uint64_t>(slot)] = published;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_begin_get_achievements(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_AchievementCollectionHandle* const outAchievements)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                cna_signed_in_gamer_get_achievements(gamerHandle, outAchievements);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
         }
         return CNA_RESULT_SUCCESS;
     });

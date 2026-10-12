@@ -46,6 +46,7 @@ using CNA::C::Detail::BorrowNetworkGamer;
 using CNA::C::Detail::BorrowNetworkSessionProperties;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateBorrowedNetworkGamer;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -138,17 +139,7 @@ struct NetworkSessionResource final {
 {
     const auto resource = std::make_shared<AvailableSessionResource>();
     resource->value = std::make_shared<AvailableNetworkSession>(std::move(value));
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::AvailableNetworkSession,
-        resource,
-        outSession);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvailableNetworkSession handle could not be created.");
+    return CreateHandle(ObjectKind::AvailableNetworkSession, resource, outSession);
 }
 
 } // namespace
@@ -294,17 +285,7 @@ CNA_Result cna_available_network_session_collection_create_ext(
         const auto resource = std::make_shared<AvailableSessionCollectionResource>();
         resource->value = std::make_shared<AvailableNetworkSessionCollection>(
             AvailableNetworkSessionCollection::CreateInternal(std::move(copied)));
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::AvailableNetworkSessionCollection,
-            resource,
-            outCollection);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned AvailableNetworkSessionCollection handle could not be created.");
+        return CreateHandle(ObjectKind::AvailableNetworkSessionCollection, resource, outCollection);
     });
 }
 
@@ -344,17 +325,7 @@ namespace {
     }
     const auto resource = std::make_shared<NetworkSessionResource>();
     resource->value = created;
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::NetworkSession,
-        resource,
-        outSession);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkSession handle could not be created.");
+    return CreateHandle(ObjectKind::NetworkSession, resource, outSession);
 }
 
 template<typename TCallable>
@@ -1330,17 +1301,7 @@ using SignedInGamerList = std::vector<Microsoft::Xna::Framework::GamerServices::
 {
     const auto resource = std::make_shared<AvailableSessionCollectionResource>();
     resource->value = std::make_shared<AvailableNetworkSessionCollection>(std::move(value));
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::AvailableNetworkSessionCollection,
-        resource,
-        outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned AvailableNetworkSessionCollection handle could not be created.");
+    return CreateHandle(ObjectKind::AvailableNetworkSessionCollection, resource, outCollection);
 }
 
 } // namespace

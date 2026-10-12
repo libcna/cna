@@ -368,28 +368,14 @@ MeshResource::~MeshResource()
 {
     const auto resource = std::make_shared<BoneResource>(
         BoneResource{std::move(node)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelBone, resource, outBone);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelBone handle could not be created.");
+    return CreateHandle(ObjectKind::ModelBone, resource, outBone);
 }
 
 [[nodiscard]] CNA_Result CreateCollectionHandle(
     std::shared_ptr<BoneCollectionResource> resource,
     CNA_ModelBoneCollectionHandle* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelBoneCollection, std::move(resource), outCollection);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelBoneCollection handle could not be created.");
+    return CreateHandle(ObjectKind::ModelBoneCollection, std::move(resource), outCollection);
 }
 
 [[nodiscard]] const std::vector<std::shared_ptr<BoneNode>>& CollectionNodes(
@@ -416,28 +402,14 @@ MeshResource::~MeshResource()
     std::shared_ptr<PartResource> part,
     CNA_ModelMeshPartHandle* const outPart)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelMeshPart, std::move(part), outPart);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelMeshPart handle could not be created.");
+    return CreateHandle(ObjectKind::ModelMeshPart, std::move(part), outPart);
 }
 
 [[nodiscard]] CNA_Result CreatePartCollectionHandle(
     std::shared_ptr<PartCollectionResource> collection,
     CNA_ModelMeshPartCollectionHandle* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelMeshPartCollection, std::move(collection), outCollection);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelMeshPartCollection handle could not be created.");
+    return CreateHandle(ObjectKind::ModelMeshPartCollection, std::move(collection), outCollection);
 }
 
 [[nodiscard]] CNA_Result GetMesh(
@@ -465,28 +437,14 @@ MeshResource::~MeshResource()
     std::shared_ptr<MeshResource> mesh,
     CNA_ModelMeshHandle* const outMesh)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelMesh, std::move(mesh), outMesh);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelMesh handle could not be created.");
+    return CreateHandle(ObjectKind::ModelMesh, std::move(mesh), outMesh);
 }
 
 [[nodiscard]] CNA_Result CreateMeshCollectionHandle(
     std::shared_ptr<MeshCollectionResource> collection,
     CNA_ModelMeshCollectionHandle* const outCollection)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelMeshCollection, std::move(collection), outCollection);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelMeshCollection handle could not be created.");
+    return CreateHandle(ObjectKind::ModelMeshCollection, std::move(collection), outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateEffectCollectionHandle(
@@ -495,14 +453,7 @@ MeshResource::~MeshResource()
 {
     const auto resource = std::make_shared<EffectCollectionResource>();
     resource->mesh = std::move(mesh);
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ModelEffectCollection, resource, outCollection);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ModelEffectCollection handle could not be created.");
+    return CreateHandle(ObjectKind::ModelEffectCollection, resource, outCollection);
 }
 
 [[nodiscard]] CNA_Result GetModel(
@@ -516,14 +467,7 @@ MeshResource::~MeshResource()
     std::shared_ptr<ModelResource> model,
     CNA_ModelHandle* const outModel)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::Model, std::move(model), outModel);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned Model handle could not be created.");
+    return CreateHandle(ObjectKind::Model, std::move(model), outModel);
 }
 
 [[nodiscard]] CNA_Result GetMorphData(
@@ -537,14 +481,7 @@ MeshResource::~MeshResource()
     std::shared_ptr<MorphDataResource> data,
     CNA_MorphTargetDataEXTHandle* const outData)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::MorphTargetDataEXT, std::move(data), outData);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned MorphTargetDataEXT handle could not be created.");
+    return CreateHandle(ObjectKind::MorphTargetDataEXT, std::move(data), outData);
 }
 
 [[nodiscard]] CNA_Result GetSkinnedModel(
@@ -558,14 +495,7 @@ MeshResource::~MeshResource()
     std::shared_ptr<SkinnedModelResource> model,
     CNA_SkinnedModelEXTHandle* const outModel)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::SkinnedModelEXT, std::move(model), outModel);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SkinnedModelEXT handle could not be created.");
+    return CreateHandle(ObjectKind::SkinnedModelEXT, std::move(model), outModel);
 }
 
 [[nodiscard]] CNA_Result GetSkinningData(
@@ -579,13 +509,7 @@ MeshResource::~MeshResource()
     std::shared_ptr<SkinningDataResource> data,
     CNA_SkinningDataHandle* const outData)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::SkinningData, std::move(data), outData);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result, ErrorCategoryForResult(result),
-            "The owned SkinningData handle could not be created.");
+    return CreateHandle(ObjectKind::SkinningData, std::move(data), outData);
 }
 
 [[nodiscard]] CNA_Result GetAnimationPlayer(
@@ -599,13 +523,7 @@ MeshResource::~MeshResource()
     std::shared_ptr<AnimationPlayerResource> player,
     CNA_AnimationPlayerHandle* const outPlayer)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::AnimationPlayer, std::move(player), outPlayer);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result, ErrorCategoryForResult(result),
-            "The owned AnimationPlayer handle could not be created.");
+    return CreateHandle(ObjectKind::AnimationPlayer, std::move(player), outPlayer);
 }
 
 void RebuildSkinnedParts(SkinnedModelResource& model)

@@ -639,3 +639,60 @@ CNA_Result cna_gamer_copy_partner_token(
         return CNA::C::Detail::CopyText(Gamer::GetPartnerToken(audience_uri), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_gamer_begin_get_profile(
+    const CNA_GamerHandle gamer,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_GamerProfileHandle* const out_profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_profile == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_begin_get_profile: out_profile is null.");
+        }
+        *out_profile = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_gamer_get_profile(gamer, out_profile), callback, context);
+    });
+}
+
+CNA_Result cna_gamer_begin_get_from_gamertag(
+    const CNA_StringView gamertag,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_GamerHandle* const out_gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gamer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_begin_get_from_gamertag: out_gamer is null.");
+        }
+        *out_gamer = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_gamer_get_from_gamertag(gamertag, out_gamer), callback, context);
+    });
+}
+
+CNA_Result cna_gamer_begin_get_partner_token(
+    const CNA_StringView audience_uri,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_begin_get_partner_token: out_bytes is null.");
+        }
+        return CompleteAtOnce(cna_gamer_copy_partner_token(audience_uri, destination, capacity, out_bytes), callback, context);
+    });
+}
+
+CNA_Result cna_signed_in_gamer_begin_award_achievement(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_StringView achievement_key,
+    const CNA_GamerAsyncCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CompleteAtOnce(cna_signed_in_gamer_award_achievement(gamer, achievement_key), callback, context);
+    });
+}

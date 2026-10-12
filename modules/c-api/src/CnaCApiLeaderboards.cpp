@@ -25,6 +25,7 @@ namespace {
 using CNA::C::Detail::BorrowAnyGamer;
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CompleteAtOnce;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedPropertyDictionary;
 using CNA::C::Detail::InvalidArgument;
@@ -243,79 +244,6 @@ CNA_Result cna_leaderboard_reader_read_from_gamers(
     });
 }
 
-CNA_Result cna_leaderboard_reader_begin_read(
-    const CNA_LeaderboardIdentity* const identity,
-    const int32_t pageStart,
-    const int32_t pageSize,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_LeaderboardReaderHandle* const outReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                cna_leaderboard_reader_read(identity, pageStart, pageSize, outReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_reader_begin_read_from_pivot(
-    const CNA_LeaderboardIdentity* const identity,
-    const CNA_GamerHandle pivotGamerHandle,
-    const int32_t pageSize,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_LeaderboardReaderHandle* const outReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_leaderboard_reader_read_from_pivot(
-                identity,
-                pivotGamerHandle,
-                pageSize,
-                outReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_reader_begin_read_from_gamers(
-    const CNA_LeaderboardIdentity* const identity,
-    const CNA_GamerHandle* const gamers,
-    const uint64_t gamerCount,
-    const CNA_GamerHandle pivotGamerHandle,
-    const int32_t pageSize,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_LeaderboardReaderHandle* const outReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_leaderboard_reader_read_from_gamers(
-                identity,
-                gamers,
-                gamerCount,
-                pivotGamerHandle,
-                pageSize,
-                outReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_leaderboard_reader_get_entry_at(
     const CNA_LeaderboardReaderHandle readerHandle,
     const int32_t index,
@@ -338,40 +266,6 @@ CNA_Result cna_leaderboard_reader_get_entry_at(
             return InvalidArgument("The entry index is outside the reader's page.");
         }
         return PublishOwnedEntry(entries[static_cast<int>(index)], outEntry, reader->value);
-    });
-}
-
-CNA_Result cna_leaderboard_reader_begin_page_down(
-    const CNA_LeaderboardReaderHandle readerHandle,
-    const CNA_GamerAsyncCallback callback,
-    void* const context)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_leaderboard_reader_page_down(readerHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_leaderboard_reader_begin_page_up(
-    const CNA_LeaderboardReaderHandle readerHandle,
-    const CNA_GamerAsyncCallback callback,
-    void* const context)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_leaderboard_reader_page_up(readerHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 

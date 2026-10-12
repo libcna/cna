@@ -60,6 +60,12 @@ cna_leaderboard_entry_create_ext = { result = "PublishOwnedEntry(LeaderboardEntr
 # Both canonical creation routes are this one: the overload without a game mode is this one
 # with zero.
 cna_leaderboard_identity_init = { result = "WriteCIdentity(LeaderboardIdentity::Create(static_cast<LeaderboardKey>(key), static_cast<int>(game_mode)), out_identity)", invalid_if = "key > CNA_LEADERBOARD_KEY_MAXIMUM" }
+# Begin halves this ABI completes at once: the synchronous route, then the callback.
+cna_leaderboard_reader_begin_read = { result = "CompleteAtOnce(cna_leaderboard_reader_read(identity, page_start, page_size, out_reader), callback, context)" }
+cna_leaderboard_reader_begin_read_from_pivot = { result = "CompleteAtOnce(cna_leaderboard_reader_read_from_pivot(identity, pivot_gamer, page_size, out_reader), callback, context)" }
+cna_leaderboard_reader_begin_read_from_gamers = { result = "CompleteAtOnce(cna_leaderboard_reader_read_from_gamers(identity, gamers, gamer_count, pivot_gamer, page_size, out_reader), callback, context)" }
+cna_leaderboard_reader_begin_page_down = { result = "CompleteAtOnce(cna_leaderboard_reader_page_down(reader), callback, context)" }
+cna_leaderboard_reader_begin_page_up = { result = "CompleteAtOnce(cna_leaderboard_reader_page_up(reader), callback, context)" }
 
 [entry_pair]
 lookup = "BorrowEntry"

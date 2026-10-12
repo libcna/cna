@@ -39,6 +39,99 @@ CNA_Result cna_curve_key_init_tangents(
     });
 }
 
+CNA_Result cna_curve_key_init_full(
+    const float position,
+    const float value,
+    const float tangent_in,
+    const float tangent_out,
+    const CNA_CurveContinuity continuity,
+    CNA_CurveKey* const out_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_key == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_init_full: out_key is null.");
+        }
+        if (const CNA_Result routeResult = ValidateContinuity(continuity);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_key = CNA::C::Detail::ToC(CurveKey(position, value, tangent_in, tangent_out, static_cast<CurveContinuity>(continuity)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_equals(
+    const CNA_CurveKey c_left,
+    const CNA_CurveKey c_right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_equals: out_equal is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_left);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_right);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto left = CNA::C::Detail::ToNative(c_left);
+        const auto right = CNA::C::Detail::ToNative(c_right);
+        *out_equal = CNA::C::Detail::ToCBool(left.Equals(right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_not_equals(
+    const CNA_CurveKey c_left,
+    const CNA_CurveKey c_right,
+    CNA_Bool* const out_not_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_not_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_not_equals: out_not_equal is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_left);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_right);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto left = CNA::C::Detail::ToNative(c_left);
+        const auto right = CNA::C::Detail::ToNative(c_right);
+        *out_not_equal = CNA::C::Detail::ToCBool(left != right);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_create(
+    CNA_CurveKeyCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return CreateHandle(ObjectKind::CurveKeyCollection, std::make_shared<CurveKeyCollection>(), out_collection);
+    });
+}
+
+CNA_Result cna_curve_create(
+    CNA_CurveHandle* const out_curve)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_curve == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_create: out_curve is null.");
+        }
+        *out_curve = CNA_INVALID_HANDLE;
+        return CreateHandle(ObjectKind::Curve, std::make_shared<Curve>(), out_curve);
+    });
+}
+
 CNA_Result cna_curve_key_collection_clear(
     const CNA_CurveKeyCollectionHandle collection)
 {
@@ -164,6 +257,109 @@ CNA_Result cna_curve_key_collection_index_of(
     });
 }
 
+CNA_Result cna_curve_key_collection_get_is_read_only(
+    const CNA_CurveKeyCollectionHandle collection,
+    CNA_Bool* const out_is_read_only)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_read_only == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_get_is_read_only: out_is_read_only is null.");
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_read_only = CNA::C::Detail::ToCBool(object->getIsReadOnlyProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_get(
+    const CNA_CurveKeyCollectionHandle collection,
+    const int32_t index,
+    CNA_CurveKey* const out_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_key == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_get: out_key is null.");
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_key = CNA::C::Detail::ToC(object->getItemProperty(index));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_contains(
+    const CNA_CurveKeyCollectionHandle collection,
+    const CNA_CurveKey c_key,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_contains: out_contains is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto key = CNA::C::Detail::ToNative(c_key);
+        *out_contains = CNA::C::Detail::ToCBool(object->Contains(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_remove(
+    const CNA_CurveKeyCollectionHandle collection,
+    const CNA_CurveKey c_key,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_remove: out_removed is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(c_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto key = CNA::C::Detail::ToNative(c_key);
+        *out_removed = CNA::C::Detail::ToCBool(object->Remove(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_collection_clone(
+    const CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKeyCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_clone: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        std::shared_ptr<CurveKeyCollection> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::CurveKeyCollection, std::make_shared<CurveKeyCollection>(object->Clone()), out_collection);
+    });
+}
+
 CNA_Result cna_curve_destroy(
     const CNA_CurveHandle curve)
 {
@@ -192,6 +388,145 @@ CNA_Result cna_curve_evaluate(
             return routeResult;
         }
         *out_value = static_cast<float>(object->Evaluate(position));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_is_constant(
+    const CNA_CurveHandle curve,
+    CNA_Bool* const out_is_constant)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_constant == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_get_is_constant: out_is_constant is null.");
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_constant = CNA::C::Detail::ToCBool(object->getIsConstantProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_pre_loop(
+    const CNA_CurveHandle curve,
+    CNA_CurveLoopType* const out_loop_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_loop_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_get_pre_loop: out_loop_type is null.");
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_loop_type = static_cast<CNA_CurveLoopType>(object->getPreLoopProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_post_loop(
+    const CNA_CurveHandle curve,
+    CNA_CurveLoopType* const out_loop_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_loop_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_get_post_loop: out_loop_type is null.");
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_loop_type = static_cast<CNA_CurveLoopType>(object->getPostLoopProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_clone(
+    const CNA_CurveHandle curve,
+    CNA_CurveHandle* const out_curve)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_curve == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_clone: out_curve is null.");
+        }
+        *out_curve = CNA_INVALID_HANDLE;
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::Curve, std::make_shared<Curve>(object->Clone()), out_curve);
+    });
+}
+
+CNA_Result cna_curve_get_keys(
+    const CNA_CurveHandle curve,
+    CNA_CurveKeyCollectionHandle* const out_keys)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_keys == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_get_keys: out_keys is null.");
+        }
+        *out_keys = CNA_INVALID_HANDLE;
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::CurveKeyCollection, std::shared_ptr<CurveKeyCollection>(object, &object->getKeysProperty()), out_keys);
+    });
+}
+
+CNA_Result cna_curve_compute_tangents_in_out(
+    const CNA_CurveHandle curve,
+    const CNA_CurveTangent tangent_in_type,
+    const CNA_CurveTangent tangent_out_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateTangent(tangent_in_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateTangent(tangent_out_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->ComputeTangents(static_cast<CurveTangent>(tangent_in_type), static_cast<CurveTangent>(tangent_out_type));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangent_in_out(
+    const CNA_CurveHandle curve,
+    const int32_t key_index,
+    const CNA_CurveTangent tangent_in_type,
+    const CNA_CurveTangent tangent_out_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = ValidateTangent(tangent_in_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateTangent(tangent_out_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Curve> object{};
+        if (const CNA_Result routeResult = GetCurve(curve, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->ComputeTangent(key_index, static_cast<CurveTangent>(tangent_in_type), static_cast<CurveTangent>(tangent_out_type));
         return CNA_RESULT_SUCCESS;
     });
 }

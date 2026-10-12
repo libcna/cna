@@ -259,6 +259,30 @@ CNA_Result cna_platform_copy_current_name_ext(
     });
 }
 
+CNA_Result cna_assembly_set_title_ext(
+    const CNA_StringView c_title)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string title;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_title, "cna_assembly_set_title_ext: title is not valid text.", &title, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        CNA::SetAssemblyTitleEXT(title);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_assembly_copy_title_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return CNA::GetAssemblyTitleEXT();
+    });
+}
+
 CNA_Result cna_graphics_renderer_get_current_name_size(
     uint64_t* const out_bytes)
 {

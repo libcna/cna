@@ -70,3 +70,8 @@ other = { lookup = "BorrowAchievement", object = "std::shared_ptr<AchievementRes
 [achievement_pair.routes]
 # Both canonical equality operators are this one answer; inequality is its negation.
 cna_achievement_equals = { get = "*object->value == *other->value" }
+
+[calls]
+[calls.routes]
+# Begin halves this ABI completes at once: the synchronous route, then the callback.
+cna_signed_in_gamer_begin_get_achievements = { result = "CompleteAtOnce(cna_signed_in_gamer_get_achievements(gamer, out_achievements), callback, context)" }

@@ -509,6 +509,24 @@ CNA_Result cna_effect_parameter_destroy(
     });
 }
 
+CNA_Result cna_effect_parameter_get_annotations(
+    const CNA_EffectParameterHandle parameter,
+    CNA_EffectAnnotationCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_get_annotations: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterResource> object{};
+        if (const CNA_Result routeResult = GetParameter(parameter, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::EffectAnnotationCollection, std::make_shared<AnnotationCollectionResource>(AnnotationCollectionResource{std::shared_ptr<EffectAnnotationCollection>(object->value, &object->value->getAnnotationsProperty())}), out_collection);
+    });
+}
+
 CNA_Result cna_effect_parameter_collection_get_count(
     const CNA_EffectParameterCollectionHandle collection,
     uint64_t* const out_count)
@@ -3517,6 +3535,18 @@ CNA_Result cna_directional_light_create(
         }
         *out_light = CNA_INVALID_HANDLE;
         return CreateDirectionalLightHandle(std::make_shared<DirectionalLight>(), nullptr, out_light);
+    });
+}
+
+CNA_Result cna_effect_annotation_collection_create(
+    CNA_EffectAnnotationCollectionHandle* const out_collection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_collection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_annotation_collection_create: out_collection is null.");
+        }
+        *out_collection = CNA_INVALID_HANDLE;
+        return CreateHandle(ObjectKind::EffectAnnotationCollection, std::make_shared<AnnotationCollectionResource>(AnnotationCollectionResource{std::make_shared<EffectAnnotationCollection>()}), out_collection);
     });
 }
 

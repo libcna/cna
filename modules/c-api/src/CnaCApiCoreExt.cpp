@@ -657,44 +657,5 @@ CNA_Result cna_graphics_renderer_try_parse_name_ext(
     });
 }
 
-// CBIND-093. The assembly title. AssemblyInfo.hpp is not under CNA_CNAEXT, so these two work in
-// every build; the canonical AssemblyTitleAttributeEXT has no C form, because C has no
-// static-initialization construct to bind -- a C caller sets the title from main instead.
-
-CNA_Result cna_assembly_set_title_ext(const CNA_StringView title)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copied;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                title, "The assembly title is not valid UTF-8 text.", &copied,
-                CNA::C::Detail::EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::SetAssemblyTitleEXT(copied);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_assembly_copy_title_ext(
-    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("The required-byte output is null.");
-        }
-        const std::string& title = CNA::GetAssemblyTitleEXT();
-        *outBytes = static_cast<uint64_t>(title.size());
-        if (capacity < title.size()) {
-            return CNA::C::Detail::BufferTooSmall(
-                "The destination cannot hold the complete title.");
-        }
-        if (!title.empty()) {
-            std::memcpy(destination, title.data(), title.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 // The routes generated from modules/c-api/spec/CoreExt.toml.
 #include "generated/CoreExt.inc"

@@ -23,9 +23,9 @@ namespace {
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -127,17 +127,7 @@ static_assert(sizeof(int) == sizeof(int32_t));
     std::shared_ptr<VertexDeclaration> declaration,
     CNA_VertexDeclarationHandle* const outDeclaration)
 {
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::VertexDeclaration,
-        std::move(declaration),
-        outDeclaration);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The VertexDeclaration handle could not be created.");
+    return CreateHandle(ObjectKind::VertexDeclaration, std::move(declaration), outDeclaration);
 }
 
 } // namespace

@@ -105,3 +105,11 @@ cna_signed_in_gamer_is_friend = { get = "object->IsFriend(other)" }
 [values.routes]
 cna_gamer_get_partner_token_size = { size = "Gamer::GetPartnerToken(audience_uri)" }
 cna_gamer_copy_partner_token = { copy = "Gamer::GetPartnerToken(audience_uri)" }
+
+[calls]
+[calls.routes]
+# Begin halves this ABI completes at once: the synchronous route, then the callback.
+cna_gamer_begin_get_profile = { result = "CompleteAtOnce(cna_gamer_get_profile(gamer, out_profile), callback, context)" }
+cna_gamer_begin_get_from_gamertag = { result = "CompleteAtOnce(cna_gamer_get_from_gamertag(gamertag, out_gamer), callback, context)" }
+cna_gamer_begin_get_partner_token = { result = "CompleteAtOnce(cna_gamer_copy_partner_token(audience_uri, destination, capacity, out_bytes), callback, context)" }
+cna_signed_in_gamer_begin_award_achievement = { result = "CompleteAtOnce(cna_signed_in_gamer_award_achievement(gamer, achievement_key), callback, context)" }

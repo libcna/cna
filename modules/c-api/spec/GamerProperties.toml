@@ -10,6 +10,26 @@ cna_property_dictionary_destroy = { release = true }
 cna_property_dictionary_get_count = { get = "object->value->getCountProperty()" }
 cna_property_dictionary_get_is_read_only = { get = "object->value->getIsReadOnlyProperty()" }
 cna_property_dictionary_clear = { call = "object->value->Clear()" }
+cna_property_dictionary_contains_key = { get = "object->value->ContainsKey(key)" }
+cna_property_dictionary_remove = { get = "object->value->Remove(key)" }
+# A read refuses a key that holds a value of another kind (RequireKind); a write replaces it.
+cna_property_dictionary_get_date_time_ticks = { get = "object->value->GetValueDateTime(key).getTicksProperty()", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_DATE_TIME)" }
+cna_property_dictionary_get_double = { get = "object->value->GetValueDouble(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_DOUBLE)" }
+cna_property_dictionary_get_int32 = { get = "object->value->GetValueInt32(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_INT32)" }
+cna_property_dictionary_get_int64 = { get = "object->value->GetValueInt64(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_INT64)" }
+cna_property_dictionary_get_outcome = { get = "object->value->GetValueOutcome(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_OUTCOME)" }
+cna_property_dictionary_get_single = { get = "object->value->GetValueSingle(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_SINGLE)" }
+cna_property_dictionary_get_string_size = { size = "object->value->GetValueString(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_STRING)" }
+cna_property_dictionary_copy_string = { copy = "object->value->GetValueString(key)", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_STRING)" }
+cna_property_dictionary_get_time_span_ticks = { get = "object->value->GetValueTimeSpan(key).getTicksProperty()", require = "RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_TIME_SPAN)" }
+cna_property_dictionary_set_date_time_ticks = { call = "object->value->SetValue(key, System::DateTime(ticks))" }
+cna_property_dictionary_set_double = { call = "object->value->SetValue(key, value)" }
+cna_property_dictionary_set_int32 = { call = "object->value->SetValue(key, static_cast<int>(value))" }
+cna_property_dictionary_set_int64 = { call = "object->value->SetValue(key, static_cast<long long>(value))" }
+cna_property_dictionary_set_outcome = { call = "object->value->SetValue(key, static_cast<LeaderboardOutcome>(outcome))", invalid_if = "outcome > CNA_LEADERBOARD_OUTCOME_MAXIMUM" }
+cna_property_dictionary_set_single = { call = "object->value->SetValue(key, value)" }
+cna_property_dictionary_set_string = { call = "object->value->SetValue(key, value)" }
+cna_property_dictionary_set_time_span_ticks = { call = "object->value->SetValue(key, System::TimeSpan(ticks))" }
 
 [calls]
 [calls.routes]

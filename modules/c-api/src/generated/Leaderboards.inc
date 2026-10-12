@@ -207,6 +207,79 @@ CNA_Result cna_leaderboard_identity_init(
     });
 }
 
+CNA_Result cna_leaderboard_reader_begin_read(
+    const CNA_LeaderboardIdentity* const identity,
+    const int32_t page_start,
+    const int32_t page_size,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_LeaderboardReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_reader_begin_read: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_leaderboard_reader_read(identity, page_start, page_size, out_reader), callback, context);
+    });
+}
+
+CNA_Result cna_leaderboard_reader_begin_read_from_pivot(
+    const CNA_LeaderboardIdentity* const identity,
+    const CNA_GamerHandle pivot_gamer,
+    const int32_t page_size,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_LeaderboardReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_reader_begin_read_from_pivot: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_leaderboard_reader_read_from_pivot(identity, pivot_gamer, page_size, out_reader), callback, context);
+    });
+}
+
+CNA_Result cna_leaderboard_reader_begin_read_from_gamers(
+    const CNA_LeaderboardIdentity* const identity,
+    const CNA_GamerHandle* const gamers,
+    const uint64_t gamer_count,
+    const CNA_GamerHandle pivot_gamer,
+    const int32_t page_size,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_LeaderboardReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_leaderboard_reader_begin_read_from_gamers: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_leaderboard_reader_read_from_gamers(identity, gamers, gamer_count, pivot_gamer, page_size, out_reader), callback, context);
+    });
+}
+
+CNA_Result cna_leaderboard_reader_begin_page_down(
+    const CNA_LeaderboardReaderHandle reader,
+    const CNA_GamerAsyncCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CompleteAtOnce(cna_leaderboard_reader_page_down(reader), callback, context);
+    });
+}
+
+CNA_Result cna_leaderboard_reader_begin_page_up(
+    const CNA_LeaderboardReaderHandle reader,
+    const CNA_GamerAsyncCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CompleteAtOnce(cna_leaderboard_reader_page_up(reader), callback, context);
+    });
+}
+
 CNA_Result cna_leaderboard_entry_equals(
     const CNA_LeaderboardEntryHandle entry,
     const CNA_LeaderboardEntryHandle c_other,

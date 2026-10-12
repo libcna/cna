@@ -36,6 +36,7 @@ namespace {
 using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CompleteAtOnce;
 using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
@@ -315,24 +316,6 @@ CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const 
     });
 }
 
-CNA_Result cna_gamer_begin_get_profile(
-    const CNA_GamerHandle gamerHandle,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_GamerProfileHandle* const outProfile)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_gamer_get_profile(gamerHandle, outProfile);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_get_from_gamertag(
     const CNA_StringView gamertag,
     CNA_GamerHandle* const outGamer)
@@ -354,45 +337,6 @@ CNA_Result cna_gamer_get_from_gamertag(
             std::shared_ptr<Gamer>(Gamer::GetFromGamertag(nativeGamertag)),
             nullptr,
             outGamer);
-    });
-}
-
-CNA_Result cna_gamer_begin_get_from_gamertag(
-    const CNA_StringView gamertag,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    CNA_GamerHandle* const outGamer)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = cna_gamer_get_from_gamertag(gamertag, outGamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_begin_get_partner_token(
-    const CNA_StringView audienceUri,
-    const CNA_GamerAsyncCallback callback,
-    void* const context,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                cna_gamer_copy_partner_token(audienceUri, destination, capacity, outBytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -622,25 +566,6 @@ CNA_Result cna_signed_in_gamer_get_friends(
         const auto resource = std::make_shared<GamerCollectionResource>();
         resource->friends = std::make_shared<FriendCollection>(gamer->GetFriends());
         return CreateHandle(ObjectKind::GamerCollection, resource, outFriends);
-    });
-}
-
-CNA_Result cna_signed_in_gamer_begin_award_achievement(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const CNA_StringView achievementKey,
-    const CNA_GamerAsyncCallback callback,
-    void* const context)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                cna_signed_in_gamer_award_achievement(gamerHandle, achievementKey);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback != nullptr) {
-            callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 

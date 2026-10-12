@@ -529,6 +529,24 @@ CNA_Result cna_cnb_document_copy_external_reference_name(
     });
 }
 
+CNA_Result cna_cnb_decode_curve(
+    const CNA_CnbDocumentHandle document,
+    CNA_CurveHandle* const out_curve)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_curve == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_curve: out_curve is null.");
+        }
+        *out_curve = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::Curve, (std::make_shared<Microsoft::Xna::Framework::Curve>(Cnb::DecodeCurveFromCnb(*object->value))), out_curve);
+    });
+}
+
 CNA_Result cna_cnb_reader_copy_context(
     const CNA_CnbReaderHandle reader,
     char* const destination,

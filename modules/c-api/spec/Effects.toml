@@ -63,6 +63,7 @@ CNA_EffectParameterInfo{
 }''' }
 cna_effect_parameter_set_value_string = { call = "object->value->SetValue(value)", refuse_nul = ["value"] }
 cna_effect_parameter_destroy = { release = true }
+cna_effect_parameter_get_annotations = { result = "CreateHandle(ObjectKind::EffectAnnotationCollection, std::make_shared<AnnotationCollectionResource>(AnnotationCollectionResource{std::shared_ptr<EffectAnnotationCollection>(object->value, &object->value->getAnnotationsProperty())}), out_collection)" }
 
 [parameter_collection]
 lookup = "GetParameterCollection"
@@ -362,6 +363,7 @@ cna_effect_copy_vertex_source = { result = "CopyEffectString(effect, destination
 cna_effect_get_fragment_source_byte_count = { result = "GetEffectStringByteCount(effect, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); })" }
 cna_effect_copy_fragment_source = { result = "CopyEffectString(effect, destination, capacity, out_byte_count, [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); })" }
 cna_directional_light_create = { result = "CreateDirectionalLightHandle(std::make_shared<DirectionalLight>(), nullptr, out_light)" }
+cna_effect_annotation_collection_create = { result = "CreateHandle(ObjectKind::EffectAnnotationCollection, std::make_shared<AnnotationCollectionResource>(AnnotationCollectionResource{std::make_shared<EffectAnnotationCollection>()}), out_collection)" }
 
 [borrowed_graphics_device]
 lookup = "GetBorrowedGraphicsDevice"

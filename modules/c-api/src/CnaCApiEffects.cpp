@@ -64,6 +64,7 @@ using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyElements;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -340,15 +341,7 @@ struct EffectState final {
 {
     const auto resource = std::make_shared<AnnotationResource>(
         AnnotationResource{std::make_shared<EffectAnnotation>(annotation)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectAnnotation, resource, outAnnotation);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned EffectAnnotation handle could not be created.");
+    return CreateHandle(ObjectKind::EffectAnnotation, resource, outAnnotation);
 }
 
 [[nodiscard]] CNA_Result GetParameter(
@@ -372,15 +365,7 @@ struct EffectState final {
 {
     const auto resource = std::make_shared<ParameterResource>(
         ParameterResource{std::move(value), std::move(state)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectParameter, resource, outParameter);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned EffectParameter handle could not be created.");
+    return CreateHandle(ObjectKind::EffectParameter, resource, outParameter);
 }
 
 [[nodiscard]] CNA_Result CreateParameterCollectionHandle(
@@ -389,15 +374,7 @@ struct EffectState final {
 {
     const auto resource = std::make_shared<ParameterCollectionResource>(
         ParameterCollectionResource{std::move(state)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectParameterCollection, resource, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned EffectParameterCollection handle could not be created.");
+    return CreateHandle(ObjectKind::EffectParameterCollection, resource, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateNativeParameter(
@@ -566,14 +543,7 @@ template<typename TNative, typename TC, typename TConvert>
 {
     const auto resource = std::make_shared<PassResource>(
         PassResource{std::move(value), std::move(effectOwnership)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectPass, resource, outPass);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned EffectPass handle could not be created.");
+    return CreateHandle(ObjectKind::EffectPass, resource, outPass);
 }
 
 [[nodiscard]] CNA_Result CreatePassCollectionHandle(
@@ -582,14 +552,7 @@ template<typename TNative, typename TC, typename TConvert>
 {
     const auto resource = std::make_shared<PassCollectionResource>(
         PassCollectionResource{std::move(state)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectPassCollection, resource, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned EffectPassCollection handle could not be created.");
+    return CreateHandle(ObjectKind::EffectPassCollection, resource, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateTechniqueHandle(
@@ -599,14 +562,7 @@ template<typename TNative, typename TC, typename TConvert>
 {
     const auto resource = std::make_shared<TechniqueResource>(
         TechniqueResource{std::move(value), std::move(state)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectTechnique, resource, outTechnique);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned EffectTechnique handle could not be created.");
+    return CreateHandle(ObjectKind::EffectTechnique, resource, outTechnique);
 }
 
 [[nodiscard]] CNA_Result CreateTechniqueCollectionHandle(
@@ -615,14 +571,7 @@ template<typename TNative, typename TC, typename TConvert>
 {
     const auto resource = std::make_shared<TechniqueCollectionResource>(
         TechniqueCollectionResource{std::move(state)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectTechniqueCollection, resource, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned EffectTechniqueCollection handle could not be created.");
+    return CreateHandle(ObjectKind::EffectTechniqueCollection, resource, outCollection);
 }
 
 [[nodiscard]] CNA_Result CreateAnnotationCollectionAlias(
@@ -633,14 +582,7 @@ template<typename TNative, typename TC, typename TConvert>
     const auto resource = std::make_shared<AnnotationCollectionResource>(
         AnnotationCollectionResource{
             std::shared_ptr<EffectAnnotationCollection>(std::move(owner), value)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::EffectAnnotationCollection, resource, outCollection);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The effect annotation-collection view could not be created.");
+    return CreateHandle(ObjectKind::EffectAnnotationCollection, resource, outCollection);
 }
 
 [[nodiscard]] std::shared_ptr<TechniqueState> GetTechniqueElementState(
@@ -709,14 +651,7 @@ template<typename TNative, typename TC, typename TConvert>
     auto state = MakeEffectState(value, parentGame);
     const auto resource = std::make_shared<EffectResource>(EffectResource{
         std::move(value), parentGame, state, 0U, disposeAllowed});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::Effect, resource, outEffect);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned Effect handle could not be created.");
+    return CreateHandle(ObjectKind::Effect, resource, outEffect);
 }
 
 // The class or interface name an Effect lookup names when the effect is not one.
@@ -853,14 +788,7 @@ template<typename TInterface>
 {
     const auto resource = std::make_shared<DirectionalLightResource>(
         DirectionalLightResource{std::move(value), std::move(effectOwnership)});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::DirectionalLight, resource, outLight);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result, ErrorCategoryForResult(result),
-        "The owned DirectionalLight handle could not be created.");
+    return CreateHandle(ObjectKind::DirectionalLight, resource, outLight);
 }
 
 template<typename TGetter>
@@ -1098,28 +1026,6 @@ CNA_Result cna_effect_annotation_create(
     });
 }
 
-CNA_Result cna_effect_annotation_collection_create(
-    CNA_EffectAnnotationCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectAnnotationCollection output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<AnnotationCollectionResource>(
-            AnnotationCollectionResource{std::make_shared<EffectAnnotationCollection>()});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::EffectAnnotationCollection, resource, outCollection);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned EffectAnnotationCollection handle could not be created.");
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_find(
     const CNA_EffectAnnotationCollectionHandle collectionHandle,
     const CNA_StringView name,
@@ -1204,35 +1110,6 @@ CNA_Result cna_effect_parameter_get_structure_members(
             parameter->state->members = std::move(state);
         }
         return CreateParameterCollectionHandle(parameter->state->members, outCollection);
-    });
-}
-
-CNA_Result cna_effect_parameter_get_annotations(
-    const CNA_EffectParameterHandle parameterHandle,
-    CNA_EffectAnnotationCollectionHandle* const outCollection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCollection == nullptr) {
-            return InvalidArgument("The EffectParameter annotations output handle is null.");
-        }
-        *outCollection = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<AnnotationCollectionResource>(
-            AnnotationCollectionResource{std::shared_ptr<EffectAnnotationCollection>(
-                parameter->value, &parameter->value->getAnnotationsProperty())});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::EffectAnnotationCollection, resource, outCollection);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The EffectParameter annotation-collection view could not be created.");
     });
 }
 

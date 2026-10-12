@@ -466,3 +466,18 @@ CNA_Result cna_achievement_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_signed_in_gamer_begin_get_achievements(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_GamerAsyncCallback callback,
+    void* const context,
+    CNA_AchievementCollectionHandle* const out_achievements)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_achievements == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_signed_in_gamer_begin_get_achievements: out_achievements is null.");
+        }
+        *out_achievements = CNA_INVALID_HANDLE;
+        return CompleteAtOnce(cna_signed_in_gamer_get_achievements(gamer, out_achievements), callback, context);
+    });
+}

@@ -11,7 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
-- **The C API's mechanically regular routes are generated.** 2,130 of the 3,210 `cna_*` routes —
+- **The C API's mechanically regular routes are generated.** 2,183 of the 3,210 `cna_*` routes —
   property reads and writes, commands, text setters, static queries, value computations, text
   size/copy pairs, plain destroys, and routes that only call a hand-written helper — are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
@@ -30,6 +30,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   destructor during process exit, after the driver's worker threads had already ended; the
   release then waited on them forever. The device is now never destroyed. Found by the C API's
   suites under Wine, where the ones that queried formats hung after `main` returned.
+- **`cna_assembly_copy_title_ext` refuses a null destination given a capacity.** It copied the
+  title through the pointer without checking it, as the size-then-copy protocol in
+  `docs/c-api/STRINGS_AND_BUFFERS.md` requires; it now answers `CNA_RESULT_INVALID_ARGUMENT`.
 - **Every C API text argument is read by one reader, under the documented UTF-8 rule.** The
   achievement, gamer, gamer-property, guide and XACT routes accepted malformed UTF-8 (they copied
   the bytes unchecked); they now refuse it with `CNA_RESULT_ENCODING` like every other route, as

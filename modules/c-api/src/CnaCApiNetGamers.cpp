@@ -30,9 +30,6 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
@@ -196,17 +193,7 @@ CNA_Result CreateOwnedLocalNetworkGamer(
         Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(signedInGamer, session));
     resource->value = resource->owned.get();
     resource->session = sessionHandle;
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::NetworkGamer,
-        resource,
-        outGamer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned LocalNetworkGamer handle could not be created.");
+    return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
 }
 
 } // namespace CNA::C::Detail
@@ -245,17 +232,7 @@ CNA_Result cna_network_gamer_create(
                   NetworkGamer::CreateInternal(nativeSession, gamertagCopy));
         resource->value = resource->owned.get();
         resource->session = session;
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkGamer,
-            resource,
-            outGamer);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned NetworkGamer handle could not be created.");
+        return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
     });
 }
 
@@ -275,17 +252,7 @@ CNA_Result cna_network_gamer_copy_machine(
         }
         const auto resource = std::make_shared<NetworkMachineResource>();
         resource->value = std::make_shared<NetworkMachine>(gamer->value->getMachineProperty());
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkMachine,
-            resource,
-            outMachine);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned NetworkMachine handle could not be created.");
+        return CreateHandle(ObjectKind::NetworkMachine, resource, outMachine);
     });
 }
 
@@ -323,17 +290,7 @@ CNA_Result cna_network_machine_create(CNA_NetworkMachineHandle* const outMachine
         *outMachine = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<NetworkMachineResource>();
         resource->value = std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal());
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkMachine,
-            resource,
-            outMachine);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned NetworkMachine handle could not be created.");
+        return CreateHandle(ObjectKind::NetworkMachine, resource, outMachine);
     });
 }
 

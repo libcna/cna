@@ -514,15 +514,7 @@ CNA_Result CreateGameFrameTexture2D(
     auto resource = std::make_shared<Texture2DResource>(
         Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U, 0U});
     resource->ownedResource = false;
-    const CNA_Result result =
-            GetRuntimeHandles().Create(ObjectKind::Texture2D, resource, outTexture);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The frame Texture2D handle could not be created.");
+    return CreateHandle(ObjectKind::Texture2D, resource, outTexture);
 }
 
 CNA_Result CreateOwnedRenderTarget2D(
@@ -555,15 +547,7 @@ CNA_Result CreateBorrowedRenderTarget2D(
         0U,
         false,
         false});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::RenderTarget2D, resource, outTexture);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The borrowed RenderTarget2D handle could not be created.");
+    return CreateHandle(ObjectKind::RenderTarget2D, resource, outTexture);
 }
 
 CNA_Result GetOwnedTexture2D(

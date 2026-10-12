@@ -4301,26 +4301,6 @@ CNA_Result cna_cnb_encode_curve(
     });
 }
 
-CNA_Result cna_cnb_decode_curve(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CurveHandle* const outCurve)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCurve == nullptr) {
-            return InvalidArgument("The Curve output handle is null.");
-        }
-        *outCurve = CNA_INVALID_HANDLE;
-        const auto decoded = std::make_shared<Microsoft::Xna::Framework::Curve>(
-            Cnb::DecodeCurveFromCnb(*document->value));
-        return CreateHandle(ObjectKind::Curve, decoded, outCurve);
-    });
-}
-
 CNA_Result cna_cnb_encode_animation_clip(
     const CNA_AnimationClipEXTDescriptor* const descriptor,
     const CNA_ClipTargetSpaceEXT targetSpace,

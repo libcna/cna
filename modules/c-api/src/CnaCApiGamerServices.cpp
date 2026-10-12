@@ -24,9 +24,8 @@ namespace {
 
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
@@ -115,17 +114,7 @@ CNA_Result CreateBorrowedSignedInGamer(SignedInGamer* const value, CNA_Handle* c
     // A borrowed view never owns the canonical object, so the aliasing constructor keeps the
     // pointer without ever deleting it.
     resource->value = std::shared_ptr<SignedInGamer>(std::shared_ptr<void>(), value);
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::SignedInGamer,
-        resource,
-        outGamer);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The borrowed SignedInGamer handle could not be created.");
+    return CreateHandle(ObjectKind::SignedInGamer, resource, outGamer);
 }
 
 CNA_Result ReleaseBorrowedSignedInGamer(const CNA_Handle handle)
@@ -207,17 +196,7 @@ CNA_Result cna_signed_in_gamer_create_ext(
             isSignedInToLive != CNA_FALSE,
             isGuest != CNA_FALSE,
             static_cast<PlayerIndex>(playerIndex)));
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::SignedInGamer,
-            resource,
-            outGamer);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned SignedInGamer handle could not be created.");
+        return CreateHandle(ObjectKind::SignedInGamer, resource, outGamer);
     });
 }
 

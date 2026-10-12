@@ -34,6 +34,7 @@ cna_cnb_decode_animation_clip = { result = "CreateAnimationClip(Cnb::DecodeAnima
 cna_cnb_loader_registry_resolve_for_document = { result = "CreateLoader(CNA::Content::CnbLoaderRegistry::ResolveForDocument(*object->value), out_loader)" }
 cna_cnb_document_get_external_reference_name_size = { size = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
 cna_cnb_document_copy_external_reference_name = { copy = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
+cna_cnb_decode_curve = { result = "CreateHandle(ObjectKind::Curve, (std::make_shared<Microsoft::Xna::Framework::Curve>(Cnb::DecodeCurveFromCnb(*object->value))), out_curve)" }
 
 [reader]
 lookup = "GetReader"

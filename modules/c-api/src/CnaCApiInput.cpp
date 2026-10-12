@@ -66,7 +66,6 @@ using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
@@ -1550,17 +1549,7 @@ struct MouseCursorResource final {
     std::shared_ptr<MouseCursorResource> resource,
     CNA_MouseCursorHandle* const outCursor)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
-        CNA::C::Detail::ObjectKind::MouseCursor,
-        std::move(resource),
-        outCursor);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        CNA::C::Detail::ErrorCategoryForResult(result),
-        "The owned MouseCursor handle could not be created.");
+    return CreateHandle(CNA::C::Detail::ObjectKind::MouseCursor, std::move(resource), outCursor);
 }
 
 [[nodiscard]] CNA_Result GetCursorResource(

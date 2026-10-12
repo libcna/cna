@@ -45,7 +45,6 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
-using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
@@ -159,17 +158,7 @@ template<typename TCallable>
 {
     const auto resource = std::make_shared<ContentTypeReaderResource>();
     resource->value = std::move(typeReader);
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::ContentTypeReader,
-        resource,
-        outTypeReader);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned content type-reader handle could not be created.");
+    return CreateHandle(ObjectKind::ContentTypeReader, resource, outTypeReader);
 }
 
 } // namespace
@@ -218,17 +207,7 @@ CNA_Result cna_content_reader_create(
             createInfo->version,
             static_cast<char>(createInfo->platform));
 
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::ContentReader,
-            resource,
-            outReader);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned ContentReader handle could not be created.");
+        return CreateHandle(ObjectKind::ContentReader, resource, outReader);
     });
 }
 
@@ -1932,13 +1911,7 @@ CNA_Result PublishObjectDictionary(
     }
     auto resource = std::make_shared<ObjectDictionaryResource>();
     resource->value = std::move(dictionary);
-    const CNA_Result result =
-        GetRuntimeHandles().Create(ObjectKind::ObjectDictionaryEXT, resource, outHandle);
-    return result == CNA_RESULT_SUCCESS
-        ? CNA_RESULT_SUCCESS
-        : Fail(
-            result, ErrorCategoryForResult(result),
-            "The object dictionary could not be published as a handle.");
+    return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outHandle);
 }
 
 bool TryGetForeignReferenceObject(const System::Object* const tag, void** const outObject)

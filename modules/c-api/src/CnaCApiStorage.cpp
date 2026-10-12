@@ -187,17 +187,7 @@ private:
 {
     const auto resource = std::make_shared<StorageDeviceResource>();
     resource->value = std::shared_ptr<StorageDevice>(std::move(device));
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::StorageDevice,
-        resource,
-        outDevice);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned StorageDevice handle could not be created.");
+    return CreateHandle(ObjectKind::StorageDevice, resource, outDevice);
 }
 
 [[nodiscard]] CNA_Result CreateStreamHandle(

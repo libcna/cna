@@ -40,10 +40,7 @@ namespace {
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetLastError;
-using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
@@ -269,17 +266,7 @@ CNA_Result CreateOwnedNetworkSessionProperties(
     *outProperties = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<NetworkSessionPropertiesResource>();
     resource->value = std::make_unique<NetworkSessionProperties>(value);
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::NetworkSessionProperties,
-        resource,
-        outProperties);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned NetworkSessionProperties handle could not be created.");
+    return CreateHandle(ObjectKind::NetworkSessionProperties, resource, outProperties);
 }
 
 CNA_Result BorrowPacketReader(const CNA_Handle handle, PacketReader** const outReader)
@@ -341,17 +328,7 @@ CNA_Result cna_network_session_properties_create(
         *outProperties = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<NetworkSessionPropertiesResource>();
         resource->value = std::make_unique<NetworkSessionProperties>();
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::NetworkSessionProperties,
-            resource,
-            outProperties);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned NetworkSessionProperties handle could not be created.");
+        return CreateHandle(ObjectKind::NetworkSessionProperties, resource, outProperties);
     });
 }
 
@@ -639,17 +616,7 @@ CNA_Result cna_packet_writer_create(
         *outWriter = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<PacketWriterResource>();
         resource->value = std::make_unique<PacketWriter>(static_cast<int>(capacity));
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::PacketWriter,
-            resource,
-            outWriter);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned PacketWriter handle could not be created.");
+        return CreateHandle(ObjectKind::PacketWriter, resource, outWriter);
     });
 }
 
@@ -699,17 +666,7 @@ CNA_Result cna_packet_reader_create(
         *outReader = CNA_INVALID_HANDLE;
         const auto resource = std::make_shared<PacketReaderResource>();
         resource->value = std::make_unique<PacketReader>(static_cast<int>(capacity));
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::PacketReader,
-            resource,
-            outReader);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The owned PacketReader handle could not be created.");
+        return CreateHandle(ObjectKind::PacketReader, resource, outReader);
     });
 }
 

@@ -5,6 +5,11 @@
 [curve_key.routes]
 cna_curve_key_init_position_value = { value = "CurveKey(position, value)" }
 cna_curve_key_init_tangents = { value = "CurveKey(position, value, tangent_in, tangent_out)" }
+cna_curve_key_init_full = { value = "CurveKey(position, value, tangent_in, tangent_out, static_cast<CurveContinuity>(continuity))", validate = "ValidateContinuity(continuity)" }
+cna_curve_key_equals = { value = "left.Equals(right)", validate = ["ValidateKey(left)", "ValidateKey(right)"] }
+cna_curve_key_not_equals = { value = "left != right", validate = ["ValidateKey(left)", "ValidateKey(right)"] }
+cna_curve_key_collection_create = { result = "CreateHandle(ObjectKind::CurveKeyCollection, std::make_shared<CurveKeyCollection>(), out_collection)" }
+cna_curve_create = { result = "CreateHandle(ObjectKind::Curve, std::make_shared<Curve>(), out_curve)" }
 
 [collection]
 lookup = "GetCollection"
@@ -18,6 +23,11 @@ cna_curve_key_collection_get_count = { get = "static_cast<uint64_t>(object->getC
 cna_curve_key_collection_set = { call = "object->setItemProperty(index, key)", validate = "ValidateKey(key)" }
 cna_curve_key_collection_add = { call = "object->Add(key)", validate = "ValidateKey(key)" }
 cna_curve_key_collection_index_of = { get = "object->IndexOf(key)", validate = "ValidateKey(key)" }
+cna_curve_key_collection_get_is_read_only = { get = "object->getIsReadOnlyProperty()" }
+cna_curve_key_collection_get = { get = "object->getItemProperty(index)" }
+cna_curve_key_collection_contains = { get = "object->Contains(key)", validate = "ValidateKey(key)" }
+cna_curve_key_collection_remove = { get = "object->Remove(key)", validate = "ValidateKey(key)" }
+cna_curve_key_collection_clone = { result = "CreateHandle(ObjectKind::CurveKeyCollection, std::make_shared<CurveKeyCollection>(object->Clone()), out_collection)" }
 
 [curve]
 lookup = "GetCurve"
@@ -26,6 +36,14 @@ object = "std::shared_ptr<Curve>"
 [curve.routes]
 cna_curve_destroy = { release = true }
 cna_curve_evaluate = { get = "object->Evaluate(position)" }
+cna_curve_get_is_constant = { get = "object->getIsConstantProperty()" }
+cna_curve_get_pre_loop = { get = "object->getPreLoopProperty()" }
+cna_curve_get_post_loop = { get = "object->getPostLoopProperty()" }
+cna_curve_clone = { result = "CreateHandle(ObjectKind::Curve, std::make_shared<Curve>(object->Clone()), out_curve)" }
+# The collection is the curve's own; the handle keeps the curve alive.
+cna_curve_get_keys = { result = "CreateHandle(ObjectKind::CurveKeyCollection, std::shared_ptr<CurveKeyCollection>(object, &object->getKeysProperty()), out_keys)" }
+cna_curve_compute_tangents_in_out = { call = "object->ComputeTangents(static_cast<CurveTangent>(tangent_in_type), static_cast<CurveTangent>(tangent_out_type))", validate = ["ValidateTangent(tangent_in_type)", "ValidateTangent(tangent_out_type)"] }
+cna_curve_compute_tangent_in_out = { call = "object->ComputeTangent(key_index, static_cast<CurveTangent>(tangent_in_type), static_cast<CurveTangent>(tangent_out_type))", validate = ["ValidateTangent(tangent_in_type)", "ValidateTangent(tangent_out_type)"] }
 
 # A key is validated first: its continuity must be one CNA_CurveContinuity defines.
 cna_curve_set_pre_loop = { call = "object->setPreLoopProperty(static_cast<CurveLoopType>(loop_type))", validate = "ValidateLoopType(loop_type)" }

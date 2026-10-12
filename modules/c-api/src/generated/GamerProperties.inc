@@ -72,6 +72,483 @@ CNA_Result cna_property_dictionary_clear(
     });
 }
 
+CNA_Result cna_property_dictionary_contains_key(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_contains_key: out_contains is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_contains_key: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(object->value->ContainsKey(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_remove(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_remove: out_removed is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_remove: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_removed = CNA::C::Detail::ToCBool(object->value->Remove(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_date_time_ticks(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_date_time_ticks: out_ticks is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_date_time_ticks: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_DATE_TIME);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->GetValueDateTime(key).getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_double(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    double* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_double: out_value is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_double: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_DOUBLE);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<double>(object->value->GetValueDouble(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_int32(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_int32: out_value is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_int32: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_INT32);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int32_t>(object->value->GetValueInt32(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_int64(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    int64_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_int64: out_value is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_int64: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_INT64);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<int64_t>(object->value->GetValueInt64(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_outcome(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    CNA_LeaderboardOutcome* const out_outcome)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_outcome == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_outcome: out_outcome is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_outcome: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_OUTCOME);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_outcome = static_cast<CNA_LeaderboardOutcome>(object->value->GetValueOutcome(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_single(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_single: out_value is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_single: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_SINGLE);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(object->value->GetValueSingle(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_get_string_size(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_string_size: out_bytes is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_string_size: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_STRING);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetValueString(key), out_bytes);
+    });
+}
+
+CNA_Result cna_property_dictionary_copy_string(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_copy_string: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_STRING);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetValueString(key), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_property_dictionary_get_time_span_ticks(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    int64_t* const out_ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_ticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_get_time_span_ticks: out_ticks is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_get_time_span_ticks: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireKind(*object->value, key, CNA_PROPERTY_VALUE_KIND_TIME_SPAN);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_ticks = static_cast<int64_t>(object->value->GetValueTimeSpan(key).getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_date_time_ticks(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_date_time_ticks: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, System::DateTime(ticks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_double(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const double value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_double: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_int32(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_int32: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_int64(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const int64_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_int64: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, static_cast<long long>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_outcome(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const CNA_LeaderboardOutcome outcome)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outcome > CNA_LEADERBOARD_OUTCOME_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_set_outcome: invalid because outcome > CNA_LEADERBOARD_OUTCOME_MAXIMUM.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_outcome: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, static_cast<LeaderboardOutcome>(outcome));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_single(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_single: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_string(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const CNA_StringView c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_string: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string value;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_property_dictionary_set_string: value is not valid text.", &value);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_property_dictionary_set_time_span_ticks(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    const int64_t ticks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_property_dictionary_set_time_span_ticks: key is not valid text.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> object{};
+        if (const CNA_Result routeResult = BorrowDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(key, System::TimeSpan(ticks));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_property_dictionary_create_ext(
     CNA_PropertyDictionaryHandle* const out_dictionary)
 {

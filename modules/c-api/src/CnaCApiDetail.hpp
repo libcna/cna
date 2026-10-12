@@ -317,6 +317,26 @@ template<typename TIndex, typename TCount>
         : OutOfRange(message);
 }
 
+/**
+ * @brief The Begin half of an XNA Begin/End pair that this ABI completes before returning.
+ *
+ * @param result What the synchronous route answered.
+ * @param callback The caller's completion callback, or null for none.
+ * @param context Passed to `callback`.
+ * @return `result`; the callback runs only when it is `CNA_RESULT_SUCCESS`.
+ */
+template<typename TCallback>
+[[nodiscard]] CNA_Result CompleteAtOnce(
+    const CNA_Result result,
+    const TCallback callback,
+    void* const context)
+{
+    if (result == CNA_RESULT_SUCCESS && callback != nullptr) {
+        callback(context);
+    }
+    return result;
+}
+
 /** @brief Records and returns a failure to read or write a file, stream or device. */
 [[nodiscard]] inline CNA_Result IoError(const std::string_view message) noexcept
 {

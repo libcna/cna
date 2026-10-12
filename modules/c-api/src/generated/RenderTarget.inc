@@ -24,3 +24,47 @@ CNA_Result cna_render_target_usage_preserves_contents(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_render_target2d_create(
+    const CNA_Handle graphics_device,
+    const CNA_RenderTarget2DCreateInfo* const create_info,
+    CNA_Handle* const out_render_target)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_render_target == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target2d_create: out_render_target is null.");
+        }
+        *out_render_target = CNA_INVALID_HANDLE;
+        if (!IsVersionedStructure(create_info) || create_info->width == 0U || create_info->height == 0U || create_info->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) || create_info->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved0[0] != 0U || create_info->reserved0[1] != 0U || create_info->reserved0[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage) || create_info->reserved1 != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target2d_create: invalid because !IsVersionedStructure(create_info) || create_info->width == 0U || create_info->height == 0U || create_info->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) || create_info->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved0[0] != 0U || create_info->reserved0[1] != 0U || create_info->reserved0[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage) || create_info->reserved1 != 0U.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateOwnedRenderTarget2D(std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture2D>((std::make_shared<RenderTarget2D>(*object->value, static_cast<int>(create_info->width), static_cast<int>(create_info->height), create_info->mip_map == CNA_TRUE, static_cast<SurfaceFormat>(create_info->format), static_cast<DepthFormat>(create_info->depth_format), create_info->multi_sample_count, static_cast<RenderTargetUsage>(create_info->usage)))), object->parentGame, out_render_target);
+    });
+}
+
+CNA_Result cna_render_target_cube_create(
+    const CNA_Handle graphics_device,
+    const CNA_RenderTargetCubeCreateInfo* const create_info,
+    CNA_Handle* const out_render_target)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_render_target == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target_cube_create: out_render_target is null.");
+        }
+        *out_render_target = CNA_INVALID_HANDLE;
+        if (!IsVersionedStructure(create_info) || create_info->size == 0U || create_info->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved[0] != 0U || create_info->reserved[1] != 0U || create_info->reserved[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage)) {
+            return CNA::C::Detail::InvalidArgument("cna_render_target_cube_create: invalid because !IsVersionedStructure(create_info) || create_info->size == 0U || create_info->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) || !IsCanonicalBool(create_info->mip_map) || create_info->reserved[0] != 0U || create_info->reserved[1] != 0U || create_info->reserved[2] != 0U || !IsSurfaceFormat(create_info->format) || !IsDepthFormat(create_info->depth_format) || create_info->multi_sample_count < 0 || !IsRenderTargetUsage(create_info->usage).");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateRenderTargetCubeHandle((std::make_shared<RenderTargetCube>(*object->value, static_cast<int>(create_info->size), create_info->mip_map == CNA_TRUE, static_cast<SurfaceFormat>(create_info->format), static_cast<DepthFormat>(create_info->depth_format), create_info->multi_sample_count, static_cast<RenderTargetUsage>(create_info->usage))), object->parentGame, out_render_target);
+    });
+}

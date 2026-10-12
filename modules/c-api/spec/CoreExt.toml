@@ -26,6 +26,11 @@ cna_logger_debug_if = { call = "CNA::Logger::DebugIf(message, condition)", refus
 cna_logger_trace_if = { call = "CNA::Logger::TraceIf(message, condition)", refuse_nul = ["message"] }
 cna_logger_experiment_if = { call = "CNA::Logger::ExperimentIf(message, condition)", refuse_nul = ["message"] }
 cna_platform_copy_current_name_ext = { copy = "CNA::getCurrentPlatformName()" }
+# CBIND-093. The assembly title works in every build; the canonical AssemblyTitleAttributeEXT has
+# no C form, because C has no static-initialization construct to bind -- a C caller sets the
+# title from main instead.
+cna_assembly_set_title_ext = { call = "CNA::SetAssemblyTitleEXT(title)", refuse_nul = ["title"] }
+cna_assembly_copy_title_ext = { copy = "CNA::GetAssemblyTitleEXT()" }
 cna_graphics_renderer_get_current_name_size = { size = "CNA::getCurrentGraphicsRendererName()" }
 cna_graphics_renderer_copy_current_name = { copy = "CNA::getCurrentGraphicsRendererName()" }
 
