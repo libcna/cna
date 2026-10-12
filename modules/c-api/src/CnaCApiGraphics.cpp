@@ -56,6 +56,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedSpriteFont;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
@@ -633,9 +634,7 @@ CNA_Result cna_graphics_device_get_renderer_info(
         const std::string_view rendererName = nativeDevice.GetGraphicsRendererName();
         const int maxTextureDimension = nativeDevice.GetMaxTextureDimension();
         if (maxTextureDimension < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The native renderer reported a negative texture-dimension limit.");
         }
         const CNA_RendererInfo info = {
@@ -834,9 +833,7 @@ CNA_Result cna_graphics_device_get_backbuffer_info(
         const int width = presentationParameters.getBackBufferWidthProperty();
         const int height = presentationParameters.getBackBufferHeightProperty();
         if (width <= 0 || height <= 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The native graphics device reported invalid backbuffer dimensions.");
         }
         *outInfo = CNA_BackBufferInfo{
@@ -874,9 +871,7 @@ CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
         const int width = presentationParameters.getBackBufferWidthProperty();
         const int height = presentationParameters.getBackBufferHeightProperty();
         if (width <= 0 || height <= 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The native graphics device reported invalid backbuffer dimensions.");
         }
         const uint64_t requiredPixels =
@@ -949,9 +944,7 @@ CNA_Result cna_texture2d_create(
         }
         const int maxTextureDimension = graphicsDevice->value->GetMaxTextureDimension();
         if (maxTextureDimension < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The native renderer reported a negative texture-dimension limit.");
         }
         if (createInfo->width > static_cast<uint32_t>(maxTextureDimension) ||

@@ -30,6 +30,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReadText;
@@ -326,7 +327,7 @@ CNA_Result CopyPictureStream(
     constexpr SharpRuntime::longcs MaximumPictureBytes = 16 * 1024 * 1024;
     const SharpRuntime::longcs length = stream != nullptr ? stream->getLengthProperty() : 0;
     if (length < 0 || length > MaximumPictureBytes) {
-        return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "Invalid picture stream size.");
+        return IoError("Invalid picture stream size.");
     }
     *outBytes = static_cast<uint64_t>(length);
     if (capacity < *outBytes) {
@@ -336,7 +337,7 @@ CNA_Result CopyPictureStream(
     while (position < length) {
         const auto read = stream->Read(destination, position, length - position);
         if (read <= 0) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "Truncated picture stream.");
+            return IoError("Truncated picture stream.");
         }
         position += read;
     }

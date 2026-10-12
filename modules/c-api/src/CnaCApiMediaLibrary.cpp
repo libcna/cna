@@ -36,6 +36,7 @@
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -693,10 +694,7 @@ namespace {
     CNA_PictureHandle* const outPicture)
 {
     if (picture == nullptr) {
-        return Fail(
-            CNA_RESULT_IO,
-            CNA_ERROR_CATEGORY_IO,
-            "The picture could not be saved.");
+        return IoError("The picture could not be saved.");
     }
     return PublishLibraryChild<Picture>(
         ObjectKind::Picture,

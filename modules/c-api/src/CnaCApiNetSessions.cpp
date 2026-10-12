@@ -51,6 +51,7 @@ using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsVersionedStructure;
@@ -360,10 +361,7 @@ namespace {
     CNA_NetworkSessionHandle* const outSession)
 {
     if (created == nullptr) {
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The canonical creation returned no session.");
+        return InternalError("The canonical creation returned no session.");
     }
     const auto resource = std::make_shared<NetworkSessionResource>();
     resource->value = created;

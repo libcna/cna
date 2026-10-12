@@ -31,6 +31,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
@@ -244,10 +245,7 @@ CNA_Result cna_sprite_font_copy_glyphs(
         // reading past the shorter table.
         if (bounds.size() != characters.size() || cropping.size() != characters.size() ||
             kerning.size() != characters.size()) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The SpriteFont glyph tables disagree on their length.");
+            return InternalError("The SpriteFont glyph tables disagree on their length.");
         }
         if (capacity < characters.size()) {
             return BufferTooSmall("The SpriteFont glyph output buffer is too small.");

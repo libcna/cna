@@ -23,10 +23,9 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::Fail;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Media::Detail::BorrowMediaChild;
 using CNA::C::Media::Detail::MediaChildResource;
@@ -335,10 +334,7 @@ CNA_Result cna_media_queue_get_at(
         }
         const Song* const song = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
         if (song == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The media queue holds no song at this index.");
+            return InternalError("The media queue holds no song at this index.");
         }
         return PublishSongCopy(*song, outSong);
     });

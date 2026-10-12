@@ -74,8 +74,10 @@ using CNA::C::Detail::GetOwnedTexture3D;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -2386,22 +2388,16 @@ CNA_Result cna_content_manager_load_effect(
             std::shared_ptr<Effect> loaded =
                 contentManager.value->Load<std::shared_ptr<Effect>>(assetNameCopy);
             if (loaded == nullptr) {
-                return Fail(
-                    CNA_RESULT_IO,
-                    CNA_ERROR_CATEGORY_IO,
-                    "The Effect asset loaded as a null effect.");
+                return IoError("The Effect asset loaded as a null effect.");
             }
             return CreateEffectHandle(
                 std::move(loaded), contentManager.parentGame, outEffect);
         } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // The asset's root reader produced something that is not an Effect. Reporting the
             // mismatch beats the exception barrier's catch-all calling it an internal fault.
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
-                "The asset's root type reader did not produce an Effect.");
+            return IoError("The asset's root type reader did not produce an Effect.");
         }
     });
 }
@@ -2484,10 +2480,7 @@ CNA_Result cna_effect_clone(
         }
         std::shared_ptr<Effect> clone(effect->value->Clone());
         if (clone == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The native Effect clone operation returned null.");
+            return InternalError("The native Effect clone operation returned null.");
         }
         if (const CNA_Result result = CreateEffectHandle(
                 std::move(clone), effect->parentGame, outClone);
@@ -2623,10 +2616,7 @@ CNA_Result cna_effect_get_graphics_device(
             borrowed, ObjectKind::GraphicsDevice, &graphicsDevice);
         if (lookupResult != CNA_RESULT_SUCCESS ||
             graphicsDevice->value != &effect->value->getGraphicsDeviceInternal()) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The Effect and borrowed graphics-device owners disagree.");
+            return InternalError("The Effect and borrowed graphics-device owners disagree.");
         }
         *outGraphicsDevice = borrowed;
         return CNA_RESULT_SUCCESS;

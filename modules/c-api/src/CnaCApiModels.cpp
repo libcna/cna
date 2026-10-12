@@ -61,6 +61,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -5155,14 +5156,11 @@ CNA_Result cna_content_manager_load_model(
                 .SupportsCapability(CNA::GraphicsCapability::ThreeD);
             loaded = std::make_shared<Model>(contentManager.value->Load<Model>(assetNameText));
         } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // The asset's root reader produced something that is not a Model. Reporting the
             // mismatch beats the exception barrier's catch-all calling it an internal fault.
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
-                "The asset's root type reader did not produce a Model.");
+            return IoError("The asset's root type reader did not produce a Model.");
         }
 
         std::shared_ptr<ModelResource> model;

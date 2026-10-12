@@ -48,8 +48,10 @@ using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
@@ -245,10 +247,7 @@ CNA_Result cna_content_reader_get_content_manager(
             return result;
         }
         if (reader->value->getContentManagerProperty() != reader->contentManager.value) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical reader reported a different content manager.");
+            return InternalError("The canonical reader reported a different content manager.");
         }
         *outContentManager = reader->contentManagerHandle;
         return CNA_RESULT_SUCCESS;
@@ -1912,7 +1911,7 @@ CNA_Result cna_content_manager_load_object_dictionary_ext(
             resource->value = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
                 contentManager.value->Load<std::map<std::string, std::any>>(assetNameText));
         } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
         return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
     });

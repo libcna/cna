@@ -35,6 +35,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -304,10 +305,7 @@ CNA_Result cna_graphics_resource_get_graphics_device(
             borrowedHandle, ObjectKind::GraphicsDevice, &borrowed);
         if (lookupResult != CNA_RESULT_SUCCESS ||
             borrowed->value != resource.value->getGraphicsDeviceProperty()) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The resource and borrowed graphics-device owners disagree.");
+            return InternalError("The resource and borrowed graphics-device owners disagree.");
         }
         *outGraphicsDevice = borrowedHandle;
         return CNA_RESULT_SUCCESS;

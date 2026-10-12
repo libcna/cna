@@ -25,7 +25,7 @@ namespace {
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyFormattedText;
-using CNA::C::Detail::Fail;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
@@ -347,10 +347,7 @@ CNA_Result cna_vertex_type_get_stride(
         }
         const int nativeStride = DeclarationForType(type).getVertexStrideProperty();
         if (nativeStride < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The native vertex declaration reported a negative stride.");
+            return InternalError("The native vertex declaration reported a negative stride.");
         }
         *outStride = static_cast<uint32_t>(nativeStride);
         return CNA_RESULT_SUCCESS;

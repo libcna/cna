@@ -67,6 +67,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
@@ -487,10 +488,7 @@ CNA_Result cna_touch_get_capabilities(
         const TouchPanelCapabilities nativeCapabilities = TouchPanel::GetCapabilities();
         const int maximumTouchCount = nativeCapabilities.getMaximumTouchCountProperty();
         if (maximumTouchCount < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "CNA returned a negative maximum touch count.");
+            return InternalError("CNA returned a negative maximum touch count.");
         }
         const CNA_TouchCapabilities capabilities = {
             sizeof(CNA_TouchCapabilities),
@@ -523,10 +521,7 @@ CNA_Result cna_touch_get_state(
         const TouchCollection nativeState = TouchPanel::GetState();
         const int nativeCount = nativeState.getCountProperty();
         if (nativeCount < 0 || nativeCount > static_cast<int>(CNA_TOUCH_MAX_TOUCHES)) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "CNA returned more touches than the fixed C snapshot can hold.");
+            return InternalError("CNA returned more touches than the fixed C snapshot can hold.");
         }
         CNA_TouchState snapshot = {};
         snapshot.struct_size = sizeof(CNA_TouchState);

@@ -33,6 +33,7 @@ using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -161,10 +162,7 @@ CNA_Result CreateBorrowedNetworkGamer(
     }
     *outGamer = CNA_INVALID_HANDLE;
     if (value == nullptr) {
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The canonical collection reported a null gamer.");
+        return InternalError("The canonical collection reported a null gamer.");
     }
     const auto resource = std::make_shared<NetworkGamerResource>();
     resource->value = value;
@@ -309,10 +307,7 @@ CNA_Result cna_network_gamer_get_session(
         // handle that supplied it and stays consistent when no session was supplied at all.
         if ((gamer->value->getSessionProperty() == nullptr) !=
             (gamer->session == CNA_INVALID_HANDLE)) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical gamer reported a different session.");
+            return InternalError("The canonical gamer reported a different session.");
         }
         *outSession = gamer->session;
         return CNA_RESULT_SUCCESS;
@@ -365,10 +360,7 @@ CNA_Result cna_network_machine_get_gamer(
         const auto resource = std::make_shared<NetworkGamerResource>();
         resource->value = gamers[static_cast<int>(index)];
         if (resource->value == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical machine reported a null gamer.");
+            return InternalError("The canonical machine reported a null gamer.");
         }
         if (const CNA_Result result = CreateHandle(ObjectKind::NetworkGamer,
             resource,

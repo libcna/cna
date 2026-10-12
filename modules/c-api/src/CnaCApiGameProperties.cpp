@@ -29,6 +29,7 @@ using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetGameWindow;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 
@@ -363,17 +364,14 @@ CNA_Result cna_title_container_read_ext(
         try {
             stream = TitleContainer::OpenStream(path);
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
         if (!stream) {
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
-                "The title file could not be opened.");
+            return IoError("The title file could not be opened.");
         }
         const int64_t length = static_cast<int64_t>(stream->getLengthProperty());
         if (length < 0) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "The title file has no length.");
+            return IoError("The title file has no length.");
         }
         *outBytes = static_cast<uint64_t>(length);
         if (capacity < *outBytes) {
@@ -383,10 +381,7 @@ CNA_Result cna_title_container_read_ext(
             const auto read = static_cast<uint64_t>(
                 stream->Read(destination, 0, static_cast<SharpRuntime::intcs>(*outBytes)));
             if (read != *outBytes) {
-                return Fail(
-                    CNA_RESULT_IO,
-                    CNA_ERROR_CATEGORY_IO,
-                    "The title file could not be read completely.");
+                return IoError("The title file could not be read completely.");
             }
         }
         return CNA_RESULT_SUCCESS;

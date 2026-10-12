@@ -297,6 +297,18 @@ void SetLastError(
     return Fail(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE, message);
 }
 
+/** @brief Records and returns a failure to read or write a file, stream or device. */
+[[nodiscard]] inline CNA_Result IoError(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, message);
+}
+
+/** @brief Records and returns an inconsistency inside CNA that no argument explains. */
+[[nodiscard]] inline CNA_Result InternalError(const std::string_view message) noexcept
+{
+    return Fail(CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_INTERNAL, message);
+}
+
 void SetLastJoinError(uint32_t joinError) noexcept;
 
 void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;

@@ -49,6 +49,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -4626,7 +4627,7 @@ CNA_Result cna_cnb_import_image_as_texture2d(
         } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
     });
 }

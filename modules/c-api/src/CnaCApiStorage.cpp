@@ -37,6 +37,7 @@ using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -392,10 +393,7 @@ private:
             static_cast<System::IO::FileShare>(fileShare));
     }
     if (stream == nullptr) {
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The canonical container returned no stream.");
+        return InternalError("The canonical container returned no stream.");
     }
     return CreateStreamHandle(std::move(stream), std::move(container), outStream);
 }
@@ -446,10 +444,7 @@ private:
 
     std::unique_ptr<StorageDevice> device = StorageDevice::EndShowSelector(asyncResult.get());
     if (device == nullptr) {
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The canonical selector returned no storage device.");
+        return InternalError("The canonical selector returned no storage device.");
     }
     return CreateDeviceHandle(std::move(device), outDevice);
 }
@@ -634,10 +629,7 @@ CNA_Result cna_storage_container_open(
         std::unique_ptr<StorageContainer> nativeContainer =
             device->value->EndOpenContainer(asyncResult.get());
         if (nativeContainer == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical device returned no storage container.");
+            return InternalError("The canonical device returned no storage container.");
         }
 
         const auto resource = std::make_shared<StorageContainerResource>();
@@ -673,9 +665,7 @@ CNA_Result cna_storage_container_get_storage_device(
         // from, so the C route answers with that handle instead of minting a second owner for one
         // native object.
         if (&container->value->getStorageDeviceProperty() != container->device->value.get()) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The canonical container reported a different owning storage device.");
         }
         *outDevice = container->deviceHandle;
@@ -861,10 +851,7 @@ CNA_Result cna_storage_container_create_file(
         }
         std::unique_ptr<System::IO::Stream> stream = container->value->CreateFile(path);
         if (stream == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical container returned no stream.");
+            return InternalError("The canonical container returned no stream.");
         }
         return CreateStreamHandle(std::move(stream), std::move(container), outStream);
     });
@@ -923,10 +910,7 @@ CNA_Result cna_storage_stream_read(
         }
         const System::IO::intcs read = stream->value->Read(destination, 0, count);
         if (read < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The canonical stream reported a negative read count.");
+            return InternalError("The canonical stream reported a negative read count.");
         }
         *outRead = static_cast<uint64_t>(read);
         return CNA_RESULT_SUCCESS;

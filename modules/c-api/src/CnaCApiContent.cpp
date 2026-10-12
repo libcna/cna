@@ -45,8 +45,10 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
@@ -293,20 +295,18 @@ CNA_Result cna_content_manager_load_texture2d(
                 contentManager->parentGame,
                 outTexture);
         } catch (const ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // A compiled asset whose root reader produced a different type. The canonical read
             // reports that by failing the unbox, which is not a runtime_error and would otherwise
             // reach the barrier's catch-all and be reported as an internal fault -- an honest
             // "this asset is not that type" turned into "something went wrong inside CNA".
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
+            return IoError(
                 "The asset's root type reader produced a different type than this loader reads.");
         } catch (const System::NotSupportedException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
     });
 }
@@ -397,20 +397,18 @@ CNA_Result cna_content_manager_load_sound_effect(
         } catch (const NoAudioHardwareException& exception) {
             return NotSupported(exception.what());
         } catch (const ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // A compiled asset whose root reader produced a different type. The canonical read
             // reports that by failing the unbox, which is not a runtime_error and would otherwise
             // reach the barrier's catch-all and be reported as an internal fault -- an honest
             // "this asset is not that type" turned into "something went wrong inside CNA".
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
+            return IoError(
                 "The asset's root type reader produced a different type than this loader reads.");
         } catch (const System::NotSupportedException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
     });
 }
@@ -448,20 +446,18 @@ CNA_Result cna_content_manager_load_texture_cube(
                 contentManager->parentGame,
                 outTexture);
         } catch (const ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // A compiled asset whose root reader produced a different type. The canonical read
             // reports that by failing the unbox, which is not a runtime_error and would otherwise
             // reach the barrier's catch-all and be reported as an internal fault -- an honest
             // "this asset is not that type" turned into "something went wrong inside CNA".
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
+            return IoError(
                 "The asset's root type reader produced a different type than this loader reads.");
         } catch (const System::NotSupportedException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
     });
 }
@@ -501,20 +497,18 @@ CNA_Result cna_content_manager_load_sprite_font(
             font = std::make_shared<SpriteFont>(
                 contentManager->value->Load<SpriteFont>(assetNameCopy));
         } catch (const ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // A compiled asset whose root reader produced a different type. The canonical read
             // reports that by failing the unbox, which is not a runtime_error and would otherwise
             // reach the barrier's catch-all and be reported as an internal fault -- an honest
             // "this asset is not that type" turned into "something went wrong inside CNA".
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
+            return IoError(
                 "The asset's root type reader produced a different type than this loader reads.");
         } catch (const System::NotSupportedException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
 
         // The atlas has to become a handle of its own: a SpriteFont holds its texture by value,
@@ -590,20 +584,18 @@ CNA_Result cna_content_manager_load_foreign_ext(
             *outObject = loaded.value;
             return CNA_RESULT_SUCCESS;
         } catch (const ContentLoadException& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         } catch (const std::bad_any_cast&) {
             // The file's root reader produced something else, which means the asset is not the
             // caller's type at all. Reporting the mismatch beats returning a pointer into an
             // object of a different type.
-            return Fail(
-                CNA_RESULT_IO,
-                CNA_ERROR_CATEGORY_IO,
+            return IoError(
                 "The asset's root type reader is not a caller-registered reader, so it did not "
                 "produce a foreign object.");
         } catch (const System::NotSupportedException&) {
             throw;
         } catch (const std::runtime_error& exception) {
-            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+            return IoError(exception.what());
         }
     });
 }
@@ -789,9 +781,7 @@ CNA_Result cna_content_manager_get_graphics_device(
             return result;
         }
         if (&contentManager->value->getGraphicsDeviceInternal() != graphicsDevice->value) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The canonical content manager reported a different graphics device.");
         }
         *outGraphicsDevice = contentManager->graphicsDevice;

@@ -45,6 +45,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GamerRegistration;
 using CNA::C::Detail::GamerRegistrationBase;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -412,9 +413,7 @@ CNA_Result cna_gamer_get_signed_in_gamer_at(
         if (gamer == nullptr) {
             // The collection reported the position as valid, so a null element is an internal
             // inconsistency rather than an ordinary "nobody is signed in at that slot".
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
+            return InternalError(
                 "The signed-in gamer collection reported an empty element inside its own count.");
         }
         return CreateBorrowedSignedInGamer(gamer, outGamer);
