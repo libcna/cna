@@ -241,26 +241,4 @@ namespace CNA::Content
 
         return loader;
     }
-
-    void CnbLoaderRegistry::RegisterBuiltIns()
-    {
-        // Curve and AnimationClip need nothing but their own codecs -- no GraphicsDevice, no
-        // external references -- so they are registered here. The other eight built-in loaders
-        // each construct a runtime object needing a GraphicsDevice or the ContentManager itself,
-        // so they register from ContentManager::RegisterBuiltinLoaders() where those helpers live.
-        // This function is therefore NOT "every built-in", and its documentation says so
-        // (plans/plan_cnb.md CNBF-119).
-        RegisterBuiltIn(Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
-                        [](const Cnb::CnbDocument& document,
-                           Microsoft::Xna::Framework::Content::ContentManager&,
-                           const std::string&) -> std::any
-                        { return std::any(Cnb::DecodeCurveFromCnb(document)); });
-
-        RegisterBuiltIn(Cnb::CnbAssetTypeId::AnimationClip,
-                        "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
-                        [](const Cnb::CnbDocument& document,
-                           Microsoft::Xna::Framework::Content::ContentManager&,
-                           const std::string&) -> std::any
-                        { return std::any(Cnb::DecodeAnimationClipFromCnb(document)); });
-    }
 }

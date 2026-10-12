@@ -681,9 +681,9 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
 {
     // RegisterBuiltIns()'s documentation used to claim "every asset type CNA itself compiles to
     // .cnb". It installs two. The other eight each construct a runtime object needing a
-    // GraphicsDevice or the ContentManager itself, so they come from
-    // ContentManager::RegisterBuiltinLoaders() -- which matters to anyone who calls Clear() in a
-    // test and expects the table back.
+    // GraphicsDevice or the ContentManager itself, so they come from the ContentManager -- on the
+    // first Load<T>() of each type, or all at once from RegisterBuiltinLoaders() -- which matters
+    // to anyone who calls Clear() in a test and expects the table back.
     CnbLoaderRegistry::Clear();
     CnbLoaderRegistry::RegisterBuiltIns();
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
@@ -700,6 +700,9 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
 
     ScratchContentRoot root;
     ContentManager cm(nullptr, root.path().string());
+    // Constructing a manager installs nothing: a program links the loaders of the types it loads.
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
+    cm.RegisterBuiltinLoaders();
     for (const std::uint32_t everyBuiltIn :
          {CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
           CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,

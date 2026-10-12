@@ -23,12 +23,14 @@
 
 namespace
 {
+    // The Model front-ends -- runtime glTF, .cnj and .cnb -- live in the Model content family's
+    // translation unit (detail::BuiltinContent<Model>), not in ContentManager.cpp.
     std::string ReadContentManagerSource()
     {
         for (const char* prefix : {"", "../", "../../"})
         {
             const std::filesystem::path candidate =
-                std::string(prefix) + "modules/content/src/Xna/ContentManager.cpp";
+                std::string(prefix) + "modules/content/src/Xna/ContentModelLoaders.cpp";
             if (std::filesystem::exists(candidate))
             {
                 std::ifstream file(candidate);
@@ -59,7 +61,7 @@ TEST(CnbSharedModelBuilderTest, ThePartTopologyIsAppliedInExactlyOnePlace)
     // drift, and a drift here does not fail a build -- it makes .cnj and .cnb models draw
     // differently, which is a bug an output comparison only finds after someone ships it.
     const std::string source = ReadContentManagerSource();
-    if (source.empty()) { GTEST_SKIP() << "ContentManager.cpp not found (run from source root)"; }
+    if (source.empty()) { GTEST_SKIP() << "ContentModelLoaders.cpp not found (run from source root)"; }
 
     EXPECT_EQ(CountOccurrences(source, "setPrimitiveTypeEXTProperty("), 1u)
         << "the part topology is applied in more than one place again; it belongs in "
@@ -72,7 +74,7 @@ TEST(CnbSharedModelBuilderTest, TheSpecularSamplerSlotSplitIsWrittenInExactlyOne
     // spelled out separately by every front-end, and it is the kind of constant that gets fixed
     // in one copy and not the others.
     const std::string source = ReadContentManagerSource();
-    if (source.empty()) { GTEST_SKIP() << "ContentManager.cpp not found (run from source root)"; }
+    if (source.empty()) { GTEST_SKIP() << "ContentModelLoaders.cpp not found (run from source root)"; }
 
     EXPECT_EQ(CountOccurrences(source, "setSpecularSamplerStateEXTProperty("), 1u)
         << "the sampler slot split is written in more than one place again; it belongs in "
@@ -85,7 +87,7 @@ TEST(CnbSharedModelBuilderTest, TheSharedBuilderIsTheOneEveryModelFrontEndCalls)
     // fourth Model front-end that quietly builds its own parts would fail the two counts above,
     // but this makes the intended structure legible rather than only forbidding the wrong one.
     const std::string source = ReadContentManagerSource();
-    if (source.empty()) { GTEST_SKIP() << "ContentManager.cpp not found (run from source root)"; }
+    if (source.empty()) { GTEST_SKIP() << "ContentModelLoaders.cpp not found (run from source root)"; }
 
     EXPECT_EQ(CountOccurrences(source, "BuiltModelPartEXT BuildModelMeshPartGeometryEXT("), 1u);
     EXPECT_EQ(CountOccurrences(source, "BuildModelMeshPartGeometryEXT(device, geometry)"), 3u)
@@ -108,7 +110,7 @@ TEST(CnbSharedModelBuilderTest, ThePrimitiveCountOverrideExistsForTheCnbPathOnly
     // has already cross-checked it against the topology (CNBF-H012), so re-deriving it here would
     // throw that check away. The other two have nothing to state.
     const std::string source = ReadContentManagerSource();
-    if (source.empty()) { GTEST_SKIP() << "ContentManager.cpp not found (run from source root)"; }
+    if (source.empty()) { GTEST_SKIP() << "ContentModelLoaders.cpp not found (run from source root)"; }
 
     EXPECT_EQ(CountOccurrences(source, "geometry.primitiveCountOverride ="), 1u)
         << "only the .cnb path supplies a primitive count; the other two derive it";

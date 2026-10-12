@@ -167,13 +167,13 @@ namespace CNA::Content
          * **Not every built-in type** (plans/plan_cnb.md `CNBF-119`) -- the name is inherited from
          * when those were the only two. The other eight built-in loaders (`Model`, `Texture2D`,
          * `TextureCube`, `Texture3D`, `SpriteFont`, `SoundEffect`, `Song`, `Video`) are registered
-         * by `ContentManager::RegisterBuiltinLoaders()` instead, because each of them constructs a
+         * by the first `ContentManager::Load<T>()` of their type instead
+         * (`ContentManager.hpp`'s `detail::BuiltinContent`), because each of them constructs a
          * runtime object that needs a `GraphicsDevice` or the `ContentManager` itself, neither of
-         * which this module can reach. A test that calls Clear() and wants the whole table back
-         * must construct a `ContentManager`, not merely call this.
+         * which this module can reach -- and so that a program links only the loaders of the types
+         * it loads. Curve and AnimationClip register there too; games never need to call this.
          *
-         * Idempotent, thread-safe, and called automatically by every `ContentManager` constructor,
-         * so games never need to call it.
+         * Idempotent and thread-safe.
          */
         static void RegisterBuiltIns();
 
@@ -190,9 +190,9 @@ namespace CNA::Content
          * it. A game therefore cannot register a built-in identifier at all, rather than being
          * refused at run time for passing the wrong enumerator.
          *
-         * A repeat registration under the same name is tolerated, because every `ContentManager`
-         * constructor repeats it; a game-owned registration for the same identifier is not, in
-         * either order.
+         * A repeat registration under the same name is tolerated, because every first load of a
+         * type on a new `ContentManager` repeats it; a game-owned registration for the same
+         * identifier is not, in either order.
          *
          * @param assetTypeId       One of CNA's own identifiers; must not be a custom one.
          * @param canonicalTypeName The type's canonical .NET name. Must not be empty.
@@ -206,8 +206,9 @@ namespace CNA::Content
                                     const std::string& canonicalTypeName, LoaderFn loader);
 
         // The compile-time half of the CNA/game boundary (plans/plan_cnb.md `CNBF-122`).
-        // ContentManager registers the eight built-in loaders that need a GraphicsDevice or the
-        // manager itself, so it -- and nothing else -- reaches RegisterBuiltIn().
+        // ContentManager registers the built-in loaders (through RegisterBuiltinCnbLoader, for
+        // its per-type detail::BuiltinContent), so it -- and nothing else -- reaches
+        // RegisterBuiltIn().
         friend class Microsoft::Xna::Framework::Content::ContentManager;
     };
 }

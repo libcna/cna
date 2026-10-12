@@ -13,7 +13,12 @@
 // ContentTypeReaderManager::ClearTypeCreators() (in their own SetUp()) to exercise "reader not
 // registered" error paths with a ContentManager constructed afterward; auto-registering everything
 // on every ContentManager construction would silently repopulate the registry out from under that
-// isolation. Call RegisterAllBuiltInXnbReaders() explicitly, once, at real game startup instead.
+// isolation.
+//
+// A game does not call it either: ContentManager::Load<T>() registers the readers an asset of
+// type T can need on its first use (detail::BuiltinContent in ContentManager.hpp), so a program
+// links only the readers of the types it loads. This is the explicit everything-at-once entry
+// point, for a type whose content may hold any asset and for tools.
 
 namespace CNA::Internal::Xnb
 {
