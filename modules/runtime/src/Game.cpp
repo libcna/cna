@@ -478,11 +478,9 @@ namespace Microsoft::Xna::Framework
 
     const CNA::Platform::PlatformCapabilities& Game::GetPlatformCapabilitiesEXT() const
     {
-        if (!platformCapabilities_)
-        {
-            platformCapabilities_ = platform_->GetCapabilities();
-        }
-        return *platformCapabilities_;
+        std::call_once(platformCapabilitiesRead_,
+                       [this] { platformCapabilities_ = platform_->GetCapabilities(); });
+        return platformCapabilities_;
     }
 
     GameComponentCollection& Game::getComponentsProperty()

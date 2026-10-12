@@ -18,10 +18,16 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <latch>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 
@@ -83,6 +89,33 @@ namespace
     private:
         int& wholeSetReads_;
         int& cameraOrTrayQuestions_;
+    };
+
+    // Counts whole-set reads from any thread, and holds each read long enough for every other
+    // first caller to arrive while it is under way.
+    class SlowlyQuestionedPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        SlowlyQuestionedPlatform(std::unique_ptr<CNA::Platform::IPlatform> inner,
+                                 std::atomic<int>& wholeSetReads)
+            : PlatformTestDecorator(std::move(inner)), wholeSetReads_(wholeSetReads)
+        {
+        }
+
+        [[nodiscard]] CNA::Platform::PlatformCapabilities GetCapabilities() const override
+        {
+            ++wholeSetReads_;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            return PlatformTestDecorator::GetCapabilities();
+        }
+
+        [[nodiscard]] bool Supports(const CNA::Platform::PlatformCapability capability) const override
+        {
+            return GetInner().Supports(capability);
+        }
+
+    private:
+        std::atomic<int>& wholeSetReads_;
     };
 
     class GamePlatformOwnershipTest : public ::testing::Test
@@ -312,4 +345,42 @@ TEST_F(GamePlatformOwnershipTest, AGameThatNeverAsksDoesNotReadTheCameraOrTrayCa
     EXPECT_EQ(capabilities.tray, expected.tray);
     EXPECT_EQ(capabilities.surfacePresentation, expected.surfacePresentation);
     EXPECT_EQ(capabilities.textInput, expected.textInput);
+}
+
+TEST_F(GamePlatformOwnershipTest, ConcurrentFirstCallsReadTheCapabilitiesOnce)
+{
+    std::atomic<int> wholeSetReads{0};
+    QuietGame game(std::make_unique<SlowlyQuestionedPlatform>(
+        CNA::Platform::PlatformFactory::Create(), wholeSetReads));
+
+    EXPECT_EQ(wholeSetReads.load(), 0);
+    constexpr int kCallers = 8;
+    std::latch start(kCallers);
+    std::array<const CNA::Platform::PlatformCapabilities*, kCallers> seen{};
+    std::vector<std::thread> callers;
+    for (int caller = 0; caller < kCallers; ++caller)
+    {
+        callers.emplace_back([&, caller] {
+            start.arrive_and_wait();
+            seen[caller] = &game.GetPlatformCapabilitiesEXT();
+        });
+    }
+    for (std::thread& caller : callers)
+    {
+        caller.join();
+    }
+
+    EXPECT_EQ(wholeSetReads.load(), 1);
+    for (const CNA::Platform::PlatformCapabilities* capabilities : seen)
+    {
+        EXPECT_EQ(capabilities, seen[0]);
+    }
+    const CNA::Platform::PlatformCapabilities expected =
+        static_cast<const CNA::Platform::Testing::PlatformTestDecorator&>(game.GetPlatformEXT())
+            .GetInner()
+            .GetCapabilities();
+    EXPECT_EQ(seen[0]->camera, expected.camera);
+    EXPECT_EQ(seen[0]->tray, expected.tray);
+    EXPECT_EQ(seen[0]->surfacePresentation, expected.surfacePresentation);
+    EXPECT_EQ(seen[0]->textInput, expected.textInput);
 }

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -282,6 +281,8 @@ namespace Microsoft::Xna::Framework
          * because asking whether cameras are supported starts the platform's camera subsystem,
          * which a game that never asks should not pay for.
          *
+         * Thread-safe: concurrent first calls read the platform once.
+         *
          * @return The platform's capability set, the same on every call.
          */
         CNAEXT [[nodiscard]] const CNA::Platform::PlatformCapabilities&
@@ -395,7 +396,9 @@ namespace Microsoft::Xna::Framework
         // failed-construction path is covered and the normal path still uninstalls from ~Game.
         std::unique_ptr<PlatformInstallation> platformInstallation_;
 
-        mutable std::optional<CNA::Platform::PlatformCapabilities> platformCapabilities_;
+        // Read on the first GetPlatformCapabilitiesEXT(), by whichever thread asks first.
+        mutable std::once_flag platformCapabilitiesRead_;
+        mutable CNA::Platform::PlatformCapabilities platformCapabilities_;
         std::unique_ptr<PlatformEventBatch> eventBatch_;
 
         GameComponentCollection Components_;
