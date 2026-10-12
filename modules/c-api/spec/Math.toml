@@ -41,6 +41,7 @@ raw = true
 
 [point_values.routes]
 cna_point_init = { value = "CNA_Point{0, 0}" }
+cna_point_get_zero = { value = "CNA_Point{0, 0}" }
 cna_point_init_xy = { value = "CNA_Point{x, y}" }
 cna_point_add = { value = "CNA_Point{WrapAdd(left.x, right.x), WrapAdd(left.y, right.y)}" }
 cna_point_subtract = { value = "CNA_Point{WrapSubtract(left.x, right.x), WrapSubtract(left.y, right.y)}" }
@@ -51,6 +52,7 @@ raw = true
 
 [rectangle_values.routes]
 cna_rectangle_init = { value = "CNA_Rectangle{0, 0, 0, 0}" }
+cna_rectangle_get_empty = { value = "CNA_Rectangle{0, 0, 0, 0}" }
 cna_rectangle_init_xywh = { value = "CNA_Rectangle{x, y, width, height}" }
 cna_rectangle_get_left = { value = "value.x" }
 cna_rectangle_get_right = { value = "RectangleRight(value)" }
@@ -60,6 +62,7 @@ cna_rectangle_get_location = { value = "CNA_Point{value.x, value.y}" }
 cna_rectangle_get_center = { value = "CNA_Point{WrapAdd(value.x, value.width / 2), WrapAdd(value.y, value.height / 2)}" }
 cna_rectangle_get_is_empty = { value = "value.x == 0 && value.y == 0 && value.width == 0 && value.height == 0" }
 cna_rectangle_contains_xy = { value = "RectangleContainsPoint(value, x, y)" }
+cna_rectangle_contains_point = { value = "RectangleContainsPoint(value, point.x, point.y)" }
 cna_rectangle_contains_rectangle = { value = "value.x <= candidate.x && RectangleRight(candidate) <= RectangleRight(value) && value.y <= candidate.y && RectangleBottom(candidate) <= RectangleBottom(value)" }
 cna_rectangle_intersects = { value = "RectanglesIntersect(left, right)" }
 
@@ -72,12 +75,9 @@ raw = true
 [helpers.routes]
 cna_point_divide = { result = "PointDivide(left, right, out_value)" }
 cna_math_closest_msaa_power = { result = "MathClosestMsaaPower(value, out_value)" }
-cna_point_get_zero = { result = "PointGetZero(out_value)", optional = ["out_value"] }
-cna_rectangle_get_empty = { result = "RectangleGetEmpty(out_value)", optional = ["out_value"] }
 cna_rectangle_set_location = { result = "RectangleSetLocation(value, location)" }
 cna_rectangle_offset_point = { result = "RectangleOffsetPoint(value, offset)" }
 cna_rectangle_offset_xy = { result = "RectangleOffsetXy(value, offset_x, offset_y)" }
 cna_rectangle_inflate = { result = "RectangleInflate(value, horizontal_value, vertical_value)" }
 cna_rectangle_intersect = { result = "RectangleIntersect(left, right, out_value)", optional = ["out_value"] }
 cna_rectangle_union = { result = "RectangleUnion(left, right, out_value)", optional = ["out_value"] }
-cna_rectangle_contains_point = { result = "RectangleContainsPointRoute(value, point, out_contains)", optional = ["out_contains"] }

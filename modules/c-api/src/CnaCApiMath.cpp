@@ -77,7 +77,7 @@ using Microsoft::Xna::Framework::Rectangle;
     int32_t* const outValue)
 {
     if (value < 0) {
-        return InvalidArgument("The MSAA input is negative or its output is null.");
+        return InvalidArgument("The MSAA input is negative.");
     }
     if (value <= 1) {
         *outValue = 0;
@@ -95,18 +95,13 @@ using Microsoft::Xna::Framework::Rectangle;
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result PointGetZero(CNA_Point* const outValue)
-{
-    return cna_point_init(outValue);
-}
-
 [[nodiscard]] CNA_Result PointDivide(
     const CNA_Point left,
     const CNA_Point right,
     CNA_Point* const outValue)
 {
     if (right.x == 0 || right.y == 0) {
-        return InvalidArgument("The point output is null or a divisor component is zero.");
+        return InvalidArgument("A point divisor component is zero.");
     }
     constexpr int32_t Minimum = std::numeric_limits<int32_t>::min();
     if ((left.x == Minimum && right.x == -1) ||
@@ -116,11 +111,6 @@ using Microsoft::Xna::Framework::Rectangle;
     const CNA_Point result{left.x / right.x, left.y / right.y};
     *outValue = result;
     return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result RectangleGetEmpty(CNA_Rectangle* const outValue)
-{
-    return cna_rectangle_init(outValue);
 }
 
 [[nodiscard]] CNA_Result RectangleSetLocation(
@@ -133,14 +123,6 @@ using Microsoft::Xna::Framework::Rectangle;
     value->x = location.x;
     value->y = location.y;
     return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result RectangleContainsPointRoute(
-    const CNA_Rectangle value,
-    const CNA_Point point,
-    CNA_Bool* const outContains)
-{
-    return cna_rectangle_contains_xy(value, point.x, point.y, outContains);
 }
 
 [[nodiscard]] CNA_Result RectangleOffsetPoint(

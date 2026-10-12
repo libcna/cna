@@ -2020,11 +2020,13 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_rectangle_copy_string(v_CNA_Rectangle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_copy_string", "a null destination with a capacity");
     failures += expect(cna_rectangle_copy_string(v_CNA_Rectangle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_copy_string", "a null out_bytes");
     failures += expect(cna_point_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_init", "a null out_value");
+    failures += expect(cna_point_get_zero(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_get_zero", "a null out_value");
     failures += expect(cna_point_init_xy(v_int32_t, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_init_xy", "a null out_value");
     failures += expect(cna_point_add(v_CNA_Point, v_CNA_Point, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_add", "a null out_value");
     failures += expect(cna_point_subtract(v_CNA_Point, v_CNA_Point, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_subtract", "a null out_value");
     failures += expect(cna_point_multiply(v_CNA_Point, v_CNA_Point, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_multiply", "a null out_value");
     failures += expect(cna_rectangle_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_init", "a null out_value");
+    failures += expect(cna_rectangle_get_empty(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_get_empty", "a null out_value");
     failures += expect(cna_rectangle_init_xywh(v_int32_t, v_int32_t, v_int32_t, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_init_xywh", "a null out_value");
     failures += expect(cna_rectangle_get_left(v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_get_left", "a null out_edge");
     failures += expect(cna_rectangle_get_right(v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_get_right", "a null out_edge");
@@ -2034,6 +2036,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_rectangle_get_center(v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_get_center", "a null out_center");
     failures += expect(cna_rectangle_get_is_empty(v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_get_is_empty", "a null out_is_empty");
     failures += expect(cna_rectangle_contains_xy(v_CNA_Rectangle, v_int32_t, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_contains_xy", "a null out_contains");
+    failures += expect(cna_rectangle_contains_point(v_CNA_Rectangle, v_CNA_Point, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_contains_point", "a null out_contains");
     failures += expect(cna_rectangle_contains_rectangle(v_CNA_Rectangle, v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_contains_rectangle", "a null out_contains");
     failures += expect(cna_rectangle_intersects(v_CNA_Rectangle, v_CNA_Rectangle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_rectangle_intersects", "a null out_intersects");
     failures += expect(cna_point_divide(v_CNA_Point, v_CNA_Point, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_point_divide", "a null out_value");

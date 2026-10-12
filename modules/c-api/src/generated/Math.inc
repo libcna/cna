@@ -369,6 +369,18 @@ CNA_Result cna_point_init(
     });
 }
 
+CNA_Result cna_point_get_zero(
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_get_zero: out_value is null.");
+        }
+        *out_value = CNA_Point{0, 0};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_point_init_xy(
     const int32_t x,
     const int32_t y,
@@ -431,6 +443,18 @@ CNA_Result cna_rectangle_init(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_value == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_rectangle_init: out_value is null.");
+        }
+        *out_value = CNA_Rectangle{0, 0, 0, 0};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_rectangle_get_empty(
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_get_empty: out_value is null.");
         }
         *out_value = CNA_Rectangle{0, 0, 0, 0};
         return CNA_RESULT_SUCCESS;
@@ -559,6 +583,20 @@ CNA_Result cna_rectangle_contains_xy(
     });
 }
 
+CNA_Result cna_rectangle_contains_point(
+    const CNA_Rectangle value,
+    const CNA_Point point,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_rectangle_contains_point: out_contains is null.");
+        }
+        *out_contains = CNA::C::Detail::ToCBool(RectangleContainsPoint(value, point.x, point.y));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_rectangle_contains_rectangle(
     const CNA_Rectangle value,
     const CNA_Rectangle candidate,
@@ -609,22 +647,6 @@ CNA_Result cna_math_closest_msaa_power(
             return CNA::C::Detail::InvalidArgument("cna_math_closest_msaa_power: out_value is null.");
         }
         return MathClosestMsaaPower(value, out_value);
-    });
-}
-
-CNA_Result cna_point_get_zero(
-    CNA_Point* const out_value)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return PointGetZero(out_value);
-    });
-}
-
-CNA_Result cna_rectangle_get_empty(
-    CNA_Rectangle* const out_value)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return RectangleGetEmpty(out_value);
     });
 }
 
@@ -683,15 +705,5 @@ CNA_Result cna_rectangle_union(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         return RectangleUnion(left, right, out_value);
-    });
-}
-
-CNA_Result cna_rectangle_contains_point(
-    const CNA_Rectangle value,
-    const CNA_Point point,
-    CNA_Bool* const out_contains)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return RectangleContainsPointRoute(value, point, out_contains);
     });
 }
