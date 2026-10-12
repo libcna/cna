@@ -62,6 +62,8 @@ if(CNA_BUILD_TESTS)
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
     # standalone executables with their own main(), not GTest translation units.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
+    # Likewise the link-footprint consumers (cmake/Tests/LinkFootprint.cmake).
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/link_footprint/.*\\.cpp$")
 
     # plans/plan_binding.md CBIND-033: the C API module owns its own test executables
     # (modules/c-api/CMakeLists.txt) and none of its C++ translation units is a GTest unit --
