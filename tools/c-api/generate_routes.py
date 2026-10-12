@@ -58,18 +58,21 @@ Each route is ``name = { <kind> = "<C++>" }``:
                                        route is a call into a hand-written helper. Every non-const
                                        ``out_*`` pointer is refused when null before anything else,
                                        and a handle output is first set to CNA_INVALID_HANDLE.
+                                       Outputs listed in ``optional = ["out_x"]`` may be null:
+                                       they are not refused, a handle among them is cleared only
+                                       when given, and the helper decides what null means.
 
 Inside an expression every route parameter is available under its header name, already converted
 to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, a CNA_Bool is
 validated as canonical and read as ``bool``, and a CNA_StringView is read as UTF-8 into a
 ``std::string`` (CNA_RESULT_ENCODING when it is not; ``refuse_nul = ["name"]`` also refuses an
-embedded NUL). A lookup's own parameters, and every parameter of a ``result`` route, are passed
-unconverted. Every other parameter is passed as declared. The
+embedded NUL). A lookup's own parameters, and the text inputs of a ``result`` route (its helper
+reads them), are passed unconverted. Every other parameter is passed as declared. The
 result is converted back by the output's C type: ToC for a marshaled struct, ToCBool for
 CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
-expression builds it. A group that says ``raw = true`` works on the C structures themselves:
-its struct parameters, converted or not, are passed as declared and a struct result is assigned
-as built.
+expression builds it. A group that says ``raw = true`` works on the C values themselves: its
+struct and CNA_Bool parameters are passed as declared (a CNA_Bool still checked canonical first)
+and a struct result is assigned as built.
 
 A ``value`` or ``get`` whose output is a versioned structure (``struct_size``, ``struct_version``)
 says ``versioned = true``: the output is then refused unless it is a version 1 structure large
@@ -234,7 +237,7 @@ class Route:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
         unknown = set(entry) - set(KINDS) - {"invalid_if", "validate", "require", "versioned",
-                                             "refuse_nul"}
+                                             "refuse_nul", "optional"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         refusals = entry.get("invalid_if", [])
@@ -256,6 +259,10 @@ class Route:
         if not isinstance(self.refuse_nul, list) or not all(
                 isinstance(n, str) for n in self.refuse_nul):
             raise SpecError(f"{name}: refuse_nul takes a list of text parameter names")
+        self.optional = entry.get("optional", [])
+        if not isinstance(self.optional, list) or not all(
+                isinstance(n, str) for n in self.optional):
+            raise SpecError(f"{name}: optional takes a list of output parameter names")
         self.versioned = entry.get("versioned", False)
         if self.versioned is not False and self.versioned is not True:
             raise SpecError(f"{name}: versioned is either true or left out")
@@ -276,6 +283,9 @@ class Route:
         if self.requirements and not self.has_lookup:
             raise SpecError(f"{name}: require reads the looked-up object; without a lookup, "
                             "write validate")
+        if self.optional and (self.kind != "result"
+                              or not set(self.optional) <= {o.name for o in self.outputs}):
+            raise SpecError(f"{name}: optional names out_* outputs of a 'result' route")
         if self.versioned and self.kind not in ("value", "get"):
             raise SpecError(f"{name}: only a 'value' or 'get' output can be versioned")
 
@@ -350,8 +360,9 @@ class Route:
 
     def _check_names(self) -> None:
         names = {p.name for p in self.params if not self._renamed(p)}
-        locals_ = ({"object", "owner", "other", "routeResult"}
-                   | {f"c_{p.name}" for p in self.inputs})
+        # `object`, `owner` and `other` are locals only in groups that look something up.
+        locals_ = ({"routeResult"} | {f"c_{p.name}" for p in self.inputs}
+                   | ({"object", "owner", "other"} if self.has_lookup else set()))
         if names & locals_:
             raise self._fail(f"a parameter is named {', '.join(sorted(names & locals_))}, "
                              "which the generated code uses for a local")
@@ -359,8 +370,8 @@ class Route:
     # The C parameter is renamed when the expression sees a converted local under its name.
     def _converted(self, param: Param) -> bool:
         kind = self.types.kind_of(param.type)
-        if kind == "marshaled" and self.group.get("raw"):
-            return False
+        if kind in ("marshaled", "bool") and self.group.get("raw"):
+            return False  # checked like any other, then passed as the caller declared it
         if self.has_lookup and param in self.lookup_params:
             return False  # a lookup receives its parameters as the caller passed them
         if kind == "text" and self.kind == "result":
@@ -431,7 +442,7 @@ class Route:
             if kind == "marshaled" and self._converted(param):
                 lines.append(f"{indent}const auto {param.name} = "
                              f"{DETAIL}ToNative({self._c_name(param)});")
-            elif kind == "bool":
+            elif kind == "bool" and self._converted(param):
                 lines.append(f"{indent}const bool {param.name} = "
                              f"{DETAIL}FromCBool({self._c_name(param)});")
         return lines
@@ -494,10 +505,15 @@ class Route:
                 f"{DETAIL}ValidateCopyOutput({', '.join(p.name for p in self.outputs)})", i)
         elif self.kind == "result":
             for output in self.outputs:
-                lines += null_check(self.name, output, i)
+                if output.name not in self.optional:
+                    lines += null_check(self.name, output, i)
             for output in self.outputs:
                 if self.types.kind_of(output.type) == "handle":
-                    lines.append(f"{i}*{output.name} = CNA_INVALID_HANDLE;")
+                    if output.name in self.optional:
+                        lines += [f"{i}if ({output.name} != nullptr) {{",
+                                  f"{i}    *{output.name} = CNA_INVALID_HANDLE;", f"{i}}}"]
+                    else:
+                        lines.append(f"{i}*{output.name} = CNA_INVALID_HANDLE;")
         lines += self._bool_checks(i)
         lines += self._refusal_checks(i)
         lines += self._text_reads(i)
@@ -726,7 +742,7 @@ def render_contract_test(routes: list[Route]) -> str:
     ]
     for r in routes:
         if r.kind == "result":
-            for output in r.outputs:
+            for output in (o for o in r.outputs if o.name not in r.optional):
                 lines.append(_expect(f"{r.name}({_arguments(r, **{output.name: 'NULL'})})",
                                      "CNA_RESULT_INVALID_ARGUMENT", r.name,
                                      f'"a null {output.name}"', "feature" in r.group))
