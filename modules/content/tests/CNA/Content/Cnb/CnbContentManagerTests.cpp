@@ -501,14 +501,22 @@ TEST_F(CnbContentManagerTest, RegistryRejectsInvalidRegistrations)
     EXPECT_THROW(CnbLoaderRegistry::Register(0x90000001u, "X", {}), std::invalid_argument);
 }
 
-TEST_F(CnbContentManagerTest, TheBuiltInLoadersAreRegisteredByEveryContentManager)
+TEST_F(CnbContentManagerTest, TheFirstLoadOfABuiltInTypeRegistersItsLoaderAndNoOtherFamilys)
 {
+    // A program links the loaders of the types it loads: the first Load<T>() registers T's
+    // built-in loader -- even when that load then fails -- and leaves the other families alone.
+    CnbLoaderRegistry::Clear();
     ScratchContentRoot root;
     ContentManager cm(nullptr, root.path().string());
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+
+    EXPECT_THROW((void)cm.Load<Curve>("missing"), ContentLoadException);
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
-    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
     EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
               "Microsoft.Xna.Framework.Curve");
+    // AnimationClipEXT is the model family's, registered by its own first load.
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
 }
 
 // --------------------------------------------------------------------------------------------

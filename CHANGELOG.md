@@ -20,10 +20,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   that uses those features links them. See `docs/link-size-architecture.md`. Observable
   differences: `ContentManager` registers a type's readers on the first `Load<T>()` of it rather
   than in its constructor (and `Game` no longer registers every `.xnb` reader at construction), so
-  `ContentTypeReaderManager` and `GetXnbReaderUsageSummary()` report a built-in reader once its
-  type has been loaded; `RegisterBuiltinLoaders()` (CNAEXT) registers every family, `.xnb` readers
-  included. The system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as
-  before reachable only by signed-in players.
+  `ContentTypeReaderManager`, `GetXnbReaderUsageSummary()` and `CnbLoaderRegistry` report a
+  built-in reader or `.cnb` loader once its type has been loaded; `RegisterBuiltinLoaders()`
+  (CNAEXT) registers every family, `.xnb` readers included. The system Guide's panels are
+  installed by `GamerServicesDispatcher.Initialize`, as before reachable only by signed-in
+  players.
 - **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
   `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
   compiles CNA into per-function sections and collects unreferenced ones in every program that
