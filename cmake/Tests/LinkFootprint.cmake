@@ -17,6 +17,11 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
     add_executable(cna_link_footprint_full tests/link_footprint/footprint_full_features.cpp)
     target_link_libraries(cna_link_footprint_full PRIVATE CNA::Runtime CNA::GamerServices)
 
+    add_executable(cna_link_footprint_gamer_services
+        tests/link_footprint/footprint_gamer_services_game.cpp)
+    target_link_libraries(cna_link_footprint_gamer_services PRIVATE
+        CNA::Runtime CNA::GamerServices)
+
     if(Python3_Interpreter_FOUND)
         # What a game that loads textures, fonts and sounds, plays them and asks the Guide about
         # its license must not contain. Each family is one subsystem that used to ride along.
@@ -110,6 +115,44 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 --binary $<TARGET_FILE:cna_link_footprint_full>
                 ${_cna_footprint_args})
         set_tests_properties(LinkFootprint_FullFeatures PROPERTIES LABELS "configuration;link-footprint")
+        # A game with a GamerServicesComponent: initialized gamer services give its players the
+        # system Guide (Home or the Guide button), whose panels show profiles and avatars, so the
+        # Guide, the avatar renderer and editor and the built-in catalog are this game's own. The
+        # gate pins that, and that nothing else rides along.
+        set(_cna_footprint_args)
+        foreach(_pattern IN ITEMS
+                "CNA::Internal::GltfImport::(?!Cgltf)"
+                "^draco::"
+                "Content::detail::BuiltinContent<Microsoft::Xna::Framework::Graphics::Model>"
+                "CNA::Internal::Xnb::RegisterModelXnbReaders"
+                "Content::detail::RegisterEveryBuiltinXnbReader"
+                "Media::MediaPlayer::"
+                "Media::Video::"
+                "Media::Song::"
+                "Audio::Microphone::"
+                "Audio::DynamicSoundEffectInstance::"
+                "Microsoft::Xna::Framework::Net::"
+                "^enet_"
+                "CNA::Internal::GamerServices::makeFakeBackend"
+                "Graphics::Texture3D::"
+                "Graphics::TextureCube::"
+                "Graphics::RenderTargetCube::"
+                "CNA::Platform::Sdl3::Sdl3CameraProvider::"
+                "CNA::Platform::Sdl3::Sdl3Tray::"
+                "CNA::Content::Cnb::CnbWriter::")
+            list(APPEND _cna_footprint_args --forbid "${_pattern}")
+        endforeach()
+        add_test(NAME LinkFootprint_GamerServicesGame
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
+                --binary $<TARGET_FILE:cna_link_footprint_gamer_services>
+                ${_cna_footprint_args}
+                --require "CNA::Internal::GamerServices::installSystemGuide"
+                --require "CNA::Internal::GamerServices::GuideUi::homeScreen"
+                --require "GamerServices::AvatarRenderer::"
+                --require "CNA::Internal::GamerServices::Avatars::embeddedCatalogFiles"
+                --require "GamerServices::Guide::getIsTrialModeProperty")
+        set_tests_properties(LinkFootprint_GamerServicesGame PROPERTIES
+            LABELS "configuration;link-footprint")
         unset(_cna_footprint_absent)
         unset(_cna_footprint_present)
         unset(_cna_footprint_args)
