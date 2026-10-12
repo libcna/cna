@@ -56,8 +56,9 @@ foreach(_program IN ITEMS plain libgcc_option plain_shared)
 endforeach()
 # config_option asks for a static runtime in Release only; a flag inside a generator expression
 # counts in every configuration, which only costs the option.
-foreach(_program IN ITEMS libstdcxx_option both_options static_option config_option link_flags
-                          link_libraries libstdcxx_shared directory_option)
+foreach(_program IN ITEMS libstdcxx_option both_options static_option static_pie_option
+                          nostdlib_option config_option link_flags link_libraries libstdcxx_shared
+                          directory_option)
     expect("${_build}" default ${_program} OFF)
 endforeach()
 

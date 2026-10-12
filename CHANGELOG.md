@@ -39,10 +39,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   compiles CNA into per-function sections and collects unreferenced ones in every program that
   links it. SDL3_image is gone, its `third_party/SDL_image` submodule included: nothing in CNA
   used it, and images are decoded by CNA's own loader as before.
-- **mold links the same CNA objects as GNU ld and lld.** On ELF, `CNA::BuildConfig` names a shared
-  C++ runtime ahead of CNA's archives, so mold no longer extracts an unrelated CNA object for a
-  standard-library symbol a shared library needs (a multi-renderer 2D game linked the avatar
-  catalog through libshaderc). A program whose flags link the runtime statically (`-static`,
+- **With a shared C++ runtime, mold links the same CNA objects as GNU ld and lld.** On ELF,
+  `CNA::BuildConfig` names the shared runtime ahead of CNA's archives, so mold no longer extracts
+  an unrelated CNA object for a standard-library symbol a shared library needs (a multi-renderer
+  2D game linked the avatar catalog through libshaderc). A program whose flags link the runtime statically (`-static`,
   `-static-libstdc++`, ...) keeps its static runtime; `-static-libgcc` alone does not count.
   `CNA_CXX_RUNTIME_LINKAGE=STATIC|SHARED` declares a runtime CMake cannot see. See
   `docs/link-size-architecture.md`, "Linker independence".

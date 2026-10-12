@@ -196,7 +196,8 @@ inside a generator expression too, which can only cost the option -- does not ge
 `-static-libgcc` alone keeps it: libstdc++ stays shared. A runtime chosen where CMake cannot see it
 (a compiler wrapper or spec file, another library's link options) is declared with
 `-DCNA_CXX_RUNTIME_LINKAGE=STATIC`, or `SHARED`; the default is `AUTO`.
-`CnaCxxRuntimeLinkage` (`cmake/Tests/CxxRuntimeLinkageCase.cmake`) pins each of these.
+`CnaCxxRuntimeLinkage` (`cmake/Tests/CxxRuntimeLinkageCase.cmake`) configures programs that ask
+in these ways and checks their link lines.
 
 With a static runtime CNA adds nothing, and where the runtime archive goes is the program's
 choice. The driver names it last, so lld and mold resolve a standard-library symbol to the first
