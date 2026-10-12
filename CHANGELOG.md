@@ -13,9 +13,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 - **The C API's route boundaries are generated.** 3,202 of the 3,210 `cna_*` routes are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
-  `tools/c-api/generate_routes.py`. 2,252 of them -- property reads and writes, commands, text
+  `tools/c-api/generate_routes.py`. 2,255 of them -- property reads and writes, commands, text
   setters, static queries, value computations, text size/copy pairs, plain destroys -- do all
-  their work in that line; the other 950 call a hand-written helper named after the route, which
+  their work in that line; the other 947 call a hand-written helper named after the route, which
   holds the real logic (creation bookkeeping, events, bulk transfers) while the generated half
   applies the boundary rules: the exception barrier, null outputs, cleared handle outputs and
   `CNA_Bool` checks. Only the seven `cna_error_*` queries and `cna_get_abi_version` stay written
