@@ -246,7 +246,7 @@ endfunction()
 
 function(cna_apply_sharp_runtime_build_support)
     set(_cna_runtime_support
-        cna_instrumentation cna_debug_info_options cna_emscripten_exception_abi)
+        cna_instrumentation cna_debug_info_options cna_emscripten_exception_abi cna_size_options)
     if(CNA_SHARP_RUNTIME_IS_MODULAR)
         sharp_runtime_get_enabled_components(_cna_sharp_runtime_components)
         set(_cna_sharp_runtime_targets)
@@ -321,7 +321,8 @@ function(cna_apply_build_support_to_cna_targets)
             cna_instrumentation
             cna_debug_info_options
             cna_emscripten_exception_abi
-            cna_linker_options)
+            cna_linker_options
+            cna_size_options)
         if(EMSCRIPTEN AND _cna_target_type STREQUAL "EXECUTABLE")
             get_target_property(_cna_asyncify_mode
                 "${_cna_target}" CNA_EMSCRIPTEN_ASYNCIFY)
@@ -337,6 +338,25 @@ endfunction()
 
 option(CNA_ENABLE_IPO
     "Enable IPO/LTO for CNA-owned release artifacts (not compatible with the static C API package)" OFF)
+
+# Section-level dead stripping (docs/link-size-architecture.md). The module structure decides which
+# objects a static link extracts; inside an extracted object every function comes along unless the
+# object was compiled into one section per function and the final link collects the unreferenced
+# ones. CNA's own objects (and sharp-runtime's) get the sections here; the final links of programs
+# that link CNA get the collection through CNA::BuildConfig (modules/CMakeLists.txt). No CNA code
+# registers itself through a linker section, so nothing a program uses can be collected.
+#
+# MSVC already does both in Release (/Gy and /OPT:REF are its defaults) and wasm-ld collects
+# unreferenced functions by default, so the option adds nothing there.
+option(CNA_OPTIMIZE_FOR_SIZE
+    "Compile CNA into per-function sections and drop unreferenced ones in final links" OFF)
+add_library(cna_size_options INTERFACE)
+add_library(CNA::SizeOptions ALIAS cna_size_options)
+if(CNA_OPTIMIZE_FOR_SIZE AND NOT MSVC AND NOT EMSCRIPTEN
+   AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(cna_size_options INTERFACE -ffunction-sections -fdata-sections)
+    set(CNA_SIZE_GC_LINK_OPTION "$<IF:$<PLATFORM_ID:Darwin,iOS>,-Wl$<COMMA>-dead_strip,-Wl$<COMMA>--gc-sections>")
+endif()
 
 option(CNA_ENABLE_UNITY_BUILD
     "Enable the measured clean-CI unity-build pilot for the core and math modules" OFF)
