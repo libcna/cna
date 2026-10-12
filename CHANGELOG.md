@@ -12,7 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 ### Changed
 
 - **A program links only the CNA subsystems it uses.** Mobile Eggbert (textures, sounds,
-  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 62.2 MB as a Debug executable
+  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 62.4 MB as a Debug executable
   and from 44.6 MB to 6.2 MB stripped (3.0 MB as a Release build with `CNA_OPTIMIZE_FOR_SIZE`): it
   no longer contains the 30 MB embedded avatar catalog, the avatar system, the system Guide, the
   Gamer Services service client, the Model reader, glTF, Draco, MediaPlayer, Video, Microphone,

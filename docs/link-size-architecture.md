@@ -158,24 +158,24 @@ this work; the game's source is the same in both.
 
 | Debug executable | Before | After |
 |---|---:|---:|
-| Unstripped | 208,287,328 | 62,248,736 |
-| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,847,360 |
-| Fully stripped | 44,607,184 | 6,183,024 |
-| `.text` | 9,363,703 | 4,061,716 |
-| `.rodata` | 30,863,125 | 325,589 |
+| Unstripped | 208,287,328 | 62,386,528 |
+| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,867,168 |
+| Fully stripped | 44,607,184 | 6,190,840 |
+| `.text` | 9,363,703 | 4,066,138 |
+| `.rodata` | 30,863,125 | 325,973 |
 | ... of which the avatar catalog | 29,999,928 | 0 |
-| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,112 / 23,504 |
-| `.eh_frame` | 2,786,336 | 1,109,160 |
+| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,128 / 23,536 |
+| `.eh_frame` | 2,786,336 | 1,111,376 |
 
-Debug information is most of a Debug executable (143 MB before, 48 MB after) and shrinks with the
+Debug information is most of a Debug executable (143 MB before, 48.5 MB after) and shrinks with the
 code it describes; the stripped size is what ships.
 
 | Release executable, static CNA (after) | `CNA_OPTIMIZE_FOR_SIZE=OFF` | `ON` |
 |---|---:|---:|
-| Unstripped | 6,461,240 | 4,254,552 |
-| Fully stripped | 4,689,944 | 3,037,504 |
-| `.text` | 3,554,586 | 2,247,674 |
-| `.rodata` | 93,507 | 74,467 |
+| Unstripped | 6,466,616 | 4,258,248 |
+| Fully stripped | 4,693,440 | 3,040,136 |
+| `.text` | 3,556,954 | 2,249,594 |
+| `.rodata` | 93,635 | 74,595 |
 | `.data` | 8,144 | 3,504 |
 
 Neither build contains a symbol of the avatar catalog, `AvatarRenderer`, the glTF importer,
