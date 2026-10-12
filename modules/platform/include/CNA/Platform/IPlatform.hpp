@@ -317,12 +317,16 @@ namespace CNA::Platform {
         /**
          * @brief Gets the system-tray service.
          *
+         * Installed on first use (EnableTrayService(), CNA/Platform/OptionalServices.hpp).
+         *
          * @return The service, or null when this platform reports no `Tray` capability.
          */
         [[nodiscard]] virtual IPlatformTray* GetTray() = 0;
 
         /**
          * @brief Gets the camera provider.
+         *
+         * Installed on first use (EnableCameraService(), CNA/Platform/OptionalServices.hpp).
          *
          * @return The provider, or null when this platform reports no `Camera` capability.
          */

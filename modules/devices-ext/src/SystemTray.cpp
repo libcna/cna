@@ -5,14 +5,18 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Platform/OptionalServices.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
 #include <utility>
 
 namespace CNA::Devices
 {
+    // Each entry enables the platform's tray service first: it is installed on first use, so
+    // that a program without a tray never links it (CNA/Platform/OptionalServices.hpp).
     bool SystemTray::getIsSupportedProperty()
     {
+        CNA::Platform::EnableTrayService();
         const CNA::Platform::PlatformCapabilities capabilities =
             CNA::Platform::GetCurrentPlatform().GetCapabilities();
         return capabilities.tray;
@@ -20,6 +24,7 @@ namespace CNA::Devices
 
     SystemTray::SystemTray(const std::string& tooltip)
     {
+        CNA::Platform::EnableTrayService();
         CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
         CNA::Platform::IPlatformTray* service = platform.GetTray();
         if (service == nullptr)

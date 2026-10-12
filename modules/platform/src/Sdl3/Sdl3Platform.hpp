@@ -2,13 +2,13 @@
 #pragma once
 
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformCamera.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
 
-#include "Sdl3Camera.hpp"
 #include "Sdl3GraphicsServices.hpp"
 #include "Sdl3DeviceServices.hpp"
 #include "Sdl3InputServices.hpp"
 #include "Sdl3SystemServices.hpp"
-#include "Sdl3Tray.hpp"
 
 #include <cstdint>
 #include <map>
@@ -139,6 +139,20 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
             IPlatformWindow& window) override;
 
+        /**
+         * @brief Installs the tray service (EnableTrayService(), Sdl3OptionalServices.cpp).
+         * @param isSupported Whether this build and host have a tray.
+         * @param create Creates the service on the first GetTray().
+         */
+        static void InstallTray(bool (*isSupported)(), std::unique_ptr<IPlatformTray> (*create)());
+        /**
+         * @brief Installs the camera service (EnableCameraService(), Sdl3OptionalServices.cpp).
+         * @param isSupported Whether this build and host can enumerate cameras.
+         * @param create Creates the provider on the first GetCamera().
+         */
+        static void InstallCamera(bool (*isSupported)(),
+                                  std::unique_ptr<IPlatformCameraProvider> (*create)());
+
     private:
         [[nodiscard]] bool HasVulkanSupport() const;
 
@@ -191,8 +205,10 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Haptics haptics_;
         Sdl3InputDevices inputDevices_;
         Sdl3Dialogs dialogs_;
-        Sdl3Tray tray_;
-        Sdl3CameraProvider camera_;
+        // Installed on first use (CNA/Platform/OptionalServices.hpp), created on first request.
+        std::mutex optionalServicesMutex_;
+        std::unique_ptr<IPlatformTray> tray_;
+        std::unique_ptr<IPlatformCameraProvider> camera_;
     };
 
 } // namespace CNA::Platform::Sdl3

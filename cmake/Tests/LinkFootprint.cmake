@@ -49,6 +49,9 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             # Networking: the Guide and profiles need no network session or ENet.
             "Microsoft::Xna::Framework::Net::"
             "^enet_"
+            # The platform's camera and tray, installed only by CNA::Devices::Camera/SystemTray.
+            "CNA::Platform::Sdl3::Sdl3CameraProvider::"
+            "CNA::Platform::Sdl3::Sdl3Tray::"
             # Volume and cube textures, which a 2D game binds nowhere.
             "Graphics::Texture3D::"
             "Graphics::TextureCube::"

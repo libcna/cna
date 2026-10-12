@@ -5,6 +5,7 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatformCamera.hpp"
+#include "CNA/Platform/OptionalServices.hpp"
 
 #include <limits>
 #include <utility>
@@ -28,13 +29,17 @@ namespace CNA::Devices
         }
     } // namespace
 
+    // Each entry enables the platform's camera service first: it is installed on first use, so
+    // that a program without a camera never links or starts it (CNA/Platform/OptionalServices.hpp).
     bool Camera::getIsSupportedProperty()
     {
+        CNA::Platform::EnableCameraService();
         return CNA::Platform::GetCurrentPlatform().GetCapabilities().camera;
     }
 
     std::vector<CameraDeviceInfo> Camera::getAvailableCamerasProperty()
     {
+        CNA::Platform::EnableCameraService();
         CNA::Platform::IPlatformCameraProvider* provider =
             CNA::Platform::GetCurrentPlatform().GetCamera();
         if (provider == nullptr)
@@ -58,6 +63,7 @@ namespace CNA::Devices
 
     Camera::Camera()
     {
+        CNA::Platform::EnableCameraService();
         CNA::Platform::IPlatformCameraProvider* provider =
             CNA::Platform::GetCurrentPlatform().GetCamera();
         if (provider == nullptr)

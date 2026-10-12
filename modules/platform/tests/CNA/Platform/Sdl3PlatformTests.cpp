@@ -8,6 +8,9 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/OptionalServices.hpp"
+#include "../../../src/Sdl3/Sdl3Camera.hpp"
+#include "../../../src/Sdl3/Sdl3Tray.hpp"
 
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
@@ -178,6 +181,22 @@ TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
     // Vulkan on a machine with no loader would hand a caller a service that refuses every call.
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
+}
+
+TEST_F(Sdl3PlatformTest, EnabledCameraAndTrayReportWhatThePlatformSupports)
+{
+    // The camera and the tray are installed on first use (CNA/Platform/OptionalServices.hpp), so
+    // a program that never uses them neither links them nor starts SDL's camera subsystem. Once
+    // enabled they answer as they always did: the platform's own support, and a service exactly
+    // when the capability is true.
+    EnableCameraService();
+    EnableTrayService();
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_EQ(capabilities.tray, Sdl3::Sdl3Tray::IsSupported());
+    EXPECT_EQ(capabilities.camera, Sdl3::Sdl3CameraProvider::IsSupported());
+    EXPECT_EQ(platform_->GetTray() != nullptr, capabilities.tray);
+    EXPECT_EQ(platform_->GetCamera() != nullptr, capabilities.camera);
+    EXPECT_EQ(platform_->GetCamera(), platform_->GetCamera()) << "created once, then reused";
 }
 
 TEST_F(Sdl3PlatformTest, VulkanCapabilityProbePreservesTheHostsVideoSubsystemState)

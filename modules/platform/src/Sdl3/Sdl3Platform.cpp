@@ -12,6 +12,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <atomic>
 #include <cstdio>
 #include <mutex>
 #include <optional>
@@ -26,6 +27,19 @@
 namespace CNA::Platform::Sdl3 {
 
     namespace {
+
+        // The optional services' hooks, set by Install*() (Sdl3OptionalServices.cpp). The factory
+        // is stored before the probe, so a probe seen set always has its factory.
+        std::atomic<bool (*)()> traySupported{nullptr};
+        std::atomic<std::unique_ptr<IPlatformTray> (*)()> createTray{nullptr};
+        std::atomic<bool (*)()> cameraSupported{nullptr};
+        std::atomic<std::unique_ptr<IPlatformCameraProvider> (*)()> createCamera{nullptr};
+
+        bool Supported(const std::atomic<bool (*)()>& probe)
+        {
+            bool (*const supported)() = probe.load();
+            return supported != nullptr && supported();
+        }
 
         /// Maps CNA's subsystem vocabulary onto SDL's init flags. Video implies SDL's events
         /// subsystem, and gamepad implies joystick; SDL handles both dependencies itself, which
@@ -340,8 +354,8 @@ namespace CNA::Platform::Sdl3 {
         capabilities.inputDeviceEnumeration = true;
         capabilities.messageBox = true;
         capabilities.nativeFileDialog = true;
-        capabilities.tray = Sdl3Tray::IsSupported();
-        capabilities.camera = Sdl3CameraProvider::IsSupported();
+        capabilities.tray = Supported(traySupported);
+        capabilities.camera = Supported(cameraSupported);
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
 
@@ -704,10 +718,45 @@ namespace CNA::Platform::Sdl3 {
     }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
-    IPlatformTray* Sdl3Platform::GetTray() { return Sdl3Tray::IsSupported() ? &tray_ : nullptr; }
+    IPlatformTray* Sdl3Platform::GetTray()
+    {
+        if (!Supported(traySupported))
+        {
+            return nullptr;
+        }
+        const std::lock_guard lock(optionalServicesMutex_);
+        if (tray_ == nullptr)
+        {
+            tray_ = createTray.load()();
+        }
+        return tray_.get();
+    }
+
     IPlatformCameraProvider* Sdl3Platform::GetCamera()
     {
-        return Sdl3CameraProvider::IsSupported() ? &camera_ : nullptr;
+        if (!Supported(cameraSupported))
+        {
+            return nullptr;
+        }
+        const std::lock_guard lock(optionalServicesMutex_);
+        if (camera_ == nullptr)
+        {
+            camera_ = createCamera.load()();
+        }
+        return camera_.get();
+    }
+
+    void Sdl3Platform::InstallTray(bool (*isSupported)(), std::unique_ptr<IPlatformTray> (*create)())
+    {
+        createTray.store(create);
+        traySupported.store(isSupported);
+    }
+
+    void Sdl3Platform::InstallCamera(bool (*isSupported)(),
+                                     std::unique_ptr<IPlatformCameraProvider> (*create)())
+    {
+        createCamera.store(create);
+        cameraSupported.store(isSupported);
     }
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }

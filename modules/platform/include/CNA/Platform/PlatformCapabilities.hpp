@@ -77,9 +77,9 @@ namespace CNA::Platform {
         bool messageBox = false;
         /** @brief A native file or folder dialog can be shown. */
         bool nativeFileDialog = false;
-        /** @brief A system tray icon with a menu can be created. */
+        /** @brief A system tray icon with a menu can be created (once EnableTrayService() ran). */
         bool tray = false;
-        /** @brief Cameras can be enumerated and opened. */
+        /** @brief Cameras can be enumerated and opened (once EnableCameraService() ran). */
         bool camera = false;
         /** @brief The platform manages the application entry point (SDL-on-Android style). */
         bool managedEntrypoint = false;
