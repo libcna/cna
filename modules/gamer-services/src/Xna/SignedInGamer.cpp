@@ -35,32 +35,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         }();
     }
 
-    SignedInGamer::SignedInGamer(
-        const std::string& gamertag,
-        bool isSignedInToLive,
-        bool isGuest,
-        Microsoft::Xna::Framework::PlayerIndex playerIndex
-    )
-        : Gamer(gamertag, gamertag)
-        , isGuest_(isGuest)
-        , isSignedInToLive_(isSignedInToLive)
-        , playerIndex_(playerIndex)
-        , gameDefaults_(GameDefaults::CreateInternal())
-        , presence_(GamerPresence::CreateInternal())
-        , privileges_(GamerPrivileges::CreateInternal())
-        , partySize_(0)
-    {
-    }
-
-    SignedInGamer SignedInGamer::CreateInternal(
-        const std::string& gamertag,
-        bool isSignedInToLive,
-        bool isGuest,
-        Microsoft::Xna::Framework::PlayerIndex playerIndex
-    ) {
-        return SignedInGamer(gamertag, isSignedInToLive, isGuest, playerIndex);
-    }
-
     const GameDefaults& SignedInGamer::getGameDefaultsProperty() const     { return gameDefaults_; }
     bool SignedInGamer::getIsGuestProperty() const                        { return isGuest_; }
     bool SignedInGamer::getIsSignedInToLiveProperty() const               { return isSignedInToLive_; }
