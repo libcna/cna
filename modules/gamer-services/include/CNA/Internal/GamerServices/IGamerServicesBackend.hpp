@@ -75,6 +75,16 @@ struct AvatarCatalogPolicy {
     /** @brief Largest pack installed. */
     std::uint64_t maximumBytes=std::uint64_t{64}<<20;
 };
+/** @brief What the client asking for avatars can draw, sent with the read so the service can
+ * answer with something drawable. Supplied by the avatar code that asks
+ * (Avatars::clientCatalogs()), never looked up by the backend itself: the service client must not
+ * reference the avatar catalog, or every program using Gamer Services would link it. */
+struct AvatarClientCatalogs {
+    /** @brief Catalog versions drawable without a download, ascending. */
+    std::vector<std::uint16_t> versions;
+    /** @brief Whether this client has somewhere to install a catalog pack. */
+    bool canInstall=false;
+};
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {
     /** @brief Catalog key. */
@@ -324,8 +334,10 @@ public:
     /** @brief Reads accounts' avatars, negotiated for this client (description formats, catalogs
      * it has, whether it accepts catalog updates): the service answers with the stored description
      * when this client can draw it, else a marked projection. @param userIds 1..16 service identities.
+     * @param client The asker's catalogs (empty for a caller that only reads descriptions).
      * @return One record per identity, in order. */
-    virtual std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& userIds) = 0;
+    virtual std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& userIds,
+        const AvatarClientCatalogs& client = {}) = 0;
     /** @brief Stores a signed-in account's own avatar (the CNA avatar editor's save).
      * @param userId Signed-in account. @param description Valid 1021-byte CNA description.
      * @return The avatar's new revision. */

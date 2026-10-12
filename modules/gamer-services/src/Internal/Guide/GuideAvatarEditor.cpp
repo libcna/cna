@@ -5,7 +5,9 @@
 // follows the category (face, top, bottoms, shoes). Saving is transactional: the CNA service
 // (avatars.set) or the local profile either holds the new avatar, or the editor says why not and
 // keeps editing.
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "GuideScreen.hpp"
+#include "../GuideOverlay.hpp"
 #include "CNA/Internal/GamerServices/AvatarEditor.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
@@ -148,7 +150,7 @@ public:
         // service validates a saved description against.
         load<LoadedAvatar>(self,[user=userId_](IGamerServicesBackend& s) {
             LoadedAvatar loaded;
-            auto records=s.avatars({user});
+            auto records=s.avatars({user},Avatars::clientCatalogs());
             if(!records.empty())loaded.record=std::move(records.front());
             loaded.catalog=Av::parseManifest(s.avatarCatalog(0)).version;
             return loaded;
@@ -458,7 +460,7 @@ private:
         }
         checking_=true;
         load<ServiceAvatarRecord>(self_.lock(),[user=userId_](IGamerServicesBackend& s) {
-            auto records=s.avatars({user});
+            auto records=s.avatars({user},Avatars::clientCatalogs());
             return records.empty()?ServiceAvatarRecord{}:std::move(records.front());
         },[](AvatarEditorScreen& screen,ServiceAvatarRecord record) {
             screen.checking_=false;
@@ -898,6 +900,7 @@ void LeaveEditorScreen::activate(int index)
 
 std::shared_ptr<Screen> avatarEditorScreen(Xna::PlayerIndex player,AvatarEditorOptions options)
 {
+    installSystemGuide();
     auto screen=std::make_shared<AvatarEditorScreen>(std::move(options));
     screen->player=player;
     screen->start(screen);

@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/Internal/EmbeddedFile.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
+#include "CNA/Internal/GamerServices/ContentHash.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -22,7 +23,7 @@
 #include <string_view>
 #include <vector>
 
-namespace CNA::Internal::GamerServices { class IGamerServicesBackend; }
+namespace CNA::Internal::GamerServices { class IGamerServicesBackend; struct AvatarClientCatalogs; }
 
 namespace CNA::Internal::GamerServices::Avatars {
 struct AvatarImage;
@@ -155,8 +156,7 @@ const CatalogManifest& newestEmbeddedManifest();
  * one. @param catalog Catalog. @param bodyType 0/1, or empty for either. @param random Entropy
  * source. @return Descriptor naming that catalog. */
 AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<std::uint8_t> bodyType,std::mt19937& random);
-/** @brief Lower-case hex SHA-256. @param bytes Input. @return Digest. */
-std::string sha256Hex(std::span<const std::uint8_t> bytes);
+using GamerServices::sha256Hex;
 
 /** @brief Runs service work on the backend executor and waits (bounded) for it; for background
  * threads, never the game thread. @param work Work. @return Result, or empty when the service is
@@ -251,6 +251,10 @@ std::shared_ptr<const CatalogManifest> installedManifest(std::uint16_t version);
 /** @brief Every catalog version drawable without a download: compiled in, then installed.
  * @return Versions, ascending. */
 std::vector<std::uint16_t> availableCatalogVersions();
+/** @brief What this client can draw, sent with every avatar read
+ * (IGamerServicesBackend::avatars): the available catalog versions and whether a pack could be
+ * installed. @return Catalogs. */
+AvatarClientCatalogs clientCatalogs();
 
 /** @brief Outcome of installing a catalog pack. */
 enum class CatalogInstall : std::uint8_t {

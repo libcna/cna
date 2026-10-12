@@ -29,13 +29,6 @@ void publish() {
     gamers->Clear(); for (auto* gamer : slots) if (gamer) gamers->Add(gamer);
 }
 }
-bool GamerServicesDispatcher::isInitialized_=false;
-SharpRuntime::IntPtr GamerServicesDispatcher::windowHandle_=0;
-std::size_t GamerServicesDispatcher::freedGamerCount_=0;
-System::EventHandler<System::EventArgs> GamerServicesDispatcher::InstallingTitleUpdate;
-bool GamerServicesDispatcher::getIsInitializedProperty(){return isInitialized_;}
-SharpRuntime::IntPtr GamerServicesDispatcher::getWindowHandleProperty(){return windowHandle_;}
-void GamerServicesDispatcher::setWindowHandleProperty(SharpRuntime::IntPtr value){windowHandle_=value;}
 void GamerServicesDispatcher::Initialize(System::IServiceProvider& serviceProvider) {
     // Xbox-target documentation rejects duplicate initialization; no synthetic FNA profiles.
     if(isInitialized_)throw System::InvalidOperationException("Gamer services are already initialized.");
@@ -44,6 +37,9 @@ void GamerServicesDispatcher::Initialize(System::IServiceProvider& serviceProvid
     // the game starts; like XNA, they appear (and raise SignedIn) at the first Update.
     std::vector<CNA::Internal::GamerServices::LocalProfile> automatic;
     if(!service->serviceEnabled())automatic=CNA::Internal::GamerServices::autoSignInLocalProfiles();
+    // An initialized game is one whose players sign in and can open any Guide panel, so this is
+    // where the whole system Guide (and with it the avatar views) is linked and installed.
+    CNA::Internal::GamerServices::installSystemGuide();
     CNA::Internal::GamerServices::installGuideOverlay(serviceProvider);publish();
     for(std::size_t slot=0;slot<automatic.size();++slot)service->signInLocal(static_cast<int>(slot),automatic[slot].gamertag);
     isInitialized_=true;
@@ -186,5 +182,4 @@ void GamerServicesDispatcher::Update() {
     if(firstError)std::rethrow_exception(firstError);
 }
 bool GamerServicesDispatcher::UpdateAsync(){if(isInitialized_)Update();return isInitialized_;}
-std::size_t GamerServicesDispatcher::GetFreedGamerCountForTesting(){return freedGamerCount_;}
 }

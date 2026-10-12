@@ -2,6 +2,7 @@
 // Installed avatar catalog packs (Layer B of docs/avatars.md): catalogs this release does not
 // compile in, installed whole, validated before use, and kept.
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -263,6 +264,11 @@ std::vector<std::uint16_t> availableCatalogVersions()
         }
     std::ranges::sort(versions);
     return versions;
+}
+
+AvatarClientCatalogs clientCatalogs()
+{
+    return AvatarClientCatalogs{availableCatalogVersions(),!installedCatalogRoot().empty()};
 }
 
 CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumBytes,

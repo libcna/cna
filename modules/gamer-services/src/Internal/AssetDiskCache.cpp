@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
-#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/ContentHash.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
@@ -14,7 +14,7 @@ bool isHash(const std::string& name)
 
 std::string hashOf(const std::vector<unsigned char>& bytes)
 {
-    return Avatars::sha256Hex(std::span<const std::uint8_t>(bytes.data(), bytes.size()));
+    return sha256Hex(std::span<const std::uint8_t>(bytes.data(), bytes.size()));
 }
 }
 

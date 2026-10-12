@@ -258,6 +258,42 @@ void replace(std::shared_ptr<Screen> screen)
 
 Identity& identity(Xna::PlayerIndex player){return state().identities[static_cast<std::size_t>(player)&3];}
 
+// ---- What the system Guide installs (installSystemGuide) --------------------------------------
+namespace {
+ShellHooks& installedHooks(){static ShellHooks hooks;return hooks;}
+std::unique_ptr<PortraitSource>(*portraitFactory)()=nullptr;
+}
+
+void setShellHooks(const ShellHooks& hooks){installedHooks()=hooks;}
+const ShellHooks& shellHooks(){return installedHooks();}
+
+void refreshIdentity(Xna::PlayerIndex player)
+{
+    if(shellHooks().refreshIdentity){shellHooks().refreshIdentity(player);return;}
+    // Without the system Guide the rail shows who is signed in, and nothing it would have to read.
+    auto& who=identity(player);
+    who=Identity{};
+    for(auto* gamer:*GS::Gamer::getSignedInGamersProperty())
+        if(gamer->getPlayerIndexProperty()==player){who.gamertag=gamer->getGamertagProperty();who.guest=gamer->getIsGuestProperty();}
+}
+
+void setPortraitSourceFactory(std::unique_ptr<PortraitSource>(*factory)()){portraitFactory=factory;}
+Portraits::Portraits()=default;
+Portraits::~Portraits()=default;
+PortraitSource* Portraits::source()
+{
+    if(!source_&&portraitFactory)source_=portraitFactory();
+    return source_.get();
+}
+Xna::Graphics::Texture2D* Portraits::request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live)
+{
+    auto* views=source();
+    return views?views->request(description,framing,width,height,live):nullptr;
+}
+void Portraits::render(Xna::Graphics::GraphicsDevice& device,double seconds){if(auto* views=source())views->render(device,seconds);}
+void Portraits::clear(){if(source_)source_->clear();}
+int Portraits::waiting() const{return source_?source_->waiting():0;}
+
 // ---- Widgets ------------------------------------------------------------------------------
 int List::input(InputContext& ui,int count,int columns)
 {
@@ -425,22 +461,6 @@ constexpr RailEntry Rail[]{
     {Category::Leaderboards,Icon::Leaderboard,"Leaderboards"},{Category::Players,Icon::Clock,"Recent players"},{Category::Content,Icon::Store,"Game content"},
     {Category::Settings,Icon::Settings,"Settings"}};
 
-std::shared_ptr<Screen> rootFor(Category category,Xna::PlayerIndex player)
-{
-    switch(category) {
-    case Category::Home: return homeScreen(player);
-    case Category::Friends: return friendsScreen(player);
-    case Category::Party: return partyScreen(player);
-    case Category::Messages: return messagesScreen(player);
-    case Category::Achievements: return achievementsScreen(player);
-    case Category::Leaderboards: return leaderboardsScreen(player);
-    case Category::Players: return playersScreen(player);
-    case Category::Content: return contentScreen(player);
-    case Category::Settings: return settingsScreen(player);
-    case Category::None: break;
-    }
-    return nullptr;
-}
 
 std::string commandLabel(Command command,Device device)
 {
@@ -792,7 +812,7 @@ void applyInput(Screen& screen,InputContext& ui)
             const auto count=static_cast<int>(std::size(Rail));
             int index=static_cast<int>(current-std::begin(Rail))+(ui.input(Command::Next)?1:-1);
             index=(index+count)%count;
-            if(auto next=rootFor(Rail[index].category,screen.player))replace(std::move(next));
+            if(auto next=shellHooks().root?shellHooks().root(Rail[index].category,screen.player):nullptr)replace(std::move(next));
         }
     }
 }
