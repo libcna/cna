@@ -1064,6 +1064,32 @@ CNA_Result cna_cnb_model_copy_animation_name(
     });
 }
 
+CNA_Result cna_cnb_encode_model(
+    const CNA_CnbModelDataHandle model,
+    const CNA_StringView c_content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string content_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_encode_model: content_name is not valid text.", &content_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(Cnb::EncodeModelToCnb(*object->value, content_name), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
     const CNA_CnjToCnbResultHandle result,
     char* const destination,
@@ -1262,6 +1288,26 @@ CNA_Result cna_cnb_cnj_result_copy_external_reference(
     });
 }
 
+CNA_Result cna_cnb_cnj_result_copy_bytes(
+    const CNA_CnjToCnbResultHandle result,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnjToCnbResultResource> object{};
+        if (const CNA_Result routeResult = GetCompiledCnj(result, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->bytes, destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_byte_writer_destroy(
     const CNA_CnbByteWriterHandle writer)
 {
@@ -1418,6 +1464,26 @@ CNA_Result cna_cnb_byte_writer_write_string(
     });
 }
 
+CNA_Result cna_cnb_byte_writer_copy_bytes(
+    const CNA_CnbByteWriterHandle writer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->View(), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_writer_destroy(
     const CNA_CnbWriterHandle writer)
 {
@@ -1472,6 +1538,26 @@ CNA_Result cna_cnb_writer_set_metadata(
         }
         object->value->SetMetadata(std::move(asset_type_name), std::move(content_name));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_writer_build(
+    const CNA_CnbWriterHandle writer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->Build(), destination, capacity, out_byte_count);
     });
 }
 
@@ -1726,6 +1812,32 @@ CNA_Result cna_cnb_sprite_font_data_copy_atlas(
     });
 }
 
+CNA_Result cna_cnb_encode_sprite_font(
+    const CNA_CnbSpriteFontDataHandle font,
+    const CNA_StringView c_content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string content_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_encode_sprite_font: content_name is not valid text.", &content_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbSpriteFontResource> object{};
+        if (const CNA_Result routeResult = GetSpriteFont(font, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(Cnb::EncodeSpriteFontToCnb(*object->value, content_name), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_sound_effect_data_destroy(
     const CNA_CnbSoundEffectDataHandle sound)
 {
@@ -1736,6 +1848,52 @@ CNA_Result cna_cnb_sound_effect_data_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(sound);
+    });
+}
+
+CNA_Result cna_cnb_encode_sound_effect(
+    const CNA_CnbSoundEffectDataHandle sound,
+    const CNA_StringView c_content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string content_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_encode_sound_effect: content_name is not valid text.", &content_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbSoundEffectResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffect(sound, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(Cnb::EncodeSoundEffectToCnb(*object->value, content_name), destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_copy_samples(
+    const CNA_CnbSoundEffectDataHandle sound,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbSoundEffectResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffect(sound, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->samples, destination, capacity, out_byte_count);
     });
 }
 
@@ -2054,6 +2212,39 @@ CNA_Result cna_cnb_writer_create(
         }
         *out_writer = CNA_INVALID_HANDLE;
         return CreateResourceHandle<CnbWriterResource>(ObjectKind::CnbWriter, std::make_shared<Cnb::CnbWriter>(asset_type_id, asset_schema_version), out_writer);
+    });
+}
+
+CNA_Result cna_cnb_encode_song(
+    const CNA_StringView c_stream_reference,
+    const CNA_StringView c_name,
+    const uint32_t duration_milliseconds,
+    const CNA_StringView c_content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string stream_reference;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_stream_reference, "cna_cnb_encode_song: stream_reference is not valid text.", &stream_reference);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cnb_encode_song: name is not valid text.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string content_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_encode_song: content_name is not valid text.", &content_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(Cnb::EncodeSongToCnb(Cnb::CnbSongData{stream_reference, name, duration_milliseconds}, content_name), destination, capacity, out_byte_count);
     });
 }
 
@@ -2522,6 +2713,50 @@ CNA_Result cna_cnb_model_set_material_texture_coordinate_set(
         }
         object->material.textureCoordinateSets[static_cast<std::size_t>(slot)] = coordinate_set;
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_copy_part_vertex_bytes(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->vertexBytes, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_part_index_bytes(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbModelResource> owner{};
+        Cnb::CnbModelPart* object{};
+        if (const CNA_Result routeResult = GetModelPart(model, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->indexBytes, destination, capacity, out_byte_count);
     });
 }
 

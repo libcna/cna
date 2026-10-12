@@ -113,6 +113,7 @@ cna_morph_target_data_ext_copy_weights = { result = "CopyOutputValues(object->va
 cna_morph_target_data_ext_copy_triangle_indices_ext = { result = "CopyOutputValues(object->value->TriangleIndicesEXT, destination, capacity, out_index_count, [](const std::uint32_t value) { return static_cast<uint32_t>(value); }, \"The MorphTargetDataEXT triangle-index output is invalid.\", \"The destination cannot hold all morph triangle indices.\")" }
 cna_morph_target_data_ext_set_recompute_flat_normals_ext = { call = "object->value->RecomputeFlatNormalsEXT = recompute" }
 cna_morph_target_data_ext_destroy = { release = true }
+cna_morph_target_data_ext_copy_base_vertex_bytes = { copy = "object->value->BaseVertexBytes" }
 
 [skinned_model]
 lookup = "GetSkinnedModel"

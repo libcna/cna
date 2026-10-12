@@ -183,6 +183,7 @@ static CNA_CnbDocumentHandle v_CNA_CnbDocumentHandle;
 static CNA_CnbModelDataHandle v_CNA_CnbModelDataHandle;
 static CNA_CnbModelFromCnjHandle v_CNA_CnbModelFromCnjHandle;
 static CNA_CnbReaderHandle v_CNA_CnbReaderHandle;
+static CNA_CnbSoundEffectDataHandle v_CNA_CnbSoundEffectDataHandle;
 static CNA_CnbSpriteFontDataHandle v_CNA_CnbSpriteFontDataHandle;
 static CNA_CnbTextureDataHandle v_CNA_CnbTextureDataHandle;
 static CNA_CnbTextureFormat v_CNA_CnbTextureFormat;
@@ -517,6 +518,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_get_animation_name_size(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_animation_name_size", "a null out_byte_count");
     failures += expect(cna_cnb_model_copy_animation_name(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_animation_name", "a null destination with a capacity");
     failures += expect(cna_cnb_model_copy_animation_name(v_CNA_CnbModelDataHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_animation_name", "a null out_bytes");
+    failures += expect(cna_cnb_encode_model(v_CNA_CnbModelDataHandle, v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_model", "a null destination with a capacity");
+    failures += expect(cna_cnb_encode_model(v_CNA_CnbModelDataHandle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_model", "a null out_bytes");
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(v_CNA_CnjToCnbResultHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_asset_type_name", "a null destination with a capacity");
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(v_CNA_CnjToCnbResultHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_asset_type_name", "a null out_bytes");
     failures += expect(cna_cnb_cnj_result_get_asset_type_id(v_CNA_CnjToCnbResultHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_asset_type_id", "a null out_asset_type_id");
@@ -529,8 +532,14 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_cnj_result_get_external_reference_size(v_CNA_CnjToCnbResultHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_external_reference_size", "a null out_byte_count");
     failures += expect(cna_cnb_cnj_result_copy_external_reference(v_CNA_CnjToCnbResultHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_external_reference", "a null destination with a capacity");
     failures += expect(cna_cnb_cnj_result_copy_external_reference(v_CNA_CnjToCnbResultHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_external_reference", "a null out_bytes");
+    failures += expect(cna_cnb_cnj_result_copy_bytes(v_CNA_CnjToCnbResultHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_bytes", "a null destination with a capacity");
+    failures += expect(cna_cnb_cnj_result_copy_bytes(v_CNA_CnjToCnbResultHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_bytes", "a null out_bytes");
     failures += expect(cna_cnb_byte_writer_get_size(v_CNA_CnbByteWriterHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_get_size", "a null out_size");
+    failures += expect(cna_cnb_byte_writer_copy_bytes(v_CNA_CnbByteWriterHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_copy_bytes", "a null destination with a capacity");
+    failures += expect(cna_cnb_byte_writer_copy_bytes(v_CNA_CnbByteWriterHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_copy_bytes", "a null out_bytes");
     failures += expect(cna_cnb_writer_get_schema_chunk_count(v_CNA_CnbWriterHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_writer_get_schema_chunk_count", "a null out_count");
+    failures += expect(cna_cnb_writer_build(v_CNA_CnbWriterHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_writer_build", "a null destination with a capacity");
+    failures += expect(cna_cnb_writer_build(v_CNA_CnbWriterHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_writer_build", "a null out_bytes");
     failures += expect(cna_cnb_texture_data_get_representation_count(v_CNA_CnbTextureDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_texture_data_get_representation_count", "a null out_count");
     failures += expect(cna_cnb_texture_data_get_representation_format(v_CNA_CnbTextureDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_texture_data_get_representation_format", "a null out_format");
     failures += expect(cna_cnb_texture_data_get_level_count(v_CNA_CnbTextureDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_texture_data_get_level_count", "a null out_count");
@@ -543,6 +552,12 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_from_cnj_copy_external_reference(v_CNA_CnbModelFromCnjHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_from_cnj_copy_external_reference", "a null destination with a capacity");
     failures += expect(cna_cnb_model_from_cnj_copy_external_reference(v_CNA_CnbModelFromCnjHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_from_cnj_copy_external_reference", "a null out_bytes");
     failures += expect(cna_cnb_sprite_font_data_copy_atlas(v_CNA_CnbSpriteFontDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_sprite_font_data_copy_atlas", "a null out_atlas");
+    failures += expect(cna_cnb_encode_sprite_font(v_CNA_CnbSpriteFontDataHandle, v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_sprite_font", "a null destination with a capacity");
+    failures += expect(cna_cnb_encode_sprite_font(v_CNA_CnbSpriteFontDataHandle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_sprite_font", "a null out_bytes");
+    failures += expect(cna_cnb_encode_sound_effect(v_CNA_CnbSoundEffectDataHandle, v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_sound_effect", "a null destination with a capacity");
+    failures += expect(cna_cnb_encode_sound_effect(v_CNA_CnbSoundEffectDataHandle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_sound_effect", "a null out_bytes");
+    failures += expect(cna_cnb_sound_effect_data_copy_samples(v_CNA_CnbSoundEffectDataHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_sound_effect_data_copy_samples", "a null destination with a capacity");
+    failures += expect(cna_cnb_sound_effect_data_copy_samples(v_CNA_CnbSoundEffectDataHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_sound_effect_data_copy_samples", "a null out_bytes");
     failures += expect(cna_cnb_animation_clip_copy_keyframes(v_CNA_CnbAnimationClipHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_animation_clip_copy_keyframes", "a null out_keyframe_count");
     failures += expect(cna_cnb_get_chunk_id_string_size(v_CNA_CnbChunkId, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_chunk_id_string_size", "a null out_byte_count");
     failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_chunk_id_string", "a null destination with a capacity");
@@ -572,6 +587,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null out_bytes");
     failures += expect(cna_cnb_byte_writer_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_create", "a null out_writer");
     failures += expect(cna_cnb_writer_create(v_uint32_t, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_writer_create", "a null out_writer");
+    failures += expect(cna_cnb_encode_song(v_CNA_StringView, v_CNA_StringView, v_uint32_t, v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_song", "a null destination with a capacity");
+    failures += expect(cna_cnb_encode_song(v_CNA_StringView, v_CNA_StringView, v_uint32_t, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_song", "a null out_bytes");
     failures += expect(cna_cnb_crc32c(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c", "a null out_checksum");
     failures += expect(cna_cnb_crc32c_portable(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c_portable", "a null out_checksum");
     failures += expect(cna_cnb_has_magic(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_has_magic", "a null out_has_magic");
@@ -598,6 +615,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_copy_part_external_effect(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_external_effect", "a null destination with a capacity");
     failures += expect(cna_cnb_model_copy_part_external_effect(v_CNA_CnbModelDataHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_external_effect", "a null out_bytes");
     failures += expect(cna_cnb_model_get_material_texture_coordinate_set(v_CNA_CnbModelDataHandle, v_uint64_t, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_material_texture_coordinate_set", "a null out_set");
+    failures += expect(cna_cnb_model_copy_part_vertex_bytes(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_vertex_bytes", "a null destination with a capacity");
+    failures += expect(cna_cnb_model_copy_part_vertex_bytes(v_CNA_CnbModelDataHandle, v_uint64_t, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_vertex_bytes", "a null out_bytes");
+    failures += expect(cna_cnb_model_copy_part_index_bytes(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_index_bytes", "a null destination with a capacity");
+    failures += expect(cna_cnb_model_copy_part_index_bytes(v_CNA_CnbModelDataHandle, v_uint64_t, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_part_index_bytes", "a null out_bytes");
     failures += expect(cna_cnb_model_copy_morph_weights(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_morph_weights", "a null out_value_count");
     failures += expect(cna_color_init_vector4(v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_color_init_vector4", "a null out_color");
     failures += expect(cna_color_from_non_premultiplied_vector4(v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_color_from_non_premultiplied_vector4", "a null out_color");
@@ -1823,6 +1844,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_morph_target_data_ext_get_recompute_flat_normals_ext(v_CNA_MorphTargetDataEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_get_recompute_flat_normals_ext", "a null out_recompute");
     failures += expect(cna_morph_target_data_ext_copy_weights(v_CNA_MorphTargetDataEXTHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_weights", "a null out_weight_count");
     failures += expect(cna_morph_target_data_ext_copy_triangle_indices_ext(v_CNA_MorphTargetDataEXTHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_triangle_indices_ext", "a null out_index_count");
+    failures += expect(cna_morph_target_data_ext_copy_base_vertex_bytes(v_CNA_MorphTargetDataEXTHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_base_vertex_bytes", "a null destination with a capacity");
+    failures += expect(cna_morph_target_data_ext_copy_base_vertex_bytes(v_CNA_MorphTargetDataEXTHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_base_vertex_bytes", "a null out_bytes");
     failures += expect(cna_skinned_model_ext_get_bone_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_bone_count", "a null out_bone_count");
     failures += expect(cna_skinned_model_ext_get_clip_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_clip_count", "a null out_clip_count");
     failures += expect(cna_skinned_model_ext_get_part_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_part_count", "a null out_part_count");
@@ -2524,6 +2547,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_model_copy_mesh_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_mesh_name", what);
     failures += expect(cna_cnb_model_get_animation_name_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_animation_name_size", what);
     failures += expect(cna_cnb_model_copy_animation_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_animation_name", what);
+    failures += expect(cna_cnb_encode_model(handle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_encode_model", what);
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_asset_type_name", what);
     failures += expect(cna_cnb_cnj_result_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_destroy", what);
     failures += expect(cna_cnb_cnj_result_get_asset_type_id(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_get_asset_type_id", what);
@@ -2534,6 +2558,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_cnj_result_copy_absorbed_file(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_absorbed_file", what);
     failures += expect(cna_cnb_cnj_result_get_external_reference_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_get_external_reference_size", what);
     failures += expect(cna_cnb_cnj_result_copy_external_reference(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_external_reference", what);
+    failures += expect(cna_cnb_cnj_result_copy_bytes(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_bytes", what);
     failures += expect(cna_cnb_byte_writer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_destroy", what);
     failures += expect(cna_cnb_byte_writer_get_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_get_size", what);
     failures += expect(cna_cnb_byte_writer_write_u8(handle, v_uint8_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_u8", what);
@@ -2544,9 +2569,11 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_byte_writer_write_f32(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f32", what);
     failures += expect(cna_cnb_byte_writer_write_f64(handle, v_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f64", what);
     failures += expect(cna_cnb_byte_writer_write_string(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_string", what);
+    failures += expect(cna_cnb_byte_writer_copy_bytes(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_copy_bytes", what);
     failures += expect(cna_cnb_writer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_destroy", what);
     failures += expect(cna_cnb_writer_get_schema_chunk_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_get_schema_chunk_count", what);
     failures += expect(cna_cnb_writer_set_metadata(handle, v_CNA_StringView, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_set_metadata", what);
+    failures += expect(cna_cnb_writer_build(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_build", what);
     failures += expect(cna_cnb_texture_data_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_destroy", what);
     failures += expect(cna_cnb_texture_data_get_representation_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_get_representation_count", what);
     failures += expect(cna_cnb_texture_data_get_representation_format(handle, v_uint64_t, &o_CNA_CnbTextureFormat), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_get_representation_format", what);
@@ -2562,7 +2589,10 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_CnbTextureDataHandle = UINT64_C(0xDEAD);
     failures += expect(cna_cnb_sprite_font_data_copy_atlas(handle, &o_CNA_CnbTextureDataHandle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_sprite_font_data_copy_atlas", what);
     failures += expect_cleared(o_CNA_CnbTextureDataHandle, "cna_cnb_sprite_font_data_copy_atlas");
+    failures += expect(cna_cnb_encode_sprite_font(handle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_encode_sprite_font", what);
     failures += expect(cna_cnb_sound_effect_data_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_sound_effect_data_destroy", what);
+    failures += expect(cna_cnb_encode_sound_effect(handle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_encode_sound_effect", what);
+    failures += expect(cna_cnb_sound_effect_data_copy_samples(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_sound_effect_data_copy_samples", what);
     failures += expect(cna_cnb_animation_clip_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_animation_clip_destroy", what);
     failures += expect(cna_cnb_animation_clip_copy_keyframes(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_animation_clip_copy_keyframes", what);
     failures += expect(cna_cnb_loader_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_loader_destroy", what);
@@ -2574,6 +2604,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_model_clear_morph(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_clear_morph", what);
     failures += expect_unless_arguments_refused(cna_cnb_model_get_material_texture_coordinate_set(handle, v_uint64_t, v_uint64_t, &o_uint8_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_material_texture_coordinate_set", what);
     failures += expect_unless_arguments_refused(cna_cnb_model_set_material_texture_coordinate_set(handle, v_uint64_t, v_uint64_t, v_uint8_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_set_material_texture_coordinate_set", what);
+    failures += expect(cna_cnb_model_copy_part_vertex_bytes(handle, v_uint64_t, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_part_vertex_bytes", what);
+    failures += expect(cna_cnb_model_copy_part_index_bytes(handle, v_uint64_t, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_part_index_bytes", what);
     failures += expect(cna_cnb_model_copy_morph_weights(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_morph_weights", what);
     failures += expect(cna_cnb_writer_append_embedded_texture2d(handle, v_CNA_CnbTextureDataHandle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_append_embedded_texture2d", what);
     failures += expect(cna_content_manager_get_root_directory_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_root_directory_size", what);
@@ -3596,6 +3628,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_morph_target_data_ext_copy_triangle_indices_ext(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_triangle_indices_ext", what);
     failures += expect(cna_morph_target_data_ext_set_recompute_flat_normals_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_set_recompute_flat_normals_ext", what);
     failures += expect(cna_morph_target_data_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_destroy", what);
+    failures += expect(cna_morph_target_data_ext_copy_base_vertex_bytes(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_base_vertex_bytes", what);
     failures += expect(cna_skinned_model_ext_get_bone_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_bone_count", what);
     failures += expect(cna_skinned_model_ext_get_clip_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_clip_count", what);
     failures += expect(cna_skinned_model_ext_get_part_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_part_count", what);
@@ -4449,6 +4482,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2207 generated routes\n", failures);
+    printf("%d failed checks across 2218 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

@@ -50,7 +50,8 @@ Each route is ``name = { <kind> = "<C++>" }``:
 ``size``   ([handle,] args..., uint64_t* out_bytes)
                                        the byte count of the text the expression yields.
 ``copy``   ([handle,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)
-                                       the size-then-copy text protocol for the expression.
+                                       the size-then-copy text protocol for the expression; with
+                                       a uint8_t* destination, the same protocol for its bytes.
 ``release`` (handle)                   a destroy with no bookkeeping: after the lookup, run the
                                        statement (``true`` for none) and release the handle.
 ``result`` (anything)                  return what the expression returns, a CNA_Result -- the
@@ -325,11 +326,11 @@ class Route:
                 raise self._fail("'release' takes only the handle it destroys")
         elif self.kind == "copy":
             tail = params[-3:]
-            if (len(tail) != 3 or tail[0].type != "char" or not tail[0].pointer or tail[0].const
-                    or tail[1].type != "uint64_t" or tail[1].pointer
+            if (len(tail) != 3 or tail[0].type not in ("char", "uint8_t") or not tail[0].pointer
+                    or tail[0].const or tail[1].type != "uint64_t" or tail[1].pointer
                     or tail[2].type != "uint64_t" or not tail[2].pointer):
-                raise self._fail("'copy' needs (char* destination, uint64_t capacity, "
-                                 "uint64_t* out_bytes) last")
+                raise self._fail("'copy' needs (char* or uint8_t* destination, uint64_t "
+                                 "capacity, uint64_t* out_bytes) last")
             self.outputs = params[-3:]
             params = params[:-3]
         for param in params:
@@ -474,7 +475,8 @@ class Route:
     def body(self) -> list[str]:
         i = " " * 8
         reads_text = any(self.types.kind_of(p.type) == "text" for p in self.inputs)
-        if self.kind == "copy" and not self.has_lookup and not reads_text:
+        if (self.kind == "copy" and not self.has_lookup and not reads_text
+                and self.outputs[0].type == "char"):
             destination, capacity, out_bytes = (p.name for p in self.outputs)
             return ([f"    return {DETAIL}CopyFormattedText({destination}, {capacity}, "
                      f"{out_bytes}, [&] {{"]
@@ -520,7 +522,8 @@ class Route:
                       f"{self.outputs[0].name});"]
         else:
             destination, capacity, out_bytes = (p.name for p in self.outputs)
-            lines += [f"{i}return {DETAIL}CopyText({self.expression}, {destination}, "
+            copy = "CopyText" if self.outputs[0].type == "char" else "CopyBytes"
+            lines += [f"{i}return {DETAIL}{copy}({self.expression}, {destination}, "
                       f"{capacity}, {out_bytes});"]
         return expand_lines(lines + ["    });"])
 
@@ -625,7 +628,8 @@ def _arguments(route: Route, handle: str | None = None, **overrides: str) -> str
                        else "NULL" if param.pointer else _standin("v", param.type))
         elif route.kind == "copy" and param in route.outputs:
             destination, capacity, _ = route.outputs
-            out.append("text" if param is destination
+            bytes_ = destination.type == "uint8_t"
+            out.append(("(uint8_t*)text" if bytes_ else "text") if param is destination
                        else "(uint64_t)sizeof(text)" if param is capacity else "&o_uint64_t")
         elif param in route.outputs:
             out.append("&" + _standin("o", param.type))

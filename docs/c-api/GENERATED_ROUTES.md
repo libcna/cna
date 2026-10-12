@@ -69,7 +69,7 @@ using-declarations and helpers. The route kinds are:
 | `get` | `(first, args..., T* out)` | look up `first`, then `*out` = the expression |
 | `call` | `([first,] args...)` | look up `first` if the group has a lookup, then run the expression |
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
-| `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol |
+| `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol (`CopyText`; `CopyBytes` for a `uint8_t*` destination) |
 | `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
 | `result` | anything | look up, then return the expression, a `CNA_Result`: the route is a call into a hand-written helper |
 

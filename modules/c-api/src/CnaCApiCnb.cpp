@@ -1592,33 +1592,6 @@ CNA_Result cna_cnb_byte_writer_write_zeros(
     });
 }
 
-CNA_Result cna_cnb_byte_writer_copy_bytes(
-    const CNA_CnbByteWriterHandle writerHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The written-bytes output buffer is invalid.");
-        }
-        const std::span<const uint8_t> view = writer->value->View();
-        *outByteCount = static_cast<uint64_t>(view.size());
-        if (capacity < static_cast<uint64_t>(view.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the written bytes.");
-        }
-        if (!view.empty()) {
-            std::memcpy(destination, view.data(), view.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_byte_writer_take(
     const CNA_CnbByteWriterHandle writerHandle,
     uint8_t* const destination,
@@ -1797,26 +1770,6 @@ CNA_Result cna_cnb_writer_get_limits(
         }
         WriteLimits(writer->value->Limits(), outLimits);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_writer_build(
-    const CNA_CnbWriterHandle writerHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The built-image output buffer is invalid.");
-        }
-        const std::vector<uint8_t> image = writer->value->Build();
-        return CopyBytes(image, destination, capacity, outByteCount);
     });
 }
 
@@ -2414,31 +2367,6 @@ CNA_Result cna_cnb_model_set_part_vertex_bytes(
     });
 }
 
-CNA_Result cna_cnb_model_copy_part_vertex_bytes(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The vertex byte output is invalid.");
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(part->vertexBytes, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_model_set_part_index_bytes(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
@@ -2463,31 +2391,6 @@ CNA_Result cna_cnb_model_set_part_index_bytes(
         }
         part->indexBytes.assign(source.begin(), source.end());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_model_copy_part_index_bytes(
-    const CNA_CnbModelDataHandle modelHandle,
-    const uint64_t index,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The index byte output is invalid.");
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(part->indexBytes, destination, capacity, outBytes);
     });
 }
 
@@ -3659,33 +3562,6 @@ CNA_Result cna_cnb_model_get_light(
     });
 }
 
-CNA_Result cna_cnb_encode_model(
-    const CNA_CnbModelDataHandle modelHandle,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded model output is invalid.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeModelToCnb(*model->value, nameText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_build_model_from_cnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,
@@ -3954,33 +3830,6 @@ CNA_Result cna_cnb_sprite_font_data_set_glyph(
     });
 }
 
-CNA_Result cna_cnb_encode_sprite_font(
-    const CNA_CnbSpriteFontDataHandle fontHandle,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded font output is invalid.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeSpriteFontToCnb(*font->value, nameText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
-}
-
 CNA_Result cna_cnb_sound_effect_data_create(
     const CNA_CnbSoundEffectInfo* const info,
     const uint8_t* const samples,
@@ -4039,89 +3888,6 @@ CNA_Result cna_cnb_sound_effect_data_get_info(
         outInfo->loop_start = data.loopStart;
         outInfo->loop_length = data.loopLength;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_sound_effect_data_copy_samples(
-    const CNA_CnbSoundEffectDataHandle soundHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSoundEffectResource> sound;
-        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The sample output is invalid.");
-        }
-        return CopyBytes(sound->value->samples, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_encode_sound_effect(
-    const CNA_CnbSoundEffectDataHandle soundHandle,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSoundEffectResource> sound;
-        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded sound output is invalid.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeSoundEffectToCnb(*sound->value, nameText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_encode_song(
-    const CNA_StringView streamReference,
-    const CNA_StringView name,
-    const uint32_t durationMilliseconds,
-    const CNA_StringView contentName,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded song output is invalid.");
-        }
-        Cnb::CnbSongData data;
-        if (const CNA_Result result = ReadText(
-                streamReference, "The stream_reference text is not valid UTF-8.",
-                &data.streamReference);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ReadText(name, "The name text is not valid UTF-8.", &data.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data.durationMs = durationMilliseconds;
-        std::string contentText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &contentText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeSongToCnb(data, contentText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
     });
 }
 
@@ -4605,25 +4371,6 @@ CNA_Result cna_cnb_compile_cnj(
         }
         return CreateCompiledCnj(
             Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
-    });
-}
-
-CNA_Result cna_cnb_cnj_result_copy_bytes(
-    const CNA_CnjToCnbResultHandle resultHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnjToCnbResultResource> compiled;
-        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The compiled-byte output is invalid.");
-        }
-        return CopyBytes(compiled->value->bytes, destination, capacity, outBytes);
     });
 }
 

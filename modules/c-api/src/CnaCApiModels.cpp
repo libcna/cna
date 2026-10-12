@@ -2757,33 +2757,6 @@ CNA_Result cna_morph_target_data_ext_copy_type_name(
     });
 }
 
-CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The MorphTargetDataEXT base-byte output is invalid.");
-        }
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& bytes = data->value->BaseVertexBytes;
-        *outByteCount = static_cast<uint64_t>(bytes.size());
-        if (capacity < bytes.size()) {
-            return BufferTooSmall("The destination cannot hold all MorphTargetDataEXT base bytes.");
-        }
-        if (!bytes.empty()) {
-            std::memcpy(destination, bytes.data(), bytes.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_morph_target_data_ext_copy_position_deltas(
     const CNA_MorphTargetDataEXTHandle dataHandle,
     const uint64_t targetIndex,
