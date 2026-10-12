@@ -185,6 +185,6 @@ carries the installation, the CMake package and a complete C program to copy, an
 [`LIMITATIONS.md`](LIMITATIONS.md), which answers the question the coverage inventory cannot: what
 is **not** here, grouped by the reason, so you can tell whether any of it stands in your way.
 [`RELEASE_GATE.md`](RELEASE_GATE.md) records whether this ABI may be published at all, measured on
-every run rather than written down once. How the routes are implemented — which are generated
-from `modules/c-api/spec/` and which are hand-written, and how to add either — is in
-[`GENERATED_ROUTES.md`](GENERATED_ROUTES.md).
+every run rather than written down once. How the routes are implemented — generated from
+`modules/c-api/spec/`, around hand-written helpers where a route has real logic, and how to add
+either kind — is in [`GENERATED_ROUTES.md`](GENERATED_ROUTES.md).

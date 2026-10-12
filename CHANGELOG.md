@@ -11,16 +11,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
-- **The C API's mechanically regular routes are generated.** 2,251 of the 3,210 `cna_*` routes —
-  property reads and writes, commands, text setters, static queries, value computations, text
-  size/copy pairs, plain destroys, and routes that only call a hand-written helper — are one spec
+- **The C API's route boundaries are generated.** 3,202 of the 3,210 `cna_*` routes are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
-  `tools/c-api/generate_routes.py`; the helpers every route shares live in one support layer. See
+  `tools/c-api/generate_routes.py`. 2,252 of them -- property reads and writes, commands, text
+  setters, static queries, value computations, text size/copy pairs, plain destroys -- do all
+  their work in that line; the other 950 call a hand-written helper named after the route, which
+  holds the real logic (creation bookkeeping, events, bulk transfers) while the generated half
+  applies the boundary rules: the exception barrier, null outputs, cleared handle outputs and
+  `CNA_Bool` checks. Only the seven `cna_error_*` queries and `cna_get_abi_version` stay written
+  whole by hand. The helpers every route shares live in one support layer. See
   `docs/c-api/GENERATED_ROUTES.md`. No export, signature, struct layout, constant or result code
   changed. The wording of many diagnostic messages did (`docs/c-api/ERRORS.md` declares them
-  diagnostic-only), and a generated route given two faults at once now always reports them in
-  one order -- a null output, then a refused argument, then its handles in parameter order --
-  where families used to differ.
+  diagnostic-only), and a route given two faults at once now always reports them in one order --
+  a null output, then a non-canonical `CNA_Bool`, then a refused argument, then its handles in
+  parameter order -- where families used to differ. In builds without `CNA_CNAEXT`, the DebugDraw
+  create route now also sets its handle output to `CNA_INVALID_HANDLE` before answering
+  `CNA_RESULT_NOT_SUPPORTED`, as every other compiled-out create route already did.
 
 ### Fixed
 

@@ -1,10 +1,14 @@
 # Maintaining the C API routes
 
 Every `cna_*` function is declared in a hand-written public header under
-`modules/c-api/include/CNA/C/`. Its implementation is either **generated** from a one-line spec
-entry or **hand-written** C++. Generated routes are the mechanically regular ones: a property read
-or write, a command, a value computation, a text size/copy pair. Everything with real semantics is
-hand-written, and generation exists so that this code stands out.
+`modules/c-api/include/CNA/C/`, and its definition — the C boundary — is **generated** from one
+spec line. A mechanically regular route (a property read or write, a command, a value computation,
+a text size/copy pair) is generated whole. A route with real semantics — a creation that publishes
+and counts, an event subscription, a bulk transfer — is a generated boundary around a
+**hand-written helper** named after it, so the boundary rules are written once and the helper holds
+only the logic. Only the error-record queries (`cna_error_*`), which must read the record without
+touching it, and `cna_get_abi_version`, which returns a number rather than a `CNA_Result`, are
+written whole by hand (`CnaCApiRuntime.cpp`).
 
 ## Where things live
 
@@ -13,7 +17,7 @@ hand-written, and generation exists so that this code stands out.
 | Public ABI: declarations and their documentation | `modules/c-api/include/CNA/C/*.h` (hand-written) |
 | What each generated route does | `modules/c-api/spec/<Family>.toml` |
 | Generated route definitions — never edit | `modules/c-api/src/generated/<Family>.inc` |
-| Hand-written routes and the family's lookups | `modules/c-api/src/CnaCApi<Family>.cpp`, which ends with `#include "generated/<Family>.inc"` |
+| Hand-written helpers and the family's lookups | `modules/c-api/src/CnaCApi<Family>.cpp`, which ends with `#include "generated/<Family>.inc"` |
 | Exception barrier, error recording and the named refusals (`InvalidArgument`, `OutOfRange`, `BufferTooSmall`, `Overflow`, `IoError`, …, and their `…If` forms with `RequireIndex`), `CNA_Bool` rules, text input (`ReadText`), the handle registry with `LookupHandle`, `CreateHandle`, `CreateResourceHandle` and `ReleaseHandle` | `modules/c-api/src/CnaCApiDetail.hpp` |
 | Output pointers, versioned structures, text and array size-then-copy | `modules/c-api/src/CnaCApiOutput.hpp` |
 | C ↔ C++ value conversions (`ToNative`, `ToC`), C enum range checks and value checks (`IsFinite`, reserved bytes) | `modules/c-api/src/CnaCApiMarshal.hpp` |
@@ -30,10 +34,10 @@ implement are in [`ERRORS.md`](ERRORS.md), [`HANDLES.md`](HANDLES.md),
 | Question | Answer |
 |---|---|
 | How do I add a simple C property? | Declare it in the header, add one spec line, regenerate — [below](#adding-a-simple-route). |
-| How do I add a complex hand-written function? | Write it in `src/CnaCApi<Family>.cpp` against the support layer — [What stays hand-written](#what-stays-hand-written). |
+| How do I add a complex hand-written function? | Write its logic as a helper in `src/CnaCApi<Family>.cpp` and add one `result` line for it — [Complex routes](#complex-routes). |
 | Where do C/C++ conversions live? | `ToNative`/`ToC` and the enum and value checks in `src/CnaCApiMarshal.hpp`. |
 | Where are handles defined? | Handle types in the public headers; the kinds (`ObjectKind`) and the registry in `src/CnaCApiDetail.hpp`; the contract in [`HANDLES.md`](HANDLES.md). A new kind is one `ObjectKind` value plus a lookup in its family. |
-| How do I specify ownership? | `CreateHandle`/`ReleaseHandle` publish and release; who owns what is in [`OWNERSHIP.md`](OWNERSHIP.md). A destroy with nothing to undo is a `release` spec line; anything else is hand-written. |
+| How do I specify ownership? | `CreateHandle`/`ReleaseHandle` publish and release; who owns what is in [`OWNERSHIP.md`](OWNERSHIP.md). A destroy with nothing to undo is a `release` spec line; one with bookkeeping is a [helper](#complex-routes). |
 | How are strings represented? | UTF-8 `CNA_StringView` in, size-then-copy out (`size`/`copy` kinds, `ReportTextSize`/`CopyText` in `src/CnaCApiOutput.hpp`) — [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md). |
 | How are arrays copied? | `CopyElements`/`CopyBytes` in `src/CnaCApiOutput.hpp`: the full count always, nothing written on a short buffer. |
 | How are errors translated? | `CallWithExceptionBarrier` (`src/CnaCApiDetail.hpp`) turns every exception into a result code and error record; a route refuses through the named helpers there (`InvalidArgument`, `InvalidState`, `NotSupported`, `OutOfRange`, …), each one code and category — [`ERRORS.md`](ERRORS.md). |
@@ -71,7 +75,7 @@ using-declarations and helpers. The route kinds are:
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
 | `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol (`CopyText`; `CopyBytes` for a `uint8_t*` destination) |
 | `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
-| `result` | anything | look up, then return the expression, a `CNA_Result`: the route is a call into a hand-written helper |
+| `result` | anything | look up if the group has a lookup, then return the expression, a `CNA_Result`: the route is a call into a hand-written helper |
 
 The generator takes the signature from the header and the conversions from the C types:
 
@@ -141,7 +145,7 @@ is refused.
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
 null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
-`result`, every non-const `out_*` pointer, and a handle
+`result`, every non-const `out_*` pointer not listed in `optional`, and a handle
 output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
 `invalid_if` conditions and `validate` calls, then text inputs, then the lookup (and `other`'s),
 whose own result is returned when it refuses, then the `require` calls. So a call with two faults always reports the null output.
@@ -190,22 +194,45 @@ feature = "CNA_DEVICES"                 # the real routes compile under #if defi
 unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing handle outputs
 ```
 
-## What stays hand-written
+## Complex routes
 
-- the logic itself: what a creation publishes and counts, what a destroy undoes, how an event is
-  subscribed, how a bulk transfer or info structure is filled. It lives in the family's helpers,
-  which `result` routes call (`OWNERSHIP.md` has the ownership rules they implement);
-- routes with more lookups than an object and an `other`, or with several statements of work
-  after them;
-- routes whose checks against the object are interleaved with the work, or that need an output
-  that may be null;
-- routes whose text is a path, a name to resolve, or a key the lookup itself takes: they follow
-  the rules of what the text names (`RelativePath`, `ReadImportPath`), not only the UTF-8 rule.
+A route whose work is more than one expression — what a creation publishes and counts, what a
+destroy undoes, how an event is subscribed, how a bulk transfer or an info structure is filled,
+anything with several lookups or checks interleaved with the work — keeps that work in a
+hand-written helper. The helper is named after the route in CamelCase
+(`cna_sound_bank_create` → `SoundBankCreate`; `…Route` is appended when a function of that name
+already exists), takes the route's parameters as declared, and sits in the family's `.cpp`
+where the route used to be. Its spec line, in the family's `[helpers]` group, only calls it:
 
-Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments
-refused with `InvalidArgument`, handles resolved through the family's lookups, conversions through
-`ToNative`/`ToC`, outputs through the `CnaCApiOutput.hpp` helpers. Prefer a hand-written route to a
-special case in the generator.
+```toml
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. ...
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_sound_bank_create = { result = "SoundBankCreate(engine, filename, out_sound_bank)" }
+cna_model_get_camera_ext = { result = "ModelGetCameraExt(model, index, out_camera)", optional = ["out_camera"] }
+```
+
+The generated half does the boundary work the helper then never repeats: the exception barrier,
+the refusal of a null `out_*` output, clearing a handle output to `CNA_INVALID_HANDLE` before the
+helper runs, and the `CNA_Bool` check. `raw = true` passes structures and `CNA_Bool` values to the
+helper as the caller passed them, and a `CNA_StringView` reaches a `result` helper unread, so the
+helper's parameter list is exactly the header's. An output the caller may leave null — "pass null
+if you do not need it" in the header, or an output that is only required with a capacity — is
+listed in `optional`; the generated half then does not refuse it, clears it only when it is a
+handle output the caller gave, and leaves the rest to the helper.
+
+A helper reads its own text: `ReadText` under the UTF-8 rule, or `RelativePath`/`ReadImportPath`
+when the text is a path, which has rules of its own. A helper that exists only with an optional module goes in a `[helpers_<module>]` group with
+`feature` and `unavailable`, so the build without the module answers through the generated half
+and needs no hand-written stub.
+
+Write the helper like the ones around it: bad arguments refused with `InvalidArgument` (or a named
+refusal), handles resolved through the family's lookups, conversions through `ToNative`/`ToC`,
+outputs through the `CnaCApiOutput.hpp` helpers, ownership as [`OWNERSHIP.md`](OWNERSHIP.md)
+says. It does not need its own `CallWithExceptionBarrier`. Prefer a helper to a special case in
+the generator; a helper that turns out to be one expression can become a plain spec line later.
 
 ## Regenerating and checking
 
