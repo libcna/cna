@@ -23,3 +23,16 @@ object = "std::shared_ptr<Curve>"
 [curve.routes]
 cna_curve_destroy = { release = true }
 cna_curve_evaluate = { get = "object->Evaluate(position)" }
+
+# A key is validated first: its continuity must be one CNA_CurveContinuity defines.
+[validated_key]
+lookup = "ValidateKey"
+
+[validated_key.routes]
+cna_curve_key_get_continuity = { get = "ToNative(key).getContinuityProperty()" }
+cna_curve_key_get_position = { get = "ToNative(key).getPositionProperty()" }
+cna_curve_key_get_tangent_in = { get = "ToNative(key).getTangentInProperty()" }
+cna_curve_key_get_tangent_out = { get = "ToNative(key).getTangentOutProperty()" }
+cna_curve_key_get_value = { get = "ToNative(key).getValueProperty()" }
+cna_curve_key_clone = { get = "ToNative(key).Clone()" }
+cna_curve_key_get_hash_code = { get = "ToNative(key).GetHashCode()" }

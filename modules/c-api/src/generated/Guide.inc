@@ -46,11 +46,8 @@ CNA_Result cna_guide_copy_pending_keyboard_input_title_ext(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_title_ext: out_bytes is null.");
-        }
-        return CopyText(Guide::GetPendingKeyboardInputTitleForTestingEXT(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return Guide::GetPendingKeyboardInputTitleForTestingEXT();
     });
 }
 
@@ -59,11 +56,8 @@ CNA_Result cna_guide_copy_pending_keyboard_input_description_ext(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_description_ext: out_bytes is null.");
-        }
-        return CopyText(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return Guide::GetPendingKeyboardInputDescriptionForTestingEXT();
     });
 }
 
@@ -72,11 +66,8 @@ CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_guide_copy_pending_keyboard_input_display_text_ext: out_bytes is null.");
-        }
-        return CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return Guide::GetPendingKeyboardInputDisplayTextForTestingEXT();
     });
 }
 

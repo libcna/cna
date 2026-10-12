@@ -36,7 +36,7 @@ cna_storage_stream_get_can_seek = { get = "object->value->getCanSeekProperty()" 
 
 [calls]
 [calls.routes]
-cna_storage_copy_root_ext = { result = "CopyText(StorageDevice::GetStorageRootEXT(), destination, capacity, out_bytes)" }
+cna_storage_copy_root_ext = { copy = "StorageDevice::GetStorageRootEXT()" }
 cna_storage_device_show_selector = { result = "ShowSelector(false, 0U, false, 0, 0, callback, context, out_device)" }
 cna_storage_device_show_selector_for_player = { result = "ShowSelector(true, player, false, 0, 0, callback, context, out_device)" }
 cna_storage_device_show_selector_with_space = { result = "ShowSelector(false, 0U, true, size_in_bytes, directory_count, callback, context, out_device)" }

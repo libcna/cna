@@ -155,6 +155,7 @@ static CNA_CompassHandle v_CNA_CompassHandle;
 static CNA_ContentReaderHandle v_CNA_ContentReaderHandle;
 static CNA_ContentTypeReaderHandle v_CNA_ContentTypeReaderHandle;
 static CNA_CurveHandle v_CNA_CurveHandle;
+static CNA_CurveKey v_CNA_CurveKey;
 static CNA_CurveKeyCollectionHandle v_CNA_CurveKeyCollectionHandle;
 static CNA_DebugDrawHandle v_CNA_DebugDrawHandle;
 static CNA_DepthFormat v_CNA_DepthFormat;
@@ -449,13 +450,17 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_from_cnj_get_external_reference_count(v_CNA_CnbModelFromCnjHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_from_cnj_get_external_reference_count", "a null out_count");
     failures += expect(cna_cnb_animation_clip_copy_keyframes(v_CNA_CnbAnimationClipHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_animation_clip_copy_keyframes", "a null out_keyframe_count");
     failures += expect(cna_cnb_get_chunk_id_string_size(v_CNA_CnbChunkId, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_chunk_id_string_size", "a null out_byte_count");
-    failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_chunk_id_string", "a null out_byte_count");
+    failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_chunk_id_string", "a null destination with a capacity");
+    failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_chunk_id_string", "a null out_bytes");
     failures += expect(cna_cnb_get_asset_type_name_size(v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_asset_type_name_size", "a null out_byte_count");
-    failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_asset_type_name", "a null out_byte_count");
+    failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_asset_type_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_asset_type_name", "a null out_bytes");
     failures += expect(cna_cnb_get_compression_name_size(v_CNA_CnbCompression, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_compression_name_size", "a null out_byte_count");
-    failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_compression_name", "a null out_byte_count");
+    failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_compression_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_compression_name", "a null out_bytes");
     failures += expect(cna_cnb_get_texture_format_name_size(v_CNA_CnbTextureFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_texture_format_name_size", "a null out_byte_count");
-    failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_texture_format_name", "a null out_byte_count");
+    failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_texture_format_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_texture_format_name", "a null out_bytes");
     failures += expect(cna_cnb_encode_texture2d(v_CNA_CnbTextureDataHandle, v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_texture2d", "a null out_byte_count");
     failures += expect(cna_cnb_encode_texture_cube(v_CNA_CnbTextureDataHandle, v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_texture_cube", "a null out_byte_count");
     failures += expect(cna_cnb_encode_texture3d(v_CNA_CnbTextureDataHandle, v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_texture3d", "a null out_byte_count");
@@ -465,9 +470,11 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_create", "a null out_model");
     failures += expect(cna_cnb_sprite_font_data_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_sprite_font_data_create", "a null out_font");
     failures += expect(cna_cnb_get_audio_format_name_size(v_CNA_CnbAudioFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_get_audio_format_name_size", "a null out_byte_count");
-    failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_audio_format_name", "a null out_byte_count");
+    failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_audio_format_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_copy_audio_format_name", "a null out_bytes");
     failures += expect(cna_cnb_loader_registry_get_registered_type_name_size(v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_get_registered_type_name_size", "a null out_byte_count");
-    failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null out_byte_count");
+    failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null out_bytes");
     failures += expect(cna_cnb_crc32c(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c", "a null out_checksum");
     failures += expect(cna_cnb_crc32c_portable(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c_portable", "a null out_checksum");
     failures += expect(cna_cnb_has_magic(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_has_magic", "a null out_has_magic");
@@ -548,9 +555,11 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_renderer_fallback_get_message_size_ext(v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_get_message_size_ext", "a null out_bytes");
     failures += expect(cna_graphics_renderer_fallback_copy_message_ext(v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_copy_message_ext", "a null destination with a capacity");
     failures += expect(cna_graphics_renderer_fallback_copy_message_ext(v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_copy_message_ext", "a null out_bytes");
-    failures += expect(cna_platform_copy_current_name_ext(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_platform_copy_current_name_ext", "a null out_bytes");
+    failures += expect(cna_platform_copy_current_name_ext(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_platform_copy_current_name_ext", "a null destination with a capacity");
+    failures += expect(cna_platform_copy_current_name_ext(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_platform_copy_current_name_ext", "a null out_bytes");
     failures += expect(cna_graphics_renderer_get_current_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_get_current_name_size", "a null out_bytes");
-    failures += expect(cna_graphics_renderer_copy_current_name(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_copy_current_name", "a null out_bytes");
+    failures += expect(cna_graphics_renderer_copy_current_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_copy_current_name", "a null destination with a capacity");
+    failures += expect(cna_graphics_renderer_copy_current_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_copy_current_name", "a null out_bytes");
     failures += expect(cna_logger_get_minimum_level(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_logger_get_minimum_level", "a null out_level");
     failures += expect(cna_graphics_backend_get_current_category(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_backend_get_current_category", "a null out_category");
     failures += expect(cna_graphics_backend_get_current_maturity(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_backend_get_current_maturity", "a null out_maturity");
@@ -578,6 +587,13 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_curve_key_init_tangents(v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_init_tangents", "a null out_key");
     failures += expect(cna_curve_key_collection_get_count(v_CNA_CurveKeyCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_collection_get_count", "a null out_count");
     failures += expect(cna_curve_evaluate(v_CNA_CurveHandle, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_evaluate", "a null out_value");
+    failures += expect(cna_curve_key_get_continuity(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_continuity", "a null out_continuity");
+    failures += expect(cna_curve_key_get_position(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_position", "a null out_position");
+    failures += expect(cna_curve_key_get_tangent_in(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_tangent_in", "a null out_tangent");
+    failures += expect(cna_curve_key_get_tangent_out(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_tangent_out", "a null out_tangent");
+    failures += expect(cna_curve_key_get_value(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_value", "a null out_value");
+    failures += expect(cna_curve_key_clone(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_clone", "a null out_key");
+    failures += expect(cna_curve_key_get_hash_code(v_CNA_CurveKey, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_curve_key_get_hash_code", "a null out_hash");
     failures += expect_unless_compiled_out(cna_debug_draw_is_depth_tested(v_CNA_DebugDrawHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_debug_draw_is_depth_tested", "a null out_depth_tested");
     failures += expect_unless_compiled_out(cna_debug_draw_get_line_count(v_CNA_DebugDrawHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_debug_draw_get_line_count", "a null out_count");
     failures += expect(cna_vibrate_controller_get_is_supported_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vibrate_controller_get_is_supported_ext", "a null out_supported");
@@ -1019,9 +1035,12 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_resource_get_name_byte_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_resource_get_name_byte_count", "a null out_byte_count");
     failures += expect(cna_graphics_resource_get_string_byte_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_resource_get_string_byte_count", "a null out_byte_count");
     failures += expect(cna_gamer_services_component_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_services_component_create", "a null out_component");
-    failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_title_ext", "a null out_bytes");
-    failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_description_ext", "a null out_bytes");
-    failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_display_text_ext", "a null out_bytes");
+    failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_title_ext", "a null destination with a capacity");
+    failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_title_ext", "a null out_bytes");
+    failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_description_ext", "a null destination with a capacity");
+    failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_description_ext", "a null out_bytes");
+    failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_display_text_ext", "a null destination with a capacity");
+    failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_copy_pending_keyboard_input_display_text_ext", "a null out_bytes");
     failures += expect(cna_guide_get_is_screen_saver_enabled(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_get_is_screen_saver_enabled", "a null out_is_enabled");
     failures += expect(cna_guide_get_is_trial_mode(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_get_is_trial_mode", "a null out_is_trial_mode");
     failures += expect(cna_guide_get_is_visible(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_guide_get_is_visible", "a null out_is_visible");
@@ -1753,8 +1772,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_motion_copy_type_name(v_CNA_MotionHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_motion_copy_type_name(v_CNA_MotionHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_copy_type_name", "a null out_bytes");
     failures += expect(cna_motion_get_current_value(v_CNA_MotionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_get_current_value", "a null out_reading");
-    failures += expect(cna_accelerometer_reading_event_info_copy_type_name(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_event_info_copy_type_name", "a null out_bytes");
-    failures += expect(cna_calibration_event_info_copy_type_name(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_calibration_event_info_copy_type_name", "a null out_bytes");
+    failures += expect(cna_accelerometer_reading_event_info_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_event_info_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_accelerometer_reading_event_info_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_event_info_copy_type_name", "a null out_bytes");
+    failures += expect(cna_calibration_event_info_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_calibration_event_info_copy_type_name", "a null destination with a capacity");
+    failures += expect(cna_calibration_event_info_copy_type_name(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_calibration_event_info_copy_type_name", "a null out_bytes");
     failures += expect(cna_compass_subscribe_calibrate(v_CNA_CompassHandle, v_CNA_SensorEventCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_compass_subscribe_calibrate", "a null out_registration");
     failures += expect(cna_motion_subscribe_calibrate(v_CNA_MotionHandle, v_CNA_SensorEventCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_subscribe_calibrate", "a null out_registration");
     failures += expect(cna_attitude_reading_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_attitude_reading_init", "a null out_reading");
@@ -1791,7 +1812,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_storage_stream_get_can_read(v_CNA_StorageStreamHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_stream_get_can_read", "a null out_can_read");
     failures += expect(cna_storage_stream_get_can_write(v_CNA_StorageStreamHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_stream_get_can_write", "a null out_can_write");
     failures += expect(cna_storage_stream_get_can_seek(v_CNA_StorageStreamHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_stream_get_can_seek", "a null out_can_seek");
-    failures += expect(cna_storage_copy_root_ext(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_copy_root_ext", "a null out_bytes");
+    failures += expect(cna_storage_copy_root_ext(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_copy_root_ext", "a null destination with a capacity");
+    failures += expect(cna_storage_copy_root_ext(text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_copy_root_ext", "a null out_bytes");
     failures += expect(cna_storage_device_show_selector(v_CNA_StorageCompletionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_show_selector", "a null out_device");
     failures += expect(cna_storage_device_show_selector_for_player(v_CNA_PlayerIndex, v_CNA_StorageCompletionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_show_selector_for_player", "a null out_device");
     failures += expect(cna_storage_device_show_selector_with_space(v_int32_t, v_int32_t, v_CNA_StorageCompletionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_storage_device_show_selector_with_space", "a null out_device");
@@ -3375,8 +3397,103 @@ static int text_protocol_holds(void)
 {
     int failures = 0;
     uint64_t size = 0U;
-    failures += expect(cna_plane_get_string_size(v_CNA_Plane, &size), CNA_RESULT_SUCCESS, "cna_plane_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    CNA_Result size_result;
+    size_result = cna_cnb_get_chunk_id_string_size(v_CNA_CnbChunkId, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_copy_chunk_id_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_copy_chunk_id_string", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_copy_chunk_id_string: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_copy_chunk_id_string(v_CNA_CnbChunkId, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_copy_chunk_id_string", "an exact buffer");
+    }
+    size_result = cna_cnb_get_asset_type_name_size(v_uint32_t, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_copy_asset_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_copy_asset_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_copy_asset_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_copy_asset_type_name(v_uint32_t, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_copy_asset_type_name", "an exact buffer");
+    }
+    size_result = cna_cnb_get_compression_name_size(v_CNA_CnbCompression, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_copy_compression_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_copy_compression_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_copy_compression_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_copy_compression_name(v_CNA_CnbCompression, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_copy_compression_name", "an exact buffer");
+    }
+    size_result = cna_cnb_get_texture_format_name_size(v_CNA_CnbTextureFormat, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_copy_texture_format_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_copy_texture_format_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_copy_texture_format_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_copy_texture_format_name(v_CNA_CnbTextureFormat, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_copy_texture_format_name", "an exact buffer");
+    }
+    size_result = cna_cnb_get_audio_format_name_size(v_CNA_CnbAudioFormat, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_copy_audio_format_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_copy_audio_format_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_copy_audio_format_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_copy_audio_format_name(v_CNA_CnbAudioFormat, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_copy_audio_format_name", "an exact buffer");
+    }
+    size_result = cna_cnb_loader_registry_get_registered_type_name_size(v_uint32_t, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_cnb_loader_registry_copy_registered_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_cnb_loader_registry_copy_registered_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_cnb_loader_registry_copy_registered_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_cnb_loader_registry_copy_registered_type_name", "an exact buffer");
+    }
+    size_result = cna_graphics_renderer_get_current_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_graphics_renderer_copy_current_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_graphics_renderer_copy_current_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_graphics_renderer_copy_current_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_graphics_renderer_copy_current_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_graphics_renderer_copy_current_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_graphics_renderer_copy_current_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_graphics_renderer_copy_current_name", "an exact buffer");
+    }
+    size_result = cna_plane_get_string_size(v_CNA_Plane, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_plane_copy_string(v_CNA_Plane, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_plane_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_plane_copy_string(v_CNA_Plane, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_plane_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3385,8 +3502,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_plane_copy_string(v_CNA_Plane, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_plane_copy_string", "an exact buffer");
     }
-    failures += expect(cna_ray_get_string_size(v_CNA_Ray, &size), CNA_RESULT_SUCCESS, "cna_ray_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_ray_get_string_size(v_CNA_Ray, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_ray_copy_string(v_CNA_Ray, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_ray_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_ray_copy_string(v_CNA_Ray, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_ray_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3395,8 +3515,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_ray_copy_string(v_CNA_Ray, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_ray_copy_string", "an exact buffer");
     }
-    failures += expect(cna_bounding_box_get_string_size(v_CNA_BoundingBox, &size), CNA_RESULT_SUCCESS, "cna_bounding_box_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_bounding_box_get_string_size(v_CNA_BoundingBox, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_bounding_box_copy_string(v_CNA_BoundingBox, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_bounding_box_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_bounding_box_copy_string(v_CNA_BoundingBox, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_bounding_box_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3405,8 +3528,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_bounding_box_copy_string(v_CNA_BoundingBox, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_bounding_box_copy_string", "an exact buffer");
     }
-    failures += expect(cna_bounding_sphere_get_string_size(v_CNA_BoundingSphere, &size), CNA_RESULT_SUCCESS, "cna_bounding_sphere_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_bounding_sphere_get_string_size(v_CNA_BoundingSphere, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_bounding_sphere_copy_string(v_CNA_BoundingSphere, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_bounding_sphere_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_bounding_sphere_copy_string(v_CNA_BoundingSphere, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_bounding_sphere_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3415,8 +3541,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_bounding_sphere_copy_string(v_CNA_BoundingSphere, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_bounding_sphere_copy_string", "an exact buffer");
     }
-    failures += expect(cna_bounding_frustum_get_string_size(v_CNA_BoundingFrustum, &size), CNA_RESULT_SUCCESS, "cna_bounding_frustum_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_bounding_frustum_get_string_size(v_CNA_BoundingFrustum, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_bounding_frustum_copy_string(v_CNA_BoundingFrustum, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_bounding_frustum_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_bounding_frustum_copy_string(v_CNA_BoundingFrustum, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_bounding_frustum_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3425,8 +3554,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_bounding_frustum_copy_string(v_CNA_BoundingFrustum, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_bounding_frustum_copy_string", "an exact buffer");
     }
-    failures += expect(cna_viewport_get_string_size(v_CNA_Viewport, &size), CNA_RESULT_SUCCESS, "cna_viewport_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_viewport_get_string_size(v_CNA_Viewport, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_viewport_copy_string(v_CNA_Viewport, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_viewport_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_viewport_copy_string(v_CNA_Viewport, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_viewport_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3435,8 +3567,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_viewport_copy_string(v_CNA_Viewport, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_viewport_copy_string", "an exact buffer");
     }
-    failures += expect(cna_graphics_device_information_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_graphics_device_information_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_graphics_device_information_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_graphics_device_information_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_graphics_device_information_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_graphics_device_information_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_graphics_device_information_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3445,8 +3580,50 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_graphics_device_information_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_graphics_device_information_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_point_get_string_size(v_CNA_Point, &size), CNA_RESULT_SUCCESS, "cna_point_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_guide_get_pending_keyboard_input_title_size_ext(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_guide_copy_pending_keyboard_input_title_ext", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_guide_copy_pending_keyboard_input_title_ext", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_guide_copy_pending_keyboard_input_title_ext: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_guide_copy_pending_keyboard_input_title_ext(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_guide_copy_pending_keyboard_input_title_ext", "an exact buffer");
+    }
+    size_result = cna_guide_get_pending_keyboard_input_description_size_ext(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_guide_copy_pending_keyboard_input_description_ext", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_guide_copy_pending_keyboard_input_description_ext", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_guide_copy_pending_keyboard_input_description_ext: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_guide_copy_pending_keyboard_input_description_ext(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_guide_copy_pending_keyboard_input_description_ext", "an exact buffer");
+    }
+    size_result = cna_guide_get_pending_keyboard_input_display_text_size_ext(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_guide_copy_pending_keyboard_input_display_text_ext", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_guide_copy_pending_keyboard_input_display_text_ext", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_guide_copy_pending_keyboard_input_display_text_ext: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_guide_copy_pending_keyboard_input_display_text_ext(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_guide_copy_pending_keyboard_input_display_text_ext", "an exact buffer");
+    }
+    size_result = cna_point_get_string_size(v_CNA_Point, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_point_copy_string(v_CNA_Point, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_point_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_point_copy_string(v_CNA_Point, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_point_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3455,8 +3632,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_point_copy_string(v_CNA_Point, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_point_copy_string", "an exact buffer");
     }
-    failures += expect(cna_rectangle_get_string_size(v_CNA_Rectangle, &size), CNA_RESULT_SUCCESS, "cna_rectangle_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_rectangle_get_string_size(v_CNA_Rectangle, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_rectangle_copy_string(v_CNA_Rectangle, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_rectangle_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_rectangle_copy_string(v_CNA_Rectangle, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_rectangle_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3465,8 +3645,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_rectangle_copy_string(v_CNA_Rectangle, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_rectangle_copy_string", "an exact buffer");
     }
-    failures += expect(cna_matrix_get_string_size(v_CNA_Matrix, &size), CNA_RESULT_SUCCESS, "cna_matrix_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_matrix_get_string_size(v_CNA_Matrix, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_matrix_copy_string(v_CNA_Matrix, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_matrix_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_matrix_copy_string(v_CNA_Matrix, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_matrix_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3475,8 +3658,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_matrix_copy_string(v_CNA_Matrix, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_matrix_copy_string", "an exact buffer");
     }
-    failures += expect(cna_visualization_data_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_visualization_data_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_visualization_data_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_visualization_data_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_visualization_data_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_visualization_data_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_visualization_data_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3485,8 +3671,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_visualization_data_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_visualization_data_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_quaternion_get_string_size(v_CNA_Quaternion, &size), CNA_RESULT_SUCCESS, "cna_quaternion_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_quaternion_get_string_size(v_CNA_Quaternion, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_quaternion_copy_string(v_CNA_Quaternion, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_quaternion_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_quaternion_copy_string(v_CNA_Quaternion, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_quaternion_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3495,8 +3684,37 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_quaternion_copy_string(v_CNA_Quaternion, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_quaternion_copy_string", "an exact buffer");
     }
-    failures += expect(cna_accelerometer_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_accelerometer_reading_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_accelerometer_reading_event_info_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_accelerometer_reading_event_info_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_accelerometer_reading_event_info_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_accelerometer_reading_event_info_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_accelerometer_reading_event_info_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_accelerometer_reading_event_info_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_accelerometer_reading_event_info_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_accelerometer_reading_event_info_copy_type_name", "an exact buffer");
+    }
+    size_result = cna_calibration_event_info_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_calibration_event_info_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_calibration_event_info_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_calibration_event_info_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_calibration_event_info_copy_type_name", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_calibration_event_info_copy_type_name: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_calibration_event_info_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_calibration_event_info_copy_type_name", "an exact buffer");
+    }
+    size_result = cna_accelerometer_reading_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_accelerometer_reading_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_accelerometer_reading_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_accelerometer_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_accelerometer_reading_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3505,8 +3723,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_accelerometer_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_accelerometer_reading_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_gyroscope_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_gyroscope_reading_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_gyroscope_reading_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_gyroscope_reading_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_gyroscope_reading_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_gyroscope_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_gyroscope_reading_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3515,8 +3736,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_gyroscope_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_gyroscope_reading_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_attitude_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_attitude_reading_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_attitude_reading_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_attitude_reading_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_attitude_reading_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_attitude_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_attitude_reading_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3525,8 +3749,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_attitude_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_attitude_reading_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_compass_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_compass_reading_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_compass_reading_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_compass_reading_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_compass_reading_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_compass_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_compass_reading_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3535,8 +3762,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_compass_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_compass_reading_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_motion_reading_get_type_name_size(&size), CNA_RESULT_SUCCESS, "cna_motion_reading_get_type_name_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_motion_reading_get_type_name_size(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_motion_reading_copy_type_name(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_motion_reading_copy_type_name", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_motion_reading_copy_type_name(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_motion_reading_copy_type_name", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3545,8 +3775,24 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_motion_reading_copy_type_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_motion_reading_copy_type_name", "an exact buffer");
     }
-    failures += expect(cna_vector2_get_string_size(v_CNA_Vector2, &size), CNA_RESULT_SUCCESS, "cna_vector2_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_storage_get_root_size_ext(&size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_storage_copy_root_ext(text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_storage_copy_root_ext", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_storage_copy_root_ext(text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_storage_copy_root_ext", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_storage_copy_root_ext: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_storage_copy_root_ext(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_storage_copy_root_ext", "an exact buffer");
+    }
+    size_result = cna_vector2_get_string_size(v_CNA_Vector2, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_vector2_copy_string(v_CNA_Vector2, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_vector2_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_vector2_copy_string(v_CNA_Vector2, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_vector2_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3555,8 +3801,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_vector2_copy_string(v_CNA_Vector2, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_vector2_copy_string", "an exact buffer");
     }
-    failures += expect(cna_vector3_get_string_size(v_CNA_Vector3, &size), CNA_RESULT_SUCCESS, "cna_vector3_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_vector3_get_string_size(v_CNA_Vector3, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_vector3_copy_string(v_CNA_Vector3, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_vector3_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_vector3_copy_string(v_CNA_Vector3, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_vector3_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3565,8 +3814,11 @@ static int text_protocol_holds(void)
         }
         failures += expect(cna_vector3_copy_string(v_CNA_Vector3, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_vector3_copy_string", "an exact buffer");
     }
-    failures += expect(cna_vector4_get_string_size(v_CNA_Vector4, &size), CNA_RESULT_SUCCESS, "cna_vector4_get_string_size", "zeroed input");
-    if (size > 0U && size <= sizeof(text)) {
+    size_result = cna_vector4_get_string_size(v_CNA_Vector4, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_vector4_copy_string(v_CNA_Vector4, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_vector4_copy_string", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
         memset(text, 0x5A, sizeof(text));
         failures += expect(cna_vector4_copy_string(v_CNA_Vector4, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_vector4_copy_string", "one byte short");
         if (o_uint64_t != size || text[0] != 0x5A) {
@@ -3602,6 +3854,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1916 generated routes\n", failures);
+    printf("%d failed checks across 1923 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

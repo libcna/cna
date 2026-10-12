@@ -11,9 +11,9 @@ cna_gamer_services_component_create = { result = "CreateOwnedCanonicalGameCompon
 
 [calls]
 [calls.routes]
-cna_guide_copy_pending_keyboard_input_title_ext = { result = "CopyText(Guide::GetPendingKeyboardInputTitleForTestingEXT(), destination, capacity, out_bytes)" }
-cna_guide_copy_pending_keyboard_input_description_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), destination, capacity, out_bytes)" }
-cna_guide_copy_pending_keyboard_input_display_text_ext = { result = "CopyText(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), destination, capacity, out_bytes)" }
+cna_guide_copy_pending_keyboard_input_title_ext = { copy = "Guide::GetPendingKeyboardInputTitleForTestingEXT()" }
+cna_guide_copy_pending_keyboard_input_description_ext = { copy = "Guide::GetPendingKeyboardInputDescriptionForTestingEXT()" }
+cna_guide_copy_pending_keyboard_input_display_text_ext = { copy = "Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()" }
 
 [values]
 [values.routes]

@@ -278,11 +278,8 @@ CNA_Result cna_storage_copy_root_ext(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_storage_copy_root_ext: out_bytes is null.");
-        }
-        return CopyText(StorageDevice::GetStorageRootEXT(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return StorageDevice::GetStorageRootEXT();
     });
 }
 

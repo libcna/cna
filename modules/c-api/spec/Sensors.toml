@@ -157,8 +157,8 @@ cna_motion_get_current_value = { get = "MapMotionReadingValue(object->value->get
 
 [calls]
 [calls.routes]
-cna_accelerometer_reading_event_info_copy_type_name = { result = "CopyText(AccelerometerReadingEventArgs().GetTypeName(), destination, capacity, out_bytes)" }
-cna_calibration_event_info_copy_type_name = { result = "CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, out_bytes)" }
+cna_accelerometer_reading_event_info_copy_type_name = { copy = "AccelerometerReadingEventArgs().GetTypeName()" }
+cna_calibration_event_info_copy_type_name = { copy = "CalibrationEventArgs().GetTypeName()" }
 cna_compass_subscribe_calibrate = { result = "SubscribeCalibrate<Compass>(sensor, callback, context, out_registration)" }
 cna_motion_subscribe_calibrate = { result = "SubscribeCalibrate<Motion>(sensor, callback, context, out_registration)" }
 

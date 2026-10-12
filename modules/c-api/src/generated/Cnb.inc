@@ -1119,11 +1119,8 @@ CNA_Result cna_cnb_copy_chunk_id_string(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_chunk_id_string: out_byte_count is null.");
-        }
-        return CopyText(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return Cnb::ChunkIdToString(Cnb::CnbChunkId{id});
     });
 }
 
@@ -1145,11 +1142,8 @@ CNA_Result cna_cnb_copy_asset_type_name(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_asset_type_name: out_byte_count is null.");
-        }
-        return CopyText(Cnb::AssetTypeIdToString(asset_type_id), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return Cnb::AssetTypeIdToString(asset_type_id);
     });
 }
 
@@ -1171,11 +1165,8 @@ CNA_Result cna_cnb_copy_compression_name(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_compression_name: out_byte_count is null.");
-        }
-        return CopyText(Cnb::CnbCompressionToString(ToCodec(codec)), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return Cnb::CnbCompressionToString(ToCodec(codec));
     });
 }
 
@@ -1197,11 +1188,8 @@ CNA_Result cna_cnb_copy_texture_format_name(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_texture_format_name: out_byte_count is null.");
-        }
-        return CopyText(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return Cnb::CnbTextureFormatToString(ToTextureFormat(format));
     });
 }
 
@@ -1331,11 +1319,8 @@ CNA_Result cna_cnb_copy_audio_format_name(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_audio_format_name: out_byte_count is null.");
-        }
-        return CopyText(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format));
     });
 }
 
@@ -1357,11 +1342,8 @@ CNA_Result cna_cnb_loader_registry_copy_registered_type_name(
     const uint64_t capacity,
     uint64_t* const out_byte_count)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_byte_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_cnb_loader_registry_copy_registered_type_name: out_byte_count is null.");
-        }
-        return CopyText(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), destination, capacity, out_byte_count);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_byte_count, [&] {
+        return CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id);
     });
 }
 

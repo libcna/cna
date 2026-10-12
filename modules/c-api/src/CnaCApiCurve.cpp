@@ -81,27 +81,6 @@ using Microsoft::Xna::Framework::CurveTangent;
     return InvalidArgument("The curve tangent type is invalid.");
 }
 
-template<typename TValue, typename TCallable>
-[[nodiscard]] CNA_Result StoreValidatedKeyOutput(
-    const CNA_CurveKey key,
-    TValue* const output,
-    const char* const nullMessage,
-    TCallable&& callable) noexcept
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return InvalidArgument(nullMessage);
-        }
-        const CNA_Result validation = ValidateKey(key);
-        if (validation != CNA_RESULT_SUCCESS) {
-            return validation;
-        }
-        const TValue result = std::forward<TCallable>(callable)(ToNative(key));
-        *output = result;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 template<typename TCallable>
 [[nodiscard]] CNA_Result MutateValidatedKey(
     CNA_CurveKey* const key,
@@ -166,19 +145,6 @@ CNA_Result cna_curve_key_init_full(
     });
 }
 
-CNA_Result cna_curve_key_get_continuity(
-    const CNA_CurveKey key,
-    CNA_CurveContinuity* const outContinuity)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outContinuity,
-        "The continuity output is null.",
-        [](const CurveKey& native) {
-            return static_cast<CNA_CurveContinuity>(native.getContinuityProperty());
-        });
-}
-
 CNA_Result cna_curve_key_set_continuity(
     CNA_CurveKey* const key,
     const CNA_CurveContinuity continuity)
@@ -202,28 +168,6 @@ CNA_Result cna_curve_key_set_continuity(
     });
 }
 
-CNA_Result cna_curve_key_get_position(
-    const CNA_CurveKey key,
-    float* const outPosition)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outPosition,
-        "The position output is null.",
-        [](const CurveKey& native) { return native.getPositionProperty(); });
-}
-
-CNA_Result cna_curve_key_get_tangent_in(
-    const CNA_CurveKey key,
-    float* const outTangent)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outTangent,
-        "The tangent output is null.",
-        [](const CurveKey& native) { return native.getTangentInProperty(); });
-}
-
 CNA_Result cna_curve_key_set_tangent_in(
     CNA_CurveKey* const key,
     const float tangent)
@@ -231,17 +175,6 @@ CNA_Result cna_curve_key_set_tangent_in(
     return MutateValidatedKey(key, [=](CurveKey& native) {
         native.setTangentInProperty(tangent);
     });
-}
-
-CNA_Result cna_curve_key_get_tangent_out(
-    const CNA_CurveKey key,
-    float* const outTangent)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outTangent,
-        "The tangent output is null.",
-        [](const CurveKey& native) { return native.getTangentOutProperty(); });
 }
 
 CNA_Result cna_curve_key_set_tangent_out(
@@ -253,17 +186,6 @@ CNA_Result cna_curve_key_set_tangent_out(
     });
 }
 
-CNA_Result cna_curve_key_get_value(
-    const CNA_CurveKey key,
-    float* const outValue)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outValue,
-        "The value output is null.",
-        [](const CurveKey& native) { return native.getValueProperty(); });
-}
-
 CNA_Result cna_curve_key_set_value(
     CNA_CurveKey* const key,
     const float value)
@@ -271,17 +193,6 @@ CNA_Result cna_curve_key_set_value(
     return MutateValidatedKey(key, [=](CurveKey& native) {
         native.setValueProperty(value);
     });
-}
-
-CNA_Result cna_curve_key_clone(
-    const CNA_CurveKey key,
-    CNA_CurveKey* const outKey)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outKey,
-        "The CurveKey output is null.",
-        [](const CurveKey& native) { return ToC(native.Clone()); });
 }
 
 CNA_Result cna_curve_key_compare_to(
@@ -348,19 +259,6 @@ CNA_Result cna_curve_key_not_equals(
         *outNotEqual = result;
         return CNA_RESULT_SUCCESS;
     });
-}
-
-CNA_Result cna_curve_key_get_hash_code(
-    const CNA_CurveKey key,
-    int32_t* const outHash)
-{
-    return StoreValidatedKeyOutput(
-        key,
-        outHash,
-        "The hash output is null.",
-        [](const CurveKey& native) {
-            return static_cast<int32_t>(native.GetHashCode());
-        });
 }
 
 CNA_Result cna_curve_key_collection_create(

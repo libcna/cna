@@ -18,9 +18,9 @@ cna_logger_info = { result = "LogWithCategory(&CNA::Logger::Info, message, categ
 cna_logger_debug = { result = "LogWithCategory(&CNA::Logger::Debug, message, category)" }
 cna_logger_trace = { result = "LogWithCategory(&CNA::Logger::Trace, message, category)" }
 cna_logger_experiment = { result = "LogWithCategory(&CNA::Logger::Experiment, message, category)" }
-cna_platform_copy_current_name_ext = { result = "CopyText(CNA::getCurrentPlatformName(), destination, capacity, out_bytes)" }
+cna_platform_copy_current_name_ext = { copy = "CNA::getCurrentPlatformName()" }
 cna_graphics_renderer_get_current_name_size = { size = "CNA::getCurrentGraphicsRendererName()" }
-cna_graphics_renderer_copy_current_name = { result = "CopyText(CNA::getCurrentGraphicsRendererName(), destination, capacity, out_bytes)" }
+cna_graphics_renderer_copy_current_name = { copy = "CNA::getCurrentGraphicsRendererName()" }
 
 [values]
 [values.routes]

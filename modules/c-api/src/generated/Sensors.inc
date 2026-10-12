@@ -1532,11 +1532,8 @@ CNA_Result cna_accelerometer_reading_event_info_copy_type_name(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_copy_type_name: out_bytes is null.");
-        }
-        return CopyText(AccelerometerReadingEventArgs().GetTypeName(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return AccelerometerReadingEventArgs().GetTypeName();
     });
 }
 
@@ -1545,11 +1542,8 @@ CNA_Result cna_calibration_event_info_copy_type_name(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_calibration_event_info_copy_type_name: out_bytes is null.");
-        }
-        return CopyText(CalibrationEventArgs().GetTypeName(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return CalibrationEventArgs().GetTypeName();
     });
 }
 

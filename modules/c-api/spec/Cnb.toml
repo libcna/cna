@@ -143,13 +143,13 @@ cna_cnb_loader_destroy = { release = true }
 [calls]
 [calls.routes]
 cna_cnb_get_chunk_id_string_size = { size = "Cnb::ChunkIdToString(Cnb::CnbChunkId{id})" }
-cna_cnb_copy_chunk_id_string = { result = "CopyText(Cnb::ChunkIdToString(Cnb::CnbChunkId{id}), destination, capacity, out_byte_count)" }
+cna_cnb_copy_chunk_id_string = { copy = "Cnb::ChunkIdToString(Cnb::CnbChunkId{id})" }
 cna_cnb_get_asset_type_name_size = { size = "Cnb::AssetTypeIdToString(asset_type_id)" }
-cna_cnb_copy_asset_type_name = { result = "CopyText(Cnb::AssetTypeIdToString(asset_type_id), destination, capacity, out_byte_count)" }
+cna_cnb_copy_asset_type_name = { copy = "Cnb::AssetTypeIdToString(asset_type_id)" }
 cna_cnb_get_compression_name_size = { size = "Cnb::CnbCompressionToString(ToCodec(codec))" }
-cna_cnb_copy_compression_name = { result = "CopyText(Cnb::CnbCompressionToString(ToCodec(codec)), destination, capacity, out_byte_count)" }
+cna_cnb_copy_compression_name = { copy = "Cnb::CnbCompressionToString(ToCodec(codec))" }
 cna_cnb_get_texture_format_name_size = { size = "Cnb::CnbTextureFormatToString(ToTextureFormat(format))" }
-cna_cnb_copy_texture_format_name = { result = "CopyText(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), destination, capacity, out_byte_count)" }
+cna_cnb_copy_texture_format_name = { copy = "Cnb::CnbTextureFormatToString(ToTextureFormat(format))" }
 cna_cnb_encode_texture2d = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTexture2DToCnb, destination, capacity, out_byte_count)" }
 cna_cnb_encode_texture_cube = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTextureCubeToCnb, destination, capacity, out_byte_count)" }
 cna_cnb_encode_texture3d = { result = "EncodeTexture(texture, content_name, &Cnb::EncodeTexture3DToCnb, destination, capacity, out_byte_count)" }
@@ -159,9 +159,9 @@ cna_cnb_decode_texture3d = { result = "DecodeTexture(document, &Cnb::DecodeTextu
 cna_cnb_model_create = { result = "CreateModel(Cnb::CnbModelData{}, out_model)" }
 cna_cnb_sprite_font_data_create = { result = "CreateSpriteFont(Cnb::CnbSpriteFontData{}, out_font)" }
 cna_cnb_get_audio_format_name_size = { size = "Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format))" }
-cna_cnb_copy_audio_format_name = { result = "CopyText(Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), destination, capacity, out_byte_count)" }
+cna_cnb_copy_audio_format_name = { copy = "Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format))" }
 cna_cnb_loader_registry_get_registered_type_name_size = { size = "CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id)" }
-cna_cnb_loader_registry_copy_registered_type_name = { result = "CopyText(CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id), destination, capacity, out_byte_count)" }
+cna_cnb_loader_registry_copy_registered_type_name = { copy = "CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id)" }
 
 [bytes]
 lookup = "BorrowBytes"

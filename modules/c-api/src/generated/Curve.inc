@@ -130,3 +130,122 @@ CNA_Result cna_curve_evaluate(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_curve_key_get_continuity(
+    const CNA_CurveKey key,
+    CNA_CurveContinuity* const out_continuity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_continuity == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_continuity: out_continuity is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_continuity = static_cast<CNA_CurveContinuity>(ToNative(key).getContinuityProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_get_position(
+    const CNA_CurveKey key,
+    float* const out_position)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_position == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_position: out_position is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_position = static_cast<float>(ToNative(key).getPositionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_get_tangent_in(
+    const CNA_CurveKey key,
+    float* const out_tangent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tangent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_tangent_in: out_tangent is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_tangent = static_cast<float>(ToNative(key).getTangentInProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_get_tangent_out(
+    const CNA_CurveKey key,
+    float* const out_tangent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tangent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_tangent_out: out_tangent is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_tangent = static_cast<float>(ToNative(key).getTangentOutProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_get_value(
+    const CNA_CurveKey key,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_value: out_value is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(ToNative(key).getValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_clone(
+    const CNA_CurveKey key,
+    CNA_CurveKey* const out_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_key == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_clone: out_key is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_key = CNA::C::Detail::ToC(ToNative(key).Clone());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_key_get_hash_code(
+    const CNA_CurveKey key,
+    int32_t* const out_hash)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_get_hash_code: out_hash is null.");
+        }
+        if (const CNA_Result routeResult = ValidateKey(key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash = static_cast<int32_t>(ToNative(key).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}

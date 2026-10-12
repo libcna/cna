@@ -114,11 +114,8 @@ CNA_Result cna_platform_copy_current_name_ext(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_platform_copy_current_name_ext: out_bytes is null.");
-        }
-        return CopyText(CNA::getCurrentPlatformName(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return CNA::getCurrentPlatformName();
     });
 }
 
@@ -138,11 +135,8 @@ CNA_Result cna_graphics_renderer_copy_current_name(
     const uint64_t capacity,
     uint64_t* const out_bytes)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_bytes == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_copy_current_name: out_bytes is null.");
-        }
-        return CopyText(CNA::getCurrentGraphicsRendererName(), destination, capacity, out_bytes);
+    return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
+        return CNA::getCurrentGraphicsRendererName();
     });
 }
 

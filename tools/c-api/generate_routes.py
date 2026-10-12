@@ -324,6 +324,8 @@ class Route:
         kind = self.types.kind_of(param.type)
         if kind == "marshaled" and self.group.get("raw"):
             return False
+        if self.has_lookup and param in self.lookup_params:
+            return False  # a lookup receives its parameters as the caller passed them
         return not param.pointer and kind in ("marshaled", "bool")
 
     # The second handle may itself be named `other`; the definition renames it, as the ABI allows.
@@ -706,7 +708,7 @@ def render_contract_test(routes: list[Route]) -> str:
             lines += check
     lines += ["    return failures;", "}", "",
               "static int text_protocol_holds(void)", "{",
-              "    int failures = 0;", "    uint64_t size = 0U;"]
+              "    int failures = 0;", "    uint64_t size = 0U;", "    CNA_Result size_result;"]
     copies = {(r.group.get("lookup"), r.expression, tuple(r.inputs)): r
               for r in routes if r.kind == "copy" and not r.has_lookup}
     for r in routes:
@@ -717,9 +719,16 @@ def render_contract_test(routes: list[Route]) -> str:
         capacity = pair.outputs[1].name
         short = _arguments(pair, **{capacity: "size - 1U"})
         exact = _arguments(pair, **{capacity: "size"})
+        exact_args = _arguments(pair, **{capacity: "(uint64_t)sizeof(text)"})
         lines += [
-            _expect(f"{r.name}({size_args})", "CNA_RESULT_SUCCESS", r.name, '"zeroed input"'),
-            "    if (size > 0U && size <= sizeof(text)) {",
+            # A text that does not exist for zeroed input (no pending input, say) must be refused
+            # alike by both halves; one that does must keep the protocol.
+            f"    size_result = {r.name}({size_args});",
+            "    if (size_result != CNA_RESULT_SUCCESS) {",
+            "    " + _expect(f"{pair.name}({exact_args})", "size_result", pair.name,
+                             '"the refusal its size half gave"'),
+            "    }",
+            "    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {",
             "        memset(text, 0x5A, sizeof(text));",
             "    " + _expect(f"{pair.name}({short})", "CNA_RESULT_BUFFER_TOO_SMALL", pair.name,
                              '"one byte short"'),
