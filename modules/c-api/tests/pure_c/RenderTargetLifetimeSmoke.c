@@ -191,6 +191,44 @@ static CNA_Result validate_content_lost_subscription(RenderTargetLifetimeState* 
     return CNA_RESULT_SUCCESS;
 }
 
+/* A refused creation answers the documented result and leaves the output handle cleared. */
+static CNA_Result validate_create_refused(
+    const CNA_Handle graphics_device,
+    const CNA_RenderTarget2DCreateInfo* const valid_2d,
+    const CNA_RenderTargetCubeCreateInfo* const valid_cube)
+{
+    CNA_RenderTarget2DCreateInfo empty_2d = *valid_2d;
+    empty_2d.width = 0U;
+    CNA_RenderTargetCubeCreateInfo reserved_cube = *valid_cube;
+    reserved_cube.reserved[0] = 1U;
+
+    CNA_Handle target = UINT64_C(0xDEAD);
+    if (cna_render_target2d_create(graphics_device, &empty_2d, &target) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        target != CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    target = UINT64_C(0xDEAD);
+    if (cna_render_target_cube_create(graphics_device, &reserved_cube, &target) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        target != CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    target = UINT64_C(0xDEAD);
+    if (cna_render_target2d_create(CNA_INVALID_HANDLE, valid_2d, &target) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        target != CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    target = UINT64_C(0xDEAD);
+    if (cna_render_target_cube_create(CNA_INVALID_HANDLE, valid_cube, &target) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        target != CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -215,7 +253,9 @@ static CNA_Result on_load(
         CNA_FALSE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR,
         CNA_DEPTH_FORMAT_NONE, 0, CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS
     };
-    if (cna_render_target2d_create(
+    if (validate_create_refused(graphics_device, &create_2d, &create_cube) !=
+            CNA_RESULT_SUCCESS ||
+        cna_render_target2d_create(
             graphics_device, &create_2d, &state->render_target_2d) != CNA_RESULT_SUCCESS ||
         cna_render_target2d_create(
             graphics_device, &create_2d, &state->second_render_target) != CNA_RESULT_SUCCESS ||

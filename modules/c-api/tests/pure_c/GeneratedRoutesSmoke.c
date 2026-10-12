@@ -4566,12 +4566,6 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_available_network_session_not_equals(handle, v_CNA_AvailableNetworkSessionHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_not_equals", what);
     failures += expect(cna_local_network_gamer_enable_send_voice(handle, v_CNA_NetworkGamerHandle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_local_network_gamer_enable_send_voice", what);
     failures += expect_unless_arguments_refused(cna_local_network_gamer_send_packet_writer(handle, v_CNA_PacketWriterHandle, v_CNA_SendDataOptions), CNA_RESULT_INVALID_HANDLE, "cna_local_network_gamer_send_packet_writer", what);
-    o_CNA_Handle = UINT64_C(0xDEAD);
-    failures += expect_unless_arguments_refused(cna_render_target2d_create(handle, NULL, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_render_target2d_create", what);
-    failures += expect_cleared(o_CNA_Handle, "cna_render_target2d_create");
-    o_CNA_Handle = UINT64_C(0xDEAD);
-    failures += expect_unless_arguments_refused(cna_render_target_cube_create(handle, NULL, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_render_target_cube_create", what);
-    failures += expect_cleared(o_CNA_Handle, "cna_render_target_cube_create");
     failures += expect(cna_game_set_foreign_thread_calls_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_foreign_thread_calls_ext", what);
     failures += expect(cna_game_run_foreign_thread_calls_ext(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_run_foreign_thread_calls_ext", what);
     failures += expect(cna_game_request_exit(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_request_exit", what);

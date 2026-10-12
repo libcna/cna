@@ -114,6 +114,73 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
     return CNA_RESULT_SUCCESS;
 }
 
+[[nodiscard]] CNA_Result RenderTarget2dCreate(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_RenderTarget2DCreateInfo* const createInfo,
+    CNA_Handle* const outRenderTarget)
+{
+    if (!IsVersionedStructure(createInfo) || createInfo->width == 0U ||
+        createInfo->height == 0U ||
+        createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved0[0] != 0U ||
+        createInfo->reserved0[1] != 0U || createInfo->reserved0[2] != 0U ||
+        !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
+        createInfo->multi_sample_count < 0 || !IsRenderTargetUsage(createInfo->usage) ||
+        createInfo->reserved1 != 0U) {
+        return InvalidArgument("The RenderTarget2D creation configuration is invalid.");
+    }
+
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto target = std::make_shared<RenderTarget2D>(
+        *graphicsDevice->value,
+        static_cast<int>(createInfo->width),
+        static_cast<int>(createInfo->height),
+        createInfo->mip_map == CNA_TRUE,
+        static_cast<SurfaceFormat>(createInfo->format),
+        static_cast<DepthFormat>(createInfo->depth_format),
+        createInfo->multi_sample_count,
+        static_cast<RenderTargetUsage>(createInfo->usage));
+    return CreateOwnedRenderTarget2D(
+        std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture2D>(target),
+        graphicsDevice->parentGame,
+        outRenderTarget);
+}
+
+[[nodiscard]] CNA_Result RenderTargetCubeCreate(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_RenderTargetCubeCreateInfo* const createInfo,
+    CNA_Handle* const outRenderTarget)
+{
+    if (!IsVersionedStructure(createInfo) || createInfo->size == 0U ||
+        createInfo->size > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        !IsCanonicalBool(createInfo->mip_map) || createInfo->reserved[0] != 0U ||
+        createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U ||
+        !IsSurfaceFormat(createInfo->format) || !IsDepthFormat(createInfo->depth_format) ||
+        createInfo->multi_sample_count < 0 || !IsRenderTargetUsage(createInfo->usage)) {
+        return InvalidArgument("The RenderTargetCube creation configuration is invalid.");
+    }
+
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto target = std::make_shared<RenderTargetCube>(
+        *graphicsDevice->value,
+        static_cast<int>(createInfo->size),
+        createInfo->mip_map == CNA_TRUE,
+        static_cast<SurfaceFormat>(createInfo->format),
+        static_cast<DepthFormat>(createInfo->depth_format),
+        createInfo->multi_sample_count,
+        static_cast<RenderTargetUsage>(createInfo->usage));
+    return CreateRenderTargetCubeHandle(target, graphicsDevice->parentGame, outRenderTarget);
+}
+
 [[nodiscard]] CNA_Result ResolveBindings(
     const CNA_Handle parentGame,
     const CNA_RenderTargetBinding* const bindings,
