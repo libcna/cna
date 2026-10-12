@@ -436,6 +436,37 @@ CNA_Result cna_devices_clipboard_set_text_ext(
 #endif
 
 #if defined(CNA_DEVICES)
+CNA_Result cna_camera_create(
+    const CNA_Handle game,
+    CNA_CameraHandle* const out_camera)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_camera == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_create: out_camera is null.");
+        }
+        *out_camera = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateResourceHandle<CameraResource>(ObjectKind::Camera, std::make_unique<Camera>(), out_camera);
+    });
+}
+#else
+CNA_Result cna_camera_create(
+    const CNA_Handle game,
+    CNA_CameraHandle* const out_camera)
+{
+    (void)game;
+    (void)out_camera;
+    if (out_camera != nullptr) {
+        *out_camera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
 CNA_Result cna_locale_get_language_size_at_ext(
     const CNA_Handle game,
     const uint64_t index,

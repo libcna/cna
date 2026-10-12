@@ -25,6 +25,7 @@ namespace {
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
@@ -190,13 +191,14 @@ CNA_Result cna_signed_in_gamer_create_ext(
             return result;
         }
 
-        const auto resource = std::make_shared<SignedInGamerResource>();
-        resource->value = std::make_shared<SignedInGamer>(SignedInGamer::CreateInternal(
-            gamertagCopy,
-            isSignedInToLive != CNA_FALSE,
-            isGuest != CNA_FALSE,
-            static_cast<PlayerIndex>(playerIndex)));
-        return CreateHandle(ObjectKind::SignedInGamer, resource, outGamer);
+        return CreateResourceHandle<SignedInGamerResource>(
+            ObjectKind::SignedInGamer,
+            std::make_shared<SignedInGamer>(SignedInGamer::CreateInternal(
+                gamertagCopy,
+                isSignedInToLive != CNA_FALSE,
+                isGuest != CNA_FALSE,
+                static_cast<PlayerIndex>(playerIndex))),
+            outGamer);
     });
 }
 

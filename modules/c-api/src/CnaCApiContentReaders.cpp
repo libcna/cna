@@ -44,6 +44,7 @@ using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -156,9 +157,8 @@ template<typename TCallable>
     std::unique_ptr<ContentTypeReaderBase> typeReader,
     CNA_ContentTypeReaderHandle* const outTypeReader)
 {
-    const auto resource = std::make_shared<ContentTypeReaderResource>();
-    resource->value = std::move(typeReader);
-    return CreateHandle(ObjectKind::ContentTypeReader, resource, outTypeReader);
+    return CreateResourceHandle<ContentTypeReaderResource>(
+        ObjectKind::ContentTypeReader, std::move(typeReader), outTypeReader);
 }
 
 } // namespace
@@ -1909,9 +1909,8 @@ CNA_Result PublishObjectDictionary(
     if (!dictionary) {
         return InvalidArgument("The object dictionary to publish is null.");
     }
-    auto resource = std::make_shared<ObjectDictionaryResource>();
-    resource->value = std::move(dictionary);
-    return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outHandle);
+    return CreateResourceHandle<ObjectDictionaryResource>(
+        ObjectKind::ObjectDictionaryEXT, std::move(dictionary), outHandle);
 }
 
 bool TryGetForeignReferenceObject(const System::Object* const tag, void** const outObject)

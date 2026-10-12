@@ -51,6 +51,9 @@ cna_packet_writer_destroy = { release = true }
 [calls.routes]
 cna_quality_of_service_init = { result = "StoreQualityOfService(QualityOfService::CreateInternal(), out_value)" }
 cna_quality_of_service_init_measured = { result = "StoreQualityOfService(QualityOfService::CreateInternal(System::TimeSpan(roundtrip_ticks)), out_value)" }
+cna_network_session_properties_create = { result = "CreateResourceHandle<NetworkSessionPropertiesResource>(ObjectKind::NetworkSessionProperties, std::make_unique<NetworkSessionProperties>(), out_properties)" }
+cna_packet_writer_create = { result = "CreateResourceHandle<PacketWriterResource>(ObjectKind::PacketWriter, std::make_unique<PacketWriter>(static_cast<int>(capacity)), out_writer)" }
+cna_packet_reader_create = { result = "CreateResourceHandle<PacketReaderResource>(ObjectKind::PacketReader, std::make_unique<PacketReader>(static_cast<int>(capacity)), out_reader)" }
 
 [enumerator]
 lookup = "GetEnumerator"

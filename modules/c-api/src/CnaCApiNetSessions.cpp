@@ -46,8 +46,8 @@ using CNA::C::Detail::BorrowNetworkGamer;
 using CNA::C::Detail::BorrowNetworkSessionProperties;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateBorrowedNetworkGamer;
-using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedNetworkSessionProperties;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -137,9 +137,10 @@ struct NetworkSessionResource final {
     AvailableNetworkSession value,
     CNA_AvailableNetworkSessionHandle* const outSession)
 {
-    const auto resource = std::make_shared<AvailableSessionResource>();
-    resource->value = std::make_shared<AvailableNetworkSession>(std::move(value));
-    return CreateHandle(ObjectKind::AvailableNetworkSession, resource, outSession);
+    return CreateResourceHandle<AvailableSessionResource>(
+        ObjectKind::AvailableNetworkSession,
+        std::make_shared<AvailableNetworkSession>(std::move(value)),
+        outSession);
 }
 
 } // namespace
@@ -282,10 +283,11 @@ CNA_Result cna_available_network_session_collection_create_ext(
             copied.push_back(*session->value);
         }
 
-        const auto resource = std::make_shared<AvailableSessionCollectionResource>();
-        resource->value = std::make_shared<AvailableNetworkSessionCollection>(
-            AvailableNetworkSessionCollection::CreateInternal(std::move(copied)));
-        return CreateHandle(ObjectKind::AvailableNetworkSessionCollection, resource, outCollection);
+        return CreateResourceHandle<AvailableSessionCollectionResource>(
+            ObjectKind::AvailableNetworkSessionCollection,
+            std::make_shared<AvailableNetworkSessionCollection>(
+                AvailableNetworkSessionCollection::CreateInternal(std::move(copied))),
+            outCollection);
     });
 }
 
@@ -323,9 +325,8 @@ namespace {
     if (created == nullptr) {
         return InternalError("The canonical creation returned no session.");
     }
-    const auto resource = std::make_shared<NetworkSessionResource>();
-    resource->value = created;
-    return CreateHandle(ObjectKind::NetworkSession, resource, outSession);
+    return CreateResourceHandle<NetworkSessionResource>(
+        ObjectKind::NetworkSession, created, outSession);
 }
 
 template<typename TCallable>
@@ -1299,9 +1300,10 @@ using SignedInGamerList = std::vector<Microsoft::Xna::Framework::GamerServices::
     AvailableNetworkSessionCollection value,
     CNA_AvailableNetworkSessionCollectionHandle* const outCollection)
 {
-    const auto resource = std::make_shared<AvailableSessionCollectionResource>();
-    resource->value = std::make_shared<AvailableNetworkSessionCollection>(std::move(value));
-    return CreateHandle(ObjectKind::AvailableNetworkSessionCollection, resource, outCollection);
+    return CreateResourceHandle<AvailableSessionCollectionResource>(
+        ObjectKind::AvailableNetworkSessionCollection,
+        std::make_shared<AvailableNetworkSessionCollection>(std::move(value)),
+        outCollection);
 }
 
 } // namespace

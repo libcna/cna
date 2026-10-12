@@ -34,6 +34,7 @@ static CNA_BlendState o_CNA_BlendState;
 static CNA_Bool o_CNA_Bool;
 static CNA_BoundingSphere o_CNA_BoundingSphere;
 static CNA_CRTMaskType o_CNA_CRTMaskType;
+static CNA_CameraHandle o_CNA_CameraHandle;
 static CNA_CameraState o_CNA_CameraState;
 static CNA_CnbAnimationClipHandle o_CNA_CnbAnimationClipHandle;
 static CNA_CnbLoaderHandle o_CNA_CnbLoaderHandle;
@@ -100,6 +101,7 @@ static CNA_LeaderboardIdentity o_CNA_LeaderboardIdentity;
 static CNA_LeaderboardOutcome o_CNA_LeaderboardOutcome;
 static CNA_LeaderboardReaderInfo o_CNA_LeaderboardReaderInfo;
 static CNA_Matrix o_CNA_Matrix;
+static CNA_MediaLibraryHandle o_CNA_MediaLibraryHandle;
 static CNA_MediaState o_CNA_MediaState;
 static CNA_MicrophoneState o_CNA_MicrophoneState;
 static CNA_ModelBoneCollectionHandle o_CNA_ModelBoneCollectionHandle;
@@ -109,6 +111,7 @@ static CNA_ModelMeshTag o_CNA_ModelMeshTag;
 static CNA_ModelTag o_CNA_ModelTag;
 static CNA_MotionHandle o_CNA_MotionHandle;
 static CNA_MotionReading o_CNA_MotionReading;
+static CNA_NetworkMachineHandle o_CNA_NetworkMachineHandle;
 static CNA_NetworkSessionHandle o_CNA_NetworkSessionHandle;
 static CNA_NetworkSessionPropertiesHandle o_CNA_NetworkSessionPropertiesHandle;
 static CNA_NetworkSessionState o_CNA_NetworkSessionState;
@@ -160,6 +163,7 @@ static CNA_AsciiPostProcessEffectHandle v_CNA_AsciiPostProcessEffectHandle;
 static CNA_AvailableNetworkSessionCollectionHandle v_CNA_AvailableNetworkSessionCollectionHandle;
 static CNA_AvailableNetworkSessionHandle v_CNA_AvailableNetworkSessionHandle;
 static CNA_AvatarAnimationHandle v_CNA_AvatarAnimationHandle;
+static CNA_AvatarAnimationPreset v_CNA_AvatarAnimationPreset;
 static CNA_AvatarBodyType v_CNA_AvatarBodyType;
 static CNA_AvatarDescriptionHandle v_CNA_AvatarDescriptionHandle;
 static CNA_AvatarRendererHandle v_CNA_AvatarRendererHandle;
@@ -450,6 +454,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_avatar_renderer_get_info(v_CNA_AvatarRendererHandle, &o_CNA_AvatarRendererInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_avatar_renderer_get_info", "a out_info of version 0");
     failures += expect(cna_avatar_description_create_random(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_avatar_description_create_random", "a null out_description");
     failures += expect(cna_avatar_description_create_random_for_body_type(v_CNA_AvatarBodyType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_avatar_description_create_random_for_body_type", "a null out_description");
+    failures += expect(cna_avatar_animation_create(v_CNA_AvatarAnimationPreset, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_avatar_animation_create", "a null out_animation");
     failures += expect(cna_avatar_expression_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_avatar_expression_init", "a null out_expression");
     failures += expect(cna_cnb_document_copy_origin(v_CNA_CnbDocumentHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_document_copy_origin", "a null destination with a capacity");
     failures += expect(cna_cnb_document_copy_origin(v_CNA_CnbDocumentHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_document_copy_origin", "a null out_bytes");
@@ -563,9 +568,12 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_loader_registry_get_registered_type_name_size(v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_get_registered_type_name_size", "a null out_byte_count");
     failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null destination with a capacity");
     failures += expect(cna_cnb_loader_registry_copy_registered_type_name(v_uint32_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_loader_registry_copy_registered_type_name", "a null out_bytes");
+    failures += expect(cna_cnb_byte_writer_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_create", "a null out_writer");
+    failures += expect(cna_cnb_writer_create(v_uint32_t, v_uint32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_writer_create", "a null out_writer");
     failures += expect(cna_cnb_crc32c(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c", "a null out_checksum");
     failures += expect(cna_cnb_crc32c_portable(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_crc32c_portable", "a null out_checksum");
     failures += expect(cna_cnb_has_magic(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_has_magic", "a null out_has_magic");
+    failures += expect(cna_cnb_byte_writer_create_from_bytes(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_byte_writer_create_from_bytes", "a null out_writer");
     failures += expect(cna_cnb_import_dds_as_texture_cube(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_import_dds_as_texture_cube", "a null out_texture");
     failures += expect(cna_cnb_import_wav_as_sound_effect(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_import_wav_as_sound_effect", "a null out_sound");
     failures += expect(cna_cnb_make_chunk_id(v_uint8_t, v_uint8_t, v_uint8_t, v_uint8_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_make_chunk_id", "a null out_id");
@@ -723,6 +731,7 @@ static int null_outputs_are_refused(void)
     failures += expect_unless_compiled_out(cna_camera_get_is_supported_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_get_is_supported_ext", "a null out_supported");
     failures += expect_unless_compiled_out(cna_camera_get_count_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_get_count_ext", "a null out_count");
     failures += expect_unless_compiled_out(cna_devices_clipboard_set_text_ext(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_devices_clipboard_set_text_ext", "a null out_accepted");
+    failures += expect_unless_compiled_out(cna_camera_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_create", "a null out_camera");
     failures += expect_unless_compiled_out(cna_locale_get_language_size_at_ext(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_get_language_size_at_ext", "a null out_bytes");
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(v_CNA_Handle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_copy_language_at_ext", "a null destination with a capacity");
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(v_CNA_Handle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_copy_language_at_ext", "a null out_bytes");
@@ -1758,6 +1767,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_playlist_equals(v_CNA_PlaylistHandle, v_CNA_PlaylistHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_playlist_equals", "a null out_equal");
     failures += expect(cna_picture_equals(v_CNA_PictureHandle, v_CNA_PictureHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_picture_equals", "a null out_equal");
     failures += expect(cna_picture_album_equals(v_CNA_PictureAlbumHandle, v_CNA_PictureAlbumHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_picture_album_equals", "a null out_equal");
+    failures += expect(cna_media_library_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_library_create", "a null out_library");
     failures += expect(cna_media_player_detect_song_ended_by_elapsed_time_ext(v_CNA_SongHandle, v_int64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_player_detect_song_ended_by_elapsed_time_ext", "a null out_ended");
     failures += expect(cna_media_queue_get_count(v_CNA_MediaQueueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_queue_get_count", "a null out_count");
     failures += expect(cna_media_queue_get_active_song_index(v_CNA_MediaQueueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_media_queue_get_active_song_index", "a null out_index");
@@ -1882,6 +1892,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_packet_writer_get_position(v_CNA_PacketWriterHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_writer_get_position", "a null out_position");
     failures += expect(cna_quality_of_service_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_quality_of_service_init", "a null out_value");
     failures += expect(cna_quality_of_service_init_measured(v_int64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_quality_of_service_init_measured", "a null out_value");
+    failures += expect(cna_network_session_properties_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_session_properties_create", "a null out_properties");
+    failures += expect(cna_packet_writer_create(v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_writer_create", "a null out_writer");
+    failures += expect(cna_packet_reader_create(v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packet_reader_create", "a null out_reader");
     failures += expect(cna_network_gamer_get_has_left_session(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_has_left_session", "a null out_value");
     failures += expect(cna_network_gamer_get_has_voice(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_has_voice", "a null out_value");
     failures += expect(cna_network_gamer_get_id(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_id", "a null out_value");
@@ -1893,7 +1906,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_network_gamer_get_is_ready(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_is_ready", "a null out_value");
     failures += expect(cna_network_gamer_get_is_talking(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_is_talking", "a null out_value");
     failures += expect(cna_network_gamer_get_roundtrip_ticks(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_roundtrip_ticks", "a null out_ticks");
+    failures += expect(cna_network_gamer_copy_machine(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_copy_machine", "a null out_machine");
     failures += expect(cna_network_machine_get_gamer_count(v_CNA_NetworkMachineHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_machine_get_gamer_count", "a null out_count");
+    failures += expect(cna_network_machine_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_machine_create", "a null out_machine");
     failures += expect(cna_available_network_session_copy_host_gamertag(v_CNA_AvailableNetworkSessionHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_copy_host_gamertag", "a null destination with a capacity");
     failures += expect(cna_available_network_session_copy_host_gamertag(v_CNA_AvailableNetworkSessionHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_copy_host_gamertag", "a null out_bytes");
     failures += expect(cna_available_network_session_copy_connect_address_ext(v_CNA_AvailableNetworkSessionHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_copy_connect_address_ext", "a null destination with a capacity");
@@ -2642,6 +2657,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_compiled_out(cna_camera_get_is_supported_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_is_supported_ext", what);
     failures += expect_unless_compiled_out(cna_camera_get_count_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_count_ext", what);
     failures += expect_unless_compiled_out(cna_devices_clipboard_set_text_ext(handle, v_CNA_StringView, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_devices_clipboard_set_text_ext", what);
+    o_CNA_CameraHandle = UINT64_C(0xDEAD);
+    failures += expect_unless_compiled_out(cna_camera_create(handle, &o_CNA_CameraHandle), CNA_RESULT_INVALID_HANDLE, "cna_camera_create", what);
+    failures += expect_cleared(o_CNA_CameraHandle, "cna_camera_create");
     failures += expect_unless_compiled_out(cna_locale_get_language_size_at_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_get_language_size_at_ext", what);
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_copy_language_at_ext", what);
     failures += expect_unless_compiled_out(cna_locale_get_country_size_at_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_get_country_size_at_ext", what);
@@ -3472,6 +3490,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_playlist_equals(handle, v_CNA_PlaylistHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_playlist_equals", what);
     failures += expect(cna_picture_equals(handle, v_CNA_PictureHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_picture_equals", what);
     failures += expect(cna_picture_album_equals(handle, v_CNA_PictureAlbumHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_picture_album_equals", what);
+    o_CNA_MediaLibraryHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_media_library_create(handle, &o_CNA_MediaLibraryHandle), CNA_RESULT_INVALID_HANDLE, "cna_media_library_create", what);
+    failures += expect_cleared(o_CNA_MediaLibraryHandle, "cna_media_library_create");
     failures += expect(cna_media_player_detect_song_ended_by_elapsed_time_ext(handle, v_int64_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_media_player_detect_song_ended_by_elapsed_time_ext", what);
     failures += expect(cna_media_queue_get_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_media_queue_get_count", what);
     failures += expect(cna_media_queue_get_active_song_index(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_media_queue_get_active_song_index", what);
@@ -3651,6 +3672,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_network_gamer_get_roundtrip_ticks(handle, &o_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_get_roundtrip_ticks", what);
     failures += expect(cna_network_gamer_set_roundtrip_ticks_ext(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_set_roundtrip_ticks_ext", what);
     failures += expect(cna_network_gamer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_destroy", what);
+    o_CNA_NetworkMachineHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_network_gamer_copy_machine(handle, &o_CNA_NetworkMachineHandle), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_copy_machine", what);
+    failures += expect_cleared(o_CNA_NetworkMachineHandle, "cna_network_gamer_copy_machine");
     failures += expect(cna_network_machine_get_gamer_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_network_machine_get_gamer_count", what);
     failures += expect(cna_network_machine_remove_from_session(handle), CNA_RESULT_INVALID_HANDLE, "cna_network_machine_remove_from_session", what);
     failures += expect(cna_network_gamer_set_machine(handle, v_CNA_NetworkMachineHandle), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_set_machine", what);
@@ -4407,6 +4431,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2183 generated routes\n", failures);
+    printf("%d failed checks across 2194 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

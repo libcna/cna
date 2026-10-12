@@ -30,6 +30,7 @@ cna_system_tray_get_is_supported_ext = { get = "SystemTray::getIsSupportedProper
 cna_camera_get_is_supported_ext = { get = "Camera::getIsSupportedProperty()" }
 cna_camera_get_count_ext = { get = "Camera::getAvailableCamerasProperty().size()" }
 cna_devices_clipboard_set_text_ext = { get = "Clipboard::setTextProperty(text)" }
+cna_camera_create = { result = "CreateResourceHandle<CameraResource>(ObjectKind::Camera, std::make_unique<Camera>(), out_camera)" }
 
 [locale]
 lookup = "BorrowLocale"

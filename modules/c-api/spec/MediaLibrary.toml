@@ -260,3 +260,9 @@ other = { lookup = "Borrow<PictureAlbum>", object = "std::shared_ptr<MediaChildR
 
 [picture_album_pair.routes]
 cna_picture_album_equals = { get = "object->value->Equals(other->value)" }
+
+[active_game_handle]
+lookup = "ValidateActiveGameHandle"
+
+[active_game_handle.routes]
+cna_media_library_create = { result = "CreateResourceHandle<MediaLibraryResource>(ObjectKind::MediaLibrary, std::make_unique<MediaLibrary>(), out_library)" }

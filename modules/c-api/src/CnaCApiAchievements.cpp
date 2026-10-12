@@ -24,7 +24,7 @@ using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CompleteAtOnce;
 using CNA::C::Detail::CopyPictureStream;
-using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -65,18 +65,18 @@ struct AchievementCollectionResource final {
 
 [[nodiscard]] CNA_Result PublishAchievement(Achievement value, CNA_Handle* const outAchievement)
 {
-    const auto resource = std::make_shared<AchievementResource>();
-    resource->value = std::make_shared<Achievement>(std::move(value));
-    return CreateHandle(ObjectKind::Achievement, resource, outAchievement);
+    return CreateResourceHandle<AchievementResource>(
+        ObjectKind::Achievement, std::make_shared<Achievement>(std::move(value)), outAchievement);
 }
 
 [[nodiscard]] CNA_Result PublishCollection(
     AchievementCollection value,
     CNA_Handle* const outCollection)
 {
-    const auto resource = std::make_shared<AchievementCollectionResource>();
-    resource->value = std::make_shared<AchievementCollection>(std::move(value));
-    return CreateHandle(ObjectKind::AchievementCollection, resource, outCollection);
+    return CreateResourceHandle<AchievementCollectionResource>(
+        ObjectKind::AchievementCollection,
+        std::make_shared<AchievementCollection>(std::move(value)),
+        outCollection);
 }
 
 } // namespace

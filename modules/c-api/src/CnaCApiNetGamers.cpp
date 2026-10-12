@@ -29,6 +29,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
@@ -236,26 +237,6 @@ CNA_Result cna_network_gamer_create(
     });
 }
 
-CNA_Result cna_network_gamer_copy_machine(
-    const CNA_NetworkGamerHandle gamerHandle,
-    CNA_NetworkMachineHandle* const outMachine)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMachine == nullptr) {
-            return InvalidArgument("The NetworkMachine output handle is null.");
-        }
-        *outMachine = CNA_INVALID_HANDLE;
-        std::shared_ptr<NetworkGamerResource> gamer;
-        if (const CNA_Result result = GetGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<NetworkMachineResource>();
-        resource->value = std::make_shared<NetworkMachine>(gamer->value->getMachineProperty());
-        return CreateHandle(ObjectKind::NetworkMachine, resource, outMachine);
-    });
-}
-
 CNA_Result cna_network_gamer_get_session(
     const CNA_NetworkGamerHandle gamerHandle,
     CNA_Handle* const outSession)
@@ -278,19 +259,6 @@ CNA_Result cna_network_gamer_get_session(
         }
         *outSession = gamer->session;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_machine_create(CNA_NetworkMachineHandle* const outMachine)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMachine == nullptr) {
-            return InvalidArgument("The NetworkMachine output handle is null.");
-        }
-        *outMachine = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<NetworkMachineResource>();
-        resource->value = std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal());
-        return CreateHandle(ObjectKind::NetworkMachine, resource, outMachine);
     });
 }
 

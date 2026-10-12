@@ -33,6 +33,7 @@ namespace {
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -185,9 +186,8 @@ private:
     std::unique_ptr<StorageDevice> device,
     CNA_StorageDeviceHandle* const outDevice)
 {
-    const auto resource = std::make_shared<StorageDeviceResource>();
-    resource->value = std::shared_ptr<StorageDevice>(std::move(device));
-    return CreateHandle(ObjectKind::StorageDevice, resource, outDevice);
+    return CreateResourceHandle<StorageDeviceResource>(
+        ObjectKind::StorageDevice, std::shared_ptr<StorageDevice>(std::move(device)), outDevice);
 }
 
 [[nodiscard]] CNA_Result CreateStreamHandle(

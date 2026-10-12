@@ -28,6 +28,7 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CompleteAtOnce;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateOwnedPropertyDictionary;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -137,9 +138,10 @@ struct LeaderboardEntryResource final {
 
 [[nodiscard]] CNA_Result PublishReader(LeaderboardReader value, CNA_Handle* const outReader)
 {
-    const auto resource = std::make_shared<LeaderboardReaderResource>();
-    resource->value = std::make_shared<LeaderboardReader>(std::move(value));
-    return CreateHandle(ObjectKind::LeaderboardReader, resource, outReader);
+    return CreateResourceHandle<LeaderboardReaderResource>(
+        ObjectKind::LeaderboardReader,
+        std::make_shared<LeaderboardReader>(std::move(value)),
+        outReader);
 }
 
 // The C ABI exposes a completed read and owns the underlying queued Begin/End operation.

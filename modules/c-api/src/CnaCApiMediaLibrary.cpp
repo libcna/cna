@@ -34,6 +34,7 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::IoError;
@@ -51,7 +52,6 @@ namespace {
 
 using CNA::C::Detail::CopyBytes;
 using CNA::C::Detail::CopyText;
-using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::ReleaseHandle;
@@ -211,27 +211,6 @@ template<typename TCollection, typename TElement>
 
 } // namespace
 
-CNA_Result cna_media_library_create(
-    const CNA_Handle gameHandle,
-    CNA_MediaLibraryHandle* const outLibrary)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLibrary == nullptr) {
-            return InvalidArgument("The media library output is null.");
-        }
-        *outLibrary = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<MediaLibraryResource>();
-        resource->value = std::make_unique<MediaLibrary>();
-        return CreateHandle(ObjectKind::MediaLibrary,
-            std::move(resource),
-            outLibrary);
-    });
-}
-
 CNA_Result cna_media_library_create_from_source(
     const CNA_Handle gameHandle,
     const uint32_t sourceIndex,
@@ -260,11 +239,9 @@ CNA_Result cna_media_library_create_from_source(
         if (static_cast<std::size_t>(sourceIndex) >= owned.size()) {
             return InvalidArgument("The media source index is out of range.");
         }
-        auto resource = std::make_shared<MediaLibraryResource>();
-        resource->value =
-            std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get());
-        return CreateHandle(ObjectKind::MediaLibrary,
-            std::move(resource),
+        return CreateResourceHandle<MediaLibraryResource>(
+            ObjectKind::MediaLibrary,
+            std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get()),
             outLibrary);
     });
 }

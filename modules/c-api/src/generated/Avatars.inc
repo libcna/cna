@@ -212,6 +212,22 @@ CNA_Result cna_avatar_description_create_random_for_body_type(
     });
 }
 
+CNA_Result cna_avatar_animation_create(
+    const CNA_AvatarAnimationPreset preset,
+    CNA_AvatarAnimationHandle* const out_animation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_animation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_animation_create: out_animation is null.");
+        }
+        *out_animation = CNA_INVALID_HANDLE;
+        if (preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_avatar_animation_create: invalid because preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM.");
+        }
+        return CreateResourceHandle<AvatarAnimationResource>(ObjectKind::AvatarAnimation, std::make_shared<AvatarAnimation>(static_cast<AvatarAnimationPreset>(preset)), out_animation);
+    });
+}
+
 CNA_Result cna_avatar_expression_init(
     CNA_AvatarExpression* const out_expression)
 {

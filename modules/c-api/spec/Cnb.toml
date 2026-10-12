@@ -191,6 +191,8 @@ cna_cnb_get_audio_format_name_size = { size = "Cnb::CnbAudioFormatToString(stati
 cna_cnb_copy_audio_format_name = { copy = "Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format))" }
 cna_cnb_loader_registry_get_registered_type_name_size = { size = "CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id)" }
 cna_cnb_loader_registry_copy_registered_type_name = { copy = "CNA::Content::CnbLoaderRegistry::RegisteredTypeName(asset_type_id)" }
+cna_cnb_byte_writer_create = { result = "CreateResourceHandle<CnbByteWriterResource>(ObjectKind::CnbByteWriter, std::make_shared<Cnb::CnbByteWriter>(), out_writer)" }
+cna_cnb_writer_create = { result = "CreateResourceHandle<CnbWriterResource>(ObjectKind::CnbWriter, std::make_shared<Cnb::CnbWriter>(asset_type_id, asset_schema_version), out_writer)" }
 
 [bytes]
 lookup = "BorrowBytes"
@@ -201,6 +203,7 @@ arguments = 2
 cna_cnb_crc32c = { get = "Cnb::Crc32c(object)" }
 cna_cnb_crc32c_portable = { get = "Cnb::Crc32cPortableEXT(object)" }
 cna_cnb_has_magic = { get = "Cnb::CnbDocument::HasMagic(object)" }
+cna_cnb_byte_writer_create_from_bytes = { result = "CreateResourceHandle<CnbByteWriterResource>(ObjectKind::CnbByteWriter, std::make_shared<Cnb::CnbByteWriter>(std::vector<uint8_t>(object.begin(), object.end())), out_writer)" }
 
 [import_path]
 lookup = "ReadImportPath"

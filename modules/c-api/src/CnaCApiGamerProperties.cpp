@@ -27,7 +27,7 @@ namespace {
 using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
-using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::LookupHandle;
@@ -183,9 +183,8 @@ CNA_Result CreateOwnedPropertyDictionary(
         return InvalidArgument("The property dictionary factory arguments are invalid.");
     }
     *outDictionary = CNA_INVALID_HANDLE;
-    const auto resource = std::make_shared<PropertyDictionaryResource>();
-    resource->value = std::move(value);
-    return CreateHandle(ObjectKind::PropertyDictionary, resource, outDictionary);
+    return CreateResourceHandle<PropertyDictionaryResource>(
+        ObjectKind::PropertyDictionary, std::move(value), outDictionary);
 }
 
 } // namespace CNA::C::Detail

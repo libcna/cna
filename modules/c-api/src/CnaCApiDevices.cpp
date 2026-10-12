@@ -49,6 +49,7 @@
 #endif
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetGameWindow;
@@ -1231,11 +1232,8 @@ CNA_Result cna_system_tray_create(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        auto resource = std::make_shared<SystemTrayResource>();
-        resource->value = std::make_unique<SystemTray>(tooltipText);
-        return CreateHandle(ObjectKind::SystemTray,
-            std::move(resource),
-            outTray);
+        return CreateResourceHandle<SystemTrayResource>(
+            ObjectKind::SystemTray, std::make_unique<SystemTray>(tooltipText), outTray);
     });
 }
 
@@ -1372,25 +1370,6 @@ CNA_Result cna_camera_get_info_at_ext(
         mapped.position = static_cast<CNA_CameraPosition>(info.Position);
         *outInfo = mapped;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_camera_create(const CNA_Handle gameHandle, CNA_CameraHandle* const outCamera)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCamera == nullptr) {
-            return InvalidArgument("The camera output is null.");
-        }
-        *outCamera = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<CameraResource>();
-        resource->value = std::make_unique<Camera>();
-        return CreateHandle(ObjectKind::Camera,
-            std::move(resource),
-            outCamera);
     });
 }
 
@@ -1738,15 +1717,6 @@ CNA_Result cna_camera_get_info_at_ext(
     (void)game;
     (void)index;
     (void)outInfo;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_camera_create(const CNA_Handle game, CNA_CameraHandle* const outCamera)
-{
-    (void)game;
-    if (outCamera != nullptr) {
-        *outCamera = CNA_INVALID_HANDLE;
-    }
     return ExtensionUnavailable();
 }
 

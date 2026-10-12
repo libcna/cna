@@ -33,6 +33,7 @@ using CNA::C::Detail::BorrowAnyGamer;
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
@@ -135,9 +136,10 @@ struct AvatarRendererResource final {
     AvatarDescription value,
     CNA_Handle* const outDescription)
 {
-    const auto resource = std::make_shared<AvatarDescriptionResource>();
-    resource->value = std::make_shared<AvatarDescription>(std::move(value));
-    return CreateHandle(ObjectKind::AvatarDescription, resource, outDescription);
+    return CreateResourceHandle<AvatarDescriptionResource>(
+        ObjectKind::AvatarDescription,
+        std::make_shared<AvatarDescription>(std::move(value)),
+        outDescription);
 }
 
 } // namespace
@@ -252,25 +254,6 @@ CNA_Result cna_avatar_description_subscribe_changed_ext(
                     source,
                     token)),
             outRegistration);
-    });
-}
-
-CNA_Result cna_avatar_animation_create(
-    const CNA_AvatarAnimationPreset preset,
-    CNA_AvatarAnimationHandle* const outAnimation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAnimation == nullptr) {
-            return InvalidArgument("The AvatarAnimation output handle is null.");
-        }
-        *outAnimation = CNA_INVALID_HANDLE;
-        if (preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM) {
-            return InvalidArgument("The avatar animation preset is not a defined identity.");
-        }
-        const auto resource = std::make_shared<AvatarAnimationResource>();
-        resource->value =
-            std::make_shared<AvatarAnimation>(static_cast<AvatarAnimationPreset>(preset));
-        return CreateHandle(ObjectKind::AvatarAnimation, resource, outAnimation);
     });
 }
 

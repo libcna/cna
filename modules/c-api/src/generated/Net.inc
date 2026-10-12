@@ -495,6 +495,44 @@ CNA_Result cna_quality_of_service_init_measured(
     });
 }
 
+CNA_Result cna_network_session_properties_create(
+    CNA_NetworkSessionPropertiesHandle* const out_properties)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_properties == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_session_properties_create: out_properties is null.");
+        }
+        *out_properties = CNA_INVALID_HANDLE;
+        return CreateResourceHandle<NetworkSessionPropertiesResource>(ObjectKind::NetworkSessionProperties, std::make_unique<NetworkSessionProperties>(), out_properties);
+    });
+}
+
+CNA_Result cna_packet_writer_create(
+    const int32_t capacity,
+    CNA_PacketWriterHandle* const out_writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_writer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_writer_create: out_writer is null.");
+        }
+        *out_writer = CNA_INVALID_HANDLE;
+        return CreateResourceHandle<PacketWriterResource>(ObjectKind::PacketWriter, std::make_unique<PacketWriter>(static_cast<int>(capacity)), out_writer);
+    });
+}
+
+CNA_Result cna_packet_reader_create(
+    const int32_t capacity,
+    CNA_PacketReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packet_reader_create: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CreateResourceHandle<PacketReaderResource>(ObjectKind::PacketReader, std::make_unique<PacketReader>(static_cast<int>(capacity)), out_reader);
+    });
+}
+
 CNA_Result cna_network_session_property_enumerator_destroy(
     const CNA_NetworkSessionPropertyEnumeratorHandle enumerator)
 {

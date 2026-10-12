@@ -1990,6 +1990,32 @@ CNA_Result cna_cnb_loader_registry_copy_registered_type_name(
     });
 }
 
+CNA_Result cna_cnb_byte_writer_create(
+    CNA_CnbByteWriterHandle* const out_writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_writer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_byte_writer_create: out_writer is null.");
+        }
+        *out_writer = CNA_INVALID_HANDLE;
+        return CreateResourceHandle<CnbByteWriterResource>(ObjectKind::CnbByteWriter, std::make_shared<Cnb::CnbByteWriter>(), out_writer);
+    });
+}
+
+CNA_Result cna_cnb_writer_create(
+    const uint32_t asset_type_id,
+    const uint32_t asset_schema_version,
+    CNA_CnbWriterHandle* const out_writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_writer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_writer_create: out_writer is null.");
+        }
+        *out_writer = CNA_INVALID_HANDLE;
+        return CreateResourceHandle<CnbWriterResource>(ObjectKind::CnbWriter, std::make_shared<Cnb::CnbWriter>(asset_type_id, asset_schema_version), out_writer);
+    });
+}
+
 CNA_Result cna_cnb_crc32c(
     const uint8_t* const data,
     const uint64_t byte_count,
@@ -2044,6 +2070,25 @@ CNA_Result cna_cnb_has_magic(
         }
         *out_has_magic = CNA::C::Detail::ToCBool(Cnb::CnbDocument::HasMagic(object));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_create_from_bytes(
+    const uint8_t* const initial,
+    const uint64_t byte_count,
+    CNA_CnbByteWriterHandle* const out_writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_writer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_byte_writer_create_from_bytes: out_writer is null.");
+        }
+        *out_writer = CNA_INVALID_HANDLE;
+        std::span<const uint8_t> object{};
+        if (const CNA_Result routeResult = BorrowBytes(initial, byte_count, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateResourceHandle<CnbByteWriterResource>(ObjectKind::CnbByteWriter, std::make_shared<Cnb::CnbByteWriter>(std::vector<uint8_t>(object.begin(), object.end())), out_writer);
     });
 }
 

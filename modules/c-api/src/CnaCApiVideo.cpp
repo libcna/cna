@@ -20,6 +20,7 @@
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateGameFrameTexture2D;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -121,11 +122,7 @@ void InvalidateFrameTexture(VideoPlayerResource& player) noexcept
     std::unique_ptr<Video> video,
     CNA_VideoHandle* const outVideo)
 {
-    auto resource = std::make_shared<VideoResource>();
-    resource->value = std::move(video);
-    return CreateHandle(ObjectKind::Video,
-        std::move(resource),
-        outVideo);
+    return CreateResourceHandle<VideoResource>(ObjectKind::Video, std::move(video), outVideo);
 }
 
 template<typename TRead>

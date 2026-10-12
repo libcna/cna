@@ -46,6 +46,7 @@
 
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -301,9 +302,10 @@ struct CnbTextureDataResource final {
     Cnb::CnbTextureData data,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    const auto resource = std::make_shared<CnbTextureDataResource>();
-    resource->value = std::make_shared<Cnb::CnbTextureData>(std::move(data));
-    return CreateHandle(ObjectKind::CnbTextureData, resource, outTexture);
+    return CreateResourceHandle<CnbTextureDataResource>(
+        ObjectKind::CnbTextureData,
+        std::make_shared<Cnb::CnbTextureData>(std::move(data)),
+        outTexture);
 }
 
 /// CBIND-109: the model graph. One handle for the whole of it; its nodes are reached by index.
@@ -335,9 +337,8 @@ struct CnbModelFromCnjResource final {
     Cnb::CnbModelData data,
     CNA_CnbModelDataHandle* const outModel)
 {
-    const auto resource = std::make_shared<CnbModelResource>();
-    resource->value = std::make_shared<Cnb::CnbModelData>(std::move(data));
-    return CreateHandle(ObjectKind::CnbModelData, resource, outModel);
+    return CreateResourceHandle<CnbModelResource>(
+        ObjectKind::CnbModelData, std::make_shared<Cnb::CnbModelData>(std::move(data)), outModel);
 }
 
 /// The prefix rule, in the one place every versioned model structure can share it.
@@ -560,28 +561,30 @@ struct CnbAnimationClipResource final {
     Cnb::CnbSpriteFontData data,
     CNA_CnbSpriteFontDataHandle* const outFont)
 {
-    const auto resource = std::make_shared<CnbSpriteFontResource>();
-    resource->value = std::make_shared<Cnb::CnbSpriteFontData>(std::move(data));
-    return CreateHandle(ObjectKind::CnbSpriteFontData, resource, outFont);
+    return CreateResourceHandle<CnbSpriteFontResource>(
+        ObjectKind::CnbSpriteFontData,
+        std::make_shared<Cnb::CnbSpriteFontData>(std::move(data)),
+        outFont);
 }
 
 [[nodiscard]] CNA_Result CreateSoundEffect(
     Cnb::CnbSoundEffectData data,
     CNA_CnbSoundEffectDataHandle* const outSound)
 {
-    const auto resource = std::make_shared<CnbSoundEffectResource>();
-    resource->value = std::make_shared<Cnb::CnbSoundEffectData>(std::move(data));
-    return CreateHandle(ObjectKind::CnbSoundEffectData, resource, outSound);
+    return CreateResourceHandle<CnbSoundEffectResource>(
+        ObjectKind::CnbSoundEffectData,
+        std::make_shared<Cnb::CnbSoundEffectData>(std::move(data)),
+        outSound);
 }
 
 [[nodiscard]] CNA_Result CreateAnimationClip(
     Microsoft::Xna::Framework::Graphics::AnimationClipEXT clip,
     CNA_CnbAnimationClipHandle* const outClip)
 {
-    const auto resource = std::make_shared<CnbAnimationClipResource>();
-    resource->value =
-        std::make_shared<Microsoft::Xna::Framework::Graphics::AnimationClipEXT>(std::move(clip));
-    return CreateHandle(ObjectKind::CnbAnimationClip, resource, outClip);
+    return CreateResourceHandle<CnbAnimationClipResource>(
+        ObjectKind::CnbAnimationClip,
+        std::make_shared<Microsoft::Xna::Framework::Graphics::AnimationClipEXT>(std::move(clip)),
+        outClip);
 }
 
 /**
@@ -716,9 +719,8 @@ struct CnjToCnbResultResource final {
     CNA::Content::CnbLoaderRegistry::LoaderFn loader,
     CNA_CnbLoaderHandle* const outLoader)
 {
-    const auto resource = std::make_shared<CnbLoaderResource>();
-    resource->value = std::move(loader);
-    return CreateHandle(ObjectKind::CnbLoader, resource, outLoader);
+    return CreateResourceHandle<CnbLoaderResource>(
+        ObjectKind::CnbLoader, std::move(loader), outLoader);
 }
 
 /**
@@ -783,9 +785,10 @@ struct CnjToCnbResultResource final {
     Cnb::CnjToCnbResult compiled,
     CNA_CnjToCnbResultHandle* const outResult)
 {
-    const auto resource = std::make_shared<CnjToCnbResultResource>();
-    resource->value = std::make_shared<Cnb::CnjToCnbResult>(std::move(compiled));
-    return CreateHandle(ObjectKind::CnjToCnbResult, resource, outResult);
+    return CreateResourceHandle<CnjToCnbResultResource>(
+        ObjectKind::CnjToCnbResult,
+        std::make_shared<Cnb::CnjToCnbResult>(std::move(compiled)),
+        outResult);
 }
 
 } // namespace
@@ -1059,9 +1062,10 @@ namespace {
     Cnb::CnbDocument document,
     CNA_CnbDocumentHandle* const outDocument)
 {
-    const auto resource = std::make_shared<CnbDocumentResource>();
-    resource->value = std::make_shared<Cnb::CnbDocument>(std::move(document));
-    return CreateHandle(ObjectKind::CnbDocument, resource, outDocument);
+    return CreateResourceHandle<CnbDocumentResource>(
+        ObjectKind::CnbDocument,
+        std::make_shared<Cnb::CnbDocument>(std::move(document)),
+        outDocument);
 }
 
 } // namespace
@@ -1584,41 +1588,6 @@ CNA_Result cna_cnb_is_well_formed_utf8(
 
 /* --- CBIND-107: the primitive writer ---------------------------------------------------------- */
 
-CNA_Result cna_cnb_byte_writer_create(CNA_CnbByteWriterHandle* const outWriter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWriter == nullptr) {
-            return InvalidArgument("The CNB byte-writer output handle is null.");
-        }
-        *outWriter = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<CnbByteWriterResource>();
-        resource->value = std::make_shared<Cnb::CnbByteWriter>();
-        return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
-    });
-}
-
-CNA_Result cna_cnb_byte_writer_create_from_bytes(
-    const uint8_t* const initial,
-    const uint64_t byteCount,
-    CNA_CnbByteWriterHandle* const outWriter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWriter == nullptr) {
-            return InvalidArgument("The CNB byte-writer output handle is null.");
-        }
-        *outWriter = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(initial, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<CnbByteWriterResource>();
-        resource->value = std::make_shared<Cnb::CnbByteWriter>(
-            std::vector<uint8_t>(span.begin(), span.end()));
-        return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
-    });
-}
-
 CNA_Result cna_cnb_byte_writer_write_bytes(
     const CNA_CnbByteWriterHandle writerHandle,
     const uint8_t* const bytes,
@@ -1715,22 +1684,6 @@ CNA_Result cna_cnb_byte_writer_take(
 }
 
 /* --- CBIND-107: the container writer ---------------------------------------------------------- */
-
-CNA_Result cna_cnb_writer_create(
-    const uint32_t assetTypeId,
-    const uint32_t assetSchemaVersion,
-    CNA_CnbWriterHandle* const outWriter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWriter == nullptr) {
-            return InvalidArgument("The CNB writer output handle is null.");
-        }
-        *outWriter = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<CnbWriterResource>();
-        resource->value = std::make_shared<Cnb::CnbWriter>(assetTypeId, assetSchemaVersion);
-        return CreateHandle(ObjectKind::CnbWriter, resource, outWriter);
-    });
-}
 
 CNA_Result cna_cnb_writer_add_external_reference(
     const CNA_CnbWriterHandle writerHandle,
@@ -3790,10 +3743,11 @@ CNA_Result cna_cnb_build_model_from_cnj(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const auto resource = std::make_shared<CnbModelFromCnjResource>();
-        resource->value = std::make_shared<Cnb::CnbModelFromCnjResult>(
-            Cnb::BuildCnbModelFromCnj(pathText, rootText));
-        return CreateHandle(ObjectKind::CnbModelFromCnj, resource, outResult);
+        return CreateResourceHandle<CnbModelFromCnjResource>(
+            ObjectKind::CnbModelFromCnj,
+            std::make_shared<Cnb::CnbModelFromCnjResult>(
+                Cnb::BuildCnbModelFromCnj(pathText, rootText)),
+            outResult);
     });
 }
 

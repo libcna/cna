@@ -40,6 +40,7 @@ namespace {
 using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::GetLastError;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
@@ -264,9 +265,10 @@ CNA_Result CreateOwnedNetworkSessionProperties(
         return InvalidArgument("The NetworkSessionProperties output handle is null.");
     }
     *outProperties = CNA_INVALID_HANDLE;
-    const auto resource = std::make_shared<NetworkSessionPropertiesResource>();
-    resource->value = std::make_unique<NetworkSessionProperties>(value);
-    return CreateHandle(ObjectKind::NetworkSessionProperties, resource, outProperties);
+    return CreateResourceHandle<NetworkSessionPropertiesResource>(
+        ObjectKind::NetworkSessionProperties,
+        std::make_unique<NetworkSessionProperties>(value),
+        outProperties);
 }
 
 CNA_Result BorrowPacketReader(const CNA_Handle handle, PacketReader** const outReader)
@@ -315,20 +317,6 @@ CNA_Result cna_net_get_last_join_error(
             ? static_cast<CNA_NetworkSessionJoinError>(error.joinError)
             : CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_NOT_FOUND;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_properties_create(
-    CNA_NetworkSessionPropertiesHandle* const outProperties)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outProperties == nullptr) {
-            return InvalidArgument("The NetworkSessionProperties output handle is null.");
-        }
-        *outProperties = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<NetworkSessionPropertiesResource>();
-        resource->value = std::make_unique<NetworkSessionProperties>();
-        return CreateHandle(ObjectKind::NetworkSessionProperties, resource, outProperties);
     });
 }
 
@@ -605,21 +593,6 @@ CNA_Result cna_network_session_properties_destroy(
     });
 }
 
-CNA_Result cna_packet_writer_create(
-    const int32_t capacity,
-    CNA_PacketWriterHandle* const outWriter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWriter == nullptr) {
-            return InvalidArgument("The PacketWriter output handle is null.");
-        }
-        *outWriter = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<PacketWriterResource>();
-        resource->value = std::make_unique<PacketWriter>(static_cast<int>(capacity));
-        return CreateHandle(ObjectKind::PacketWriter, resource, outWriter);
-    });
-}
-
 CNA_Result cna_packet_writer_copy_data_ext(
     const CNA_PacketWriterHandle writerHandle,
     uint8_t* const destination,
@@ -652,21 +625,6 @@ CNA_Result cna_packet_writer_copy_data_ext(
             std::memcpy(destination, data.data(), data.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_packet_reader_create(
-    const int32_t capacity,
-    CNA_PacketReaderHandle* const outReader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The PacketReader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        const auto resource = std::make_shared<PacketReaderResource>();
-        resource->value = std::make_unique<PacketReader>(static_cast<int>(capacity));
-        return CreateHandle(ObjectKind::PacketReader, resource, outReader);
     });
 }
 

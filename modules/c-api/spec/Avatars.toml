@@ -57,6 +57,7 @@ CNA_AvatarRendererInfo{
 [calls.routes]
 cna_avatar_description_create_random = { result = "PublishDescription(AvatarDescription::CreateRandom(), out_description)" }
 cna_avatar_description_create_random_for_body_type = { result = "PublishDescription(AvatarDescription::CreateRandom(static_cast<AvatarBodyType>(body_type)), out_description)", invalid_if = "body_type > CNA_AVATAR_BODY_TYPE_MAXIMUM" }
+cna_avatar_animation_create = { result = "CreateResourceHandle<AvatarAnimationResource>(ObjectKind::AvatarAnimation, std::make_shared<AvatarAnimation>(static_cast<AvatarAnimationPreset>(preset)), out_animation)", invalid_if = "preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM" }
 
 [values]
 [values.routes]

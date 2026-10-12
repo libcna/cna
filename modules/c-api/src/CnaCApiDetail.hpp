@@ -784,6 +784,23 @@ template<typename TObject>
 }
 
 /**
+ * @brief Publishes a new resource of type `TResource` holding `value`, as CreateHandle does.
+ *
+ * The resource types are small structures whose `value` member is the canonical object; this is
+ * the "make one, set its value, publish it" sequence every creation route used to spell out.
+ */
+template<typename TResource, typename TValue>
+[[nodiscard]] CNA_Result CreateResourceHandle(
+    const ObjectKind kind,
+    TValue value,
+    CNA_Handle* const outHandle)
+{
+    auto resource = std::make_shared<TResource>();
+    resource->value = std::move(value);
+    return CreateHandle(kind, std::move(resource), outHandle);
+}
+
+/**
  * @brief Releases a handle's registry entry, recording the diagnostic on refusal.
  *
  * Only the registry entry: the caller undoes its own ownership bookkeeping. The object is

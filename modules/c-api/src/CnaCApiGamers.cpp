@@ -41,6 +41,7 @@ using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
 using CNA::C::Detail::CreateHandle;
+using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GamerRegistration;
@@ -195,9 +196,8 @@ struct GamerEnumeratorResource final {
     std::shared_ptr<GamerProfile> value,
     CNA_Handle* const outProfile)
 {
-    const auto resource = std::make_shared<GamerProfileResource>();
-    resource->value = std::move(value);
-    return CreateHandle(ObjectKind::GamerProfile, resource, outProfile);
+    return CreateResourceHandle<GamerProfileResource>(
+        ObjectKind::GamerProfile, std::move(value), outProfile);
 }
 
 [[nodiscard]] CNA_Result PublishRegistration(

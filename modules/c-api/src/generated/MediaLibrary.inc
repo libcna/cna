@@ -2203,3 +2203,20 @@ CNA_Result cna_picture_album_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_media_library_create(
+    const CNA_Handle game,
+    CNA_MediaLibraryHandle* const out_library)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_library == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_media_library_create: out_library is null.");
+        }
+        *out_library = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateResourceHandle<MediaLibraryResource>(ObjectKind::MediaLibrary, std::make_unique<MediaLibrary>(), out_library);
+    });
+}
