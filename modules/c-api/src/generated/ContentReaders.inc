@@ -478,3 +478,385 @@ CNA_Result cna_content_type_reader_manager_unregister(
         return CNA::C::Detail::ReleaseHandle(registration);
     });
 }
+
+CNA_Result cna_content_reader_create(
+    const CNA_ContentReaderCreateInfo* const create_info,
+    CNA_ContentReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_create: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return ContentReaderCreate(create_info, out_reader);
+    });
+}
+
+CNA_Result cna_content_reader_get_content_manager(
+    const CNA_ContentReaderHandle reader,
+    CNA_Handle* const out_content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_content_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_get_content_manager: out_content_manager is null.");
+        }
+        *out_content_manager = CNA_INVALID_HANDLE;
+        return ContentReaderGetContentManager(reader, out_content_manager);
+    });
+}
+
+CNA_Result cna_content_reader_read_bytes_exact(
+    const CNA_ContentReaderHandle reader,
+    const int32_t count,
+    const CNA_StringView reader_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_read_bytes_exact: out_bytes is null.");
+        }
+        return ContentReaderReadBytesExact(reader, count, reader_name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_register(
+    const CNA_StringView canonical_name,
+    const CNA_ContentTypeReaderCallbacks* const callbacks,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_type_reader_manager_register: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return ContentTypeReaderManagerRegister(canonical_name, callbacks, out_registration);
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_create_reader(
+    const CNA_StringView canonical_name,
+    CNA_ContentTypeReaderHandle* const out_type_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_type_reader_manager_create_reader: out_type_reader is null.");
+        }
+        *out_type_reader = CNA_INVALID_HANDLE;
+        return ContentTypeReaderManagerCreateReader(canonical_name, out_type_reader);
+    });
+}
+
+CNA_Result cna_content_type_reader_read_untyped(
+    const CNA_ContentTypeReaderHandle type_reader,
+    const CNA_ContentReaderHandle reader,
+    CNA_Bool* const out_has_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_type_reader_read_untyped: out_has_value is null.");
+        }
+        return ContentTypeReaderReadUntyped(type_reader, reader, out_has_value);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_create(
+    const CNA_StringView target_type_name,
+    const CNA_ReflectiveObjectCreateCallback create_callback,
+    void* const context,
+    CNA_ReflectiveTypeReaderBuilderHandle* const out_builder)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_builder == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_reflective_type_reader_builder_create: out_builder is null.");
+        }
+        *out_builder = CNA_INVALID_HANDLE;
+        return ReflectiveTypeReaderBuilderCreate(target_type_name, create_callback, context, out_builder);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_key_size_at(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_get_key_size_at: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtGetKeySizeAt(dictionary, index, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_key_at(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_copy_key_at: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtCopyKeyAt(dictionary, index, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_entry(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    CNA_ObjectDictionaryEntry* const out_entry)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_entry == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_get_entry: out_entry is null.");
+        }
+        return ObjectDictionaryExtGetEntry(dictionary, key, out_entry);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_type_name(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_copy_type_name: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtCopyTypeName(dictionary, key, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_array(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    const CNA_ObjectDictionaryValueKind kind,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_copy_array: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtCopyArray(dictionary, key, kind, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_string_size(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_get_string_size: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtGetStringSize(dictionary, key, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_string(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_copy_string: out_byte_count is null.");
+        }
+        return ObjectDictionaryExtCopyString(dictionary, key, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_foreign_object(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    void** const out_object)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_object == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_get_foreign_object: out_object is null.");
+        }
+        return ObjectDictionaryExtGetForeignObject(dictionary, key, out_object);
+    });
+}
+
+CNA_Result cna_content_manager_load_object_dictionary_ext(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_ObjectDictionaryHandle* const out_dictionary)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dictionary == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_object_dictionary_ext: out_dictionary is null.");
+        }
+        *out_dictionary = CNA_INVALID_HANDLE;
+        return ContentManagerLoadObjectDictionaryExt(content_manager, asset_name, out_dictionary);
+    });
+}
+
+CNA_Result cna_content_reader_read_matrix(
+    const CNA_ContentReaderHandle reader,
+    CNA_Matrix* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadMatrix(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_quaternion(
+    const CNA_ContentReaderHandle reader,
+    CNA_Quaternion* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadQuaternion(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_vector2(
+    const CNA_ContentReaderHandle reader,
+    CNA_Vector2* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadVector2(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_vector3(
+    const CNA_ContentReaderHandle reader,
+    CNA_Vector3* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadVector3(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_vector4(
+    const CNA_ContentReaderHandle reader,
+    CNA_Vector4* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadVector4(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_color(
+    const CNA_ContentReaderHandle reader,
+    CNA_Color* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadColor(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_bounding_sphere(
+    const CNA_ContentReaderHandle reader,
+    CNA_BoundingSphere* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadBoundingSphere(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_object_tag(
+    const CNA_ContentReaderHandle reader,
+    CNA_Bool* const out_has_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderReadObjectTag(reader, out_has_value);
+    });
+}
+
+CNA_Result cna_content_reader_check_collection_element_count(
+    const CNA_ContentReaderHandle reader,
+    const int64_t count,
+    const CNA_StringView reader_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderCheckCollectionElementCount(reader, count, reader_name);
+    });
+}
+
+CNA_Result cna_content_reader_check_decoded_byte_size(
+    const CNA_ContentReaderHandle reader,
+    const int64_t byte_size,
+    const CNA_StringView reader_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentReaderCheckDecodedByteSize(reader, byte_size, reader_name);
+    });
+}
+
+CNA_Result cna_content_type_reader_initialize(
+    const CNA_ContentTypeReaderHandle type_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentTypeReaderInitialize(type_reader);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_field(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder,
+    const CNA_ContentFieldKind kind,
+    const uint64_t offset_in_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderAddField(builder, kind, offset_in_bytes);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_enum_field(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder,
+    const uint64_t offset_in_bytes,
+    const CNA_StringView enum_type_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderAddEnumField(builder, offset_in_bytes, enum_type_name);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_custom(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder,
+    const CNA_ReflectiveFieldCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderAddCustom(builder, callback, context);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_register(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderRegister(builder);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_register_shared(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderRegisterShared(builder);
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_value(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView key,
+    const CNA_ObjectDictionaryValueKind kind,
+    void* const destination,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ObjectDictionaryExtCopyValue(dictionary, key, kind, destination, capacity);
+    });
+}

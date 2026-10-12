@@ -2831,3 +2831,1442 @@ CNA_Result cna_cnb_writer_append_embedded_texture2d(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_cnb_read_limits_init(
+    CNA_CnbReadLimits* const out_limits)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_limits == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_read_limits_init: out_limits is null.");
+        }
+        return CnbReadLimitsInit(out_limits);
+    });
+}
+
+CNA_Result cna_cnb_copy_format_magic(
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_format_magic: out_byte_count is null.");
+        }
+        return CnbCopyFormatMagic(destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_checked_add(
+    const uint64_t a,
+    const uint64_t b,
+    uint64_t* const out_sum)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sum == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_checked_add: out_sum is null.");
+        }
+        return CnbCheckedAdd(a, b, out_sum);
+    });
+}
+
+CNA_Result cna_cnb_checked_multiply(
+    const uint64_t a,
+    const uint64_t b,
+    uint64_t* const out_product)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_product == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_checked_multiply: out_product is null.");
+        }
+        return CnbCheckedMultiply(a, b, out_product);
+    });
+}
+
+CNA_Result cna_cnb_crc32c_continue(
+    const uint32_t previous,
+    const uint8_t* const data,
+    const uint64_t byte_count,
+    uint32_t* const out_checksum)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_checksum == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_crc32c_continue: out_checksum is null.");
+        }
+        return CnbCrc32cContinue(previous, data, byte_count, out_checksum);
+    });
+}
+
+CNA_Result cna_cnb_get_compressed_byte_count(
+    const uint8_t* const raw,
+    const uint64_t raw_byte_count,
+    const CNA_CnbCompression codec,
+    const int32_t level,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_get_compressed_byte_count: out_byte_count is null.");
+        }
+        return CnbGetCompressedByteCount(raw, raw_byte_count, codec, level, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_copy_compressed(
+    const uint8_t* const raw,
+    const uint64_t raw_byte_count,
+    const CNA_CnbCompression codec,
+    const int32_t level,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_compressed: out_byte_count is null.");
+        }
+        return CnbCopyCompressed(raw, raw_byte_count, codec, level, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_copy_decompressed(
+    const uint8_t* const stored,
+    const uint64_t stored_byte_count,
+    const CNA_CnbCompression codec,
+    const uint64_t uncompressed_size,
+    const uint64_t max_uncompressed_size,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_copy_decompressed: out_byte_count is null.");
+        }
+        return CnbCopyDecompressed(stored, stored_byte_count, codec, uncompressed_size, max_uncompressed_size, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_chunk_entry_is_mandatory(
+    const CNA_CnbChunkEntry* const entry,
+    CNA_Bool* const out_mandatory)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_mandatory == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_chunk_entry_is_mandatory: out_mandatory is null.");
+        }
+        return CnbChunkEntryIsMandatory(entry, out_mandatory);
+    });
+}
+
+CNA_Result cna_cnb_document_parse(
+    const uint8_t* const bytes,
+    const uint64_t byte_count,
+    const CNA_StringView origin,
+    const CNA_CnbReadLimits* const limits,
+    CNA_CnbDocumentHandle* const out_document)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_document == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_parse: out_document is null.");
+        }
+        *out_document = CNA_INVALID_HANDLE;
+        return CnbDocumentParse(bytes, byte_count, origin, limits, out_document);
+    });
+}
+
+CNA_Result cna_cnb_document_parse_file(
+    const CNA_StringView path,
+    const CNA_CnbReadLimits* const limits,
+    CNA_CnbDocumentHandle* const out_document)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_document == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_parse_file: out_document is null.");
+        }
+        *out_document = CNA_INVALID_HANDLE;
+        return CnbDocumentParseFile(path, limits, out_document);
+    });
+}
+
+CNA_Result cna_cnb_document_get_chunk(
+    const CNA_CnbDocumentHandle document,
+    const uint64_t index,
+    CNA_CnbChunkEntry* const out_entry)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_entry == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_get_chunk: out_entry is null.");
+        }
+        return CnbDocumentGetChunk(document, index, out_entry);
+    });
+}
+
+CNA_Result cna_cnb_document_open_chunk(
+    const CNA_CnbDocumentHandle document,
+    const uint64_t index,
+    CNA_CnbReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_open_chunk: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CnbDocumentOpenChunk(document, index, out_reader);
+    });
+}
+
+CNA_Result cna_cnb_document_find_all(
+    const CNA_CnbDocumentHandle document,
+    const CNA_CnbChunkId type,
+    uint64_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_find_all: out_count is null.");
+        }
+        return CnbDocumentFindAll(document, type, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_cnb_document_find_single(
+    const CNA_CnbDocumentHandle document,
+    const CNA_CnbChunkId type,
+    CNA_Bool* const out_found,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_find_single: out_found is null.");
+        }
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_find_single: out_index is null.");
+        }
+        return CnbDocumentFindSingle(document, type, out_found, out_index);
+    });
+}
+
+CNA_Result cna_cnb_document_get_metadata(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbMetadata* const out_metadata)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_metadata == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_get_metadata: out_metadata is null.");
+        }
+        return CnbDocumentGetMetadata(document, out_metadata);
+    });
+}
+
+CNA_Result cna_cnb_document_get_external_reference(
+    const CNA_CnbDocumentHandle document,
+    const uint64_t index,
+    const CNA_StringView what_for_diagnostics,
+    CNA_CnbExternalReference* const out_reference)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reference == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_get_external_reference: out_reference is null.");
+        }
+        return CnbDocumentGetExternalReference(document, index, what_for_diagnostics, out_reference);
+    });
+}
+
+CNA_Result cna_cnb_document_get_limits(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbReadLimits* const out_limits)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_limits == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_get_limits: out_limits is null.");
+        }
+        return CnbDocumentGetLimits(document, out_limits);
+    });
+}
+
+CNA_Result cna_cnb_reader_create(
+    const uint8_t* const data,
+    const uint64_t byte_count,
+    const CNA_StringView context,
+    const CNA_CnbReadLimits* const limits,
+    CNA_CnbReaderHandle* const out_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_create: out_reader is null.");
+        }
+        *out_reader = CNA_INVALID_HANDLE;
+        return CnbReaderCreate(data, byte_count, context, limits, out_reader);
+    });
+}
+
+CNA_Result cna_cnb_reader_read_string(
+    const CNA_CnbReaderHandle reader,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_string: out_byte_count is null.");
+        }
+        return CnbReaderReadString(reader, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_reader_read_bytes(
+    const CNA_CnbReaderHandle reader,
+    const uint64_t byte_count,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_bytes: out_byte_count is null.");
+        }
+        return CnbReaderReadBytes(reader, byte_count, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_is_well_formed_utf8(
+    const CNA_StringView text,
+    CNA_Bool* const out_well_formed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_well_formed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_is_well_formed_utf8: out_well_formed is null.");
+        }
+        return CnbIsWellFormedUtf8(text, out_well_formed);
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_take(
+    const CNA_CnbByteWriterHandle writer,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_byte_writer_take: out_byte_count is null.");
+        }
+        return CnbByteWriterTake(writer, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_writer_get_limits(
+    const CNA_CnbWriterHandle writer,
+    CNA_CnbReadLimits* const out_limits)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_limits == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_writer_get_limits: out_limits is null.");
+        }
+        return CnbWriterGetLimits(writer, out_limits);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_create(
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth,
+    const uint32_t face_count,
+    const uint32_t mip_count,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_create: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbTextureDataCreate(width, height, depth, face_count, mip_count, out_texture);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_create_rgba8(
+    const uint32_t width,
+    const uint32_t height,
+    const uint8_t* const rgba,
+    const uint64_t byte_count,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_create_rgba8: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbTextureDataCreateRgba8(width, height, rgba, byte_count, out_texture);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_info(
+    const CNA_CnbTextureDataHandle texture,
+    CNA_CnbTextureInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_get_info: out_info is null.");
+        }
+        return CnbTextureDataGetInfo(texture, out_info);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_level_dimensions(
+    const CNA_CnbTextureDataHandle texture,
+    const uint32_t level,
+    uint32_t* const out_width,
+    uint32_t* const out_height,
+    uint32_t* const out_depth)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_get_level_dimensions: out_width is null.");
+        }
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_get_level_dimensions: out_height is null.");
+        }
+        if (out_depth == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_get_level_dimensions: out_depth is null.");
+        }
+        return CnbTextureDataGetLevelDimensions(texture, level, out_width, out_height, out_depth);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_add_representation(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_CnbTextureFormat format,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_add_representation: out_index is null.");
+        }
+        return CnbTextureDataAddRepresentation(texture, format, out_index);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_copy_level(
+    const CNA_CnbTextureDataHandle texture,
+    const uint64_t representation,
+    const uint64_t level,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_copy_level: out_byte_count is null.");
+        }
+        return CnbTextureDataCopyLevel(texture, representation, level, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_select_representation(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_CnbTextureFormatSupportedFn supported,
+    void* const context,
+    CNA_Bool* const out_found,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_select_representation: out_found is null.");
+        }
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_select_representation: out_index is null.");
+        }
+        return CnbTextureDataSelectRepresentation(texture, supported, context, out_found, out_index);
+    });
+}
+
+CNA_Result cna_cnb_document_read_embedded_texture2d(
+    const CNA_CnbDocumentHandle document,
+    const CNA_StringView label,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_document_read_embedded_texture2d: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbDocumentReadEmbeddedTexture2d(document, label, out_texture);
+    });
+}
+
+CNA_Result cna_cnb_model_set_flags(
+    const CNA_CnbModelDataHandle model,
+    const CNA_Bool applies_gltf_lighting_policy,
+    const CNA_Bool has_bone_hierarchy)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(applies_gltf_lighting_policy, "applies_gltf_lighting_policy");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(has_bone_hierarchy, "has_bone_hierarchy");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CnbModelSetFlags(model, applies_gltf_lighting_policy, has_bone_hierarchy);
+    });
+}
+
+CNA_Result cna_cnb_model_get_material_texture_transform(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t slot,
+    CNA_CnbTextureTransform* const out_transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_transform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_material_texture_transform: out_transform is null.");
+        }
+        return CnbModelGetMaterialTextureTransform(model, part, slot, out_transform);
+    });
+}
+
+CNA_Result cna_cnb_model_get_material_sampler(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t slot,
+    CNA_CnbSamplerState* const out_sampler)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sampler == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_material_sampler: out_sampler is null.");
+        }
+        return CnbModelGetMaterialSampler(model, part, slot, out_sampler);
+    });
+}
+
+CNA_Result cna_cnb_model_has_morph(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    CNA_Bool* const out_present)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_present == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_has_morph: out_present is null.");
+        }
+        return CnbModelHasMorph(model, part, out_present);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_mesh_part_indices(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_index_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_copy_mesh_part_indices: out_index_count is null.");
+        }
+        return CnbModelCopyMeshPartIndices(model, index, destination, capacity, out_index_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_skeleton_hierarchy(
+    const CNA_CnbModelDataHandle model,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_index_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_copy_skeleton_hierarchy: out_index_count is null.");
+        }
+        return CnbModelCopySkeletonHierarchy(model, destination, capacity, out_index_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_skeleton_matrices(
+    const CNA_CnbModelDataHandle model,
+    const CNA_CnbSkeletonMatrixSet set,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_copy_skeleton_matrices: out_value_count is null.");
+        }
+        return CnbModelCopySkeletonMatrices(model, set, destination, capacity, out_value_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_animation_keyframes(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    const uint64_t track,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_keyframe_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_keyframe_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_copy_animation_keyframes: out_keyframe_count is null.");
+        }
+        return CnbModelCopyAnimationKeyframes(model, index, track, destination, capacity, out_keyframe_count);
+    });
+}
+
+CNA_Result cna_cnb_model_get_light(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    CNA_CnbModelLight* const out_light)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_light == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_light: out_light is null.");
+        }
+        return CnbModelGetLight(model, index, out_light);
+    });
+}
+
+CNA_Result cna_cnb_build_model_from_cnj(
+    const CNA_StringView cnj_path,
+    const CNA_StringView content_root,
+    CNA_CnbModelFromCnjHandle* const out_result)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_result == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_build_model_from_cnj: out_result is null.");
+        }
+        *out_result = CNA_INVALID_HANDLE;
+        return CnbBuildModelFromCnj(cnj_path, content_root, out_result);
+    });
+}
+
+CNA_Result cna_cnb_model_from_cnj_take_model(
+    const CNA_CnbModelFromCnjHandle result,
+    CNA_CnbModelDataHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_from_cnj_take_model: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return CnbModelFromCnjTakeModel(result, out_model);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_create(
+    const CNA_CnbSoundEffectInfo* const info,
+    const uint8_t* const samples,
+    const uint64_t byte_count,
+    CNA_CnbSoundEffectDataHandle* const out_sound)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sound_effect_data_create: out_sound is null.");
+        }
+        *out_sound = CNA_INVALID_HANDLE;
+        return CnbSoundEffectDataCreate(info, samples, byte_count, out_sound);
+    });
+}
+
+CNA_Result cna_cnb_encode_video(
+    const CNA_StringView stream_reference,
+    const CNA_CnbVideoInfo* const info,
+    const CNA_StringView content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_encode_video: out_byte_count is null.");
+        }
+        return CnbEncodeVideo(stream_reference, info, content_name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_encode_curve(
+    const CNA_CurveHandle curve,
+    const CNA_StringView content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_encode_curve: out_byte_count is null.");
+        }
+        return CnbEncodeCurve(curve, content_name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_encode_animation_clip(
+    const CNA_AnimationClipEXTDescriptor* const clip,
+    const CNA_ClipTargetSpaceEXT target_space,
+    const CNA_StringView content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_encode_animation_clip: out_byte_count is null.");
+        }
+        return CnbEncodeAnimationClip(clip, target_space, content_name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_reader_read_keyframe(
+    const CNA_CnbReaderHandle reader,
+    CNA_KeyframeEXT* const out_keyframe)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_keyframe == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_keyframe: out_keyframe is null.");
+        }
+        return CnbReaderReadKeyframe(reader, out_keyframe);
+    });
+}
+
+CNA_Result cna_cnb_loader_invoke(
+    const CNA_CnbLoaderHandle loader,
+    const CNA_CnbDocumentHandle document,
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    void** const out_object)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_object == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_loader_invoke: out_object is null.");
+        }
+        return CnbLoaderInvoke(loader, document, content_manager, asset_name, out_object);
+    });
+}
+
+CNA_Result cna_cnb_import_image_as_texture2d(
+    const CNA_StringView image_path,
+    const CNA_CnbImageImportOptions* const options,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_import_image_as_texture2d: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbImportImageAsTexture2d(image_path, options, out_texture);
+    });
+}
+
+CNA_Result cna_cnb_decode_dds_as_texture_cube(
+    const uint8_t* const bytes,
+    const uint64_t byte_count,
+    const CNA_StringView origin,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_dds_as_texture_cube: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbDecodeDdsAsTextureCube(bytes, byte_count, origin, out_texture);
+    });
+}
+
+CNA_Result cna_cnb_decode_wav_as_sound_effect(
+    const uint8_t* const bytes,
+    const uint64_t byte_count,
+    const CNA_StringView origin,
+    CNA_CnbSoundEffectDataHandle* const out_sound)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_wav_as_sound_effect: out_sound is null.");
+        }
+        *out_sound = CNA_INVALID_HANDLE;
+        return CnbDecodeWavAsSoundEffect(bytes, byte_count, origin, out_sound);
+    });
+}
+
+CNA_Result cna_cnb_compile_cnj(
+    const CNA_StringView cnj_path,
+    const CNA_StringView content_root,
+    const CNA_StringView content_name,
+    CNA_CnjToCnbResultHandle* const out_result)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_result == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_compile_cnj: out_result is null.");
+        }
+        *out_result = CNA_INVALID_HANDLE;
+        return CnbCompileCnj(cnj_path, content_root, content_name, out_result);
+    });
+}
+
+CNA_Result cna_cnb_model_get_info(
+    const CNA_CnbModelDataHandle model,
+    CNA_CnbModelInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_info: out_info is null.");
+        }
+        return CnbModelGetInfo(model, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_bone(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    CNA_CnbModelBone* const out_bone)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bone == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_bone: out_bone is null.");
+        }
+        return CnbModelGetBone(model, index, out_bone);
+    });
+}
+
+CNA_Result cna_cnb_model_get_part(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    CNA_CnbModelPartInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_part: out_info is null.");
+        }
+        return CnbModelGetPart(model, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_material(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    CNA_CnbMaterialInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_material: out_info is null.");
+        }
+        return CnbModelGetMaterial(model, part, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_morph(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    CNA_CnbMorphInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_morph: out_info is null.");
+        }
+        return CnbModelGetMorph(model, part, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_morph_weight_key(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t key,
+    CNA_CnbMorphWeightKeyInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_morph_weight_key: out_info is null.");
+        }
+        return CnbModelGetMorphWeightKey(model, part, key, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_mesh(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    CNA_CnbMeshInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_mesh: out_info is null.");
+        }
+        return CnbModelGetMesh(model, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_get_skeleton(
+    const CNA_CnbModelDataHandle model,
+    CNA_CnbSkeletonInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_skeleton: out_info is null.");
+        }
+        return CnbModelGetSkeleton(model, out_info);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_get_info(
+    const CNA_CnbSpriteFontDataHandle font,
+    CNA_CnbSpriteFontInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sprite_font_data_get_info: out_info is null.");
+        }
+        return CnbSpriteFontDataGetInfo(font, out_info);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_get_glyph(
+    const CNA_CnbSpriteFontDataHandle font,
+    const uint64_t index,
+    CNA_SpriteFontGlyph* const out_glyph)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_glyph == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sprite_font_data_get_glyph: out_glyph is null.");
+        }
+        return CnbSpriteFontDataGetGlyph(font, index, out_glyph);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_get_info(
+    const CNA_CnbSoundEffectDataHandle sound,
+    CNA_CnbSoundEffectInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sound_effect_data_get_info: out_info is null.");
+        }
+        return CnbSoundEffectDataGetInfo(sound, out_info);
+    });
+}
+
+CNA_Result cna_cnb_decode_video(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbVideoInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_video: out_info is null.");
+        }
+        return CnbDecodeVideo(document, out_info);
+    });
+}
+
+CNA_Result cna_cnb_get_logical_name_problem_size(
+    const CNA_StringView logical_name,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbGetLogicalNameProblemSize(logical_name, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_copy_logical_name_problem(
+    const CNA_StringView logical_name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbCopyLogicalNameProblem(logical_name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_add_bone(
+    const CNA_CnbModelDataHandle model,
+    const CNA_StringView name,
+    const int32_t parent,
+    const float* const transform,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddBone(model, name, parent, transform, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_add_part(
+    const CNA_CnbModelDataHandle model,
+    const CNA_CnbModelPartInfo* const info,
+    const CNA_StringView name,
+    const CNA_StringView external_effect,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddPart(model, info, name, external_effect, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_get_material_texture_size(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const CNA_CnbMaterialTextureSlot slot,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelGetMaterialTextureSize(model, part, slot, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_material_texture(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const CNA_CnbMaterialTextureSlot slot,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelCopyMaterialTexture(model, part, slot, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_add_morph_target(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddMorphTarget(model, part, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_morph_target_deltas(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t target,
+    const CNA_CnbMorphDeltaStream stream,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelCopyMorphTargetDeltas(model, part, target, stream, destination, capacity, out_value_count);
+    });
+}
+
+CNA_Result cna_cnb_model_add_morph_weight_key(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const double time_seconds,
+    const float* const weights,
+    const uint64_t weight_count,
+    const float* const in_tangents,
+    const uint64_t in_tangent_count,
+    const float* const out_tangents,
+    const uint64_t out_tangent_count,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddMorphWeightKey(model, part, time_seconds, weights, weight_count, in_tangents, in_tangent_count, out_tangents, out_tangent_count, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_morph_weight_key_values(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t key,
+    const CNA_CnbMorphKeyStream stream,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelCopyMorphWeightKeyValues(model, part, key, stream, destination, capacity, out_value_count);
+    });
+}
+
+CNA_Result cna_cnb_model_add_mesh(
+    const CNA_CnbModelDataHandle model,
+    const CNA_StringView name,
+    const int32_t parent_bone,
+    const uint32_t* const part_indices,
+    const uint64_t part_index_count,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddMesh(model, name, parent_bone, part_indices, part_index_count, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_add_animation(
+    const CNA_CnbModelDataHandle model,
+    const CNA_StringView name,
+    const CNA_AnimationClipEXTDescriptor* const clip,
+    const CNA_ClipTargetSpaceEXT target_space,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddAnimation(model, name, clip, target_space, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_get_animation(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count,
+    CNA_ClipTargetSpaceEXT* const out_target_space)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelGetAnimation(model, index, out_duration_seconds, out_track_count, out_target_space);
+    });
+}
+
+CNA_Result cna_cnb_model_get_animation_track(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    const uint64_t track,
+    int32_t* const out_bone_index,
+    uint64_t* const out_keyframe_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelGetAnimationTrack(model, index, track, out_bone_index, out_keyframe_count);
+    });
+}
+
+CNA_Result cna_cnb_model_add_light(
+    const CNA_CnbModelDataHandle model,
+    const CNA_CnbModelLight* const light,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddLight(model, light, out_index);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_add_glyph(
+    const CNA_CnbSpriteFontDataHandle font,
+    const CNA_SpriteFontGlyph* const glyph,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbSpriteFontDataAddGlyph(font, glyph, out_index);
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_get(
+    const CNA_CnbAnimationClipHandle clip,
+    double* const out_duration_seconds,
+    uint64_t* const out_track_count,
+    CNA_ClipTargetSpaceEXT* const out_target_space)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbAnimationClipGet(clip, out_duration_seconds, out_track_count, out_target_space);
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_get_track(
+    const CNA_CnbAnimationClipHandle clip,
+    const uint64_t track,
+    int32_t* const out_bone_index,
+    uint64_t* const out_keyframe_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbAnimationClipGetTrack(clip, track, out_bone_index, out_keyframe_count);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_remove(
+    const uint32_t asset_type_id,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbLoaderRegistryRemove(asset_type_id, out_removed);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_find(
+    const uint32_t asset_type_id,
+    CNA_Bool* const out_found,
+    CNA_CnbLoaderHandle* const out_loader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_loader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_loader_registry_find: out_loader is null.");
+        }
+        *out_loader = CNA_INVALID_HANDLE;
+        return CnbLoaderRegistryFind(asset_type_id, out_found, out_loader);
+    });
+}
+
+CNA_Result cna_cnb_document_require_mandatory_chunks_understood(
+    const CNA_CnbDocumentHandle document,
+    const CNA_CnbChunkId* const known_types,
+    const uint64_t known_type_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbDocumentRequireMandatoryChunksUnderstood(document, known_types, known_type_count);
+    });
+}
+
+CNA_Result cna_cnb_reader_fail(
+    const CNA_CnbReaderHandle reader,
+    const CNA_StringView detail)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbReaderFail(reader, detail);
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_bytes(
+    const CNA_CnbByteWriterHandle writer,
+    const uint8_t* const bytes,
+    const uint64_t byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbByteWriterWriteBytes(writer, bytes, byte_count);
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_zeros(
+    const CNA_CnbByteWriterHandle writer,
+    const uint64_t byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbByteWriterWriteZeros(writer, byte_count);
+    });
+}
+
+CNA_Result cna_cnb_writer_add_external_reference(
+    const CNA_CnbWriterHandle writer,
+    const CNA_CnbExternalReference* const reference,
+    const CNA_StringView logical_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterAddExternalReference(writer, reference, logical_name);
+    });
+}
+
+CNA_Result cna_cnb_writer_clear_external_references(
+    const CNA_CnbWriterHandle writer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterClearExternalReferences(writer);
+    });
+}
+
+CNA_Result cna_cnb_writer_add_chunk(
+    const CNA_CnbWriterHandle writer,
+    const CNA_CnbChunkId type,
+    const uint8_t* const data,
+    const uint64_t byte_count,
+    const uint32_t flags,
+    const uint32_t alignment)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterAddChunk(writer, type, data, byte_count, flags, alignment);
+    });
+}
+
+CNA_Result cna_cnb_writer_set_compression(
+    const CNA_CnbWriterHandle writer,
+    const CNA_CnbCompression codec,
+    const int32_t level)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterSetCompression(writer, codec, level);
+    });
+}
+
+CNA_Result cna_cnb_writer_set_limits(
+    const CNA_CnbWriterHandle writer,
+    const CNA_CnbReadLimits* const limits)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterSetLimits(writer, limits);
+    });
+}
+
+CNA_Result cna_cnb_writer_write_to_file(
+    const CNA_CnbWriterHandle writer,
+    const CNA_StringView path)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbWriterWriteToFile(writer, path);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_set_level(
+    const CNA_CnbTextureDataHandle texture,
+    const uint64_t representation,
+    const uint64_t level,
+    const uint8_t* const bytes,
+    const uint64_t byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbTextureDataSetLevel(texture, representation, level, bytes, byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_set_part(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    const CNA_CnbModelPartInfo* const info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetPart(model, index, info);
+    });
+}
+
+CNA_Result cna_cnb_model_set_part_vertex_bytes(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    const uint8_t* const bytes,
+    const uint64_t byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetPartVertexBytes(model, index, bytes, byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_set_part_index_bytes(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    const uint8_t* const bytes,
+    const uint64_t byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetPartIndexBytes(model, index, bytes, byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_set_material(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const CNA_CnbMaterialInfo* const info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMaterial(model, part, info);
+    });
+}
+
+CNA_Result cna_cnb_model_set_material_texture(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const CNA_CnbMaterialTextureSlot slot,
+    const CNA_StringView asset_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMaterialTexture(model, part, slot, asset_name);
+    });
+}
+
+CNA_Result cna_cnb_model_set_material_texture_transform(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t slot,
+    const CNA_CnbTextureTransform* const transform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMaterialTextureTransform(model, part, slot, transform);
+    });
+}
+
+CNA_Result cna_cnb_model_set_material_sampler(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t slot,
+    const CNA_CnbSamplerState* const sampler)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMaterialSampler(model, part, slot, sampler);
+    });
+}
+
+CNA_Result cna_cnb_model_set_morph(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const CNA_CnbMorphInfo* const info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMorph(model, part, info);
+    });
+}
+
+CNA_Result cna_cnb_model_set_morph_target_deltas(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const uint64_t target,
+    const CNA_CnbMorphDeltaStream stream,
+    const float* const values,
+    const uint64_t value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMorphTargetDeltas(model, part, target, stream, values, value_count);
+    });
+}
+
+CNA_Result cna_cnb_model_set_morph_weights(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t part,
+    const float* const values,
+    const uint64_t value_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetMorphWeights(model, part, values, value_count);
+    });
+}
+
+CNA_Result cna_cnb_model_set_skeleton(
+    const CNA_CnbModelDataHandle model,
+    const int32_t* const hierarchy,
+    const uint64_t joint_count,
+    const float* const bind_pose,
+    const float* const inverse_bind_pose,
+    const float* const root_prefix)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelSetSkeleton(model, hierarchy, joint_count, bind_pose, inverse_bind_pose, root_prefix);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_set_info(
+    const CNA_CnbSpriteFontDataHandle font,
+    const CNA_CnbSpriteFontInfo* const info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbSpriteFontDataSetInfo(font, info);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_set_glyph(
+    const CNA_CnbSpriteFontDataHandle font,
+    const uint64_t index,
+    const CNA_SpriteFontGlyph* const glyph)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbSpriteFontDataSetGlyph(font, index, glyph);
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_keyframe(
+    const CNA_CnbByteWriterHandle writer,
+    const CNA_KeyframeEXT* const keyframe)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbByteWriterWriteKeyframe(writer, keyframe);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_register(
+    const uint32_t asset_type_id,
+    const CNA_StringView canonical_type_name,
+    const CNA_CnbLoaderCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbLoaderRegistryRegister(asset_type_id, canonical_type_name, callback, context);
+    });
+}
+
+CNA_Result cna_cnb_asset_type_id_from_name(
+    const CNA_StringView name,
+    uint32_t* const out_asset_type_id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_asset_type_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_asset_type_id_from_name: out_asset_type_id is null.");
+        }
+        return CnbAssetTypeIdFromNameRoute(name, out_asset_type_id);
+    });
+}

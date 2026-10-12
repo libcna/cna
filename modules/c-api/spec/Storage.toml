@@ -54,3 +54,30 @@ cna_storage_container_open_file_share = { result = "OpenFileHandle(container, fi
 [values.routes]
 cna_storage_get_root_size_ext = { size = "StorageDevice::GetStorageRootEXT()" }
 cna_storage_set_app_name_ext = { call = "StorageDevice::SetAppNameEXT(app_name)", refuse_nul = ["app_name"] }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_storage_device_subscribe_device_changed = { result = "StorageDeviceSubscribeDeviceChanged(callback, context, out_registration)" }
+cna_storage_container_open = { result = "StorageContainerOpen(device, display_name, callback, context, out_container)" }
+cna_storage_container_get_storage_device = { result = "StorageContainerGetStorageDevice(container, out_device)" }
+cna_storage_container_subscribe_disposing = { result = "StorageContainerSubscribeDisposing(container, callback, context, out_registration)" }
+cna_storage_container_directory_exists = { result = "StorageContainerDirectoryExists(container, directory, out_exists)" }
+cna_storage_container_file_exists = { result = "StorageContainerFileExists(container, file, out_exists)" }
+cna_storage_container_create_file = { result = "StorageContainerCreateFile(container, file, out_stream)" }
+cna_storage_stream_read = { result = "StorageStreamRead(stream, destination, capacity, out_read)" }
+cna_storage_stream_seek = { result = "StorageStreamSeek(stream, offset, origin, out_position)" }
+cna_storage_device_delete_container = { result = "StorageDeviceDeleteContainer(device, title_name)" }
+cna_storage_device_unsubscribe_device_changed = { result = "StorageDeviceUnsubscribeDeviceChanged(registration)" }
+cna_storage_container_unsubscribe_disposing = { result = "StorageContainerUnsubscribeDisposing(registration)" }
+cna_storage_container_create_directory = { result = "StorageContainerCreateDirectory(container, directory)" }
+cna_storage_container_delete_directory = { result = "StorageContainerDeleteDirectory(container, directory)" }
+cna_storage_container_delete_file = { result = "StorageContainerDeleteFile(container, file)" }
+cna_storage_container_destroy = { result = "StorageContainerDestroy(container)" }
+cna_storage_stream_write = { result = "StorageStreamWrite(stream, data, count)" }
+cna_storage_stream_set_length = { result = "StorageStreamSetLength(stream, length)" }
+cna_storage_stream_close = { result = "StorageStreamClose(stream)" }

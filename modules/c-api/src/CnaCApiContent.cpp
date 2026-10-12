@@ -177,762 +177,682 @@ CNA_Result BorrowContentManager(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_content_manager_create(
+namespace {
+
+[[nodiscard]] CNA_Result ContentManagerCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_ContentManagerCreateInfo* const createInfo,
     CNA_Handle* const outContentManager)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outContentManager == nullptr) {
-            return InvalidArgument("The ContentManager output handle is null.");
-        }
-        *outContentManager = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
-            return InvalidArgument("The ContentManager creation configuration is invalid.");
-        }
+    if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
+        return InvalidArgument("The ContentManager creation configuration is invalid.");
+    }
 
-        std::string rootDirectory;
-        if (const CNA_Result result = ReadText(
-                createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectory, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::string rootDirectory;
+    if (const CNA_Result result = ReadText(
+            createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
+            &rootDirectory, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto nativeManager = std::make_shared<ContentManager>();
-        nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
-        nativeManager->setGraphicsDevice(*graphicsDevice->value);
-        const auto resource = std::make_shared<ContentManagerResource>(
-            ContentManagerResource{
-                nativeManager,
-                graphicsDevice->parentGame,
-                graphicsDeviceHandle,
-                false});
-        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
-            resource,
-            outContentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedContentManager();
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto nativeManager = std::make_shared<ContentManager>();
+    nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
+    nativeManager->setGraphicsDevice(*graphicsDevice->value);
+    const auto resource = std::make_shared<ContentManagerResource>(
+        ContentManagerResource{
+            nativeManager,
+            graphicsDevice->parentGame,
+            graphicsDeviceHandle,
+            false});
+    if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
+        resource,
+        outContentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedContentManager();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_load_texture2d(
+[[nodiscard]] CNA_Result ContentManagerLoadTexture2d(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The loaded Texture2D output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
+    std::string assetNameCopy;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
 
-        std::string assetNameCopy;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(
+            contentManagerHandle,
+            &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        try {
-            Texture2D loaded = contentManager->value->Load<Texture2D>(assetNameCopy);
-            return CNA::C::Detail::CreateOwnedTexture2D(
-                std::make_shared<Texture2D>(std::move(loaded)),
-                contentManager->parentGame,
-                outTexture);
-        } catch (const ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // A compiled asset whose root reader produced a different type. The canonical read
-            // reports that by failing the unbox, which is not a runtime_error and would otherwise
-            // reach the barrier's catch-all and be reported as an internal fault -- an honest
-            // "this asset is not that type" turned into "something went wrong inside CNA".
-            return IoError(
-                "The asset's root type reader produced a different type than this loader reads.");
-        } catch (const System::NotSupportedException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-    });
+    try {
+        Texture2D loaded = contentManager->value->Load<Texture2D>(assetNameCopy);
+        return CNA::C::Detail::CreateOwnedTexture2D(
+            std::make_shared<Texture2D>(std::move(loaded)),
+            contentManager->parentGame,
+            outTexture);
+    } catch (const ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // A compiled asset whose root reader produced a different type. The canonical read
+        // reports that by failing the unbox, which is not a runtime_error and would otherwise
+        // reach the barrier's catch-all and be reported as an internal fault -- an honest
+        // "this asset is not that type" turned into "something went wrong inside CNA".
+        return IoError(
+            "The asset's root type reader produced a different type than this loader reads.");
+    } catch (const System::NotSupportedException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
 }
 
-CNA_Result cna_content_manager_create_resource(
+[[nodiscard]] CNA_Result ContentManagerCreateResource(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_ContentManagerCreateInfo* const createInfo,
     CNA_Handle* const outContentManager)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outContentManager == nullptr) {
-            return InvalidArgument("The ContentManager output handle is null.");
-        }
-        *outContentManager = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
-            return InvalidArgument("The ContentManager creation configuration is invalid.");
-        }
+    if (!IsVersionedStructure(createInfo) || createInfo->reserved != 0U) {
+        return InvalidArgument("The ContentManager creation configuration is invalid.");
+    }
 
-        std::string rootDirectory;
-        if (const CNA_Result result = ReadText(
-                createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectory, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::string rootDirectory;
+    if (const CNA_Result result = ReadText(
+            createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
+            &rootDirectory, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const std::shared_ptr<ContentManager> nativeManager =
-            std::make_shared<ResourceContentManager>(nullptr);
-        nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
-        nativeManager->setGraphicsDevice(*graphicsDevice->value);
-        const auto resource = std::make_shared<ContentManagerResource>(
-            ContentManagerResource{
-                nativeManager,
-                graphicsDevice->parentGame,
-                graphicsDeviceHandle,
-                false});
-        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
-            resource,
-            outContentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AddOwnedContentManager();
-        return CNA_RESULT_SUCCESS;
-    });
+    const std::shared_ptr<ContentManager> nativeManager =
+        std::make_shared<ResourceContentManager>(nullptr);
+    nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
+    nativeManager->setGraphicsDevice(*graphicsDevice->value);
+    const auto resource = std::make_shared<ContentManagerResource>(
+        ContentManagerResource{
+            nativeManager,
+            graphicsDevice->parentGame,
+            graphicsDeviceHandle,
+            false});
+    if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
+        resource,
+        outContentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    AddOwnedContentManager();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_load_sound_effect(
+[[nodiscard]] CNA_Result ContentManagerLoadSoundEffect(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_Handle* const outSoundEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSoundEffect == nullptr) {
-            return InvalidArgument("The loaded SoundEffect output handle is null.");
-        }
-        *outSoundEffect = CNA_INVALID_HANDLE;
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
 
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        try {
-            SoundEffect loaded = contentManager->value->Load<SoundEffect>(assetNameCopy);
-            return CNA::C::Detail::CreateOwnedSoundEffect(
-                std::make_shared<SoundEffect>(std::move(loaded)),
-                contentManager->parentGame,
-                outSoundEffect);
-        } catch (const NoAudioHardwareException& exception) {
-            return NotSupported(exception.what());
-        } catch (const ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // A compiled asset whose root reader produced a different type. The canonical read
-            // reports that by failing the unbox, which is not a runtime_error and would otherwise
-            // reach the barrier's catch-all and be reported as an internal fault -- an honest
-            // "this asset is not that type" turned into "something went wrong inside CNA".
-            return IoError(
-                "The asset's root type reader produced a different type than this loader reads.");
-        } catch (const System::NotSupportedException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-    });
+    try {
+        SoundEffect loaded = contentManager->value->Load<SoundEffect>(assetNameCopy);
+        return CNA::C::Detail::CreateOwnedSoundEffect(
+            std::make_shared<SoundEffect>(std::move(loaded)),
+            contentManager->parentGame,
+            outSoundEffect);
+    } catch (const NoAudioHardwareException& exception) {
+        return NotSupported(exception.what());
+    } catch (const ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // A compiled asset whose root reader produced a different type. The canonical read
+        // reports that by failing the unbox, which is not a runtime_error and would otherwise
+        // reach the barrier's catch-all and be reported as an internal fault -- an honest
+        // "this asset is not that type" turned into "something went wrong inside CNA".
+        return IoError(
+            "The asset's root type reader produced a different type than this loader reads.");
+    } catch (const System::NotSupportedException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
 }
 
-CNA_Result cna_content_manager_load_texture_cube(
+[[nodiscard]] CNA_Result ContentManagerLoadTextureCube(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The loaded TextureCube output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
 
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        try {
-            TextureCube loaded = contentManager->value->Load<TextureCube>(assetNameCopy);
-            return CNA::C::Detail::CreateOwnedTextureCube(
-                std::make_shared<TextureCube>(std::move(loaded)),
-                contentManager->parentGame,
-                outTexture);
-        } catch (const ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // A compiled asset whose root reader produced a different type. The canonical read
-            // reports that by failing the unbox, which is not a runtime_error and would otherwise
-            // reach the barrier's catch-all and be reported as an internal fault -- an honest
-            // "this asset is not that type" turned into "something went wrong inside CNA".
-            return IoError(
-                "The asset's root type reader produced a different type than this loader reads.");
-        } catch (const System::NotSupportedException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-    });
+    try {
+        TextureCube loaded = contentManager->value->Load<TextureCube>(assetNameCopy);
+        return CNA::C::Detail::CreateOwnedTextureCube(
+            std::make_shared<TextureCube>(std::move(loaded)),
+            contentManager->parentGame,
+            outTexture);
+    } catch (const ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // A compiled asset whose root reader produced a different type. The canonical read
+        // reports that by failing the unbox, which is not a runtime_error and would otherwise
+        // reach the barrier's catch-all and be reported as an internal fault -- an honest
+        // "this asset is not that type" turned into "something went wrong inside CNA".
+        return IoError(
+            "The asset's root type reader produced a different type than this loader reads.");
+    } catch (const System::NotSupportedException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
 }
 
-CNA_Result cna_content_manager_load_sprite_font(
+[[nodiscard]] CNA_Result ContentManagerLoadSpriteFont(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_Handle* const outSpriteFont,
     CNA_Handle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outSpriteFont == nullptr || outTexture == nullptr) {
-            return InvalidArgument("A loaded SpriteFont output handle is null.");
-        }
-        *outSpriteFont = CNA_INVALID_HANDLE;
+    std::string assetNameCopy;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
+
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    std::shared_ptr<SpriteFont> font;
+    try {
+        font = std::make_shared<SpriteFont>(
+            contentManager->value->Load<SpriteFont>(assetNameCopy));
+    } catch (const ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // A compiled asset whose root reader produced a different type. The canonical read
+        // reports that by failing the unbox, which is not a runtime_error and would otherwise
+        // reach the barrier's catch-all and be reported as an internal fault -- an honest
+        // "this asset is not that type" turned into "something went wrong inside CNA".
+        return IoError(
+            "The asset's root type reader produced a different type than this loader reads.");
+    } catch (const System::NotSupportedException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
+
+    // The atlas has to become a handle of its own: a SpriteFont holds its texture by value,
+    // and every route that retains one -- this ABI's own font resource included -- speaks in
+    // Texture2D handles. The copy shares the underlying renderer resource, which is why the
+    // font's retention count below is what keeps a caller from disposing it early.
+    if (const CNA_Result result = CNA::C::Detail::CreateOwnedTexture2D(
+            std::make_shared<Texture2D>(font->getTextureEXT()),
+            contentManager->parentGame,
+            outTexture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    std::shared_ptr<Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(*outTexture, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        static_cast<void>(GetRuntimeHandles().Release(*outTexture));
         *outTexture = CNA_INVALID_HANDLE;
+        return result;
+    }
 
-        std::string assetNameCopy;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
-
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        std::shared_ptr<SpriteFont> font;
-        try {
-            font = std::make_shared<SpriteFont>(
-                contentManager->value->Load<SpriteFont>(assetNameCopy));
-        } catch (const ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // A compiled asset whose root reader produced a different type. The canonical read
-            // reports that by failing the unbox, which is not a runtime_error and would otherwise
-            // reach the barrier's catch-all and be reported as an internal fault -- an honest
-            // "this asset is not that type" turned into "something went wrong inside CNA".
-            return IoError(
-                "The asset's root type reader produced a different type than this loader reads.");
-        } catch (const System::NotSupportedException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-
-        // The atlas has to become a handle of its own: a SpriteFont holds its texture by value,
-        // and every route that retains one -- this ABI's own font resource included -- speaks in
-        // Texture2D handles. The copy shares the underlying renderer resource, which is why the
-        // font's retention count below is what keeps a caller from disposing it early.
-        if (const CNA_Result result = CNA::C::Detail::CreateOwnedTexture2D(
-                std::make_shared<Texture2D>(font->getTextureEXT()),
-                contentManager->parentGame,
-                outTexture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(*outTexture, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            static_cast<void>(GetRuntimeHandles().Release(*outTexture));
-            *outTexture = CNA_INVALID_HANDLE;
-            return result;
-        }
-
-        const auto resource = std::make_shared<SpriteFontResource>(
-            SpriteFontResource{font, texture, contentManager->parentGame});
-        if (const CNA_Result result = GetRuntimeHandles().Create(
-                ObjectKind::SpriteFont, resource, outSpriteFont);
-            result != CNA_RESULT_SUCCESS) {
-            static_cast<void>(GetRuntimeHandles().Release(*outTexture));
-            *outTexture = CNA_INVALID_HANDLE;
-            *outSpriteFont = CNA_INVALID_HANDLE;
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The loaded SpriteFont handle could not be created.");
-        }
-        ++texture->activeFontReferenceCount;
-        AddOwnedGraphicsResourceFor(contentManager->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto resource = std::make_shared<SpriteFontResource>(
+        SpriteFontResource{font, texture, contentManager->parentGame});
+    if (const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::SpriteFont, resource, outSpriteFont);
+        result != CNA_RESULT_SUCCESS) {
+        static_cast<void>(GetRuntimeHandles().Release(*outTexture));
+        *outTexture = CNA_INVALID_HANDLE;
+        *outSpriteFont = CNA_INVALID_HANDLE;
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The loaded SpriteFont handle could not be created.");
+    }
+    ++texture->activeFontReferenceCount;
+    AddOwnedGraphicsResourceFor(contentManager->parentGame);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_load_foreign_ext(
+[[nodiscard]] CNA_Result ContentManagerLoadForeignExt(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     void** const outObject)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (outObject == nullptr) {
-            return InvalidArgument("The loaded foreign-asset output pointer is null.");
-        }
-        *outObject = nullptr;
+    *outObject = nullptr;
 
-        std::string assetNameCopy;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameCopy.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
+    std::string assetNameCopy;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
 
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        try {
-            const CNA::Content::ForeignContentObjectEXT loaded =
-                contentManager->value->Load<CNA::Content::ForeignContentObjectEXT>(assetNameCopy);
-            *outObject = loaded.value;
-            return CNA_RESULT_SUCCESS;
-        } catch (const ContentLoadException& exception) {
-            return IoError(exception.what());
-        } catch (const std::bad_any_cast&) {
-            // The file's root reader produced something else, which means the asset is not the
-            // caller's type at all. Reporting the mismatch beats returning a pointer into an
-            // object of a different type.
-            return IoError(
-                "The asset's root type reader is not a caller-registered reader, so it did not "
-                "produce a foreign object.");
-        } catch (const System::NotSupportedException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-    });
+    try {
+        const CNA::Content::ForeignContentObjectEXT loaded =
+            contentManager->value->Load<CNA::Content::ForeignContentObjectEXT>(assetNameCopy);
+        *outObject = loaded.value;
+        return CNA_RESULT_SUCCESS;
+    } catch (const ContentLoadException& exception) {
+        return IoError(exception.what());
+    } catch (const std::bad_any_cast&) {
+        // The file's root reader produced something else, which means the asset is not the
+        // caller's type at all. Reporting the mismatch beats returning a pointer into an
+        // object of a different type.
+        return IoError(
+            "The asset's root type reader is not a caller-registered reader, so it did not "
+            "produce a foreign object.");
+    } catch (const System::NotSupportedException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
 }
 
-CNA_Result cna_content_manager_register_cnj_loader_ext(
+[[nodiscard]] CNA_Result ContentManagerRegisterCnjLoaderExt(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView typeName,
     const CNA_CnjLoaderCallback callback,
     void* const context)
 {
-    return CallWithExceptionBarrier([&]() {
-        if (callback == nullptr) {
-            return InvalidArgument("The .cnj loader callback is null.");
-        }
-        std::string typeNameCopy;
-        if (const CNA_Result result = ReadText(
-                typeName, "The .cnj type name is not valid UTF-8.", &typeNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (typeNameCopy.empty()) {
-            return InvalidArgument("The .cnj type name must not be empty.");
-        }
+    if (callback == nullptr) {
+        return InvalidArgument("The .cnj loader callback is null.");
+    }
+    std::string typeNameCopy;
+    if (const CNA_Result result = ReadText(
+            typeName, "The .cnj type name is not valid UTF-8.", &typeNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (typeNameCopy.empty()) {
+        return InvalidArgument("The .cnj type name must not be empty.");
+    }
 
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        try {
-            // The canonical factory is a std::function returning T by value, which is why this
-            // route exists at all: T is CNA::Content::ForeignContentObjectEXT, a concrete type C
-            // can name through the same carrier a registered XNB reader already produces. The
-            // coverage matrix recorded this family as having no C form "because registering a
-            // reader requires naming an arbitrary C++ type T" -- true of the general template and
-            // not of the one instantiation a C caller needs.
-            contentManager->value->RegisterCnjLoader<CNA::Content::ForeignContentObjectEXT>(
-                typeNameCopy,
-                [callback, context](const std::string& json, ContentManager&)
-                    -> CNA::Content::ForeignContentObjectEXT {
-                    const CNA_StringView view{json.data(), json.size()};
-                    void* object = nullptr;
-                    const CNA_Result result = callback(context, view, &object);
-                    if (result != CNA_RESULT_SUCCESS) {
-                        throw ContentLoadException(
-                            "A caller-supplied .cnj loader failed (CNA_Result " +
-                            std::to_string(result) + ").");
-                    }
-                    return CNA::Content::ForeignContentObjectEXT{object};
-                });
-        } catch (const std::invalid_argument& exception) {
-            return InvalidArgument(exception.what());
-        } catch (const std::logic_error& exception) {
-            // The canonical refusal for a name already taken. It is a state failure rather than a
-            // bad argument: the same name is perfectly valid on a manager that does not hold it.
-            return InvalidState(exception.what());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    try {
+        // The canonical factory is a std::function returning T by value, which is why this
+        // route exists at all: T is CNA::Content::ForeignContentObjectEXT, a concrete type C
+        // can name through the same carrier a registered XNB reader already produces. The
+        // coverage matrix recorded this family as having no C form "because registering a
+        // reader requires naming an arbitrary C++ type T" -- true of the general template and
+        // not of the one instantiation a C caller needs.
+        contentManager->value->RegisterCnjLoader<CNA::Content::ForeignContentObjectEXT>(
+            typeNameCopy,
+            [callback, context](const std::string& json, ContentManager&)
+                -> CNA::Content::ForeignContentObjectEXT {
+                const CNA_StringView view{json.data(), json.size()};
+                void* object = nullptr;
+                const CNA_Result result = callback(context, view, &object);
+                if (result != CNA_RESULT_SUCCESS) {
+                    throw ContentLoadException(
+                        "A caller-supplied .cnj loader failed (CNA_Result " +
+                        std::to_string(result) + ").");
+                }
+                return CNA::Content::ForeignContentObjectEXT{object};
+            });
+    } catch (const std::invalid_argument& exception) {
+        return InvalidArgument(exception.what());
+    } catch (const std::logic_error& exception) {
+        // The canonical refusal for a name already taken. It is a state failure rather than a
+        // bad argument: the same name is perfectly valid on a manager that does not hold it.
+        return InvalidState(exception.what());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_get_asset_path_size(
+[[nodiscard]] CNA_Result ContentManagerGetAssetPathSize(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The asset-path size output is null.");
-        }
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = contentManager->value->BuildAssetPath(assetNameCopy).size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = contentManager->value->BuildAssetPath(assetNameCopy).size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_copy_asset_path(
+[[nodiscard]] CNA_Result ContentManagerCopyAssetPath(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            contentManager->value->BuildAssetPath(assetNameCopy),
-            destination,
-            capacity,
-            outBytes);
-    });
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyText(
+        contentManager->value->BuildAssetPath(assetNameCopy),
+        destination,
+        capacity,
+        outBytes);
 }
 
-CNA_Result cna_content_manager_get_normalized_key_size(
+[[nodiscard]] CNA_Result ContentManagerGetNormalizedKeySize(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The normalized-key size output is null.");
-        }
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = contentManager->value->NormalizeKey(assetNameCopy).size();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = contentManager->value->NormalizeKey(assetNameCopy).size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_copy_normalized_key(
+[[nodiscard]] CNA_Result ContentManagerCopyNormalizedKey(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string assetNameCopy;
-        if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            contentManager->value->NormalizeKey(assetNameCopy),
-            destination,
-            capacity,
-            outBytes);
-    });
+    std::string assetNameCopy;
+    if (const CNA_Result result = CopyAssetName(assetName, &assetNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyText(
+        contentManager->value->NormalizeKey(assetNameCopy),
+        destination,
+        capacity,
+        outBytes);
 }
 
-CNA_Result cna_content_manager_get_graphics_device(
+[[nodiscard]] CNA_Result ContentManagerGetGraphicsDevice(
     const CNA_Handle contentManagerHandle,
     CNA_Handle* const outGraphicsDevice)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The graphics-device output handle is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                contentManager->graphicsDevice,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (&contentManager->value->getGraphicsDeviceInternal() != graphicsDevice->value) {
-            return InternalError(
-                "The canonical content manager reported a different graphics device.");
-        }
-        *outGraphicsDevice = contentManager->graphicsDevice;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            contentManager->graphicsDevice,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (&contentManager->value->getGraphicsDeviceInternal() != graphicsDevice->value) {
+        return InternalError(
+            "The canonical content manager reported a different graphics device.");
+    }
+    *outGraphicsDevice = contentManager->graphicsDevice;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_set_graphics_device(
+[[nodiscard]] CNA_Result ContentManagerSetGraphicsDevice(
     const CNA_Handle contentManagerHandle,
     const CNA_Handle graphicsDeviceHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (graphicsDevice->parentGame != contentManager->parentGame) {
-            return InvalidState(
-                "The graphics device belongs to a different game than the content manager.");
-        }
-        contentManager->value->setGraphicsDevice(*graphicsDevice->value);
-        contentManager->graphicsDevice = graphicsDeviceHandle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle,
+            &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (graphicsDevice->parentGame != contentManager->parentGame) {
+        return InvalidState(
+            "The graphics device belongs to a different game than the content manager.");
+    }
+    contentManager->value->setGraphicsDevice(*graphicsDevice->value);
+    contentManager->graphicsDevice = graphicsDeviceHandle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_get_manifest_entry(
+[[nodiscard]] CNA_Result ContentManagerGetManifestEntry(
     const CNA_Handle contentManagerHandle,
     const uint64_t index,
     CNA_ContentManifestEntryInfo* const outEntry)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outEntry, "The manifest entry output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        const ContentManifestEntry* entry = nullptr;
-        if (const CNA_Result result = GetManifestEntry(
-                contentManagerHandle,
-                index,
-                &contentManager,
-                &entry);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        outEntry->has_xnb = ToCBool(entry->hasXnb);
-        outEntry->has_cnj = ToCBool(entry->hasCnj);
-        std::memset(outEntry->reserved, 0, sizeof(outEntry->reserved));
-        outEntry->native_extension_count = entry->nativeExtensions.size();
-        outEntry->xnb_reader_name_count = entry->xnbReaderNames.size();
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outEntry, "The manifest entry output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    const ContentManifestEntry* entry = nullptr;
+    if (const CNA_Result result = GetManifestEntry(
+            contentManagerHandle,
+            index,
+            &contentManager,
+            &entry);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outEntry->has_xnb = ToCBool(entry->hasXnb);
+    outEntry->has_cnj = ToCBool(entry->hasCnj);
+    std::memset(outEntry->reserved, 0, sizeof(outEntry->reserved));
+    outEntry->native_extension_count = entry->nativeExtensions.size();
+    outEntry->xnb_reader_name_count = entry->xnbReaderNames.size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_get_xnb_reader_usage(
+[[nodiscard]] CNA_Result ContentManagerGetXnbReaderUsage(
     const CNA_Handle contentManagerHandle,
     const uint64_t index,
     CNA_ContentReaderUsageInfo* const outUsage)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outUsage, "The reader-usage output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
-        if (index >= usage.size()) {
-            return OutOfRange("The reader-usage index is outside the summary.");
-        }
-        const ContentManifestReaderUsage& row = usage[static_cast<std::size_t>(index)];
-        outUsage->is_registered = ToCBool(row.isRegistered);
-        std::memset(outUsage->reserved, 0, sizeof(outUsage->reserved));
-        outUsage->file_count = static_cast<uint64_t>(row.fileCount);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outUsage, "The reader-usage output structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
+    if (index >= usage.size()) {
+        return OutOfRange("The reader-usage index is outside the summary.");
+    }
+    const ContentManifestReaderUsage& row = usage[static_cast<std::size_t>(index)];
+    outUsage->is_registered = ToCBool(row.isRegistered);
+    std::memset(outUsage->reserved, 0, sizeof(outUsage->reserved));
+    outUsage->file_count = static_cast<uint64_t>(row.fileCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
+[[nodiscard]] CNA_Result ContentManagerCopyXnbReaderUsageName(
     const CNA_Handle contentManagerHandle,
     const uint64_t index,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
-        if (index >= usage.size()) {
-            return OutOfRange("The reader-usage index is outside the summary.");
-        }
-        return CopyText(
-            usage[static_cast<std::size_t>(index)].readerName,
-            destination,
-            capacity,
-            outBytes);
-    });
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<ContentManifestReaderUsage> usage = SortedReaderUsage(contentManager);
+    if (index >= usage.size()) {
+        return OutOfRange("The reader-usage index is outside the summary.");
+    }
+    return CopyText(
+        usage[static_cast<std::size_t>(index)].readerName,
+        destination,
+        capacity,
+        outBytes);
 }
 
-CNA_Result cna_content_manager_destroy(const CNA_Handle contentManagerHandle)
+[[nodiscard]] CNA_Result ContentManagerDestroy(const CNA_Handle contentManagerHandle)
 {
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (contentManager->borrowed) {
-            return InvalidState("The game owns this ContentManager; it is released with the game.");
-        }
-        contentManager->value->Dispose();
-        if (const CNA_Result releaseResult = ReleaseHandle(contentManagerHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        RemoveOwnedContentManager();
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(
+            contentManagerHandle,
+            &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (contentManager->borrowed) {
+        return InvalidState("The game owns this ContentManager; it is released with the game.");
+    }
+    contentManager->value->Dispose();
+    if (const CNA_Result releaseResult = ReleaseHandle(contentManagerHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    RemoveOwnedContentManager();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_get_content_manager_ext(
+[[nodiscard]] CNA_Result GameGetContentManagerExt(
     const CNA_Handle gameHandle,
     CNA_Handle* const outContentManager)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContentManager == nullptr) {
-            return InvalidArgument("The content-manager output handle is null.");
+    Microsoft::Xna::Framework::Game* game = nullptr;
+    if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::lock_guard<std::mutex> lock(BorrowedGameContentMutex());
+    CNA_Handle& cached = BorrowedGameContentHandle();
+    if (cached != CNA_INVALID_HANDLE) {
+        std::shared_ptr<ContentManagerResource> existing;
+        if (GetRuntimeHandles().Get(cached, ObjectKind::ContentManager, &existing) ==
+            CNA_RESULT_SUCCESS) {
+            *outContentManager = cached;
+            return CNA_RESULT_SUCCESS;
         }
-        *outContentManager = CNA_INVALID_HANDLE;
-        Microsoft::Xna::Framework::Game* game = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::lock_guard<std::mutex> lock(BorrowedGameContentMutex());
-        CNA_Handle& cached = BorrowedGameContentHandle();
-        if (cached != CNA_INVALID_HANDLE) {
-            std::shared_ptr<ContentManagerResource> existing;
-            if (GetRuntimeHandles().Get(cached, ObjectKind::ContentManager, &existing) ==
-                CNA_RESULT_SUCCESS) {
-                *outContentManager = cached;
-                return CNA_RESULT_SUCCESS;
-            }
-            cached = CNA_INVALID_HANDLE;
-        }
-        // A non-owning shared_ptr: the manager is a value member of the game and outlives every
-        // borrow, so nothing here may ever delete it.
-        std::shared_ptr<ContentManager> borrowed(
-            std::shared_ptr<void>(),
-            &game->getContentProperty());
-        const auto resource = std::make_shared<ContentManagerResource>(
-            ContentManagerResource{borrowed, gameHandle, CNA_INVALID_HANDLE, true});
-        if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
-            resource,
-            outContentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cached = *outContentManager;
-        return CNA_RESULT_SUCCESS;
-    });
+        cached = CNA_INVALID_HANDLE;
+    }
+    // A non-owning shared_ptr: the manager is a value member of the game and outlives every
+    // borrow, so nothing here may ever delete it.
+    std::shared_ptr<ContentManager> borrowed(
+        std::shared_ptr<void>(),
+        &game->getContentProperty());
+    const auto resource = std::make_shared<ContentManagerResource>(
+        ContentManagerResource{borrowed, gameHandle, CNA_INVALID_HANDLE, true});
+    if (const CNA_Result result = CreateHandle(ObjectKind::ContentManager,
+        resource,
+        outContentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    cached = *outContentManager;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 

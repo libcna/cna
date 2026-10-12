@@ -36,3 +36,30 @@ other = { lookup = "GetContentManager", object = "std::shared_ptr<ContentManager
 # The canonical setter copies, so the caller keeps its own manager and later changes to it
 # never reach the game.
 cna_game_set_content_manager_ext = { call = "object->setContentProperty(*other->value)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_content_manager_create = { result = "ContentManagerCreate(graphics_device, create_info, out_content_manager)" }
+cna_content_manager_load_texture2d = { result = "ContentManagerLoadTexture2d(content_manager, asset_name, out_texture)" }
+cna_content_manager_create_resource = { result = "ContentManagerCreateResource(graphics_device, create_info, out_content_manager)" }
+cna_content_manager_load_sound_effect = { result = "ContentManagerLoadSoundEffect(content_manager, asset_name, out_sound_effect)" }
+cna_content_manager_load_texture_cube = { result = "ContentManagerLoadTextureCube(content_manager, asset_name, out_texture)" }
+cna_content_manager_load_sprite_font = { result = "ContentManagerLoadSpriteFont(content_manager, asset_name, out_sprite_font, out_texture)" }
+cna_content_manager_load_foreign_ext = { result = "ContentManagerLoadForeignExt(content_manager, asset_name, out_object)" }
+cna_content_manager_get_asset_path_size = { result = "ContentManagerGetAssetPathSize(content_manager, asset_name, out_bytes)" }
+cna_content_manager_get_normalized_key_size = { result = "ContentManagerGetNormalizedKeySize(content_manager, asset_name, out_bytes)" }
+cna_content_manager_get_graphics_device = { result = "ContentManagerGetGraphicsDevice(content_manager, out_graphics_device)" }
+cna_game_get_content_manager_ext = { result = "GameGetContentManagerExt(game, out_content_manager)" }
+cna_content_manager_get_manifest_entry = { result = "ContentManagerGetManifestEntry(content_manager, index, out_entry)" }
+cna_content_manager_get_xnb_reader_usage = { result = "ContentManagerGetXnbReaderUsage(content_manager, index, out_usage)" }
+cna_content_manager_copy_asset_path = { result = "ContentManagerCopyAssetPath(content_manager, asset_name, destination, capacity, out_bytes)", optional = ["out_bytes"] }
+cna_content_manager_copy_normalized_key = { result = "ContentManagerCopyNormalizedKey(content_manager, asset_name, destination, capacity, out_bytes)", optional = ["out_bytes"] }
+cna_content_manager_copy_xnb_reader_usage_name = { result = "ContentManagerCopyXnbReaderUsageName(content_manager, index, destination, capacity, out_bytes)", optional = ["out_bytes"] }
+cna_content_manager_register_cnj_loader_ext = { result = "ContentManagerRegisterCnjLoaderExt(content_manager, type_name, callback, context)" }
+cna_content_manager_set_graphics_device = { result = "ContentManagerSetGraphicsDevice(content_manager, graphics_device)" }
+cna_content_manager_destroy = { result = "ContentManagerDestroy(content_manager)" }

@@ -492,3 +492,216 @@ CNA_Result cna_storage_set_app_name_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_storage_device_subscribe_device_changed(
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_device_subscribe_device_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return StorageDeviceSubscribeDeviceChanged(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_storage_container_open(
+    const CNA_StorageDeviceHandle device,
+    const CNA_StringView display_name,
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_StorageContainerHandle* const out_container)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_container == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_open: out_container is null.");
+        }
+        *out_container = CNA_INVALID_HANDLE;
+        return StorageContainerOpen(device, display_name, callback, context, out_container);
+    });
+}
+
+CNA_Result cna_storage_container_get_storage_device(
+    const CNA_StorageContainerHandle container,
+    CNA_StorageDeviceHandle* const out_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_get_storage_device: out_device is null.");
+        }
+        *out_device = CNA_INVALID_HANDLE;
+        return StorageContainerGetStorageDevice(container, out_device);
+    });
+}
+
+CNA_Result cna_storage_container_subscribe_disposing(
+    const CNA_StorageContainerHandle container,
+    const CNA_StorageCompletionCallback callback,
+    void* const context,
+    CNA_Handle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_subscribe_disposing: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return StorageContainerSubscribeDisposing(container, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_storage_container_directory_exists(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView directory,
+    CNA_Bool* const out_exists)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_exists == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_directory_exists: out_exists is null.");
+        }
+        return StorageContainerDirectoryExists(container, directory, out_exists);
+    });
+}
+
+CNA_Result cna_storage_container_file_exists(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file,
+    CNA_Bool* const out_exists)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_exists == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_file_exists: out_exists is null.");
+        }
+        return StorageContainerFileExists(container, file, out_exists);
+    });
+}
+
+CNA_Result cna_storage_container_create_file(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file,
+    CNA_StorageStreamHandle* const out_stream)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stream == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_container_create_file: out_stream is null.");
+        }
+        *out_stream = CNA_INVALID_HANDLE;
+        return StorageContainerCreateFile(container, file, out_stream);
+    });
+}
+
+CNA_Result cna_storage_stream_read(
+    const CNA_StorageStreamHandle stream,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_read)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_read == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_read: out_read is null.");
+        }
+        return StorageStreamRead(stream, destination, capacity, out_read);
+    });
+}
+
+CNA_Result cna_storage_stream_seek(
+    const CNA_StorageStreamHandle stream,
+    const int64_t offset,
+    const CNA_SeekOrigin origin,
+    int64_t* const out_position)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_position == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_storage_stream_seek: out_position is null.");
+        }
+        return StorageStreamSeek(stream, offset, origin, out_position);
+    });
+}
+
+CNA_Result cna_storage_device_delete_container(
+    const CNA_StorageDeviceHandle device,
+    const CNA_StringView title_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageDeviceDeleteContainer(device, title_name);
+    });
+}
+
+CNA_Result cna_storage_device_unsubscribe_device_changed(
+    const CNA_Handle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageDeviceUnsubscribeDeviceChanged(registration);
+    });
+}
+
+CNA_Result cna_storage_container_unsubscribe_disposing(
+    const CNA_Handle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageContainerUnsubscribeDisposing(registration);
+    });
+}
+
+CNA_Result cna_storage_container_create_directory(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView directory)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageContainerCreateDirectory(container, directory);
+    });
+}
+
+CNA_Result cna_storage_container_delete_directory(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView directory)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageContainerDeleteDirectory(container, directory);
+    });
+}
+
+CNA_Result cna_storage_container_delete_file(
+    const CNA_StorageContainerHandle container,
+    const CNA_StringView file)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageContainerDeleteFile(container, file);
+    });
+}
+
+CNA_Result cna_storage_container_destroy(
+    const CNA_StorageContainerHandle container)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageContainerDestroy(container);
+    });
+}
+
+CNA_Result cna_storage_stream_write(
+    const CNA_StorageStreamHandle stream,
+    const uint8_t* const data,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageStreamWrite(stream, data, count);
+    });
+}
+
+CNA_Result cna_storage_stream_set_length(
+    const CNA_StorageStreamHandle stream,
+    const int64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageStreamSetLength(stream, length);
+    });
+}
+
+CNA_Result cna_storage_stream_close(
+    const CNA_StorageStreamHandle stream)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StorageStreamClose(stream);
+    });
+}

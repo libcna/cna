@@ -791,182 +791,147 @@ struct CnjToCnbResultResource final {
         outResult);
 }
 
-} // namespace
-
-CNA_Result cna_cnb_read_limits_init(CNA_CnbReadLimits* const outLimits)
+[[nodiscard]] CNA_Result CnbReadLimitsInit(CNA_CnbReadLimits* const outLimits)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLimits == nullptr) {
-            return InvalidArgument("The read-limits output is null.");
-        }
-        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
-            return InvalidArgument("The read-limits structure is not a known size and version.");
-        }
-        const Cnb::CnbReadLimits& limits = Cnb::DefaultCnbReadLimits();
-        outLimits->max_file_size = limits.maxFileSize;
-        outLimits->max_chunk_size = limits.maxChunkSize;
-        outLimits->max_total_uncompressed_size = limits.maxTotalUncompressedSize;
-        outLimits->max_chunk_count = limits.maxChunkCount;
-        outLimits->max_string_bytes = limits.maxStringBytes;
-        outLimits->max_array_element_count = limits.maxArrayElementCount;
-        outLimits->max_chunk_alignment = limits.maxChunkAlignment;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
+        return InvalidArgument("The read-limits structure is not a known size and version.");
+    }
+    const Cnb::CnbReadLimits& limits = Cnb::DefaultCnbReadLimits();
+    outLimits->max_file_size = limits.maxFileSize;
+    outLimits->max_chunk_size = limits.maxChunkSize;
+    outLimits->max_total_uncompressed_size = limits.maxTotalUncompressedSize;
+    outLimits->max_chunk_count = limits.maxChunkCount;
+    outLimits->max_string_bytes = limits.maxStringBytes;
+    outLimits->max_array_element_count = limits.maxArrayElementCount;
+    outLimits->max_chunk_alignment = limits.maxChunkAlignment;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_copy_format_magic(
+[[nodiscard]] CNA_Result CnbCopyFormatMagic(
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The magic-bytes output is invalid.");
-        }
-        const std::vector<uint8_t> magic(Cnb::Format::Magic.begin(), Cnb::Format::Magic.end());
-        return CopyBytes(magic, destination, capacity, outByteCount);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The magic-bytes output is invalid.");
+    }
+    const std::vector<uint8_t> magic(Cnb::Format::Magic.begin(), Cnb::Format::Magic.end());
+    return CopyBytes(magic, destination, capacity, outByteCount);
 }
 
-CNA_Result cna_cnb_asset_type_id_from_name(
+[[nodiscard]] CNA_Result CnbAssetTypeIdFromNameRoute(
     const CNA_StringView name,
     uint32_t* const outAssetTypeId)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAssetTypeId == nullptr) {
-            return InvalidArgument("The asset-type-identifier output is null.");
-        }
-        std::string value;
-        if (const CNA_Result result = ReadText(
-                name, "The asset type name is not valid UTF-8.", &value, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical guard, decided here so the result is a named refusal rather than whatever
-        // the firewall makes of std::invalid_argument.
-        if (value.empty()) {
-            return InvalidArgument("A custom asset type name must not be empty.");
-        }
-        *outAssetTypeId = Cnb::CnbAssetTypeIdFromName(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string value;
+    if (const CNA_Result result = ReadText(
+            name, "The asset type name is not valid UTF-8.", &value, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical guard, decided here so the result is a named refusal rather than whatever
+    // the firewall makes of std::invalid_argument.
+    if (value.empty()) {
+        return InvalidArgument("A custom asset type name must not be empty.");
+    }
+    *outAssetTypeId = Cnb::CnbAssetTypeIdFromName(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_get_logical_name_problem_size(
+[[nodiscard]] CNA_Result CnbGetLogicalNameProblemSize(
     const CNA_StringView logicalName,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        // Deliberately not ValidateStringView: "is not well-formed UTF-8" is one of the verdicts
-        // this function exists to report, so refusing malformed input here would withhold the
-        // answer the caller asked for. Only the pointer/length pair itself is checked.
-        if (logicalName.data == nullptr && logicalName.byte_length != 0U) {
-            return InvalidArgument("The logical name is null with a non-zero length.");
-        }
-        const std::string_view view(
-            logicalName.data == nullptr ? "" : logicalName.data,
-            static_cast<std::size_t>(logicalName.byte_length));
-        return ReportTextSize(Cnb::CnbLogicalNameProblem(view), outByteCount);
-    });
+    // Deliberately not ValidateStringView: "is not well-formed UTF-8" is one of the verdicts
+    // this function exists to report, so refusing malformed input here would withhold the
+    // answer the caller asked for. Only the pointer/length pair itself is checked.
+    if (logicalName.data == nullptr && logicalName.byte_length != 0U) {
+        return InvalidArgument("The logical name is null with a non-zero length.");
+    }
+    const std::string_view view(
+        logicalName.data == nullptr ? "" : logicalName.data,
+        static_cast<std::size_t>(logicalName.byte_length));
+    return ReportTextSize(Cnb::CnbLogicalNameProblem(view), outByteCount);
 }
 
-CNA_Result cna_cnb_copy_logical_name_problem(
+[[nodiscard]] CNA_Result CnbCopyLogicalNameProblem(
     const CNA_StringView logicalName,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (logicalName.data == nullptr && logicalName.byte_length != 0U) {
-            return InvalidArgument("The logical name is null with a non-zero length.");
-        }
-        const std::string_view view(
-            logicalName.data == nullptr ? "" : logicalName.data,
-            static_cast<std::size_t>(logicalName.byte_length));
-        return CopyText(Cnb::CnbLogicalNameProblem(view), destination, capacity, outByteCount);
-    });
+    if (logicalName.data == nullptr && logicalName.byte_length != 0U) {
+        return InvalidArgument("The logical name is null with a non-zero length.");
+    }
+    const std::string_view view(
+        logicalName.data == nullptr ? "" : logicalName.data,
+        static_cast<std::size_t>(logicalName.byte_length));
+    return CopyText(Cnb::CnbLogicalNameProblem(view), destination, capacity, outByteCount);
 }
 
-CNA_Result cna_cnb_checked_add(const uint64_t a, const uint64_t b, uint64_t* const outSum)
+[[nodiscard]] CNA_Result CnbCheckedAdd(const uint64_t a, const uint64_t b, uint64_t* const outSum)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSum == nullptr) {
-            return InvalidArgument("The sum output is null.");
-        }
-        // Mirrors CheckedAdd's own guard exactly, so the answer is CNA_RESULT_OVERFLOW rather than
-        // whatever the firewall makes of a ContentLoadException. The canonical function still
-        // performs the arithmetic: if this condition ever drifted from its guard, the canonical
-        // throw would fire and the disagreement would surface as CNA_RESULT_IO rather than hide.
-        if (a > std::numeric_limits<uint64_t>::max() - b) {
-            return Overflow("The declared offset and size overflow a 64-bit byte count.");
-        }
-        *outSum = Cnb::CheckedAdd(a, b, "cna_cnb_checked_add");
-        return CNA_RESULT_SUCCESS;
-    });
+    // Mirrors CheckedAdd's own guard exactly, so the answer is CNA_RESULT_OVERFLOW rather than
+    // whatever the firewall makes of a ContentLoadException. The canonical function still
+    // performs the arithmetic: if this condition ever drifted from its guard, the canonical
+    // throw would fire and the disagreement would surface as CNA_RESULT_IO rather than hide.
+    if (a > std::numeric_limits<uint64_t>::max() - b) {
+        return Overflow("The declared offset and size overflow a 64-bit byte count.");
+    }
+    *outSum = Cnb::CheckedAdd(a, b, "cna_cnb_checked_add");
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_checked_multiply(const uint64_t a, const uint64_t b, uint64_t* const outProduct)
+[[nodiscard]] CNA_Result CnbCheckedMultiply(
+    const uint64_t a,
+    const uint64_t b,
+    uint64_t* const outProduct)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outProduct == nullptr) {
-            return InvalidArgument("The product output is null.");
-        }
-        if (a != 0U && b > std::numeric_limits<uint64_t>::max() / a) {
-            return Overflow(
-                "The declared element count and element size overflow a 64-bit byte count.");
-        }
-        *outProduct = Cnb::CheckedMultiply(a, b, "cna_cnb_checked_multiply");
-        return CNA_RESULT_SUCCESS;
-    });
+    if (a != 0U && b > std::numeric_limits<uint64_t>::max() / a) {
+        return Overflow(
+            "The declared element count and element size overflow a 64-bit byte count.");
+    }
+    *outProduct = Cnb::CheckedMultiply(a, b, "cna_cnb_checked_multiply");
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_crc32c_continue(
+[[nodiscard]] CNA_Result CnbCrc32cContinue(
     const uint32_t previous,
     const uint8_t* const data,
     const uint64_t byteCount,
     uint32_t* const outChecksum)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outChecksum == nullptr) {
-            return InvalidArgument("The checksum output is null.");
-        }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(data, byteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outChecksum = Cnb::Crc32cContinue(previous, bytes);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::span<const uint8_t> bytes;
+    if (const CNA_Result result = BorrowBytes(data, byteCount, &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outChecksum = Cnb::Crc32cContinue(previous, bytes);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_get_compressed_byte_count(
+[[nodiscard]] CNA_Result CnbGetCompressedByteCount(
     const uint8_t* const raw,
     const uint64_t rawByteCount,
     const CNA_CnbCompression codec,
     const int32_t level,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The compressed byte-count output is null.");
-        }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(raw, rawByteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> compressed;
-        if (const CNA_Result result = CompressInto(bytes, codec, level, &compressed);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outByteCount = static_cast<uint64_t>(compressed.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::span<const uint8_t> bytes;
+    if (const CNA_Result result = BorrowBytes(raw, rawByteCount, &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> compressed;
+    if (const CNA_Result result = CompressInto(bytes, codec, level, &compressed);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = static_cast<uint64_t>(compressed.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_copy_compressed(
+[[nodiscard]] CNA_Result CnbCopyCompressed(
     const uint8_t* const raw,
     const uint64_t rawByteCount,
     const CNA_CnbCompression codec,
@@ -975,25 +940,23 @@ CNA_Result cna_cnb_copy_compressed(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The compressed output buffer is invalid.");
-        }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(raw, rawByteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<uint8_t> compressed;
-        if (const CNA_Result result = CompressInto(bytes, codec, level, &compressed);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(compressed, destination, capacity, outByteCount);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The compressed output buffer is invalid.");
+    }
+    std::span<const uint8_t> bytes;
+    if (const CNA_Result result = BorrowBytes(raw, rawByteCount, &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<uint8_t> compressed;
+    if (const CNA_Result result = CompressInto(bytes, codec, level, &compressed);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(compressed, destination, capacity, outByteCount);
 }
 
-CNA_Result cna_cnb_copy_decompressed(
+[[nodiscard]] CNA_Result CnbCopyDecompressed(
     const uint8_t* const stored,
     const uint64_t storedByteCount,
     const CNA_CnbCompression codec,
@@ -1003,60 +966,58 @@ CNA_Result cna_cnb_copy_decompressed(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The decompressed output buffer is invalid.");
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The decompressed output buffer is invalid.");
+    }
+    std::span<const uint8_t> bytes;
+    if (const CNA_Result result = BorrowBytes(stored, storedByteCount, &bytes);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbCompression nativeCodec = ToCodec(codec);
+    // The order below is DecompressCnbChunk's own, and the order is contract rather than
+    // style: an unsupported codec with an over-ceiling size is reported as the ceiling, and a
+    // stored chunk consults neither size at all. Reversing any pair would answer a different
+    // question than the canonical reader answers about the same file.
+    if (nativeCodec != Cnb::CnbCompression::None) {
+        if (uncompressedSize > maxUncompressedSize) {
+            return InvalidArgument(
+                "The declared unpacked size is above the configured limit; refused before "
+                "allocating anything.");
         }
-        std::span<const uint8_t> bytes;
-        if (const CNA_Result result = BorrowBytes(stored, storedByteCount, &bytes);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+        if (!Cnb::IsCnbCompressionSupported(nativeCodec)) {
+            return NotSupported(
+                "The chunk uses compression codec " +
+                Cnb::CnbCompressionToString(nativeCodec) +
+                ", which this build does not implement.");
         }
-        const Cnb::CnbCompression nativeCodec = ToCodec(codec);
-        // The order below is DecompressCnbChunk's own, and the order is contract rather than
-        // style: an unsupported codec with an over-ceiling size is reported as the ceiling, and a
-        // stored chunk consults neither size at all. Reversing any pair would answer a different
-        // question than the canonical reader answers about the same file.
-        if (nativeCodec != Cnb::CnbCompression::None) {
-            if (uncompressedSize > maxUncompressedSize) {
-                return InvalidArgument(
-                    "The declared unpacked size is above the configured limit; refused before "
-                    "allocating anything.");
-            }
-            if (!Cnb::IsCnbCompressionSupported(nativeCodec)) {
-                return NotSupported(
-                    "The chunk uses compression codec " +
-                    Cnb::CnbCompressionToString(nativeCodec) +
-                    ", which this build does not implement.");
-            }
-        }
-        const std::vector<uint8_t> raw = Cnb::DecompressCnbChunk(
-            bytes, nativeCodec, uncompressedSize, maxUncompressedSize, "The CNB chunk");
-        return CopyBytes(raw, destination, capacity, outByteCount);
-    });
+    }
+    const std::vector<uint8_t> raw = Cnb::DecompressCnbChunk(
+        bytes, nativeCodec, uncompressedSize, maxUncompressedSize, "The CNB chunk");
+    return CopyBytes(raw, destination, capacity, outByteCount);
 }
+
+} // namespace
 
 /* --- CBIND-107: the parsed document ---------------------------------------------------------- */
 
-CNA_Result cna_cnb_chunk_entry_is_mandatory(
+namespace {
+
+[[nodiscard]] CNA_Result CnbChunkEntryIsMandatory(
     const CNA_CnbChunkEntry* const entry,
     CNA_Bool* const outMandatory)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (entry == nullptr || outMandatory == nullptr) {
-            return InvalidArgument("The chunk-entry input or output is null.");
-        }
-        if (!IsVersionedStructure(entry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
-            return InvalidArgument("The chunk entry is not a known size and version.");
-        }
-        Cnb::CnbChunkEntry native;
-        native.flags = entry->flags;
-        *outMandatory = ToCBool(native.IsMandatory());
-        return CNA_RESULT_SUCCESS;
-    });
+    if (entry == nullptr) {
+        return InvalidArgument("The chunk-entry input or output is null.");
+    }
+    if (!IsVersionedStructure(entry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
+        return InvalidArgument("The chunk entry is not a known size and version.");
+    }
+    Cnb::CnbChunkEntry native;
+    native.flags = entry->flags;
+    *outMandatory = ToCBool(native.IsMandatory());
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 [[nodiscard]] CNA_Result CreateDocument(
     Cnb::CnbDocument document,
@@ -1068,578 +1029,511 @@ namespace {
         outDocument);
 }
 
-} // namespace
-
-CNA_Result cna_cnb_document_parse(
+[[nodiscard]] CNA_Result CnbDocumentParse(
     const uint8_t* const bytes,
     const uint64_t byteCount,
     const CNA_StringView origin,
     const CNA_CnbReadLimits* const limits,
     CNA_CnbDocumentHandle* const outDocument)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDocument == nullptr) {
-            return InvalidArgument("The CNB document output handle is null.");
-        }
-        *outDocument = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string originText;
-        if (const CNA_Result result =
-                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbReadLimits nativeLimits;
-        if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateDocument(
-            Cnb::CnbDocument::Parse(
-                std::vector<uint8_t>(span.begin(), span.end()), originText, nativeLimits),
-            outDocument);
-    });
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string originText;
+    if (const CNA_Result result =
+            ReadText(origin, "The origin text is not valid UTF-8.", &originText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbReadLimits nativeLimits;
+    if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateDocument(
+        Cnb::CnbDocument::Parse(
+            std::vector<uint8_t>(span.begin(), span.end()), originText, nativeLimits),
+        outDocument);
 }
 
-CNA_Result cna_cnb_document_parse_file(
+[[nodiscard]] CNA_Result CnbDocumentParseFile(
     const CNA_StringView path,
     const CNA_CnbReadLimits* const limits,
     CNA_CnbDocumentHandle* const outDocument)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDocument == nullptr) {
-            return InvalidArgument("The CNB document output handle is null.");
-        }
-        *outDocument = CNA_INVALID_HANDLE;
-        std::string pathText;
-        if (const CNA_Result result =
-                ReadText(path, "The path text is not valid UTF-8.", &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (pathText.empty()) {
-            return InvalidArgument("The CNB file path must not be empty.");
-        }
-        Cnb::CnbReadLimits nativeLimits;
-        if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateDocument(Cnb::CnbDocument::ParseFile(pathText, nativeLimits), outDocument);
-    });
+    std::string pathText;
+    if (const CNA_Result result =
+            ReadText(path, "The path text is not valid UTF-8.", &pathText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (pathText.empty()) {
+        return InvalidArgument("The CNB file path must not be empty.");
+    }
+    Cnb::CnbReadLimits nativeLimits;
+    if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateDocument(Cnb::CnbDocument::ParseFile(pathText, nativeLimits), outDocument);
 }
 
-CNA_Result cna_cnb_document_get_chunk(
+[[nodiscard]] CNA_Result CnbDocumentGetChunk(
     const CNA_CnbDocumentHandle documentHandle,
     const uint64_t index,
     CNA_CnbChunkEntry* const outEntry)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outEntry == nullptr) {
-            return InvalidArgument("The chunk-entry output is null.");
-        }
-        if (!IsVersionedStructure(outEntry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
-            return InvalidArgument("The chunk entry is not a known size and version.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ChunkCount(),
-                "The chunk index is outside this document's table of contents.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbChunkEntry& entry =
-            document->value->ChunkAt(static_cast<std::size_t>(index));
-        outEntry->offset = entry.offset;
-        outEntry->stored_size = entry.storedSize;
-        outEntry->uncompressed_size = entry.uncompressedSize;
-        outEntry->type = entry.type.value;
-        outEntry->flags = entry.flags;
-        outEntry->checksum = entry.checksum;
-        outEntry->compression = static_cast<CNA_CnbCompression>(entry.compression);
-        outEntry->alignment = entry.alignment;
-        outEntry->reserved = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsVersionedStructure(outEntry, CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION)) {
+        return InvalidArgument("The chunk entry is not a known size and version.");
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, document->value->ChunkCount(),
+            "The chunk index is outside this document's table of contents.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbChunkEntry& entry =
+        document->value->ChunkAt(static_cast<std::size_t>(index));
+    outEntry->offset = entry.offset;
+    outEntry->stored_size = entry.storedSize;
+    outEntry->uncompressed_size = entry.uncompressedSize;
+    outEntry->type = entry.type.value;
+    outEntry->flags = entry.flags;
+    outEntry->checksum = entry.checksum;
+    outEntry->compression = static_cast<CNA_CnbCompression>(entry.compression);
+    outEntry->alignment = entry.alignment;
+    outEntry->reserved = 0U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_open_chunk(
+[[nodiscard]] CNA_Result CnbDocumentOpenChunk(
     const CNA_CnbDocumentHandle documentHandle,
     const uint64_t index,
     CNA_CnbReaderHandle* const outReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The CNB reader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ChunkCount(),
-                "The chunk index is outside this document's table of contents.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<CnbReaderResource>();
-        // The borrow is taken before the cursor exists, so a failure to create the handle below
-        // releases it with the resource rather than leaving the document permanently blocked.
-        resource->documentBorrow = std::make_shared<CountedBorrow<CnbDocumentResource>>(document);
-        resource->value = std::make_shared<Cnb::CnbByteReader>(
-            document->value->OpenChunk(static_cast<std::size_t>(index)));
-        return CreateHandle(ObjectKind::CnbReader, resource, outReader);
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, document->value->ChunkCount(),
+            "The chunk index is outside this document's table of contents.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<CnbReaderResource>();
+    // The borrow is taken before the cursor exists, so a failure to create the handle below
+    // releases it with the resource rather than leaving the document permanently blocked.
+    resource->documentBorrow = std::make_shared<CountedBorrow<CnbDocumentResource>>(document);
+    resource->value = std::make_shared<Cnb::CnbByteReader>(
+        document->value->OpenChunk(static_cast<std::size_t>(index)));
+    return CreateHandle(ObjectKind::CnbReader, resource, outReader);
 }
 
-CNA_Result cna_cnb_document_find_all(
+[[nodiscard]] CNA_Result CnbDocumentFindAll(
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_CnbChunkId type,
     uint64_t* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The chunk-index output buffer is invalid.");
-        }
-        const std::vector<std::size_t> found = document->value->FindAll(Cnb::CnbChunkId{type});
-        *outCount = static_cast<uint64_t>(found.size());
-        if (capacity < static_cast<uint64_t>(found.size())) {
-            return BufferTooSmall(
-                "The destination capacity is smaller than the number of matching chunks.");
-        }
-        for (std::size_t i = 0; i < found.size(); ++i) {
-            destination[i] = static_cast<uint64_t>(found[i]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The chunk-index output buffer is invalid.");
+    }
+    const std::vector<std::size_t> found = document->value->FindAll(Cnb::CnbChunkId{type});
+    *outCount = static_cast<uint64_t>(found.size());
+    if (capacity < static_cast<uint64_t>(found.size())) {
+        return BufferTooSmall(
+            "The destination capacity is smaller than the number of matching chunks.");
+    }
+    for (std::size_t i = 0; i < found.size(); ++i) {
+        destination[i] = static_cast<uint64_t>(found[i]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_find_single(
+[[nodiscard]] CNA_Result CnbDocumentFindSingle(
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_CnbChunkId type,
     CNA_Bool* const outFound,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outFound == nullptr || outIndex == nullptr) {
-            return InvalidArgument("The chunk-lookup output is null.");
-        }
-        const std::optional<std::size_t> found =
-            document->value->FindSingle(Cnb::CnbChunkId{type});
-        // Absence is an ordinary answer, never a failure, so it is reported beside the value and
-        // the value is left alone -- the availability convention every optional query here uses.
-        *outFound = ToCBool(found.has_value());
-        if (found.has_value()) {
-            *outIndex = static_cast<uint64_t>(*found);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::optional<std::size_t> found =
+        document->value->FindSingle(Cnb::CnbChunkId{type});
+    // Absence is an ordinary answer, never a failure, so it is reported beside the value and
+    // the value is left alone -- the availability convention every optional query here uses.
+    *outFound = ToCBool(found.has_value());
+    if (found.has_value()) {
+        *outIndex = static_cast<uint64_t>(*found);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_require_mandatory_chunks_understood(
+[[nodiscard]] CNA_Result CnbDocumentRequireMandatoryChunksUnderstood(
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_CnbChunkId* const knownTypes,
     const uint64_t knownTypeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (knownTypes == nullptr && knownTypeCount != 0U) {
-            return InvalidArgument(
-                "The known chunk-identifier array is null with a non-zero count.");
-        }
-        if (knownTypeCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
-            return Overflow(
-                "The known chunk-identifier count does not fit in this host's size type.");
-        }
-        std::vector<Cnb::CnbChunkId> native;
-        native.reserve(static_cast<std::size_t>(knownTypeCount));
-        for (uint64_t i = 0; i < knownTypeCount; ++i) {
-            native.push_back(Cnb::CnbChunkId{knownTypes[i]});
-        }
-        document->value->RequireMandatoryChunksUnderstood(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (knownTypes == nullptr && knownTypeCount != 0U) {
+        return InvalidArgument(
+            "The known chunk-identifier array is null with a non-zero count.");
+    }
+    if (knownTypeCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        return Overflow(
+            "The known chunk-identifier count does not fit in this host's size type.");
+    }
+    std::vector<Cnb::CnbChunkId> native;
+    native.reserve(static_cast<std::size_t>(knownTypeCount));
+    for (uint64_t i = 0; i < knownTypeCount; ++i) {
+        native.push_back(Cnb::CnbChunkId{knownTypes[i]});
+    }
+    document->value->RequireMandatoryChunksUnderstood(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_get_metadata(
+[[nodiscard]] CNA_Result CnbDocumentGetMetadata(
     const CNA_CnbDocumentHandle documentHandle,
     CNA_CnbMetadata* const outMetadata)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outMetadata == nullptr) {
-            return InvalidArgument("The metadata output is null.");
-        }
-        if (!IsVersionedStructure(outMetadata, CNA_CNB_METADATA_STRUCT_VERSION)) {
-            return InvalidArgument("The metadata structure is not a known size and version.");
-        }
-        const Cnb::CnbMetadata& metadata = document->value->Metadata();
-        outMetadata->present = ToCBool(metadata.present);
-        outMetadata->reserved[0] = 0U;
-        outMetadata->reserved[1] = 0U;
-        outMetadata->reserved[2] = 0U;
-        outMetadata->flags = metadata.flags;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsVersionedStructure(outMetadata, CNA_CNB_METADATA_STRUCT_VERSION)) {
+        return InvalidArgument("The metadata structure is not a known size and version.");
+    }
+    const Cnb::CnbMetadata& metadata = document->value->Metadata();
+    outMetadata->present = ToCBool(metadata.present);
+    outMetadata->reserved[0] = 0U;
+    outMetadata->reserved[1] = 0U;
+    outMetadata->reserved[2] = 0U;
+    outMetadata->flags = metadata.flags;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_get_external_reference(
+[[nodiscard]] CNA_Result CnbDocumentGetExternalReference(
     const CNA_CnbDocumentHandle documentHandle,
     const uint64_t index,
     const CNA_StringView whatForDiagnostics,
     CNA_CnbExternalReference* const outReference)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outReference == nullptr) {
-            return InvalidArgument("The external-reference output is null.");
-        }
-        if (outReference->struct_size <
-                static_cast<uint32_t>(sizeof(CNA_CnbExternalReference)) ||
-            outReference->struct_version != CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION) {
-            return InvalidArgument(
-                "The external-reference structure is not a known size and version.");
-        }
-        std::string what;
-        if (const CNA_Result result = ReadText(
-                whatForDiagnostics, "The what_for_diagnostics text is not valid UTF-8.", &what);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
-            return InvalidArgument("The external-reference index is outside the table.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ExternalReferences().size(),
-                "The external-reference index is outside the table.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbExternalReference& reference = document->value->ExternalReferenceAt(
-            static_cast<uint32_t>(index), what.c_str());
-        outReference->flags = reference.flags;
-        outReference->expected_asset_type_id = reference.expectedAssetTypeId;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (outReference->struct_size <
+            static_cast<uint32_t>(sizeof(CNA_CnbExternalReference)) ||
+        outReference->struct_version != CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION) {
+        return InvalidArgument(
+            "The external-reference structure is not a known size and version.");
+    }
+    std::string what;
+    if (const CNA_Result result = ReadText(
+            whatForDiagnostics, "The what_for_diagnostics text is not valid UTF-8.", &what);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+        return InvalidArgument("The external-reference index is outside the table.");
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, document->value->ExternalReferences().size(),
+            "The external-reference index is outside the table.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbExternalReference& reference = document->value->ExternalReferenceAt(
+        static_cast<uint32_t>(index), what.c_str());
+    outReference->flags = reference.flags;
+    outReference->expected_asset_type_id = reference.expectedAssetTypeId;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_document_get_limits(
+[[nodiscard]] CNA_Result CnbDocumentGetLimits(
     const CNA_CnbDocumentHandle documentHandle,
     CNA_CnbReadLimits* const outLimits)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outLimits == nullptr) {
-            return InvalidArgument("The read-limits output is null.");
-        }
-        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
-            return InvalidArgument("The read-limits structure is not a known size and version.");
-        }
-        WriteLimits(document->value->Limits(), outLimits);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
+        return InvalidArgument("The read-limits structure is not a known size and version.");
+    }
+    WriteLimits(document->value->Limits(), outLimits);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-107: the bounded reader ------------------------------------------------------------ */
 
-CNA_Result cna_cnb_reader_create(
+namespace {
+
+[[nodiscard]] CNA_Result CnbReaderCreate(
     const uint8_t* const data,
     const uint64_t byteCount,
     const CNA_StringView context,
     const CNA_CnbReadLimits* const limits,
     CNA_CnbReaderHandle* const outReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The CNB reader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(data, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string contextText;
-        if (const CNA_Result result =
-                ReadText(context, "The context text is not valid UTF-8.", &contextText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbReadLimits nativeLimits;
-        if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto resource = std::make_shared<CnbReaderResource>();
-        // The copy is the deviation this route documents: the canonical cursor never copies, and a
-        // C caller cannot be told to keep its buffer alive, so the ABI owns the bytes instead of
-        // leaving a lifetime rule it has no way to police.
-        resource->ownedBytes =
-            std::make_shared<std::vector<uint8_t>>(span.begin(), span.end());
-        resource->value = std::make_shared<Cnb::CnbByteReader>(
-            std::span<const uint8_t>(*resource->ownedBytes), std::move(contextText), nativeLimits);
-        return CreateHandle(ObjectKind::CnbReader, resource, outReader);
-    });
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(data, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string contextText;
+    if (const CNA_Result result =
+            ReadText(context, "The context text is not valid UTF-8.", &contextText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbReadLimits nativeLimits;
+    if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto resource = std::make_shared<CnbReaderResource>();
+    // The copy is the deviation this route documents: the canonical cursor never copies, and a
+    // C caller cannot be told to keep its buffer alive, so the ABI owns the bytes instead of
+    // leaving a lifetime rule it has no way to police.
+    resource->ownedBytes =
+        std::make_shared<std::vector<uint8_t>>(span.begin(), span.end());
+    resource->value = std::make_shared<Cnb::CnbByteReader>(
+        std::span<const uint8_t>(*resource->ownedBytes), std::move(contextText), nativeLimits);
+    return CreateHandle(ObjectKind::CnbReader, resource, outReader);
 }
 
-CNA_Result cna_cnb_reader_read_string(
+[[nodiscard]] CNA_Result CnbReaderReadString(
     const CNA_CnbReaderHandle readerHandle,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The string byte-count output is null.");
-        }
-        // Read first, store second: a throw leaves the previous string in place rather than
-        // clearing it, so a failed read cannot make an earlier successful one look like it never
-        // happened.
-        std::string value = reader->value->ReadString();
-        *outByteCount = static_cast<uint64_t>(value.size());
-        reader->lastString = std::move(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Read first, store second: a throw leaves the previous string in place rather than
+    // clearing it, so a failed read cannot make an earlier successful one look like it never
+    // happened.
+    std::string value = reader->value->ReadString();
+    *outByteCount = static_cast<uint64_t>(value.size());
+    reader->lastString = std::move(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_reader_read_bytes(
+[[nodiscard]] CNA_Result CnbReaderReadBytes(
     const CNA_CnbReaderHandle readerHandle,
     const uint64_t byteCount,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The byte output buffer is invalid.");
-        }
-        *outByteCount = byteCount;
-        // The size is the caller's own argument rather than something the file declares, so a
-        // capacity that cannot hold it is settled BEFORE the cursor advances: a refused call
-        // consumes nothing and can simply be repeated with a larger buffer.
-        if (capacity < byteCount) {
-            return BufferTooSmall(
-                "The destination capacity is smaller than the requested byte count.");
-        }
-        const std::span<const uint8_t> bytes = reader->value->ReadBytes(byteCount);
-        if (!bytes.empty()) {
-            std::memcpy(destination, bytes.data(), bytes.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The byte output buffer is invalid.");
+    }
+    *outByteCount = byteCount;
+    // The size is the caller's own argument rather than something the file declares, so a
+    // capacity that cannot hold it is settled BEFORE the cursor advances: a refused call
+    // consumes nothing and can simply be repeated with a larger buffer.
+    if (capacity < byteCount) {
+        return BufferTooSmall(
+            "The destination capacity is smaller than the requested byte count.");
+    }
+    const std::span<const uint8_t> bytes = reader->value->ReadBytes(byteCount);
+    if (!bytes.empty()) {
+        std::memcpy(destination, bytes.data(), bytes.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_reader_fail(
+[[nodiscard]] CNA_Result CnbReaderFail(
     const CNA_CnbReaderHandle readerHandle,
     const CNA_StringView detail)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string detailText;
-        if (const CNA_Result result =
-                ReadText(detail, "The detail text is not valid UTF-8.", &detailText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->Fail(detailText);
-    });
+    std::shared_ptr<CnbReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string detailText;
+    if (const CNA_Result result =
+            ReadText(detail, "The detail text is not valid UTF-8.", &detailText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    reader->value->Fail(detailText);
 }
 
-CNA_Result cna_cnb_is_well_formed_utf8(
+[[nodiscard]] CNA_Result CnbIsWellFormedUtf8(
     const CNA_StringView text,
     CNA_Bool* const outWellFormed)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outWellFormed == nullptr) {
-            return InvalidArgument("The UTF-8 validity output is null.");
-        }
-        // Deliberately not validated as UTF-8 by the ABI first: whether it is well-formed is the
-        // question being asked, so refusing malformed bytes here would answer nothing.
-        if (text.data == nullptr && text.byte_length != 0U) {
-            return InvalidArgument("The text is null with a non-zero length.");
-        }
-        const std::string_view view(
-            text.data == nullptr ? "" : text.data,
-            static_cast<std::size_t>(text.byte_length));
-        *outWellFormed = ToCBool(Cnb::CnbByteReader::IsWellFormedUtf8(view));
-        return CNA_RESULT_SUCCESS;
-    });
+    // Deliberately not validated as UTF-8 by the ABI first: whether it is well-formed is the
+    // question being asked, so refusing malformed bytes here would answer nothing.
+    if (text.data == nullptr && text.byte_length != 0U) {
+        return InvalidArgument("The text is null with a non-zero length.");
+    }
+    const std::string_view view(
+        text.data == nullptr ? "" : text.data,
+        static_cast<std::size_t>(text.byte_length));
+    *outWellFormed = ToCBool(Cnb::CnbByteReader::IsWellFormedUtf8(view));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-107: the primitive writer ---------------------------------------------------------- */
 
-CNA_Result cna_cnb_byte_writer_write_bytes(
+namespace {
+
+[[nodiscard]] CNA_Result CnbByteWriterWriteBytes(
     const CNA_CnbByteWriterHandle writerHandle,
     const uint8_t* const bytes,
     const uint64_t byteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->WriteBytes(span);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbByteWriterResource> writer;
+    if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    writer->value->WriteBytes(span);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_byte_writer_write_zeros(
+[[nodiscard]] CNA_Result CnbByteWriterWriteZeros(
     const CNA_CnbByteWriterHandle writerHandle,
     const uint64_t byteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (byteCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
-            return Overflow("The zero count does not fit in this host's size type.");
-        }
-        writer->value->WriteZeros(static_cast<std::size_t>(byteCount));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbByteWriterResource> writer;
+    if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (byteCount > static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        return Overflow("The zero count does not fit in this host's size type.");
+    }
+    writer->value->WriteZeros(static_cast<std::size_t>(byteCount));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_byte_writer_take(
+[[nodiscard]] CNA_Result CnbByteWriterTake(
     const CNA_CnbByteWriterHandle writerHandle,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The written-bytes output buffer is invalid.");
-        }
-        *outByteCount = static_cast<uint64_t>(writer->value->Size());
-        // Taking is destructive, so the capacity is settled first: a refused take leaves the bytes
-        // where they were and can simply be repeated with a larger buffer.
-        if (capacity < *outByteCount) {
-            return BufferTooSmall("The destination capacity is smaller than the written bytes.");
-        }
-        const std::vector<uint8_t> taken = writer->value->Take();
-        if (!taken.empty()) {
-            std::memcpy(destination, taken.data(), taken.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbByteWriterResource> writer;
+    if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The written-bytes output buffer is invalid.");
+    }
+    *outByteCount = static_cast<uint64_t>(writer->value->Size());
+    // Taking is destructive, so the capacity is settled first: a refused take leaves the bytes
+    // where they were and can simply be repeated with a larger buffer.
+    if (capacity < *outByteCount) {
+        return BufferTooSmall("The destination capacity is smaller than the written bytes.");
+    }
+    const std::vector<uint8_t> taken = writer->value->Take();
+    if (!taken.empty()) {
+        std::memcpy(destination, taken.data(), taken.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-107: the container writer ---------------------------------------------------------- */
 
-CNA_Result cna_cnb_writer_add_external_reference(
+namespace {
+
+[[nodiscard]] CNA_Result CnbWriterAddExternalReference(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbExternalReference* const reference,
     const CNA_StringView logicalName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (reference == nullptr) {
-            return InvalidArgument("The external-reference input is null.");
-        }
-        if (!IsVersionedStructure(reference, CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION)) {
-            return InvalidArgument(
-                "The external-reference structure is not a known size and version.");
-        }
-        std::string name;
-        if (const CNA_Result result =
-                ReadText(logicalName, "The logical_name text is not valid UTF-8.", &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbExternalReference native;
-        native.flags = reference->flags;
-        native.expectedAssetTypeId = reference->expected_asset_type_id;
-        native.logicalName = std::move(name);
-        writer->externalReferences.push_back(std::move(native));
-        // The canonical setter takes the whole table, so the accumulated one is handed over each
-        // time rather than kept only here: the writer's own state stays the single source of truth
-        // and a build sees exactly what was appended.
-        writer->value->SetExternalReferences(writer->externalReferences);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (reference == nullptr) {
+        return InvalidArgument("The external-reference input is null.");
+    }
+    if (!IsVersionedStructure(reference, CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION)) {
+        return InvalidArgument(
+            "The external-reference structure is not a known size and version.");
+    }
+    std::string name;
+    if (const CNA_Result result =
+            ReadText(logicalName, "The logical_name text is not valid UTF-8.", &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbExternalReference native;
+    native.flags = reference->flags;
+    native.expectedAssetTypeId = reference->expected_asset_type_id;
+    native.logicalName = std::move(name);
+    writer->externalReferences.push_back(std::move(native));
+    // The canonical setter takes the whole table, so the accumulated one is handed over each
+    // time rather than kept only here: the writer's own state stays the single source of truth
+    // and a build sees exactly what was appended.
+    writer->value->SetExternalReferences(writer->externalReferences);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_clear_external_references(const CNA_CnbWriterHandle writerHandle)
+[[nodiscard]] CNA_Result CnbWriterClearExternalReferences(const CNA_CnbWriterHandle writerHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->externalReferences.clear();
-        writer->value->SetExternalReferences({});
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    writer->externalReferences.clear();
+    writer->value->SetExternalReferences({});
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_add_chunk(
+[[nodiscard]] CNA_Result CnbWriterAddChunk(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbChunkId type,
     const uint8_t* const data,
@@ -1647,126 +1541,117 @@ CNA_Result cna_cnb_writer_add_chunk(
     const uint32_t flags,
     const uint32_t alignment)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(data, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->AddChunk(
-            Cnb::CnbChunkId{type},
-            std::vector<uint8_t>(span.begin(), span.end()),
-            flags,
-            alignment);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(data, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    writer->value->AddChunk(
+        Cnb::CnbChunkId{type},
+        std::vector<uint8_t>(span.begin(), span.end()),
+        flags,
+        alignment);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_set_compression(
+[[nodiscard]] CNA_Result CnbWriterSetCompression(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbCompression codec,
     const int32_t level)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbCompression nativeCodec = ToCodec(codec);
-        // The canonical setter throws std::invalid_argument, which the firewall would report as a
-        // bad argument. "This build does not implement that codec" is not a bad argument -- the
-        // caller retries with another codec rather than correcting this one -- so it is decided
-        // here, exactly as the compression routes decide it.
-        if (nativeCodec != Cnb::CnbCompression::None &&
-            !Cnb::IsCnbCompressionSupported(nativeCodec)) {
-            return NotSupported(
-                "The CNB writer was asked for codec " + Cnb::CnbCompressionToString(nativeCodec) +
-                ", which this build does not implement.");
-        }
-        writer->value->SetCompression(nativeCodec, static_cast<int>(level));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbCompression nativeCodec = ToCodec(codec);
+    // The canonical setter throws std::invalid_argument, which the firewall would report as a
+    // bad argument. "This build does not implement that codec" is not a bad argument -- the
+    // caller retries with another codec rather than correcting this one -- so it is decided
+    // here, exactly as the compression routes decide it.
+    if (nativeCodec != Cnb::CnbCompression::None &&
+        !Cnb::IsCnbCompressionSupported(nativeCodec)) {
+        return NotSupported(
+            "The CNB writer was asked for codec " + Cnb::CnbCompressionToString(nativeCodec) +
+            ", which this build does not implement.");
+    }
+    writer->value->SetCompression(nativeCodec, static_cast<int>(level));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_set_limits(
+[[nodiscard]] CNA_Result CnbWriterSetLimits(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_CnbReadLimits* const limits)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (limits == nullptr) {
-            return InvalidArgument("The read-limits input is null.");
-        }
-        Cnb::CnbReadLimits nativeLimits;
-        if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->SetLimits(nativeLimits);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (limits == nullptr) {
+        return InvalidArgument("The read-limits input is null.");
+    }
+    Cnb::CnbReadLimits nativeLimits;
+    if (const CNA_Result result = ResolveLimits(limits, &nativeLimits);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    writer->value->SetLimits(nativeLimits);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_get_limits(
+[[nodiscard]] CNA_Result CnbWriterGetLimits(
     const CNA_CnbWriterHandle writerHandle,
     CNA_CnbReadLimits* const outLimits)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outLimits == nullptr) {
-            return InvalidArgument("The read-limits output is null.");
-        }
-        if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
-            return InvalidArgument("The read-limits structure is not a known size and version.");
-        }
-        WriteLimits(writer->value->Limits(), outLimits);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsVersionedStructure(outLimits, CNA_CNB_READ_LIMITS_STRUCT_VERSION)) {
+        return InvalidArgument("The read-limits structure is not a known size and version.");
+    }
+    WriteLimits(writer->value->Limits(), outLimits);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_writer_write_to_file(
+[[nodiscard]] CNA_Result CnbWriterWriteToFile(
     const CNA_CnbWriterHandle writerHandle,
     const CNA_StringView path)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string pathText;
-        if (const CNA_Result result =
-                ReadText(path, "The path text is not valid UTF-8.", &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (pathText.empty()) {
-            return InvalidArgument("The CNB file path must not be empty.");
-        }
-        writer->value->WriteToFile(pathText);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbWriterResource> writer;
+    if (const CNA_Result result = GetWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string pathText;
+    if (const CNA_Result result =
+            ReadText(path, "The path text is not valid UTF-8.", &pathText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (pathText.empty()) {
+        return InvalidArgument("The CNB file path must not be empty.");
+    }
+    writer->value->WriteToFile(pathText);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-108: texture pixel formats ---------------------------------------------------------- */
 
 /* --- CBIND-108: the texture schemas ------------------------------------------------------------ */
 
-CNA_Result cna_cnb_texture_data_create(
+namespace {
+
+[[nodiscard]] CNA_Result CnbTextureDataCreate(
     const uint32_t width,
     const uint32_t height,
     const uint32_t depth,
@@ -1774,164 +1659,135 @@ CNA_Result cna_cnb_texture_data_create(
     const uint32_t mipCount,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        // The shape is checked by the encoder, which owns the rule and states it once. What is
-        // refused here is only what would make the description unusable before it ever gets there:
-        // a zero count leaves a representation with no levels to fill.
-        if (faceCount == 0U || mipCount == 0U) {
-            return InvalidArgument("A CNB texture needs at least one face and one mip level.");
-        }
-        Cnb::CnbTextureData data;
-        data.width = width;
-        data.height = height;
-        data.depth = depth;
-        data.faceCount = faceCount;
-        data.mipCount = mipCount;
-        return CreateTextureData(std::move(data), outTexture);
-    });
+    // The shape is checked by the encoder, which owns the rule and states it once. What is
+    // refused here is only what would make the description unusable before it ever gets there:
+    // a zero count leaves a representation with no levels to fill.
+    if (faceCount == 0U || mipCount == 0U) {
+        return InvalidArgument("A CNB texture needs at least one face and one mip level.");
+    }
+    Cnb::CnbTextureData data;
+    data.width = width;
+    data.height = height;
+    data.depth = depth;
+    data.faceCount = faceCount;
+    data.mipCount = mipCount;
+    return CreateTextureData(std::move(data), outTexture);
 }
 
-CNA_Result cna_cnb_texture_data_create_rgba8(
+[[nodiscard]] CNA_Result CnbTextureDataCreateRgba8(
     const uint32_t width,
     const uint32_t height,
     const uint8_t* const rgba,
     const uint64_t byteCount,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(rgba, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTextureData(
-            Cnb::MakeRgba8Texture2DData(
-                width, height, std::vector<uint8_t>(span.begin(), span.end())),
-            outTexture);
-    });
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(rgba, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTextureData(
+        Cnb::MakeRgba8Texture2DData(
+            width, height, std::vector<uint8_t>(span.begin(), span.end())),
+        outTexture);
 }
 
-CNA_Result cna_cnb_texture_data_get_info(
+[[nodiscard]] CNA_Result CnbTextureDataGetInfo(
     const CNA_CnbTextureDataHandle textureHandle,
     CNA_CnbTextureInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outInfo == nullptr) {
-            return InvalidArgument("The texture-info output is null.");
-        }
-        if (!IsVersionedStructure(outInfo, CNA_CNB_TEXTURE_INFO_STRUCT_VERSION)) {
-            return InvalidArgument("The texture-info structure is not a known size and version.");
-        }
-        const Cnb::CnbTextureData& data = *texture->value;
-        outInfo->width = data.width;
-        outInfo->height = data.height;
-        outInfo->depth = data.depth;
-        outInfo->face_count = data.faceCount;
-        outInfo->mip_count = data.mipCount;
-        outInfo->representation_count = static_cast<uint32_t>(data.representations.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!IsVersionedStructure(outInfo, CNA_CNB_TEXTURE_INFO_STRUCT_VERSION)) {
+        return InvalidArgument("The texture-info structure is not a known size and version.");
+    }
+    const Cnb::CnbTextureData& data = *texture->value;
+    outInfo->width = data.width;
+    outInfo->height = data.height;
+    outInfo->depth = data.depth;
+    outInfo->face_count = data.faceCount;
+    outInfo->mip_count = data.mipCount;
+    outInfo->representation_count = static_cast<uint32_t>(data.representations.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_texture_data_get_level_dimensions(
+[[nodiscard]] CNA_Result CnbTextureDataGetLevelDimensions(
     const CNA_CnbTextureDataHandle textureHandle,
     const uint32_t level,
     uint32_t* const outWidth,
     uint32_t* const outHeight,
     uint32_t* const outDepth)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outWidth == nullptr || outHeight == nullptr || outDepth == nullptr) {
-            return InvalidArgument("A level-dimension output is null.");
-        }
-        Cnb::CnbTextureLevelDimensions(*texture->value, level, *outWidth, *outHeight, *outDepth);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbTextureLevelDimensions(*texture->value, level, *outWidth, *outHeight, *outDepth);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_texture_data_add_representation(
+[[nodiscard]] CNA_Result CnbTextureDataAddRepresentation(
     const CNA_CnbTextureDataHandle textureHandle,
     const CNA_CnbTextureFormat format,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outIndex == nullptr) {
-            return InvalidArgument("The representation-index output is null.");
-        }
-        Cnb::CnbTextureData& data = *texture->value;
-        Cnb::CnbTextureRepresentation representation;
-        representation.format = ToTextureFormat(format);
-        // Sized for the shape the description already declares, so a caller fills levels by index
-        // rather than pushing them in an order the format would then have to trust.
-        representation.levels.resize(
-            static_cast<std::size_t>(data.faceCount) * static_cast<std::size_t>(data.mipCount));
-        data.representations.push_back(std::move(representation));
-        *outIndex = static_cast<uint64_t>(data.representations.size() - 1U);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbTextureData& data = *texture->value;
+    Cnb::CnbTextureRepresentation representation;
+    representation.format = ToTextureFormat(format);
+    // Sized for the shape the description already declares, so a caller fills levels by index
+    // rather than pushing them in an order the format would then have to trust.
+    representation.levels.resize(
+        static_cast<std::size_t>(data.faceCount) * static_cast<std::size_t>(data.mipCount));
+    data.representations.push_back(std::move(representation));
+    *outIndex = static_cast<uint64_t>(data.representations.size() - 1U);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_texture_data_set_level(
+[[nodiscard]] CNA_Result CnbTextureDataSetLevel(
     const CNA_CnbTextureDataHandle textureHandle,
     const uint64_t representation,
     const uint64_t level,
     const uint8_t* const bytes,
     const uint64_t byteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> span;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                representation, texture->value->representations.size(),
-                "The representation index is outside this texture's list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto& levels =
-            texture->value->representations[static_cast<std::size_t>(representation)].levels;
-        if (const CNA_Result result = RequireIndex(
-                level, levels.size(),
-                "The level index is outside this representation's levels.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        levels[static_cast<std::size_t>(level)].assign(span.begin(), span.end());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> span;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            representation, texture->value->representations.size(),
+            "The representation index is outside this texture's list.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto& levels =
+        texture->value->representations[static_cast<std::size_t>(representation)].levels;
+    if (const CNA_Result result = RequireIndex(
+            level, levels.size(),
+            "The level index is outside this representation's levels.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    levels[static_cast<std::size_t>(level)].assign(span.begin(), span.end());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_texture_data_copy_level(
+[[nodiscard]] CNA_Result CnbTextureDataCopyLevel(
     const CNA_CnbTextureDataHandle textureHandle,
     const uint64_t representation,
     const uint64_t level,
@@ -1939,68 +1795,62 @@ CNA_Result cna_cnb_texture_data_copy_level(
     const uint64_t capacity,
     uint64_t* const outByteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The level output buffer is invalid.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                representation, texture->value->representations.size(),
-                "The representation index is outside this texture's list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& levels =
-            texture->value->representations[static_cast<std::size_t>(representation)].levels;
-        if (const CNA_Result result = RequireIndex(
-                level, levels.size(),
-                "The level index is outside this representation's levels.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyBytes(
-            levels[static_cast<std::size_t>(level)], destination, capacity, outByteCount);
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The level output buffer is invalid.");
+    }
+    if (const CNA_Result result = RequireIndex(
+            representation, texture->value->representations.size(),
+            "The representation index is outside this texture's list.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& levels =
+        texture->value->representations[static_cast<std::size_t>(representation)].levels;
+    if (const CNA_Result result = RequireIndex(
+            level, levels.size(),
+            "The level index is outside this representation's levels.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyBytes(
+        levels[static_cast<std::size_t>(level)], destination, capacity, outByteCount);
 }
 
-CNA_Result cna_cnb_texture_data_select_representation(
+[[nodiscard]] CNA_Result CnbTextureDataSelectRepresentation(
     const CNA_CnbTextureDataHandle textureHandle,
     const CNA_CnbTextureFormatSupportedFn supported,
     void* const context,
     CNA_Bool* const outFound,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (supported == nullptr || outFound == nullptr || outIndex == nullptr) {
-            return InvalidArgument("The representation-selection callback or output is null.");
-        }
-        const Cnb::CnbTextureData& data = *texture->value;
-        const std::size_t chosen = Cnb::SelectCnbTextureRepresentation(
-            data,
-            [&](const Cnb::CnbTextureFormat format) {
-                return supported(static_cast<CNA_CnbTextureFormat>(format), context) == CNA_TRUE;
-            });
-        // The canonical function reports "none" by returning the list size. In C that would be a
-        // sentinel a caller has to know to compare against, so it becomes the availability pair
-        // every optional query in this ABI uses.
-        *outFound = ToCBool(chosen < data.representations.size());
-        if (*outFound == CNA_TRUE) {
-            *outIndex = static_cast<uint64_t>(chosen);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (supported == nullptr) {
+        return InvalidArgument("The representation-selection callback or output is null.");
+    }
+    const Cnb::CnbTextureData& data = *texture->value;
+    const std::size_t chosen = Cnb::SelectCnbTextureRepresentation(
+        data,
+        [&](const Cnb::CnbTextureFormat format) {
+            return supported(static_cast<CNA_CnbTextureFormat>(format), context) == CNA_TRUE;
+        });
+    // The canonical function reports "none" by returning the list size. In C that would be a
+    // sentinel a caller has to know to compare against, so it becomes the availability pair
+    // every optional query in this ABI uses.
+    *outFound = ToCBool(chosen < data.representations.size());
+    if (*outFound == CNA_TRUE) {
+        *outIndex = static_cast<uint64_t>(chosen);
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 using TextureEncoder =
     std::vector<uint8_t> (*)(const Cnb::CnbTextureData&, const std::string&);
@@ -2050,424 +1900,382 @@ using TextureDecoder = Cnb::CnbTextureData (*)(const Cnb::CnbDocument&);
     return CreateTextureData(decoder(*document->value), outTexture);
 }
 
-} // namespace
-
-CNA_Result cna_cnb_document_read_embedded_texture2d(
+[[nodiscard]] CNA_Result CnbDocumentReadEmbeddedTexture2d(
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_StringView label,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string labelText;
-        if (const CNA_Result result =
-                ReadText(label, "The label text is not valid UTF-8.", &labelText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTextureData(
-            Cnb::ReadEmbeddedTexture2DChunks(*document->value, labelText.c_str()), outTexture);
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string labelText;
+    if (const CNA_Result result =
+            ReadText(label, "The label text is not valid UTF-8.", &labelText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTextureData(
+        Cnb::ReadEmbeddedTexture2DChunks(*document->value, labelText.c_str()), outTexture);
 }
+
+} // namespace
 
 /* --- CBIND-109: the model schema ---------------------------------------------------------------- */
 
-CNA_Result cna_cnb_model_get_info(
+namespace {
+
+[[nodiscard]] CNA_Result CnbModelGetInfo(
     const CNA_CnbModelDataHandle modelHandle,
     CNA_CnbModelInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MODEL_INFO_STRUCT_VERSION,
-                "The model-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbModelData& data = *model->value;
-        outInfo->bone_count = static_cast<uint64_t>(data.bones.size());
-        outInfo->part_count = static_cast<uint64_t>(data.parts.size());
-        outInfo->mesh_count = static_cast<uint64_t>(data.meshes.size());
-        outInfo->animation_count = static_cast<uint64_t>(data.animations.size());
-        outInfo->light_count = static_cast<uint64_t>(data.lights.size());
-        outInfo->has_skeleton = ToCBool(data.skeleton.has_value());
-        outInfo->applies_gltf_lighting_policy =
-            ToCBool(data.appliesGltfLightingPolicy);
-        outInfo->has_bone_hierarchy = ToCBool(data.hasBoneHierarchy);
-        outInfo->reserved = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MODEL_INFO_STRUCT_VERSION,
+            "The model-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelData& data = *model->value;
+    outInfo->bone_count = static_cast<uint64_t>(data.bones.size());
+    outInfo->part_count = static_cast<uint64_t>(data.parts.size());
+    outInfo->mesh_count = static_cast<uint64_t>(data.meshes.size());
+    outInfo->animation_count = static_cast<uint64_t>(data.animations.size());
+    outInfo->light_count = static_cast<uint64_t>(data.lights.size());
+    outInfo->has_skeleton = ToCBool(data.skeleton.has_value());
+    outInfo->applies_gltf_lighting_policy =
+        ToCBool(data.appliesGltfLightingPolicy);
+    outInfo->has_bone_hierarchy = ToCBool(data.hasBoneHierarchy);
+    outInfo->reserved = 0U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_flags(
+[[nodiscard]] CNA_Result CnbModelSetFlags(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_Bool appliesGltfLightingPolicy,
     const CNA_Bool hasBoneHierarchy)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        // CBIND-067's discipline: a non-canonical CNA_Bool is refused **before** the handle is
-        // resolved, so the answer is the same whatever handle came with it. Validating it after
-        // the lookup is what CApiBoolContractSmoke catches -- with an invalid handle the route
-        // answers a handle error, which reads as "accepted the byte".
-        if (const CNA_Result result = ValidateCanonicalBool(
-                appliesGltfLightingPolicy, "applies_gltf_lighting_policy");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateCanonicalBool(hasBoneHierarchy, "has_bone_hierarchy");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->appliesGltfLightingPolicy = appliesGltfLightingPolicy != CNA_FALSE;
-        model->value->hasBoneHierarchy = hasBoneHierarchy != CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    model->value->appliesGltfLightingPolicy = appliesGltfLightingPolicy != CNA_FALSE;
+    model->value->hasBoneHierarchy = hasBoneHierarchy != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_bone(
+[[nodiscard]] CNA_Result CnbModelAddBone(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_StringView name,
     const int32_t parent,
     const float* const transform,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (transform == nullptr) {
-            return InvalidArgument("The bone transform is null.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(name, "The name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelBone bone;
-        bone.name = std::move(nameText);
-        bone.parent = parent;
-        std::memcpy(bone.transform.data(), transform, bone.transform.size() * sizeof(float));
-        model->value->bones.push_back(std::move(bone));
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(model->value->bones.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (transform == nullptr) {
+        return InvalidArgument("The bone transform is null.");
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(name, "The name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelBone bone;
+    bone.name = std::move(nameText);
+    bone.parent = parent;
+    std::memcpy(bone.transform.data(), transform, bone.transform.size() * sizeof(float));
+    model->value->bones.push_back(std::move(bone));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->bones.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_bone(
+[[nodiscard]] CNA_Result CnbModelGetBone(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     CNA_CnbModelBone* const outBone)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outBone, CNA_CNB_MODEL_BONE_STRUCT_VERSION,
-                "The model-bone structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->bones.size(), "The bone index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbModelBone& bone = model->value->bones[static_cast<std::size_t>(index)];
-        outBone->parent = bone.parent;
-        outBone->reserved = 0U;
-        std::memcpy(outBone->transform, bone.transform.data(), bone.transform.size() * sizeof(float));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outBone, CNA_CNB_MODEL_BONE_STRUCT_VERSION,
+            "The model-bone structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            RequireIndex(index, model->value->bones.size(), "The bone index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelBone& bone = model->value->bones[static_cast<std::size_t>(index)];
+    outBone->parent = bone.parent;
+    outBone->reserved = 0U;
+    std::memcpy(outBone->transform, bone.transform.data(), bone.transform.size() * sizeof(float));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_part(
+[[nodiscard]] CNA_Result CnbModelAddPart(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_CnbModelPartInfo* const info,
     const CNA_StringView name,
     const CNA_StringView externalEffect,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
-                "The model-part structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(name, "The name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string effectText;
-        if (const CNA_Result result = ReadText(
-                externalEffect, "The external_effect text is not valid UTF-8.", &effectText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart part;
-        if (const CNA_Result result = ApplyPartInfo(*info, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part.name = std::move(nameText);
-        part.externalEffect = std::move(effectText);
-        model->value->parts.push_back(std::move(part));
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(model->value->parts.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
+            "The model-part structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(name, "The name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string effectText;
+    if (const CNA_Result result = ReadText(
+            externalEffect, "The external_effect text is not valid UTF-8.", &effectText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart part;
+    if (const CNA_Result result = ApplyPartInfo(*info, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part.name = std::move(nameText);
+    part.externalEffect = std::move(effectText);
+    model->value->parts.push_back(std::move(part));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->parts.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_part(
+[[nodiscard]] CNA_Result CnbModelGetPart(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     CNA_CnbModelPartInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
-                "The model-part structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ReadPartInfo(*part, outInfo);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
+            "The model-part structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* part = nullptr;
+    if (const CNA_Result result = GetPart(model, index, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ReadPartInfo(*part, outInfo);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_part(
+[[nodiscard]] CNA_Result CnbModelSetPart(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     const CNA_CnbModelPartInfo* const info)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
-                "The model-part structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ApplyPartInfo(*info, part);
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION,
+            "The model-part structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* part = nullptr;
+    if (const CNA_Result result = GetPart(model, index, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ApplyPartInfo(*info, part);
 }
 
-CNA_Result cna_cnb_model_set_part_vertex_bytes(
+[[nodiscard]] CNA_Result CnbModelSetPartVertexBytes(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     const uint8_t* const bytes,
     const uint64_t byteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> source;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->vertexBytes.assign(source.begin(), source.end());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* part = nullptr;
+    if (const CNA_Result result = GetPart(model, index, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> source;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->vertexBytes.assign(source.begin(), source.end());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_part_index_bytes(
+[[nodiscard]] CNA_Result CnbModelSetPartIndexBytes(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     const uint8_t* const bytes,
     const uint64_t byteCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* part = nullptr;
-        if (const CNA_Result result = GetPart(model, index, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> source;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        part->indexBytes.assign(source.begin(), source.end());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* part = nullptr;
+    if (const CNA_Result result = GetPart(model, index, &part);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> source;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    part->indexBytes.assign(source.begin(), source.end());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_material(
+[[nodiscard]] CNA_Result CnbModelGetMaterial(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     CNA_CnbMaterialInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MATERIAL_INFO_STRUCT_VERSION,
-                "The material structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbMaterial& material = target->material;
-        std::memcpy(outInfo->base_color_factor, material.baseColorFactor.data(), 4U * sizeof(float));
-        std::memcpy(outInfo->emissive_factor, material.emissiveFactor.data(), 3U * sizeof(float));
-        std::memcpy(
-            outInfo->specular_color_factor, material.specularColorFactor.data(), 3U * sizeof(float));
-        outInfo->metallic_factor = material.metallicFactor;
-        outInfo->roughness_factor = material.roughnessFactor;
-        outInfo->ior = material.ior;
-        outInfo->specular_factor = material.specularFactor;
-        outInfo->normal_scale = material.normalScale;
-        outInfo->occlusion_strength = material.occlusionStrength;
-        outInfo->alpha_cutoff = material.alphaCutoff;
-        outInfo->alpha_mode = material.alphaMode;
-        outInfo->double_sided = ToCBool(material.doubleSided);
-        outInfo->reserved[0] = 0U;
-        outInfo->reserved[1] = 0U;
-        outInfo->reserved[2] = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MATERIAL_INFO_STRUCT_VERSION,
+            "The material structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbMaterial& material = target->material;
+    std::memcpy(outInfo->base_color_factor, material.baseColorFactor.data(), 4U * sizeof(float));
+    std::memcpy(outInfo->emissive_factor, material.emissiveFactor.data(), 3U * sizeof(float));
+    std::memcpy(
+        outInfo->specular_color_factor, material.specularColorFactor.data(), 3U * sizeof(float));
+    outInfo->metallic_factor = material.metallicFactor;
+    outInfo->roughness_factor = material.roughnessFactor;
+    outInfo->ior = material.ior;
+    outInfo->specular_factor = material.specularFactor;
+    outInfo->normal_scale = material.normalScale;
+    outInfo->occlusion_strength = material.occlusionStrength;
+    outInfo->alpha_cutoff = material.alphaCutoff;
+    outInfo->alpha_mode = material.alphaMode;
+    outInfo->double_sided = ToCBool(material.doubleSided);
+    outInfo->reserved[0] = 0U;
+    outInfo->reserved[1] = 0U;
+    outInfo->reserved[2] = 0U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_material(
+[[nodiscard]] CNA_Result CnbModelSetMaterial(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const CNA_CnbMaterialInfo* const info)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_MATERIAL_INFO_STRUCT_VERSION,
-                "The material structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMaterial& material = target->material;
-        std::memcpy(material.baseColorFactor.data(), info->base_color_factor, 4U * sizeof(float));
-        std::memcpy(material.emissiveFactor.data(), info->emissive_factor, 3U * sizeof(float));
-        std::memcpy(
-            material.specularColorFactor.data(), info->specular_color_factor, 3U * sizeof(float));
-        material.metallicFactor = info->metallic_factor;
-        material.roughnessFactor = info->roughness_factor;
-        material.ior = info->ior;
-        material.specularFactor = info->specular_factor;
-        material.normalScale = info->normal_scale;
-        material.occlusionStrength = info->occlusion_strength;
-        material.alphaCutoff = info->alpha_cutoff;
-        material.alphaMode = info->alpha_mode;
-        material.doubleSided = info->double_sided != CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_MATERIAL_INFO_STRUCT_VERSION,
+            "The material structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMaterial& material = target->material;
+    std::memcpy(material.baseColorFactor.data(), info->base_color_factor, 4U * sizeof(float));
+    std::memcpy(material.emissiveFactor.data(), info->emissive_factor, 3U * sizeof(float));
+    std::memcpy(
+        material.specularColorFactor.data(), info->specular_color_factor, 3U * sizeof(float));
+    material.metallicFactor = info->metallic_factor;
+    material.roughnessFactor = info->roughness_factor;
+    material.ior = info->ior;
+    material.specularFactor = info->specular_factor;
+    material.normalScale = info->normal_scale;
+    material.occlusionStrength = info->occlusion_strength;
+    material.alphaCutoff = info->alpha_cutoff;
+    material.alphaMode = info->alpha_mode;
+    material.doubleSided = info->double_sided != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_material_texture_size(
+[[nodiscard]] CNA_Result CnbModelGetMaterialTextureSize(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const CNA_CnbMaterialTextureSlot slot,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::string* const name = MaterialTextureSlot(target->material, slot);
-        if (name == nullptr) {
-            return InvalidArgument("The material texture slot is not a named slot.");
-        }
-        return ReportTextSize(*name, outBytes);
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::string* const name = MaterialTextureSlot(target->material, slot);
+    if (name == nullptr) {
+        return InvalidArgument("The material texture slot is not a named slot.");
+    }
+    return ReportTextSize(*name, outBytes);
 }
 
-CNA_Result cna_cnb_model_copy_material_texture(
+[[nodiscard]] CNA_Result CnbModelCopyMaterialTexture(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const CNA_CnbMaterialTextureSlot slot,
@@ -2475,316 +2283,287 @@ CNA_Result cna_cnb_model_copy_material_texture(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::string* const name = MaterialTextureSlot(target->material, slot);
-        if (name == nullptr) {
-            return InvalidArgument("The material texture slot is not a named slot.");
-        }
-        return CopyText(*name, destination, capacity, outBytes);
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::string* const name = MaterialTextureSlot(target->material, slot);
+    if (name == nullptr) {
+        return InvalidArgument("The material texture slot is not a named slot.");
+    }
+    return CopyText(*name, destination, capacity, outBytes);
 }
 
-CNA_Result cna_cnb_model_set_material_texture(
+[[nodiscard]] CNA_Result CnbModelSetMaterialTexture(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const CNA_CnbMaterialTextureSlot slot,
     const CNA_StringView assetName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string* const name = MaterialTextureSlot(target->material, slot);
-        if (name == nullptr) {
-            return InvalidArgument("The material texture slot is not a named slot.");
-        }
-        std::string assetText;
-        if (const CNA_Result result =
-                ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *name = std::move(assetText);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string* const name = MaterialTextureSlot(target->material, slot);
+    if (name == nullptr) {
+        return InvalidArgument("The material texture slot is not a named slot.");
+    }
+    std::string assetText;
+    if (const CNA_Result result =
+            ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *name = std::move(assetText);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_material_texture_transform(
+[[nodiscard]] CNA_Result CnbModelGetMaterialTextureTransform(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t slot,
     CNA_CnbTextureTransform* const outTransform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outTransform == nullptr) {
-            return InvalidArgument("The texture-transform output is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbTextureTransform& transform =
-            target->material.textureTransforms[static_cast<std::size_t>(slot)];
-        outTransform->offset_x = transform.offsetX;
-        outTransform->offset_y = transform.offsetY;
-        outTransform->scale_x = transform.scaleX;
-        outTransform->scale_y = transform.scaleY;
-        outTransform->rotation = transform.rotation;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireTextureSlot(slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbTextureTransform& transform =
+        target->material.textureTransforms[static_cast<std::size_t>(slot)];
+    outTransform->offset_x = transform.offsetX;
+    outTransform->offset_y = transform.offsetY;
+    outTransform->scale_x = transform.scaleX;
+    outTransform->scale_y = transform.scaleY;
+    outTransform->rotation = transform.rotation;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_material_texture_transform(
+[[nodiscard]] CNA_Result CnbModelSetMaterialTextureTransform(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t slot,
     const CNA_CnbTextureTransform* const transform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (transform == nullptr) {
-            return InvalidArgument("The texture transform is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbTextureTransform& stored =
-            target->material.textureTransforms[static_cast<std::size_t>(slot)];
-        stored.offsetX = transform->offset_x;
-        stored.offsetY = transform->offset_y;
-        stored.scaleX = transform->scale_x;
-        stored.scaleY = transform->scale_y;
-        stored.rotation = transform->rotation;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (transform == nullptr) {
+        return InvalidArgument("The texture transform is null.");
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireTextureSlot(slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbTextureTransform& stored =
+        target->material.textureTransforms[static_cast<std::size_t>(slot)];
+    stored.offsetX = transform->offset_x;
+    stored.offsetY = transform->offset_y;
+    stored.scaleX = transform->scale_x;
+    stored.scaleY = transform->scale_y;
+    stored.rotation = transform->rotation;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_material_sampler(
+[[nodiscard]] CNA_Result CnbModelGetMaterialSampler(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t slot,
     CNA_CnbSamplerState* const outSampler)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSampler == nullptr) {
-            return InvalidArgument("The sampler output is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbSamplerState& sampler =
-            target->material.samplers[static_cast<std::size_t>(slot)];
-        outSampler->filter = sampler.filter;
-        outSampler->address_u = sampler.addressU;
-        outSampler->address_v = sampler.addressV;
-        outSampler->declared = ToCBool(sampler.declared);
-        outSampler->reserved[0] = 0U;
-        outSampler->reserved[1] = 0U;
-        outSampler->reserved[2] = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireTextureSlot(slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbSamplerState& sampler =
+        target->material.samplers[static_cast<std::size_t>(slot)];
+    outSampler->filter = sampler.filter;
+    outSampler->address_u = sampler.addressU;
+    outSampler->address_v = sampler.addressV;
+    outSampler->declared = ToCBool(sampler.declared);
+    outSampler->reserved[0] = 0U;
+    outSampler->reserved[1] = 0U;
+    outSampler->reserved[2] = 0U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_material_sampler(
+[[nodiscard]] CNA_Result CnbModelSetMaterialSampler(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t slot,
     const CNA_CnbSamplerState* const sampler)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (sampler == nullptr) {
-            return InvalidArgument("The sampler state is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireTextureSlot(slot);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbSamplerState& stored = target->material.samplers[static_cast<std::size_t>(slot)];
-        stored.filter = sampler->filter;
-        stored.addressU = sampler->address_u;
-        stored.addressV = sampler->address_v;
-        stored.declared = sampler->declared != CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (sampler == nullptr) {
+        return InvalidArgument("The sampler state is null.");
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireTextureSlot(slot);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbSamplerState& stored = target->material.samplers[static_cast<std::size_t>(slot)];
+    stored.filter = sampler->filter;
+    stored.addressU = sampler->address_u;
+    stored.addressV = sampler->address_v;
+    stored.declared = sampler->declared != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_has_morph(
+[[nodiscard]] CNA_Result CnbModelHasMorph(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     CNA_Bool* const outPresent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outPresent == nullptr) {
-            return InvalidArgument("The morph-presence output is null.");
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPresent = ToCBool(target->morph.has_value());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outPresent = ToCBool(target->morph.has_value());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_morph(
+[[nodiscard]] CNA_Result CnbModelGetMorph(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     CNA_CnbMorphInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MORPH_INFO_STRUCT_VERSION,
-                "The morph structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        outInfo->vertex_count = morph->vertexCount;
-        outInfo->reserved = 0U;
-        outInfo->target_count = static_cast<uint64_t>(morph->targets.size());
-        outInfo->weight_count = static_cast<uint64_t>(morph->weights.size());
-        outInfo->weight_track_key_count = static_cast<uint64_t>(morph->weightTrackKeys.size());
-        outInfo->recompute_flat_normals = ToCBool(morph->recomputeFlatNormals);
-        outInfo->weight_track_step_interpolation =
-            ToCBool(morph->weightTrackStepInterpolation);
-        outInfo->weight_track_cubic_spline = ToCBool(morph->weightTrackCubicSpline);
-        std::memset(outInfo->reserved2, 0, sizeof(outInfo->reserved2));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MORPH_INFO_STRUCT_VERSION,
+            "The morph structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outInfo->vertex_count = morph->vertexCount;
+    outInfo->reserved = 0U;
+    outInfo->target_count = static_cast<uint64_t>(morph->targets.size());
+    outInfo->weight_count = static_cast<uint64_t>(morph->weights.size());
+    outInfo->weight_track_key_count = static_cast<uint64_t>(morph->weightTrackKeys.size());
+    outInfo->recompute_flat_normals = ToCBool(morph->recomputeFlatNormals);
+    outInfo->weight_track_step_interpolation =
+        ToCBool(morph->weightTrackStepInterpolation);
+    outInfo->weight_track_cubic_spline = ToCBool(morph->weightTrackCubicSpline);
+    std::memset(outInfo->reserved2, 0, sizeof(outInfo->reserved2));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_morph(
+[[nodiscard]] CNA_Result CnbModelSetMorph(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const CNA_CnbMorphInfo* const info)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_MORPH_INFO_STRUCT_VERSION,
-                "The morph structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelPart* target = nullptr;
-        if (const CNA_Result result = GetPart(model, part, &target);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!target->morph.has_value()) {
-            target->morph.emplace();
-        }
-        Cnb::CnbMorphData& morph = target->morph.value();
-        morph.vertexCount = info->vertex_count;
-        morph.recomputeFlatNormals = info->recompute_flat_normals != CNA_FALSE;
-        morph.weightTrackStepInterpolation = info->weight_track_step_interpolation != CNA_FALSE;
-        morph.weightTrackCubicSpline = info->weight_track_cubic_spline != CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_MORPH_INFO_STRUCT_VERSION,
+            "The morph structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelPart* target = nullptr;
+    if (const CNA_Result result = GetPart(model, part, &target);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!target->morph.has_value()) {
+        target->morph.emplace();
+    }
+    Cnb::CnbMorphData& morph = target->morph.value();
+    morph.vertexCount = info->vertex_count;
+    morph.recomputeFlatNormals = info->recompute_flat_normals != CNA_FALSE;
+    morph.weightTrackStepInterpolation = info->weight_track_step_interpolation != CNA_FALSE;
+    morph.weightTrackCubicSpline = info->weight_track_cubic_spline != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_morph_target(
+[[nodiscard]] CNA_Result CnbModelAddMorphTarget(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        morph->targets.emplace_back();
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(morph->targets.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    morph->targets.emplace_back();
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(morph->targets.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_morph_target_deltas(
+[[nodiscard]] CNA_Result CnbModelSetMorphTargetDeltas(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t target,
@@ -2792,38 +2571,36 @@ CNA_Result cna_cnb_model_set_morph_target_deltas(
     const float* const values,
     const uint64_t valueCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                target, morph->targets.size(), "The morph target index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::vector<float>* const destination =
-            MorphDeltaStream(morph->targets[static_cast<std::size_t>(target)], stream);
-        if (destination == nullptr) {
-            return InvalidArgument("The morph delta stream is not a named stream.");
-        }
-        std::span<const float> source;
-        if (const CNA_Result result = BorrowElements(values, valueCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        destination->assign(source.begin(), source.end());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            target, morph->targets.size(), "The morph target index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<float>* const destination =
+        MorphDeltaStream(morph->targets[static_cast<std::size_t>(target)], stream);
+    if (destination == nullptr) {
+        return InvalidArgument("The morph delta stream is not a named stream.");
+    }
+    std::span<const float> source;
+    if (const CNA_Result result = BorrowElements(values, valueCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    destination->assign(source.begin(), source.end());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_morph_target_deltas(
+[[nodiscard]] CNA_Result CnbModelCopyMorphTargetDeltas(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t target,
@@ -2832,59 +2609,55 @@ CNA_Result cna_cnb_model_copy_morph_target_deltas(
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                target, morph->targets.size(), "The morph target index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<float>* const source =
-            MorphDeltaStream(morph->targets[static_cast<std::size_t>(target)], stream);
-        if (source == nullptr) {
-            return InvalidArgument("The morph delta stream is not a named stream.");
-        }
-        return CopyElements<float>(*source, destination, capacity, outCount);
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            target, morph->targets.size(), "The morph target index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<float>* const source =
+        MorphDeltaStream(morph->targets[static_cast<std::size_t>(target)], stream);
+    if (source == nullptr) {
+        return InvalidArgument("The morph delta stream is not a named stream.");
+    }
+    return CopyElements<float>(*source, destination, capacity, outCount);
 }
 
-CNA_Result cna_cnb_model_set_morph_weights(
+[[nodiscard]] CNA_Result CnbModelSetMorphWeights(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const float* const values,
     const uint64_t valueCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> source;
-        if (const CNA_Result result = BorrowElements(values, valueCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        morph->weights.assign(source.begin(), source.end());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> source;
+    if (const CNA_Result result = BorrowElements(values, valueCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    morph->weights.assign(source.begin(), source.end());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_morph_weight_key(
+[[nodiscard]] CNA_Result CnbModelAddMorphWeightKey(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const double timeSeconds,
@@ -2896,87 +2669,83 @@ CNA_Result cna_cnb_model_add_morph_weight_key(
     const uint64_t outTangentCount,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!std::isfinite(timeSeconds)) {
-            return InvalidArgument("The morph weight key time must be finite.");
-        }
-        std::span<const float> weightSpan;
-        if (const CNA_Result result = BorrowElements(weights, weightCount, &weightSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> inSpan;
-        if (const CNA_Result result = BorrowElements(inTangents, inTangentCount, &inSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> outSpan;
-        if (const CNA_Result result = BorrowElements(outTangents, outTangentCount, &outSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphWeightKey key;
-        key.timeSeconds = timeSeconds;
-        key.weights.assign(weightSpan.begin(), weightSpan.end());
-        key.inTangent.assign(inSpan.begin(), inSpan.end());
-        key.outTangent.assign(outSpan.begin(), outSpan.end());
-        morph->weightTrackKeys.push_back(std::move(key));
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(morph->weightTrackKeys.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!std::isfinite(timeSeconds)) {
+        return InvalidArgument("The morph weight key time must be finite.");
+    }
+    std::span<const float> weightSpan;
+    if (const CNA_Result result = BorrowElements(weights, weightCount, &weightSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> inSpan;
+    if (const CNA_Result result = BorrowElements(inTangents, inTangentCount, &inSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> outSpan;
+    if (const CNA_Result result = BorrowElements(outTangents, outTangentCount, &outSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphWeightKey key;
+    key.timeSeconds = timeSeconds;
+    key.weights.assign(weightSpan.begin(), weightSpan.end());
+    key.inTangent.assign(inSpan.begin(), inSpan.end());
+    key.outTangent.assign(outSpan.begin(), outSpan.end());
+    morph->weightTrackKeys.push_back(std::move(key));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(morph->weightTrackKeys.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_morph_weight_key(
+[[nodiscard]] CNA_Result CnbModelGetMorphWeightKey(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t key,
     CNA_CnbMorphWeightKeyInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION,
-                "The morph weight key structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                key, morph->weightTrackKeys.size(), "The morph weight key index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbMorphWeightKey& stored =
-            morph->weightTrackKeys[static_cast<std::size_t>(key)];
-        outInfo->time_seconds = stored.timeSeconds;
-        outInfo->weight_count = static_cast<uint64_t>(stored.weights.size());
-        outInfo->in_tangent_count = static_cast<uint64_t>(stored.inTangent.size());
-        outInfo->out_tangent_count = static_cast<uint64_t>(stored.outTangent.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION,
+            "The morph weight key structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            key, morph->weightTrackKeys.size(), "The morph weight key index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbMorphWeightKey& stored =
+        morph->weightTrackKeys[static_cast<std::size_t>(key)];
+    outInfo->time_seconds = stored.timeSeconds;
+    outInfo->weight_count = static_cast<uint64_t>(stored.weights.size());
+    outInfo->in_tangent_count = static_cast<uint64_t>(stored.inTangent.size());
+    outInfo->out_tangent_count = static_cast<uint64_t>(stored.outTangent.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_morph_weight_key_values(
+[[nodiscard]] CNA_Result CnbModelCopyMorphWeightKeyValues(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t part,
     const uint64_t key,
@@ -2985,32 +2754,30 @@ CNA_Result cna_cnb_model_copy_morph_weight_key_values(
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbMorphData* morph = nullptr;
-        if (const CNA_Result result = GetMorph(model, part, &morph);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                key, morph->weightTrackKeys.size(), "The morph weight key index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<float>* const source =
-            MorphKeyStream(morph->weightTrackKeys[static_cast<std::size_t>(key)], stream);
-        if (source == nullptr) {
-            return InvalidArgument("The morph key stream is not a named stream.");
-        }
-        return CopyElements<float>(*source, destination, capacity, outCount);
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbMorphData* morph = nullptr;
+    if (const CNA_Result result = GetMorph(model, part, &morph);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            key, morph->weightTrackKeys.size(), "The morph weight key index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<float>* const source =
+        MorphKeyStream(morph->weightTrackKeys[static_cast<std::size_t>(key)], stream);
+    if (source == nullptr) {
+        return InvalidArgument("The morph key stream is not a named stream.");
+    }
+    return CopyElements<float>(*source, destination, capacity, outCount);
 }
 
-CNA_Result cna_cnb_model_add_mesh(
+[[nodiscard]] CNA_Result CnbModelAddMesh(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_StringView name,
     const int32_t parentBone,
@@ -3018,100 +2785,94 @@ CNA_Result cna_cnb_model_add_mesh(
     const uint64_t partIndexCount,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(name, "The name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint32_t> source;
-        if (const CNA_Result result = BorrowElements(partIndices, partIndexCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelMesh mesh;
-        mesh.name = std::move(nameText);
-        mesh.parentBone = parentBone;
-        mesh.partIndices.assign(source.begin(), source.end());
-        model->value->meshes.push_back(std::move(mesh));
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(model->value->meshes.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(name, "The name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint32_t> source;
+    if (const CNA_Result result = BorrowElements(partIndices, partIndexCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelMesh mesh;
+    mesh.name = std::move(nameText);
+    mesh.parentBone = parentBone;
+    mesh.partIndices.assign(source.begin(), source.end());
+    model->value->meshes.push_back(std::move(mesh));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->meshes.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_mesh(
+[[nodiscard]] CNA_Result CnbModelGetMesh(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     CNA_CnbMeshInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_MESH_INFO_STRUCT_VERSION,
-                "The mesh structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbModelMesh& mesh = model->value->meshes[static_cast<std::size_t>(index)];
-        outInfo->parent_bone = mesh.parentBone;
-        outInfo->reserved = 0U;
-        outInfo->part_index_count = static_cast<uint64_t>(mesh.partIndices.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_MESH_INFO_STRUCT_VERSION,
+            "The mesh structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelMesh& mesh = model->value->meshes[static_cast<std::size_t>(index)];
+    outInfo->parent_bone = mesh.parentBone;
+    outInfo->reserved = 0U;
+    outInfo->part_index_count = static_cast<uint64_t>(mesh.partIndices.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_mesh_part_indices(
+[[nodiscard]] CNA_Result CnbModelCopyMeshPartIndices(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     uint32_t* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The part-index output is invalid.");
-        }
-        if (const CNA_Result result =
-                RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint32_t>& indices =
-            model->value->meshes[static_cast<std::size_t>(index)].partIndices;
-        *outCount = static_cast<uint64_t>(indices.size());
-        if (capacity < static_cast<uint64_t>(indices.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the part-index count.");
-        }
-        if (!indices.empty()) {
-            std::memcpy(destination, indices.data(), indices.size() * sizeof(uint32_t));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The part-index output is invalid.");
+    }
+    if (const CNA_Result result =
+            RequireIndex(index, model->value->meshes.size(), "The mesh index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint32_t>& indices =
+        model->value->meshes[static_cast<std::size_t>(index)].partIndices;
+    *outCount = static_cast<uint64_t>(indices.size());
+    if (capacity < static_cast<uint64_t>(indices.size())) {
+        return BufferTooSmall("The destination capacity is smaller than the part-index count.");
+    }
+    if (!indices.empty()) {
+        std::memcpy(destination, indices.data(), indices.size() * sizeof(uint32_t));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_set_skeleton(
+[[nodiscard]] CNA_Result CnbModelSetSkeleton(
     const CNA_CnbModelDataHandle modelHandle,
     const int32_t* const hierarchy,
     const uint64_t jointCount,
@@ -3119,312 +2880,298 @@ CNA_Result cna_cnb_model_set_skeleton(
     const float* const inverseBindPose,
     const float* const rootPrefix)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const int32_t> hierarchySpan;
+    if (const CNA_Result result = BorrowElements(hierarchy, jointCount, &hierarchySpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (jointCount != 0U && (bindPose == nullptr || inverseBindPose == nullptr)) {
+        return InvalidArgument(
+            "The skeleton pose arrays are null with a non-zero joint count.");
+    }
+    uint64_t floatCount = 0U;
+    if (const CNA_Result result = cna_cnb_checked_multiply(jointCount, 16U, &floatCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> bindSpan;
+    if (const CNA_Result result = BorrowElements(bindPose, floatCount, &bindSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> inverseSpan;
+    if (const CNA_Result result = BorrowElements(inverseBindPose, floatCount, &inverseSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const float> prefixSpan;
+    if (rootPrefix != nullptr) {
+        if (const CNA_Result result = BorrowElements(rootPrefix, floatCount, &prefixSpan);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::span<const int32_t> hierarchySpan;
-        if (const CNA_Result result = BorrowElements(hierarchy, jointCount, &hierarchySpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (jointCount != 0U && (bindPose == nullptr || inverseBindPose == nullptr)) {
-            return InvalidArgument(
-                "The skeleton pose arrays are null with a non-zero joint count.");
-        }
-        uint64_t floatCount = 0U;
-        if (const CNA_Result result = cna_cnb_checked_multiply(jointCount, 16U, &floatCount);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> bindSpan;
-        if (const CNA_Result result = BorrowElements(bindPose, floatCount, &bindSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> inverseSpan;
-        if (const CNA_Result result = BorrowElements(inverseBindPose, floatCount, &inverseSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const float> prefixSpan;
-        if (rootPrefix != nullptr) {
-            if (const CNA_Result result = BorrowElements(rootPrefix, floatCount, &prefixSpan);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-        }
-        const auto joints = static_cast<std::size_t>(jointCount);
-        Cnb::CnbModelSkeleton skeleton;
-        skeleton.hierarchy.assign(hierarchySpan.begin(), hierarchySpan.end());
-        skeleton.bindPose.resize(joints);
-        skeleton.inverseBindPose.resize(joints);
+    }
+    const auto joints = static_cast<std::size_t>(jointCount);
+    Cnb::CnbModelSkeleton skeleton;
+    skeleton.hierarchy.assign(hierarchySpan.begin(), hierarchySpan.end());
+    skeleton.bindPose.resize(joints);
+    skeleton.inverseBindPose.resize(joints);
+    for (std::size_t joint = 0U; joint < joints; ++joint) {
+        std::memcpy(
+            skeleton.bindPose[joint].data(), bindSpan.data() + (joint * 16U), 16U * sizeof(float));
+        std::memcpy(
+            skeleton.inverseBindPose[joint].data(), inverseSpan.data() + (joint * 16U),
+            16U * sizeof(float));
+    }
+    if (rootPrefix != nullptr) {
+        skeleton.rootPrefix.resize(joints);
         for (std::size_t joint = 0U; joint < joints; ++joint) {
             std::memcpy(
-                skeleton.bindPose[joint].data(), bindSpan.data() + (joint * 16U), 16U * sizeof(float));
-            std::memcpy(
-                skeleton.inverseBindPose[joint].data(), inverseSpan.data() + (joint * 16U),
+                skeleton.rootPrefix[joint].data(), prefixSpan.data() + (joint * 16U),
                 16U * sizeof(float));
         }
-        if (rootPrefix != nullptr) {
-            skeleton.rootPrefix.resize(joints);
-            for (std::size_t joint = 0U; joint < joints; ++joint) {
-                std::memcpy(
-                    skeleton.rootPrefix[joint].data(), prefixSpan.data() + (joint * 16U),
-                    16U * sizeof(float));
-            }
-        }
-        model->value->skeleton = std::move(skeleton);
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    model->value->skeleton = std::move(skeleton);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_skeleton(
+[[nodiscard]] CNA_Result CnbModelGetSkeleton(
     const CNA_CnbModelDataHandle modelHandle,
     CNA_CnbSkeletonInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_SKELETON_INFO_STRUCT_VERSION,
-                "The skeleton structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!model->value->skeleton.has_value()) {
-            return InvalidArgument("The model carries no skinning skeleton.");
-        }
-        const Cnb::CnbModelSkeleton& skeleton = model->value->skeleton.value();
-        outInfo->joint_count = static_cast<uint64_t>(skeleton.hierarchy.size());
-        outInfo->has_root_prefix = skeleton.rootPrefix.empty() ? CNA_FALSE : CNA_TRUE;
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_SKELETON_INFO_STRUCT_VERSION,
+            "The skeleton structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!model->value->skeleton.has_value()) {
+        return InvalidArgument("The model carries no skinning skeleton.");
+    }
+    const Cnb::CnbModelSkeleton& skeleton = model->value->skeleton.value();
+    outInfo->joint_count = static_cast<uint64_t>(skeleton.hierarchy.size());
+    outInfo->has_root_prefix = skeleton.rootPrefix.empty() ? CNA_FALSE : CNA_TRUE;
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_skeleton_hierarchy(
+[[nodiscard]] CNA_Result CnbModelCopySkeletonHierarchy(
     const CNA_CnbModelDataHandle modelHandle,
     int32_t* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The hierarchy output is invalid.");
-        }
-        if (!model->value->skeleton.has_value()) {
-            return InvalidArgument("The model carries no skinning skeleton.");
-        }
-        const std::vector<int32_t>& hierarchy = model->value->skeleton.value().hierarchy;
-        *outCount = static_cast<uint64_t>(hierarchy.size());
-        if (capacity < static_cast<uint64_t>(hierarchy.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the joint count.");
-        }
-        if (!hierarchy.empty()) {
-            std::memcpy(destination, hierarchy.data(), hierarchy.size() * sizeof(int32_t));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The hierarchy output is invalid.");
+    }
+    if (!model->value->skeleton.has_value()) {
+        return InvalidArgument("The model carries no skinning skeleton.");
+    }
+    const std::vector<int32_t>& hierarchy = model->value->skeleton.value().hierarchy;
+    *outCount = static_cast<uint64_t>(hierarchy.size());
+    if (capacity < static_cast<uint64_t>(hierarchy.size())) {
+        return BufferTooSmall("The destination capacity is smaller than the joint count.");
+    }
+    if (!hierarchy.empty()) {
+        std::memcpy(destination, hierarchy.data(), hierarchy.size() * sizeof(int32_t));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_skeleton_matrices(
+[[nodiscard]] CNA_Result CnbModelCopySkeletonMatrices(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_CnbSkeletonMatrixSet set,
     float* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The matrix output is invalid.");
-        }
-        if (!model->value->skeleton.has_value()) {
-            return InvalidArgument("The model carries no skinning skeleton.");
-        }
-        const Cnb::CnbModelSkeleton& skeleton = model->value->skeleton.value();
-        const std::vector<std::array<float, 16>>* source = nullptr;
-        switch (set) {
-        case CNA_CNB_SKELETON_MATRIX_BIND_POSE: source = &skeleton.bindPose; break;
-        case CNA_CNB_SKELETON_MATRIX_INVERSE_BIND_POSE: source = &skeleton.inverseBindPose; break;
-        case CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX: source = &skeleton.rootPrefix; break;
-        default: return InvalidArgument("The skeleton matrix set is not a named set.");
-        }
-        const uint64_t required = static_cast<uint64_t>(source->size()) * 16U;
-        *outCount = required;
-        if (capacity < required) {
-            return BufferTooSmall(
-                "The destination capacity is smaller than the matrix float count.");
-        }
-        for (std::size_t joint = 0U; joint < source->size(); ++joint) {
-            std::memcpy(
-                destination + (joint * 16U), (*source)[joint].data(), 16U * sizeof(float));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The matrix output is invalid.");
+    }
+    if (!model->value->skeleton.has_value()) {
+        return InvalidArgument("The model carries no skinning skeleton.");
+    }
+    const Cnb::CnbModelSkeleton& skeleton = model->value->skeleton.value();
+    const std::vector<std::array<float, 16>>* source = nullptr;
+    switch (set) {
+    case CNA_CNB_SKELETON_MATRIX_BIND_POSE: source = &skeleton.bindPose; break;
+    case CNA_CNB_SKELETON_MATRIX_INVERSE_BIND_POSE: source = &skeleton.inverseBindPose; break;
+    case CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX: source = &skeleton.rootPrefix; break;
+    default: return InvalidArgument("The skeleton matrix set is not a named set.");
+    }
+    const uint64_t required = static_cast<uint64_t>(source->size()) * 16U;
+    *outCount = required;
+    if (capacity < required) {
+        return BufferTooSmall(
+            "The destination capacity is smaller than the matrix float count.");
+    }
+    for (std::size_t joint = 0U; joint < source->size(); ++joint) {
+        std::memcpy(
+            destination + (joint * 16U), (*source)[joint].data(), 16U * sizeof(float));
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_animation(
+[[nodiscard]] CNA_Result CnbModelAddAnimation(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_StringView name,
     const CNA_AnimationClipEXTDescriptor* const clip,
     const CNA_ClipTargetSpaceEXT targetSpace,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (clip == nullptr) {
+        return InvalidArgument("The animation clip descriptor is null.");
+    }
+    if (targetSpace > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+        return InvalidArgument("The clip target space is not a ClipTargetSpaceEXT value.");
+    }
+    if (!IsValidTimeSpanSeconds(clip->duration_seconds)) {
+        return InvalidArgument("The clip duration must fit a finite TimeSpan.");
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(name, "The name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const CNA_BoneTrackEXTDescriptor> trackSpan;
+    if (const CNA_Result result =
+            BorrowElements(clip->tracks, clip->track_count, &trackSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelAnimation animation;
+    animation.name = std::move(nameText);
+    animation.clip.Duration = System::TimeSpan::FromSeconds(clip->duration_seconds);
+    animation.clip.TargetSpace =
+        static_cast<Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT>(targetSpace);
+    animation.clip.Tracks.reserve(trackSpan.size());
+    for (const CNA_BoneTrackEXTDescriptor& sourceTrack : trackSpan) {
+        if (sourceTrack.reserved != 0U) {
+            return InvalidArgument("CNA_BoneTrackEXTDescriptor.reserved must be zero.");
+        }
+        std::span<const CNA_KeyframeEXT> keySpan;
+        if (const CNA_Result result = BorrowElements(
+                sourceTrack.keyframes, sourceTrack.keyframe_count, &keySpan);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (clip == nullptr) {
-            return InvalidArgument("The animation clip descriptor is null.");
-        }
-        if (targetSpace > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
-            return InvalidArgument("The clip target space is not a ClipTargetSpaceEXT value.");
-        }
-        if (!IsValidTimeSpanSeconds(clip->duration_seconds)) {
-            return InvalidArgument("The clip duration must fit a finite TimeSpan.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(name, "The name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const CNA_BoneTrackEXTDescriptor> trackSpan;
-        if (const CNA_Result result =
-                BorrowElements(clip->tracks, clip->track_count, &trackSpan);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbModelAnimation animation;
-        animation.name = std::move(nameText);
-        animation.clip.Duration = System::TimeSpan::FromSeconds(clip->duration_seconds);
-        animation.clip.TargetSpace =
-            static_cast<Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT>(targetSpace);
-        animation.clip.Tracks.reserve(trackSpan.size());
-        for (const CNA_BoneTrackEXTDescriptor& sourceTrack : trackSpan) {
-            if (sourceTrack.reserved != 0U) {
-                return InvalidArgument("CNA_BoneTrackEXTDescriptor.reserved must be zero.");
+        Microsoft::Xna::Framework::Graphics::BoneTrackEXT track;
+        track.BoneIndex = sourceTrack.bone_index;
+        track.Keys.reserve(keySpan.size());
+        for (const CNA_KeyframeEXT& sourceKey : keySpan) {
+            if (!IsValidTimeSpanSeconds(sourceKey.time_seconds)) {
+                return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
             }
-            std::span<const CNA_KeyframeEXT> keySpan;
-            if (const CNA_Result result = BorrowElements(
-                    sourceTrack.keyframes, sourceTrack.keyframe_count, &keySpan);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            Microsoft::Xna::Framework::Graphics::BoneTrackEXT track;
-            track.BoneIndex = sourceTrack.bone_index;
-            track.Keys.reserve(keySpan.size());
-            for (const CNA_KeyframeEXT& sourceKey : keySpan) {
-                if (!IsValidTimeSpanSeconds(sourceKey.time_seconds)) {
-                    return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
-                }
-                Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
-                key.Time = System::TimeSpan::FromSeconds(sourceKey.time_seconds);
-                key.Translation = {
-                    sourceKey.translation.x, sourceKey.translation.y, sourceKey.translation.z};
-                key.Rotation = {
-                    sourceKey.rotation.x, sourceKey.rotation.y, sourceKey.rotation.z,
-                    sourceKey.rotation.w};
-                key.Scale = {sourceKey.scale.x, sourceKey.scale.y, sourceKey.scale.z};
-                track.Keys.push_back(key);
-            }
-            animation.clip.Tracks.push_back(std::move(track));
+            Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
+            key.Time = System::TimeSpan::FromSeconds(sourceKey.time_seconds);
+            key.Translation = {
+                sourceKey.translation.x, sourceKey.translation.y, sourceKey.translation.z};
+            key.Rotation = {
+                sourceKey.rotation.x, sourceKey.rotation.y, sourceKey.rotation.z,
+                sourceKey.rotation.w};
+            key.Scale = {sourceKey.scale.x, sourceKey.scale.y, sourceKey.scale.z};
+            track.Keys.push_back(key);
         }
-        model->value->animations.push_back(std::move(animation));
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(model->value->animations.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+        animation.clip.Tracks.push_back(std::move(track));
+    }
+    model->value->animations.push_back(std::move(animation));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->animations.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_animation(
+[[nodiscard]] CNA_Result CnbModelGetAnimation(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount,
     CNA_ClipTargetSpaceEXT* const outTargetSpace)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->animations.size(), "The animation index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbModelAnimation& animation =
-            model->value->animations[static_cast<std::size_t>(index)];
-        if (outDurationSeconds != nullptr) {
-            *outDurationSeconds = animation.clip.Duration.getTotalSecondsProperty();
-        }
-        if (outTrackCount != nullptr) {
-            *outTrackCount = static_cast<uint64_t>(animation.clip.Tracks.size());
-        }
-        if (outTargetSpace != nullptr) {
-            *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(animation.clip.TargetSpace);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, model->value->animations.size(), "The animation index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelAnimation& animation =
+        model->value->animations[static_cast<std::size_t>(index)];
+    if (outDurationSeconds != nullptr) {
+        *outDurationSeconds = animation.clip.Duration.getTotalSecondsProperty();
+    }
+    if (outTrackCount != nullptr) {
+        *outTrackCount = static_cast<uint64_t>(animation.clip.Tracks.size());
+    }
+    if (outTargetSpace != nullptr) {
+        *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(animation.clip.TargetSpace);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_animation_track(
+[[nodiscard]] CNA_Result CnbModelGetAnimationTrack(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     const uint64_t track,
     int32_t* const outBoneIndex,
     uint64_t* const outKeyframeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->animations.size(), "The animation index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& tracks = model->value->animations[static_cast<std::size_t>(index)].clip.Tracks;
-        if (const CNA_Result result =
-                RequireIndex(track, tracks.size(), "The animation track index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& stored = tracks[static_cast<std::size_t>(track)];
-        if (outBoneIndex != nullptr) {
-            *outBoneIndex = stored.BoneIndex;
-        }
-        if (outKeyframeCount != nullptr) {
-            *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, model->value->animations.size(), "The animation index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& tracks = model->value->animations[static_cast<std::size_t>(index)].clip.Tracks;
+    if (const CNA_Result result =
+            RequireIndex(track, tracks.size(), "The animation track index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& stored = tracks[static_cast<std::size_t>(track)];
+    if (outBoneIndex != nullptr) {
+        *outBoneIndex = stored.BoneIndex;
+    }
+    if (outKeyframeCount != nullptr) {
+        *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_copy_animation_keyframes(
+[[nodiscard]] CNA_Result CnbModelCopyAnimationKeyframes(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     const uint64_t track,
@@ -3432,156 +3179,138 @@ CNA_Result cna_cnb_model_copy_animation_keyframes(
     const uint64_t capacity,
     uint64_t* const outKeyframeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outKeyframeCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The keyframe output is invalid.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->animations.size(), "The animation index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& tracks = model->value->animations[static_cast<std::size_t>(index)].clip.Tracks;
-        if (const CNA_Result result =
-                RequireIndex(track, tracks.size(), "The animation track index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& keys = tracks[static_cast<std::size_t>(track)].Keys;
-        *outKeyframeCount = static_cast<uint64_t>(keys.size());
-        if (capacity < static_cast<uint64_t>(keys.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the keyframe count.");
-        }
-        for (std::size_t keyIndex = 0U; keyIndex < keys.size(); ++keyIndex) {
-            const auto& key = keys[keyIndex];
-            CNA_KeyframeEXT& out = destination[keyIndex];
-            out.time_seconds = key.Time.getTotalSecondsProperty();
-            out.translation.x = key.Translation.X;
-            out.translation.y = key.Translation.Y;
-            out.translation.z = key.Translation.Z;
-            out.rotation.x = key.Rotation.X;
-            out.rotation.y = key.Rotation.Y;
-            out.rotation.z = key.Rotation.Z;
-            out.rotation.w = key.Rotation.W;
-            out.scale.x = key.Scale.X;
-            out.scale.y = key.Scale.Y;
-            out.scale.z = key.Scale.Z;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The keyframe output is invalid.");
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, model->value->animations.size(), "The animation index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& tracks = model->value->animations[static_cast<std::size_t>(index)].clip.Tracks;
+    if (const CNA_Result result =
+            RequireIndex(track, tracks.size(), "The animation track index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& keys = tracks[static_cast<std::size_t>(track)].Keys;
+    *outKeyframeCount = static_cast<uint64_t>(keys.size());
+    if (capacity < static_cast<uint64_t>(keys.size())) {
+        return BufferTooSmall("The destination capacity is smaller than the keyframe count.");
+    }
+    for (std::size_t keyIndex = 0U; keyIndex < keys.size(); ++keyIndex) {
+        const auto& key = keys[keyIndex];
+        CNA_KeyframeEXT& out = destination[keyIndex];
+        out.time_seconds = key.Time.getTotalSecondsProperty();
+        out.translation.x = key.Translation.X;
+        out.translation.y = key.Translation.Y;
+        out.translation.z = key.Translation.Z;
+        out.rotation.x = key.Rotation.X;
+        out.rotation.y = key.Rotation.Y;
+        out.rotation.z = key.Rotation.Z;
+        out.rotation.w = key.Rotation.W;
+        out.scale.x = key.Scale.X;
+        out.scale.y = key.Scale.Y;
+        out.scale.z = key.Scale.Z;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_add_light(
+[[nodiscard]] CNA_Result CnbModelAddLight(
     const CNA_CnbModelDataHandle modelHandle,
     const CNA_CnbModelLight* const light,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (light == nullptr) {
-            return InvalidArgument("The light is null.");
-        }
-        Cnb::CnbModelLight stored;
-        std::memcpy(stored.direction.data(), light->direction, 3U * sizeof(float));
-        std::memcpy(stored.diffuseColor.data(), light->diffuse_color, 3U * sizeof(float));
-        model->value->lights.push_back(stored);
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(model->value->lights.size() - 1U);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (light == nullptr) {
+        return InvalidArgument("The light is null.");
+    }
+    Cnb::CnbModelLight stored;
+    std::memcpy(stored.direction.data(), light->direction, 3U * sizeof(float));
+    std::memcpy(stored.diffuseColor.data(), light->diffuse_color, 3U * sizeof(float));
+    model->value->lights.push_back(stored);
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->lights.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_model_get_light(
+[[nodiscard]] CNA_Result CnbModelGetLight(
     const CNA_CnbModelDataHandle modelHandle,
     const uint64_t index,
     CNA_CnbModelLight* const outLight)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outLight == nullptr) {
-            return InvalidArgument("The light output is null.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, model->value->lights.size(), "The light index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbModelLight& light = model->value->lights[static_cast<std::size_t>(index)];
-        std::memcpy(outLight->direction, light.direction.data(), 3U * sizeof(float));
-        std::memcpy(outLight->diffuse_color, light.diffuseColor.data(), 3U * sizeof(float));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, model->value->lights.size(), "The light index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelLight& light = model->value->lights[static_cast<std::size_t>(index)];
+    std::memcpy(outLight->direction, light.direction.data(), 3U * sizeof(float));
+    std::memcpy(outLight->diffuse_color, light.diffuseColor.data(), 3U * sizeof(float));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_build_model_from_cnj(
+[[nodiscard]] CNA_Result CnbBuildModelFromCnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,
     CNA_CnbModelFromCnjHandle* const outResult)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outResult == nullptr) {
-            return InvalidArgument("The CNB model compile output handle is null.");
-        }
-        *outResult = CNA_INVALID_HANDLE;
-        std::string pathText;
-        if (const CNA_Result result =
-                ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string rootText;
-        if (const CNA_Result result =
-                ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateResourceHandle<CnbModelFromCnjResource>(
-            ObjectKind::CnbModelFromCnj,
-            std::make_shared<Cnb::CnbModelFromCnjResult>(
-                Cnb::BuildCnbModelFromCnj(pathText, rootText)),
-            outResult);
-    });
+    std::string pathText;
+    if (const CNA_Result result =
+            ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string rootText;
+    if (const CNA_Result result =
+            ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateResourceHandle<CnbModelFromCnjResource>(
+        ObjectKind::CnbModelFromCnj,
+        std::make_shared<Cnb::CnbModelFromCnjResult>(
+            Cnb::BuildCnbModelFromCnj(pathText, rootText)),
+        outResult);
 }
 
-CNA_Result cna_cnb_model_from_cnj_take_model(
+[[nodiscard]] CNA_Result CnbModelFromCnjTakeModel(
     const CNA_CnbModelFromCnjHandle resultHandle,
     CNA_CnbModelDataHandle* const outModel)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbModelFromCnjResource> compiled;
-        if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outModel == nullptr) {
-            return InvalidArgument("The CNB model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        if (compiled->modelTaken) {
-            return InvalidArgument("The compiled model has already been taken.");
-        }
-        if (const CNA_Result result = CreateModel(std::move(compiled->value->model), outModel);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        compiled->modelTaken = true;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbModelFromCnjResource> compiled;
+    if (const CNA_Result result = GetCompileResult(resultHandle, &compiled);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outModel = CNA_INVALID_HANDLE;
+    if (compiled->modelTaken) {
+        return InvalidArgument("The compiled model has already been taken.");
+    }
+    if (const CNA_Result result = CreateModel(std::move(compiled->value->model), outModel);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    compiled->modelTaken = true;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-110: the font, audio, media, curve and animation schemas ---------------------------- */
 
@@ -3643,220 +3372,200 @@ void ResizeGlyphArrays(Cnb::CnbSpriteFontData* const font, const std::size_t cou
     font->characters.resize(count);
 }
 
-} // namespace
-
-CNA_Result cna_cnb_sprite_font_data_get_info(
+[[nodiscard]] CNA_Result CnbSpriteFontDataGetInfo(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     CNA_CnbSpriteFontInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
-                "The font-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbSpriteFontData& data = *font->value;
-        outInfo->glyph_count = static_cast<uint64_t>(data.characters.size());
-        outInfo->line_spacing = data.lineSpacing;
-        outInfo->spacing = data.spacing;
-        outInfo->default_character = data.defaultCharacter.has_value()
-            ? static_cast<CNA_Char16>(data.defaultCharacter.value())
-            : static_cast<CNA_Char16>(0);
-        outInfo->has_default_character = ToCBool(data.defaultCharacter.has_value());
-        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbSpriteFontResource> font;
+    if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
+            "The font-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbSpriteFontData& data = *font->value;
+    outInfo->glyph_count = static_cast<uint64_t>(data.characters.size());
+    outInfo->line_spacing = data.lineSpacing;
+    outInfo->spacing = data.spacing;
+    outInfo->default_character = data.defaultCharacter.has_value()
+        ? static_cast<CNA_Char16>(data.defaultCharacter.value())
+        : static_cast<CNA_Char16>(0);
+    outInfo->has_default_character = ToCBool(data.defaultCharacter.has_value());
+    std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_sprite_font_data_set_info(
+[[nodiscard]] CNA_Result CnbSpriteFontDataSetInfo(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     const CNA_CnbSpriteFontInfo* const info)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (info == nullptr) {
-            return InvalidArgument("The font-info structure is null.");
-        }
-        if (const CNA_Result result =
-                ValidateCanonicalBool(info->has_default_character, "has_default_character");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
-                "The font-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbSpriteFontData& data = *font->value;
-        data.lineSpacing = info->line_spacing;
-        data.spacing = info->spacing;
-        if (info->has_default_character != CNA_FALSE) {
-            data.defaultCharacter = static_cast<SharpRuntime::charcs>(info->default_character);
-        } else {
-            data.defaultCharacter.reset();
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (info == nullptr) {
+        return InvalidArgument("The font-info structure is null.");
+    }
+    if (const CNA_Result result =
+            ValidateCanonicalBool(info->has_default_character, "has_default_character");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<CnbSpriteFontResource> font;
+    if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
+            "The font-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbSpriteFontData& data = *font->value;
+    data.lineSpacing = info->line_spacing;
+    data.spacing = info->spacing;
+    if (info->has_default_character != CNA_FALSE) {
+        data.defaultCharacter = static_cast<SharpRuntime::charcs>(info->default_character);
+    } else {
+        data.defaultCharacter.reset();
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_sprite_font_data_add_glyph(
+[[nodiscard]] CNA_Result CnbSpriteFontDataAddGlyph(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     const CNA_SpriteFontGlyph* const glyph,
     uint64_t* const outIndex)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                glyph, SpriteFontGlyphStructVersion,
-                "The glyph structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbSpriteFontData& data = *font->value;
-        const std::size_t index = data.characters.size();
-        ResizeGlyphArrays(&data, index + 1U);
-        if (const CNA_Result result = ReadGlyphRow(*glyph, &data, index);
-            result != CNA_RESULT_SUCCESS) {
-            ResizeGlyphArrays(&data, index);
-            return result;
-        }
-        if (outIndex != nullptr) {
-            *outIndex = static_cast<uint64_t>(index);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbSpriteFontResource> font;
+    if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            glyph, SpriteFontGlyphStructVersion,
+            "The glyph structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbSpriteFontData& data = *font->value;
+    const std::size_t index = data.characters.size();
+    ResizeGlyphArrays(&data, index + 1U);
+    if (const CNA_Result result = ReadGlyphRow(*glyph, &data, index);
+        result != CNA_RESULT_SUCCESS) {
+        ResizeGlyphArrays(&data, index);
+        return result;
+    }
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(index);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_sprite_font_data_get_glyph(
+[[nodiscard]] CNA_Result CnbSpriteFontDataGetGlyph(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     const uint64_t index,
     CNA_SpriteFontGlyph* const outGlyph)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outGlyph, SpriteFontGlyphStructVersion,
-                "The glyph structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, font->value->characters.size(), "The glyph index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        WriteGlyphRow(*font->value, static_cast<std::size_t>(index), outGlyph);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbSpriteFontResource> font;
+    if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outGlyph, SpriteFontGlyphStructVersion,
+            "The glyph structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, font->value->characters.size(), "The glyph index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    WriteGlyphRow(*font->value, static_cast<std::size_t>(index), outGlyph);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_sprite_font_data_set_glyph(
+[[nodiscard]] CNA_Result CnbSpriteFontDataSetGlyph(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     const uint64_t index,
     const CNA_SpriteFontGlyph* const glyph)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                glyph, SpriteFontGlyphStructVersion,
-                "The glyph structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, font->value->characters.size(), "The glyph index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReadGlyphRow(*glyph, font->value.get(), static_cast<std::size_t>(index));
-    });
+    std::shared_ptr<CnbSpriteFontResource> font;
+    if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            glyph, SpriteFontGlyphStructVersion,
+            "The glyph structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, font->value->characters.size(), "The glyph index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReadGlyphRow(*glyph, font->value.get(), static_cast<std::size_t>(index));
 }
 
-CNA_Result cna_cnb_sound_effect_data_create(
+[[nodiscard]] CNA_Result CnbSoundEffectDataCreate(
     const CNA_CnbSoundEffectInfo* const info,
     const uint8_t* const samples,
     const uint64_t byteCount,
     CNA_CnbSoundEffectDataHandle* const outSound)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSound == nullptr) {
-            return InvalidArgument("The CNB sound output handle is null.");
-        }
-        *outSound = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
-                "The sound-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::span<const uint8_t> source;
-        if (const CNA_Result result = BorrowBytes(samples, byteCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbSoundEffectData data;
-        data.format = static_cast<Cnb::CnbAudioFormat>(info->format);
-        data.sampleRate = info->sample_rate;
-        data.channels = info->channels;
-        data.frameCount = info->frame_count;
-        data.loopStart = info->loop_start;
-        data.loopLength = info->loop_length;
-        data.samples.assign(source.begin(), source.end());
-        return CreateSoundEffect(std::move(data), outSound);
-    });
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
+            "The sound-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::span<const uint8_t> source;
+    if (const CNA_Result result = BorrowBytes(samples, byteCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbSoundEffectData data;
+    data.format = static_cast<Cnb::CnbAudioFormat>(info->format);
+    data.sampleRate = info->sample_rate;
+    data.channels = info->channels;
+    data.frameCount = info->frame_count;
+    data.loopStart = info->loop_start;
+    data.loopLength = info->loop_length;
+    data.samples.assign(source.begin(), source.end());
+    return CreateSoundEffect(std::move(data), outSound);
 }
 
-CNA_Result cna_cnb_sound_effect_data_get_info(
+[[nodiscard]] CNA_Result CnbSoundEffectDataGetInfo(
     const CNA_CnbSoundEffectDataHandle soundHandle,
     CNA_CnbSoundEffectInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSoundEffectResource> sound;
-        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
-                "The sound-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbSoundEffectData& data = *sound->value;
-        outInfo->format = static_cast<CNA_CnbAudioFormat>(data.format);
-        outInfo->sample_rate = data.sampleRate;
-        outInfo->channels = data.channels;
-        outInfo->frame_count = data.frameCount;
-        outInfo->loop_start = data.loopStart;
-        outInfo->loop_length = data.loopLength;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbSoundEffectResource> sound;
+    if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
+            "The sound-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbSoundEffectData& data = *sound->value;
+    outInfo->format = static_cast<CNA_CnbAudioFormat>(data.format);
+    outInfo->sample_rate = data.sampleRate;
+    outInfo->channels = data.channels;
+    outInfo->frame_count = data.frameCount;
+    outInfo->loop_start = data.loopStart;
+    outInfo->loop_length = data.loopLength;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_encode_video(
+[[nodiscard]] CNA_Result CnbEncodeVideo(
     const CNA_StringView streamReference,
     const CNA_CnbVideoInfo* const info,
     const CNA_StringView contentName,
@@ -3864,94 +3573,88 @@ CNA_Result cna_cnb_encode_video(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded video output is invalid.");
-        }
-        if (const CNA_Result result = RequireStruct(
-                info, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
-                "The video-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::CnbVideoData data;
-        if (const CNA_Result result = ReadText(
-                streamReference, "The stream_reference text is not valid UTF-8.",
-                &data.streamReference);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data.durationMs = info->duration_milliseconds;
-        data.width = info->width;
-        data.height = info->height;
-        data.framesPerSecond = info->frames_per_second;
-        data.soundtrackType = info->soundtrack_type;
-        std::string contentText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &contentText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeVideoToCnb(data, contentText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The encoded video output is invalid.");
+    }
+    if (const CNA_Result result = RequireStruct(
+            info, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
+            "The video-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbVideoData data;
+    if (const CNA_Result result = ReadText(
+            streamReference, "The stream_reference text is not valid UTF-8.",
+            &data.streamReference);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    data.durationMs = info->duration_milliseconds;
+    data.width = info->width;
+    data.height = info->height;
+    data.framesPerSecond = info->frames_per_second;
+    data.soundtrackType = info->soundtrack_type;
+    std::string contentText;
+    if (const CNA_Result result =
+            ReadText(contentName, "The content_name text is not valid UTF-8.", &contentText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint8_t> encoded = Cnb::EncodeVideoToCnb(data, contentText);
+    return CopyBytes(encoded, destination, capacity, outBytes);
 }
 
-CNA_Result cna_cnb_decode_video(
+[[nodiscard]] CNA_Result CnbDecodeVideo(
     const CNA_CnbDocumentHandle documentHandle,
     CNA_CnbVideoInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireStruct(
-                outInfo, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
-                "The video-info structure is not a known size and version.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Cnb::CnbVideoData data = Cnb::DecodeVideoFromCnb(*document->value);
-        outInfo->duration_milliseconds = data.durationMs;
-        outInfo->width = data.width;
-        outInfo->height = data.height;
-        outInfo->frames_per_second = data.framesPerSecond;
-        outInfo->soundtrack_type = static_cast<CNA_VideoSoundtrackType>(data.soundtrackType);
-        outInfo->reserved = 0U;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outInfo, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
+            "The video-info structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbVideoData data = Cnb::DecodeVideoFromCnb(*document->value);
+    outInfo->duration_milliseconds = data.durationMs;
+    outInfo->width = data.width;
+    outInfo->height = data.height;
+    outInfo->frames_per_second = data.framesPerSecond;
+    outInfo->soundtrack_type = static_cast<CNA_VideoSoundtrackType>(data.soundtrackType);
+    outInfo->reserved = 0U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_encode_curve(
+[[nodiscard]] CNA_Result CnbEncodeCurve(
     const CNA_CurveHandle curveHandle,
     const CNA_StringView contentName,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<Microsoft::Xna::Framework::Curve> curve;
-        if (const CNA_Result result = LookupHandle(curveHandle, ObjectKind::Curve, &curve);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded curve output is invalid.");
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeCurveToCnb(*curve, nameText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
+    std::shared_ptr<Microsoft::Xna::Framework::Curve> curve;
+    if (const CNA_Result result = LookupHandle(curveHandle, ObjectKind::Curve, &curve);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The encoded curve output is invalid.");
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint8_t> encoded = Cnb::EncodeCurveToCnb(*curve, nameText);
+    return CopyBytes(encoded, destination, capacity, outBytes);
 }
 
-CNA_Result cna_cnb_encode_animation_clip(
+[[nodiscard]] CNA_Result CnbEncodeAnimationClip(
     const CNA_AnimationClipEXTDescriptor* const descriptor,
     const CNA_ClipTargetSpaceEXT targetSpace,
     const CNA_StringView contentName,
@@ -3959,385 +3662,339 @@ CNA_Result cna_cnb_encode_animation_clip(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The encoded clip output is invalid.");
-        }
-        Microsoft::Xna::Framework::Graphics::AnimationClipEXT clip;
-        if (const CNA_Result result = BorrowClip(descriptor, targetSpace, &clip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<uint8_t> encoded = Cnb::EncodeAnimationClipToCnb(clip, nameText);
-        return CopyBytes(encoded, destination, capacity, outBytes);
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The encoded clip output is invalid.");
+    }
+    Microsoft::Xna::Framework::Graphics::AnimationClipEXT clip;
+    if (const CNA_Result result = BorrowClip(descriptor, targetSpace, &clip);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint8_t> encoded = Cnb::EncodeAnimationClipToCnb(clip, nameText);
+    return CopyBytes(encoded, destination, capacity, outBytes);
 }
 
-CNA_Result cna_cnb_animation_clip_get(
+[[nodiscard]] CNA_Result CnbAnimationClipGet(
     const CNA_CnbAnimationClipHandle clipHandle,
     double* const outDurationSeconds,
     uint64_t* const outTrackCount,
     CNA_ClipTargetSpaceEXT* const outTargetSpace)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbAnimationClipResource> clip;
-        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outDurationSeconds != nullptr) {
-            *outDurationSeconds = clip->value->Duration.getTotalSecondsProperty();
-        }
-        if (outTrackCount != nullptr) {
-            *outTrackCount = static_cast<uint64_t>(clip->value->Tracks.size());
-        }
-        if (outTargetSpace != nullptr) {
-            *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip->value->TargetSpace);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbAnimationClipResource> clip;
+    if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (outDurationSeconds != nullptr) {
+        *outDurationSeconds = clip->value->Duration.getTotalSecondsProperty();
+    }
+    if (outTrackCount != nullptr) {
+        *outTrackCount = static_cast<uint64_t>(clip->value->Tracks.size());
+    }
+    if (outTargetSpace != nullptr) {
+        *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip->value->TargetSpace);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_animation_clip_get_track(
+[[nodiscard]] CNA_Result CnbAnimationClipGetTrack(
     const CNA_CnbAnimationClipHandle clipHandle,
     const uint64_t track,
     int32_t* const outBoneIndex,
     uint64_t* const outKeyframeCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbAnimationClipResource> clip;
-        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = RequireIndex(
-                track, clip->value->Tracks.size(), "The animation track index is out of range.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& stored = clip->value->Tracks[static_cast<std::size_t>(track)];
-        if (outBoneIndex != nullptr) {
-            *outBoneIndex = stored.BoneIndex;
-        }
-        if (outKeyframeCount != nullptr) {
-            *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbAnimationClipResource> clip;
+    if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            track, clip->value->Tracks.size(), "The animation track index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& stored = clip->value->Tracks[static_cast<std::size_t>(track)];
+    if (outBoneIndex != nullptr) {
+        *outBoneIndex = stored.BoneIndex;
+    }
+    if (outKeyframeCount != nullptr) {
+        *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_reader_read_keyframe(
+[[nodiscard]] CNA_Result CnbReaderReadKeyframe(
     const CNA_CnbReaderHandle readerHandle,
     CNA_KeyframeEXT* const outKeyframe)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outKeyframe == nullptr) {
-            return InvalidArgument("The keyframe output is null.");
-        }
-        const Microsoft::Xna::Framework::Graphics::KeyframeEXT key =
-            Cnb::ReadCnbKeyframe(*reader->value);
-        outKeyframe->time_seconds = key.Time.getTotalSecondsProperty();
-        outKeyframe->translation.x = key.Translation.X;
-        outKeyframe->translation.y = key.Translation.Y;
-        outKeyframe->translation.z = key.Translation.Z;
-        outKeyframe->rotation.x = key.Rotation.X;
-        outKeyframe->rotation.y = key.Rotation.Y;
-        outKeyframe->rotation.z = key.Rotation.Z;
-        outKeyframe->rotation.w = key.Rotation.W;
-        outKeyframe->scale.x = key.Scale.X;
-        outKeyframe->scale.y = key.Scale.Y;
-        outKeyframe->scale.z = key.Scale.Z;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Microsoft::Xna::Framework::Graphics::KeyframeEXT key =
+        Cnb::ReadCnbKeyframe(*reader->value);
+    outKeyframe->time_seconds = key.Time.getTotalSecondsProperty();
+    outKeyframe->translation.x = key.Translation.X;
+    outKeyframe->translation.y = key.Translation.Y;
+    outKeyframe->translation.z = key.Translation.Z;
+    outKeyframe->rotation.x = key.Rotation.X;
+    outKeyframe->rotation.y = key.Rotation.Y;
+    outKeyframe->rotation.z = key.Rotation.Z;
+    outKeyframe->rotation.w = key.Rotation.W;
+    outKeyframe->scale.x = key.Scale.X;
+    outKeyframe->scale.y = key.Scale.Y;
+    outKeyframe->scale.z = key.Scale.Z;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_byte_writer_write_keyframe(
+[[nodiscard]] CNA_Result CnbByteWriterWriteKeyframe(
     const CNA_CnbByteWriterHandle writerHandle,
     const CNA_KeyframeEXT* const keyframe)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (keyframe == nullptr) {
-            return InvalidArgument("The keyframe is null.");
-        }
-        if (!IsValidTimeSpanSeconds(keyframe->time_seconds)) {
-            return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
-        }
-        Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
-        key.Time = System::TimeSpan::FromSeconds(keyframe->time_seconds);
-        key.Translation = {
-            keyframe->translation.x, keyframe->translation.y, keyframe->translation.z};
-        key.Rotation = {
-            keyframe->rotation.x, keyframe->rotation.y, keyframe->rotation.z,
-            keyframe->rotation.w};
-        key.Scale = {keyframe->scale.x, keyframe->scale.y, keyframe->scale.z};
-        Cnb::WriteCnbKeyframe(*writer->value, key);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbByteWriterResource> writer;
+    if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (keyframe == nullptr) {
+        return InvalidArgument("The keyframe is null.");
+    }
+    if (!IsValidTimeSpanSeconds(keyframe->time_seconds)) {
+        return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
+    }
+    Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
+    key.Time = System::TimeSpan::FromSeconds(keyframe->time_seconds);
+    key.Translation = {
+        keyframe->translation.x, keyframe->translation.y, keyframe->translation.z};
+    key.Rotation = {
+        keyframe->rotation.x, keyframe->rotation.y, keyframe->rotation.z,
+        keyframe->rotation.w};
+    key.Scale = {keyframe->scale.x, keyframe->scale.y, keyframe->scale.z};
+    Cnb::WriteCnbKeyframe(*writer->value, key);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-111: the loader registry and the two compilation front ends ------------------------- */
 
-CNA_Result cna_cnb_loader_registry_register(
+namespace {
+
+[[nodiscard]] CNA_Result CnbLoaderRegistryRegister(
     const uint32_t assetTypeId,
     const CNA_StringView canonicalTypeName,
     const CNA_CnbLoaderCallback callback,
     void* const context)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (callback == nullptr) {
-            return InvalidArgument("The CNB loader callback is null.");
-        }
-        std::string nameText;
-        if (const CNA_Result result = ReadText(
-                canonicalTypeName, "The canonical_type_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::Content::CnbLoaderRegistry::Register(
-            assetTypeId, nameText, WrapLoaderCallback(callback, context, nameText));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The CNB loader callback is null.");
+    }
+    std::string nameText;
+    if (const CNA_Result result = ReadText(
+            canonicalTypeName, "The canonical_type_name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::Content::CnbLoaderRegistry::Register(
+        assetTypeId, nameText, WrapLoaderCallback(callback, context, nameText));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_loader_registry_remove(
+[[nodiscard]] CNA_Result CnbLoaderRegistryRemove(
     const uint32_t assetTypeId,
     CNA_Bool* const outRemoved)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        const bool removed = CNA::Content::CnbLoaderRegistry::Remove(assetTypeId);
-        if (outRemoved != nullptr) {
-            *outRemoved = ToCBool(removed);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    const bool removed = CNA::Content::CnbLoaderRegistry::Remove(assetTypeId);
+    if (outRemoved != nullptr) {
+        *outRemoved = ToCBool(removed);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_loader_registry_find(
+[[nodiscard]] CNA_Result CnbLoaderRegistryFind(
     const uint32_t assetTypeId,
     CNA_Bool* const outFound,
     CNA_CnbLoaderHandle* const outLoader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLoader == nullptr) {
-            return InvalidArgument("The CNB loader output handle is null.");
-        }
-        *outLoader = CNA_INVALID_HANDLE;
-        std::optional<CNA::Content::CnbLoaderRegistry::LoaderFn> found =
-            CNA::Content::CnbLoaderRegistry::Find(assetTypeId);
-        if (outFound != nullptr) {
-            *outFound = ToCBool(found.has_value());
-        }
-        if (!found.has_value()) {
-            return CNA_RESULT_SUCCESS;
-        }
-        return CreateLoader(std::move(found).value(), outLoader);
-    });
+    std::optional<CNA::Content::CnbLoaderRegistry::LoaderFn> found =
+        CNA::Content::CnbLoaderRegistry::Find(assetTypeId);
+    if (outFound != nullptr) {
+        *outFound = ToCBool(found.has_value());
+    }
+    if (!found.has_value()) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CreateLoader(std::move(found).value(), outLoader);
 }
 
-CNA_Result cna_cnb_loader_invoke(
+[[nodiscard]] CNA_Result CnbLoaderInvoke(
     const CNA_CnbLoaderHandle loaderHandle,
     const CNA_CnbDocumentHandle documentHandle,
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     void** const outObject)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbLoaderResource> loader;
-        if (const CNA_Result result = GetLoader(loaderHandle, &loader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outObject == nullptr) {
-            return InvalidArgument("The loaded-object output is null.");
-        }
-        *outObject = nullptr;
-        std::string assetNameText;
-        if (const CNA_Result result =
-                ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetNameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical signature takes the manager by reference, so there is no "no manager" to
-        // pass. Manufacturing a placeholder one would be worse than requiring it: a content manager
-        // constructor installs the built-in loaders, and inventing that side effect to satisfy a
-        // reference would make an invoke do something a caller never asked for.
-        Microsoft::Xna::Framework::Content::ContentManager* manager = nullptr;
-        if (const CNA_Result result = CNA::C::Detail::GetContentManagerObject(
-                contentManagerHandle, &manager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::any produced = loader->value(*document->value, *manager, assetNameText);
-        const auto* const foreign =
-            std::any_cast<CNA::Content::ForeignContentObjectEXT>(&produced);
-        if (foreign == nullptr) {
-            return NotSupported(
-                "The loader produced a C++ object rather than one this ABI can hand to C; only a "
-                "loader registered through cna_cnb_loader_registry_register produces the latter.");
-        }
-        *outObject = foreign->value;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<CnbLoaderResource> loader;
+    if (const CNA_Result result = GetLoader(loaderHandle, &loader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outObject = nullptr;
+    std::string assetNameText;
+    if (const CNA_Result result =
+            ReadText(assetName, "The asset_name text is not valid UTF-8.", &assetNameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical signature takes the manager by reference, so there is no "no manager" to
+    // pass. Manufacturing a placeholder one would be worse than requiring it: a content manager
+    // constructor installs the built-in loaders, and inventing that side effect to satisfy a
+    // reference would make an invoke do something a caller never asked for.
+    Microsoft::Xna::Framework::Content::ContentManager* manager = nullptr;
+    if (const CNA_Result result = CNA::C::Detail::GetContentManagerObject(
+            contentManagerHandle, &manager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::any produced = loader->value(*document->value, *manager, assetNameText);
+    const auto* const foreign =
+        std::any_cast<CNA::Content::ForeignContentObjectEXT>(&produced);
+    if (foreign == nullptr) {
+        return NotSupported(
+            "The loader produced a C++ object rather than one this ABI can hand to C; only a "
+            "loader registered through cna_cnb_loader_registry_register produces the latter.");
+    }
+    *outObject = foreign->value;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_cnb_import_image_as_texture2d(
+[[nodiscard]] CNA_Result CnbImportImageAsTexture2d(
     const CNA_StringView imagePath,
     const CNA_CnbImageImportOptions* const options,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        Cnb::CnbImageImportOptions native;
-        if (options != nullptr) {
-            if (const CNA_Result result = RequireStruct(
-                    options, CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION,
-                    "The image-import options are not a known size and version.");
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (const CNA_Result result =
-                    ValidateCanonicalBool(options->has_color_key, "has_color_key");
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            if (options->has_color_key != CNA_FALSE) {
-                native.colorKey = std::array<uint8_t, 3>{
-                    options->color_key[0], options->color_key[1], options->color_key[2]};
-            }
-        }
-        std::string pathText;
-        if (const CNA_Result result =
-                ReadText(imagePath, "The image_path text is not valid UTF-8.", &pathText);
+    Cnb::CnbImageImportOptions native;
+    if (options != nullptr) {
+        if (const CNA_Result result = RequireStruct(
+                options, CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION,
+                "The image-import options are not a known size and version.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // CBIND-111: the canonical importer documents a content failure "if the file cannot be
-        // read or decoded", but the shared image decoder raises a plain `std::runtime_error` for an
-        // unreadable file and the importer translates only its own two checks. Left alone, the
-        // firewall would answer CNA_RESULT_INTERNAL -- "a bug in CNA" -- for a caller whose file is
-        // simply not there. The C layer answers the documented contract instead; the canonical gap
-        // is recorded in plans/plan_binding.md rather than patched here.
-        try {
-            return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(pathText, native), outTexture);
-        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
-            throw;
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
+        if (const CNA_Result result =
+                ValidateCanonicalBool(options->has_color_key, "has_color_key");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
-    });
+        if (options->has_color_key != CNA_FALSE) {
+            native.colorKey = std::array<uint8_t, 3>{
+                options->color_key[0], options->color_key[1], options->color_key[2]};
+        }
+    }
+    std::string pathText;
+    if (const CNA_Result result =
+            ReadText(imagePath, "The image_path text is not valid UTF-8.", &pathText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // CBIND-111: the canonical importer documents a content failure "if the file cannot be
+    // read or decoded", but the shared image decoder raises a plain `std::runtime_error` for an
+    // unreadable file and the importer translates only its own two checks. Left alone, the
+    // firewall would answer CNA_RESULT_INTERNAL -- "a bug in CNA" -- for a caller whose file is
+    // simply not there. The C layer answers the documented contract instead; the canonical gap
+    // is recorded in plans/plan_binding.md rather than patched here.
+    try {
+        return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(pathText, native), outTexture);
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+        throw;
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
 }
 
-CNA_Result cna_cnb_decode_dds_as_texture_cube(
+[[nodiscard]] CNA_Result CnbDecodeDdsAsTextureCube(
     const uint8_t* const bytes,
     const uint64_t byteCount,
     const CNA_StringView origin,
     CNA_CnbTextureDataHandle* const outTexture)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTexture == nullptr) {
-            return InvalidArgument("The CNB texture output handle is null.");
-        }
-        *outTexture = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> source;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string originText;
-        if (const CNA_Result result =
-                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateTextureData(
-            Cnb::DecodeDdsAsCnbTextureCube(source, originText), outTexture);
-    });
+    std::span<const uint8_t> source;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string originText;
+    if (const CNA_Result result =
+            ReadText(origin, "The origin text is not valid UTF-8.", &originText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTextureData(
+        Cnb::DecodeDdsAsCnbTextureCube(source, originText), outTexture);
 }
 
-CNA_Result cna_cnb_decode_wav_as_sound_effect(
+[[nodiscard]] CNA_Result CnbDecodeWavAsSoundEffect(
     const uint8_t* const bytes,
     const uint64_t byteCount,
     const CNA_StringView origin,
     CNA_CnbSoundEffectDataHandle* const outSound)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSound == nullptr) {
-            return InvalidArgument("The CNB sound output handle is null.");
-        }
-        *outSound = CNA_INVALID_HANDLE;
-        std::span<const uint8_t> source;
-        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string originText;
-        if (const CNA_Result result =
-                ReadText(origin, "The origin text is not valid UTF-8.", &originText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateSoundEffect(
-            Cnb::DecodeWavAsCnbSoundEffect(source, originText), outSound);
-    });
+    std::span<const uint8_t> source;
+    if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string originText;
+    if (const CNA_Result result =
+            ReadText(origin, "The origin text is not valid UTF-8.", &originText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateSoundEffect(
+        Cnb::DecodeWavAsCnbSoundEffect(source, originText), outSound);
 }
 
-CNA_Result cna_cnb_compile_cnj(
+[[nodiscard]] CNA_Result CnbCompileCnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,
     const CNA_StringView contentName,
     CNA_CnjToCnbResultHandle* const outResult)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outResult == nullptr) {
-            return InvalidArgument("The CNJ compile output handle is null.");
-        }
-        *outResult = CNA_INVALID_HANDLE;
-        std::string pathText;
-        if (const CNA_Result result =
-                ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string rootText;
-        if (const CNA_Result result =
-                ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string nameText;
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CreateCompiledCnj(
-            Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
-    });
+    std::string pathText;
+    if (const CNA_Result result =
+            ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string rootText;
+    if (const CNA_Result result =
+            ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(contentName, "The content_name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateCompiledCnj(
+        Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Cnb.toml.
 #include "generated/Cnb.inc"

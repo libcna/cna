@@ -507,501 +507,437 @@ void ReleaseStorageStream(const BorrowedStorageStream& stream) noexcept
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_storage_device_delete_container(
+namespace {
+
+[[nodiscard]] CNA_Result StorageDeviceDeleteContainer(
     const CNA_StorageDeviceHandle deviceHandle,
     const CNA_StringView titleName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string titleNameCopy;
-        if (const CNA_Result result = RelativePath(titleName, &titleNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        device->value->DeleteContainer(titleNameCopy);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string titleNameCopy;
+    if (const CNA_Result result = RelativePath(titleName, &titleNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageDeviceResource> device;
+    if (const CNA_Result result = GetDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    device->value->DeleteContainer(titleNameCopy);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_device_subscribe_device_changed(
+[[nodiscard]] CNA_Result StorageDeviceSubscribeDeviceChanged(
     const CNA_StorageCompletionCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The DeviceChanged registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The DeviceChanged callback is null.");
-        }
-        const auto token = StorageDevice::DeviceChanged.Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        const auto registration = std::make_shared<StorageRegistration>(token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::StorageDeviceEventRegistration,
-            registration,
-            outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The DeviceChanged registration handle could not be created.");
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The DeviceChanged callback is null.");
+    }
+    const auto token = StorageDevice::DeviceChanged.Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    const auto registration = std::make_shared<StorageRegistration>(token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::StorageDeviceEventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The DeviceChanged registration handle could not be created.");
 }
 
-CNA_Result cna_storage_device_unsubscribe_device_changed(const CNA_Handle registrationHandle)
+[[nodiscard]] CNA_Result StorageDeviceUnsubscribeDeviceChanged(const CNA_Handle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::StorageDeviceEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<StorageRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::StorageDeviceEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
 
-CNA_Result cna_storage_container_open(
+[[nodiscard]] CNA_Result StorageContainerOpen(
     const CNA_StorageDeviceHandle deviceHandle,
     const CNA_StringView displayName,
     const CNA_StorageCompletionCallback callback,
     void* const context,
     CNA_StorageContainerHandle* const outContainer)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContainer == nullptr) {
-            return InvalidArgument("The StorageContainer output handle is null.");
-        }
-        *outContainer = CNA_INVALID_HANDLE;
+    std::string displayNameCopy;
+    if (const CNA_Result result = RelativePath(displayName, &displayNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageDeviceResource> device;
+    if (const CNA_Result result = GetDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        std::string displayNameCopy;
-        if (const CNA_Result result = RelativePath(displayName, &displayNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    const std::unique_ptr<System::IAsyncResult> asyncResult =
+        device->value->BeginOpenContainer(
+            displayNameCopy,
+            CompletionDelegate(callback, context),
+            context);
+    std::unique_ptr<StorageContainer> nativeContainer =
+        device->value->EndOpenContainer(asyncResult.get());
+    if (nativeContainer == nullptr) {
+        return InternalError("The canonical device returned no storage container.");
+    }
 
-        const std::unique_ptr<System::IAsyncResult> asyncResult =
-            device->value->BeginOpenContainer(
-                displayNameCopy,
-                CompletionDelegate(callback, context),
-                context);
-        std::unique_ptr<StorageContainer> nativeContainer =
-            device->value->EndOpenContainer(asyncResult.get());
-        if (nativeContainer == nullptr) {
-            return InternalError("The canonical device returned no storage container.");
-        }
-
-        const auto resource = std::make_shared<StorageContainerResource>();
-        resource->value = std::shared_ptr<StorageContainer>(std::move(nativeContainer));
-        resource->device = device;
-        resource->deviceHandle = deviceHandle;
-        if (const CNA_Result result = CreateHandle(ObjectKind::StorageContainer,
-            resource,
-            outContainer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        device->openContainers += 1U;
-        return CNA_RESULT_SUCCESS;
-    });
+    const auto resource = std::make_shared<StorageContainerResource>();
+    resource->value = std::shared_ptr<StorageContainer>(std::move(nativeContainer));
+    resource->device = device;
+    resource->deviceHandle = deviceHandle;
+    if (const CNA_Result result = CreateHandle(ObjectKind::StorageContainer,
+        resource,
+        outContainer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    device->openContainers += 1U;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_get_storage_device(
+[[nodiscard]] CNA_Result StorageContainerGetStorageDevice(
     const CNA_StorageContainerHandle containerHandle,
     CNA_StorageDeviceHandle* const outDevice)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDevice == nullptr) {
-            return InvalidArgument("The owning StorageDevice output handle is null.");
-        }
-        *outDevice = CNA_INVALID_HANDLE;
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical property returns a reference to the very device the container was opened
-        // from, so the C route answers with that handle instead of minting a second owner for one
-        // native object.
-        if (&container->value->getStorageDeviceProperty() != container->device->value.get()) {
-            return InternalError(
-                "The canonical container reported a different owning storage device.");
-        }
-        *outDevice = container->deviceHandle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical property returns a reference to the very device the container was opened
+    // from, so the C route answers with that handle instead of minting a second owner for one
+    // native object.
+    if (&container->value->getStorageDeviceProperty() != container->device->value.get()) {
+        return InternalError(
+            "The canonical container reported a different owning storage device.");
+    }
+    *outDevice = container->deviceHandle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_subscribe_disposing(
+[[nodiscard]] CNA_Result StorageContainerSubscribeDisposing(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StorageCompletionCallback callback,
     void* const context,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The Disposing registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The Disposing callback is null.");
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto token = container->value->Disposing.Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        const auto registration = std::make_shared<StorageRegistration>(container->value, token);
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::StorageContainerEventRegistration,
-            registration,
-            outRegistration);
-        if (result == CNA_RESULT_SUCCESS) {
-            return CNA_RESULT_SUCCESS;
-        }
-        registration->Unsubscribe();
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The Disposing registration handle could not be created.");
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The Disposing callback is null.");
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto token = container->value->Disposing.Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    const auto registration = std::make_shared<StorageRegistration>(container->value, token);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::StorageContainerEventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The Disposing registration handle could not be created.");
 }
 
-CNA_Result cna_storage_container_unsubscribe_disposing(const CNA_Handle registrationHandle)
+[[nodiscard]] CNA_Result StorageContainerUnsubscribeDisposing(const CNA_Handle registrationHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = LookupHandle(
-            registrationHandle, ObjectKind::StorageContainerEventRegistration, &registration);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        registration->Unsubscribe();
-        return ReleaseHandle(registrationHandle);
-    });
+    std::shared_ptr<StorageRegistration> registration;
+    const CNA_Result getResult = LookupHandle(
+        registrationHandle, ObjectKind::StorageContainerEventRegistration, &registration);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    registration->Unsubscribe();
+    return ReleaseHandle(registrationHandle);
 }
 
-CNA_Result cna_storage_container_create_directory(
+[[nodiscard]] CNA_Result StorageContainerCreateDirectory(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView directory)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string path;
-        if (const CNA_Result result = RelativePath(directory, &path);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        container->value->CreateDirectory(path);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(directory, &path);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    container->value->CreateDirectory(path);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_directory_exists(
+[[nodiscard]] CNA_Result StorageContainerDirectoryExists(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView directory,
     CNA_Bool* const outExists)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outExists == nullptr) {
-            return InvalidArgument("The directory-existence output is null.");
-        }
-        std::string path;
-        if (const CNA_Result result = RelativePath(directory, &path);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outExists = ToCBool(container->value->DirectoryExists(path));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(directory, &path);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outExists = ToCBool(container->value->DirectoryExists(path));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_delete_directory(
+[[nodiscard]] CNA_Result StorageContainerDeleteDirectory(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView directory)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string path;
-        if (const CNA_Result result = RelativePath(directory, &path);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        container->value->DeleteDirectory(path);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(directory, &path);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    container->value->DeleteDirectory(path);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_file_exists(
+[[nodiscard]] CNA_Result StorageContainerFileExists(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView file,
     CNA_Bool* const outExists)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outExists == nullptr) {
-            return InvalidArgument("The file-existence output is null.");
-        }
-        std::string path;
-        if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outExists = ToCBool(container->value->FileExists(path));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outExists = ToCBool(container->value->FileExists(path));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_delete_file(
+[[nodiscard]] CNA_Result StorageContainerDeleteFile(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView file)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string path;
-        if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        container->value->DeleteFile(path);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    container->value->DeleteFile(path);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_container_create_file(
+[[nodiscard]] CNA_Result StorageContainerCreateFile(
     const CNA_StorageContainerHandle containerHandle,
     const CNA_StringView file,
     CNA_StorageStreamHandle* const outStream)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outStream == nullptr) {
-            return InvalidArgument("The storage stream output handle is null.");
-        }
-        *outStream = CNA_INVALID_HANDLE;
-        std::string path;
-        if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<System::IO::Stream> stream = container->value->CreateFile(path);
-        if (stream == nullptr) {
-            return InternalError("The canonical container returned no stream.");
-        }
-        return CreateStreamHandle(std::move(stream), std::move(container), outStream);
-    });
+    std::string path;
+    if (const CNA_Result result = RelativePath(file, &path); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<System::IO::Stream> stream = container->value->CreateFile(path);
+    if (stream == nullptr) {
+        return InternalError("The canonical container returned no stream.");
+    }
+    return CreateStreamHandle(std::move(stream), std::move(container), outStream);
 }
 
-CNA_Result cna_storage_container_destroy(const CNA_StorageContainerHandle containerHandle)
+[[nodiscard]] CNA_Result StorageContainerDestroy(const CNA_StorageContainerHandle containerHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageContainerResource> container;
-        if (const CNA_Result result = GetContainer(containerHandle, &container);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (container->openStreams != 0U) {
-            return InvalidState(
-                "Every stream opened from this StorageContainer must be closed first.");
-        }
-        container->value->Dispose();
-        if (const CNA_Result releaseResult = ReleaseHandle(containerHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        if (container->device->openContainers != 0U) {
-            container->device->openContainers -= 1U;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<StorageContainerResource> container;
+    if (const CNA_Result result = GetContainer(containerHandle, &container);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (container->openStreams != 0U) {
+        return InvalidState(
+            "Every stream opened from this StorageContainer must be closed first.");
+    }
+    container->value->Dispose();
+    if (const CNA_Result releaseResult = ReleaseHandle(containerHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    if (container->device->openContainers != 0U) {
+        container->device->openContainers -= 1U;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_stream_read(
+[[nodiscard]] CNA_Result StorageStreamRead(
     const CNA_StorageStreamHandle streamHandle,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outRead)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRead == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The storage stream read buffer is invalid.");
-        }
-        *outRead = 0U;
-        System::IO::intcs count = 0;
-        if (const CNA_Result result = CheckedCount(
-                capacity,
-                "The storage stream read capacity exceeds the canonical range.",
-                &count);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (count == 0) {
-            return CNA_RESULT_SUCCESS;
-        }
-        const System::IO::intcs read = stream->value->Read(destination, 0, count);
-        if (read < 0) {
-            return InternalError("The canonical stream reported a negative read count.");
-        }
-        *outRead = static_cast<uint64_t>(read);
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The storage stream read buffer is invalid.");
+    }
+    *outRead = 0U;
+    System::IO::intcs count = 0;
+    if (const CNA_Result result = CheckedCount(
+            capacity,
+            "The storage stream read capacity exceeds the canonical range.",
+            &count);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(streamHandle, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (count == 0) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    const System::IO::intcs read = stream->value->Read(destination, 0, count);
+    if (read < 0) {
+        return InternalError("The canonical stream reported a negative read count.");
+    }
+    *outRead = static_cast<uint64_t>(read);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_stream_write(
+[[nodiscard]] CNA_Result StorageStreamWrite(
     const CNA_StorageStreamHandle streamHandle,
     const uint8_t* const data,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (data == nullptr && count != 0U) {
-            return InvalidArgument("The storage stream write buffer is invalid.");
-        }
-        System::IO::intcs byteCount = 0;
-        if (const CNA_Result result = CheckedCount(
-                count,
-                "The storage stream write count exceeds the canonical range.",
-                &byteCount);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (byteCount == 0) {
-            return CNA_RESULT_SUCCESS;
-        }
-        stream->value->Write(data, 0, byteCount);
+    if (data == nullptr && count != 0U) {
+        return InvalidArgument("The storage stream write buffer is invalid.");
+    }
+    System::IO::intcs byteCount = 0;
+    if (const CNA_Result result = CheckedCount(
+            count,
+            "The storage stream write count exceeds the canonical range.",
+            &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(streamHandle, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (byteCount == 0) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    stream->value->Write(data, 0, byteCount);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_stream_seek(
+[[nodiscard]] CNA_Result StorageStreamSeek(
     const CNA_StorageStreamHandle streamHandle,
     const int64_t offset,
     const CNA_SeekOrigin origin,
     int64_t* const outPosition)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPosition == nullptr) {
-            return InvalidArgument("The storage stream position output is null.");
-        }
-        if (origin > CNA_SEEK_ORIGIN_END) {
-            return InvalidArgument("The requested origin is not a canonical SeekOrigin identity.");
-        }
-        System::IO::intcs nativeOffset = 0;
-        if (const CNA_Result result = CheckedInt32(
-                offset,
-                true,
-                "The storage stream seek offset exceeds the canonical range.",
-                &nativeOffset);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPosition = static_cast<int64_t>(
-            stream->value->Seek(nativeOffset, static_cast<System::IO::SeekOrigin>(origin)));
-        return CNA_RESULT_SUCCESS;
-    });
+    if (origin > CNA_SEEK_ORIGIN_END) {
+        return InvalidArgument("The requested origin is not a canonical SeekOrigin identity.");
+    }
+    System::IO::intcs nativeOffset = 0;
+    if (const CNA_Result result = CheckedInt32(
+            offset,
+            true,
+            "The storage stream seek offset exceeds the canonical range.",
+            &nativeOffset);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(streamHandle, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outPosition = static_cast<int64_t>(
+        stream->value->Seek(nativeOffset, static_cast<System::IO::SeekOrigin>(origin)));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_stream_set_length(
+[[nodiscard]] CNA_Result StorageStreamSetLength(
     const CNA_StorageStreamHandle streamHandle,
     const int64_t length)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        System::IO::intcs nativeLength = 0;
-        if (const CNA_Result result = CheckedInt32(
-                length,
-                false,
-                "The storage stream length is negative or exceeds the canonical range.",
-                &nativeLength);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        stream->value->SetLength(nativeLength);
-        return CNA_RESULT_SUCCESS;
-    });
+    System::IO::intcs nativeLength = 0;
+    if (const CNA_Result result = CheckedInt32(
+            length,
+            false,
+            "The storage stream length is negative or exceeds the canonical range.",
+            &nativeLength);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(streamHandle, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    stream->value->SetLength(nativeLength);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
+[[nodiscard]] CNA_Result StorageStreamClose(const CNA_StorageStreamHandle streamHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageStreamResource> stream;
-        if (const CNA_Result result = GetStream(streamHandle, &stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (stream->activeBorrowCount != 0U) {
-            return InvalidState(
-                "Every reader borrowing this stream must be destroyed before it is closed.");
-        }
-        stream->value->Close();
-        if (const CNA_Result releaseResult = ReleaseHandle(streamHandle);
-            releaseResult != CNA_RESULT_SUCCESS) {
-            return releaseResult;
-        }
-        if (stream->container->openStreams != 0U) {
-            stream->container->openStreams -= 1U;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(streamHandle, &stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (stream->activeBorrowCount != 0U) {
+        return InvalidState(
+            "Every reader borrowing this stream must be destroyed before it is closed.");
+    }
+    stream->value->Close();
+    if (const CNA_Result releaseResult = ReleaseHandle(streamHandle);
+        releaseResult != CNA_RESULT_SUCCESS) {
+        return releaseResult;
+    }
+    if (stream->container->openStreams != 0U) {
+        stream->container->openStreams -= 1U;
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Storage.toml.
 #include "generated/Storage.inc"

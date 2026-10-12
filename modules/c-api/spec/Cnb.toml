@@ -283,3 +283,123 @@ other = { lookup = "GetTextureData", object = "std::shared_ptr<CnbTextureDataRes
 
 [writer_and_texture_data.routes]
 cna_cnb_writer_append_embedded_texture2d = { call = "Cnb::AppendEmbeddedTexture2DChunks(*object->value, *other->value, label.c_str())" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_cnb_read_limits_init = { result = "CnbReadLimitsInit(out_limits)" }
+cna_cnb_copy_format_magic = { result = "CnbCopyFormatMagic(destination, capacity, out_byte_count)" }
+cna_cnb_checked_add = { result = "CnbCheckedAdd(a, b, out_sum)" }
+cna_cnb_checked_multiply = { result = "CnbCheckedMultiply(a, b, out_product)" }
+cna_cnb_crc32c_continue = { result = "CnbCrc32cContinue(previous, data, byte_count, out_checksum)" }
+cna_cnb_get_compressed_byte_count = { result = "CnbGetCompressedByteCount(raw, raw_byte_count, codec, level, out_byte_count)" }
+cna_cnb_copy_compressed = { result = "CnbCopyCompressed(raw, raw_byte_count, codec, level, destination, capacity, out_byte_count)" }
+cna_cnb_copy_decompressed = { result = "CnbCopyDecompressed(stored, stored_byte_count, codec, uncompressed_size, max_uncompressed_size, destination, capacity, out_byte_count)" }
+cna_cnb_chunk_entry_is_mandatory = { result = "CnbChunkEntryIsMandatory(entry, out_mandatory)" }
+cna_cnb_document_parse = { result = "CnbDocumentParse(bytes, byte_count, origin, limits, out_document)" }
+cna_cnb_document_parse_file = { result = "CnbDocumentParseFile(path, limits, out_document)" }
+cna_cnb_document_get_chunk = { result = "CnbDocumentGetChunk(document, index, out_entry)" }
+cna_cnb_document_open_chunk = { result = "CnbDocumentOpenChunk(document, index, out_reader)" }
+cna_cnb_document_find_all = { result = "CnbDocumentFindAll(document, type, destination, capacity, out_count)" }
+cna_cnb_document_find_single = { result = "CnbDocumentFindSingle(document, type, out_found, out_index)" }
+cna_cnb_document_get_metadata = { result = "CnbDocumentGetMetadata(document, out_metadata)" }
+cna_cnb_document_get_external_reference = { result = "CnbDocumentGetExternalReference(document, index, what_for_diagnostics, out_reference)" }
+cna_cnb_document_get_limits = { result = "CnbDocumentGetLimits(document, out_limits)" }
+cna_cnb_reader_create = { result = "CnbReaderCreate(data, byte_count, context, limits, out_reader)" }
+cna_cnb_reader_read_string = { result = "CnbReaderReadString(reader, out_byte_count)" }
+cna_cnb_reader_read_bytes = { result = "CnbReaderReadBytes(reader, byte_count, destination, capacity, out_byte_count)" }
+cna_cnb_is_well_formed_utf8 = { result = "CnbIsWellFormedUtf8(text, out_well_formed)" }
+cna_cnb_byte_writer_take = { result = "CnbByteWriterTake(writer, destination, capacity, out_byte_count)" }
+cna_cnb_writer_get_limits = { result = "CnbWriterGetLimits(writer, out_limits)" }
+cna_cnb_texture_data_create = { result = "CnbTextureDataCreate(width, height, depth, face_count, mip_count, out_texture)" }
+cna_cnb_texture_data_create_rgba8 = { result = "CnbTextureDataCreateRgba8(width, height, rgba, byte_count, out_texture)" }
+cna_cnb_texture_data_get_info = { result = "CnbTextureDataGetInfo(texture, out_info)" }
+cna_cnb_texture_data_get_level_dimensions = { result = "CnbTextureDataGetLevelDimensions(texture, level, out_width, out_height, out_depth)" }
+cna_cnb_texture_data_add_representation = { result = "CnbTextureDataAddRepresentation(texture, format, out_index)" }
+cna_cnb_texture_data_copy_level = { result = "CnbTextureDataCopyLevel(texture, representation, level, destination, capacity, out_byte_count)" }
+cna_cnb_texture_data_select_representation = { result = "CnbTextureDataSelectRepresentation(texture, supported, context, out_found, out_index)" }
+cna_cnb_document_read_embedded_texture2d = { result = "CnbDocumentReadEmbeddedTexture2d(document, label, out_texture)" }
+cna_cnb_model_set_flags = { result = "CnbModelSetFlags(model, applies_gltf_lighting_policy, has_bone_hierarchy)" }
+cna_cnb_model_get_material_texture_transform = { result = "CnbModelGetMaterialTextureTransform(model, part, slot, out_transform)" }
+cna_cnb_model_get_material_sampler = { result = "CnbModelGetMaterialSampler(model, part, slot, out_sampler)" }
+cna_cnb_model_has_morph = { result = "CnbModelHasMorph(model, part, out_present)" }
+cna_cnb_model_copy_mesh_part_indices = { result = "CnbModelCopyMeshPartIndices(model, index, destination, capacity, out_index_count)" }
+cna_cnb_model_copy_skeleton_hierarchy = { result = "CnbModelCopySkeletonHierarchy(model, destination, capacity, out_index_count)" }
+cna_cnb_model_copy_skeleton_matrices = { result = "CnbModelCopySkeletonMatrices(model, set, destination, capacity, out_value_count)" }
+cna_cnb_model_copy_animation_keyframes = { result = "CnbModelCopyAnimationKeyframes(model, index, track, destination, capacity, out_keyframe_count)" }
+cna_cnb_model_get_light = { result = "CnbModelGetLight(model, index, out_light)" }
+cna_cnb_build_model_from_cnj = { result = "CnbBuildModelFromCnj(cnj_path, content_root, out_result)" }
+cna_cnb_model_from_cnj_take_model = { result = "CnbModelFromCnjTakeModel(result, out_model)" }
+cna_cnb_sound_effect_data_create = { result = "CnbSoundEffectDataCreate(info, samples, byte_count, out_sound)" }
+cna_cnb_encode_video = { result = "CnbEncodeVideo(stream_reference, info, content_name, destination, capacity, out_byte_count)" }
+cna_cnb_encode_curve = { result = "CnbEncodeCurve(curve, content_name, destination, capacity, out_byte_count)" }
+cna_cnb_encode_animation_clip = { result = "CnbEncodeAnimationClip(clip, target_space, content_name, destination, capacity, out_byte_count)" }
+cna_cnb_reader_read_keyframe = { result = "CnbReaderReadKeyframe(reader, out_keyframe)" }
+cna_cnb_loader_invoke = { result = "CnbLoaderInvoke(loader, document, content_manager, asset_name, out_object)" }
+cna_cnb_import_image_as_texture2d = { result = "CnbImportImageAsTexture2d(image_path, options, out_texture)" }
+cna_cnb_decode_dds_as_texture_cube = { result = "CnbDecodeDdsAsTextureCube(bytes, byte_count, origin, out_texture)" }
+cna_cnb_decode_wav_as_sound_effect = { result = "CnbDecodeWavAsSoundEffect(bytes, byte_count, origin, out_sound)" }
+cna_cnb_compile_cnj = { result = "CnbCompileCnj(cnj_path, content_root, content_name, out_result)" }
+cna_cnb_model_get_info = { result = "CnbModelGetInfo(model, out_info)" }
+cna_cnb_model_get_bone = { result = "CnbModelGetBone(model, index, out_bone)" }
+cna_cnb_model_get_part = { result = "CnbModelGetPart(model, index, out_info)" }
+cna_cnb_model_get_material = { result = "CnbModelGetMaterial(model, part, out_info)" }
+cna_cnb_model_get_morph = { result = "CnbModelGetMorph(model, part, out_info)" }
+cna_cnb_model_get_morph_weight_key = { result = "CnbModelGetMorphWeightKey(model, part, key, out_info)" }
+cna_cnb_model_get_mesh = { result = "CnbModelGetMesh(model, index, out_info)" }
+cna_cnb_model_get_skeleton = { result = "CnbModelGetSkeleton(model, out_info)" }
+cna_cnb_sprite_font_data_get_info = { result = "CnbSpriteFontDataGetInfo(font, out_info)" }
+cna_cnb_sprite_font_data_get_glyph = { result = "CnbSpriteFontDataGetGlyph(font, index, out_glyph)" }
+cna_cnb_sound_effect_data_get_info = { result = "CnbSoundEffectDataGetInfo(sound, out_info)" }
+cna_cnb_decode_video = { result = "CnbDecodeVideo(document, out_info)" }
+cna_cnb_get_logical_name_problem_size = { result = "CnbGetLogicalNameProblemSize(logical_name, out_byte_count)", optional = ["out_byte_count"] }
+cna_cnb_copy_logical_name_problem = { result = "CnbCopyLogicalNameProblem(logical_name, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_cnb_model_add_bone = { result = "CnbModelAddBone(model, name, parent, transform, out_index)", optional = ["out_index"] }
+cna_cnb_model_add_part = { result = "CnbModelAddPart(model, info, name, external_effect, out_index)", optional = ["out_index"] }
+cna_cnb_model_get_material_texture_size = { result = "CnbModelGetMaterialTextureSize(model, part, slot, out_byte_count)", optional = ["out_byte_count"] }
+cna_cnb_model_copy_material_texture = { result = "CnbModelCopyMaterialTexture(model, part, slot, destination, capacity, out_byte_count)", optional = ["out_byte_count"] }
+cna_cnb_model_add_morph_target = { result = "CnbModelAddMorphTarget(model, part, out_index)", optional = ["out_index"] }
+cna_cnb_model_copy_morph_target_deltas = { result = "CnbModelCopyMorphTargetDeltas(model, part, target, stream, destination, capacity, out_value_count)", optional = ["out_value_count"] }
+cna_cnb_model_add_morph_weight_key = { result = "CnbModelAddMorphWeightKey(model, part, time_seconds, weights, weight_count, in_tangents, in_tangent_count, out_tangents, out_tangent_count, out_index)", optional = ["out_index"] }
+cna_cnb_model_copy_morph_weight_key_values = { result = "CnbModelCopyMorphWeightKeyValues(model, part, key, stream, destination, capacity, out_value_count)", optional = ["out_value_count"] }
+cna_cnb_model_add_mesh = { result = "CnbModelAddMesh(model, name, parent_bone, part_indices, part_index_count, out_index)", optional = ["out_index"] }
+cna_cnb_model_add_animation = { result = "CnbModelAddAnimation(model, name, clip, target_space, out_index)", optional = ["out_index"] }
+cna_cnb_model_get_animation = { result = "CnbModelGetAnimation(model, index, out_duration_seconds, out_track_count, out_target_space)", optional = ["out_duration_seconds", "out_track_count", "out_target_space"] }
+cna_cnb_model_get_animation_track = { result = "CnbModelGetAnimationTrack(model, index, track, out_bone_index, out_keyframe_count)", optional = ["out_bone_index", "out_keyframe_count"] }
+cna_cnb_model_add_light = { result = "CnbModelAddLight(model, light, out_index)", optional = ["out_index"] }
+cna_cnb_sprite_font_data_add_glyph = { result = "CnbSpriteFontDataAddGlyph(font, glyph, out_index)", optional = ["out_index"] }
+cna_cnb_animation_clip_get = { result = "CnbAnimationClipGet(clip, out_duration_seconds, out_track_count, out_target_space)", optional = ["out_duration_seconds", "out_track_count", "out_target_space"] }
+cna_cnb_animation_clip_get_track = { result = "CnbAnimationClipGetTrack(clip, track, out_bone_index, out_keyframe_count)", optional = ["out_bone_index", "out_keyframe_count"] }
+cna_cnb_loader_registry_remove = { result = "CnbLoaderRegistryRemove(asset_type_id, out_removed)", optional = ["out_removed"] }
+cna_cnb_loader_registry_find = { result = "CnbLoaderRegistryFind(asset_type_id, out_found, out_loader)", optional = ["out_found"] }
+cna_cnb_document_require_mandatory_chunks_understood = { result = "CnbDocumentRequireMandatoryChunksUnderstood(document, known_types, known_type_count)" }
+cna_cnb_reader_fail = { result = "CnbReaderFail(reader, detail)" }
+cna_cnb_byte_writer_write_bytes = { result = "CnbByteWriterWriteBytes(writer, bytes, byte_count)" }
+cna_cnb_byte_writer_write_zeros = { result = "CnbByteWriterWriteZeros(writer, byte_count)" }
+cna_cnb_writer_add_external_reference = { result = "CnbWriterAddExternalReference(writer, reference, logical_name)" }
+cna_cnb_writer_clear_external_references = { result = "CnbWriterClearExternalReferences(writer)" }
+cna_cnb_writer_add_chunk = { result = "CnbWriterAddChunk(writer, type, data, byte_count, flags, alignment)" }
+cna_cnb_writer_set_compression = { result = "CnbWriterSetCompression(writer, codec, level)" }
+cna_cnb_writer_set_limits = { result = "CnbWriterSetLimits(writer, limits)" }
+cna_cnb_writer_write_to_file = { result = "CnbWriterWriteToFile(writer, path)" }
+cna_cnb_texture_data_set_level = { result = "CnbTextureDataSetLevel(texture, representation, level, bytes, byte_count)" }
+cna_cnb_model_set_part = { result = "CnbModelSetPart(model, index, info)" }
+cna_cnb_model_set_part_vertex_bytes = { result = "CnbModelSetPartVertexBytes(model, index, bytes, byte_count)" }
+cna_cnb_model_set_part_index_bytes = { result = "CnbModelSetPartIndexBytes(model, index, bytes, byte_count)" }
+cna_cnb_model_set_material = { result = "CnbModelSetMaterial(model, part, info)" }
+cna_cnb_model_set_material_texture = { result = "CnbModelSetMaterialTexture(model, part, slot, asset_name)" }
+cna_cnb_model_set_material_texture_transform = { result = "CnbModelSetMaterialTextureTransform(model, part, slot, transform)" }
+cna_cnb_model_set_material_sampler = { result = "CnbModelSetMaterialSampler(model, part, slot, sampler)" }
+cna_cnb_model_set_morph = { result = "CnbModelSetMorph(model, part, info)" }
+cna_cnb_model_set_morph_target_deltas = { result = "CnbModelSetMorphTargetDeltas(model, part, target, stream, values, value_count)" }
+cna_cnb_model_set_morph_weights = { result = "CnbModelSetMorphWeights(model, part, values, value_count)" }
+cna_cnb_model_set_skeleton = { result = "CnbModelSetSkeleton(model, hierarchy, joint_count, bind_pose, inverse_bind_pose, root_prefix)" }
+cna_cnb_sprite_font_data_set_info = { result = "CnbSpriteFontDataSetInfo(font, info)" }
+cna_cnb_sprite_font_data_set_glyph = { result = "CnbSpriteFontDataSetGlyph(font, index, glyph)" }
+cna_cnb_byte_writer_write_keyframe = { result = "CnbByteWriterWriteKeyframe(writer, keyframe)" }
+cna_cnb_loader_registry_register = { result = "CnbLoaderRegistryRegister(asset_type_id, canonical_type_name, callback, context)" }
+cna_cnb_asset_type_id_from_name = { result = "CnbAssetTypeIdFromNameRoute(name, out_asset_type_id)" }

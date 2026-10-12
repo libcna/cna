@@ -257,3 +257,247 @@ CNA_Result cna_game_set_content_manager_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_content_manager_create(
+    const CNA_Handle graphics_device,
+    const CNA_ContentManagerCreateInfo* const create_info,
+    CNA_Handle* const out_content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_content_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_create: out_content_manager is null.");
+        }
+        *out_content_manager = CNA_INVALID_HANDLE;
+        return ContentManagerCreate(graphics_device, create_info, out_content_manager);
+    });
+}
+
+CNA_Result cna_content_manager_load_texture2d(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_texture2d: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return ContentManagerLoadTexture2d(content_manager, asset_name, out_texture);
+    });
+}
+
+CNA_Result cna_content_manager_create_resource(
+    const CNA_Handle graphics_device,
+    const CNA_ContentManagerCreateInfo* const create_info,
+    CNA_Handle* const out_content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_content_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_create_resource: out_content_manager is null.");
+        }
+        *out_content_manager = CNA_INVALID_HANDLE;
+        return ContentManagerCreateResource(graphics_device, create_info, out_content_manager);
+    });
+}
+
+CNA_Result cna_content_manager_load_sound_effect(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_Handle* const out_sound_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_sound_effect: out_sound_effect is null.");
+        }
+        *out_sound_effect = CNA_INVALID_HANDLE;
+        return ContentManagerLoadSoundEffect(content_manager, asset_name, out_sound_effect);
+    });
+}
+
+CNA_Result cna_content_manager_load_texture_cube(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_texture_cube: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return ContentManagerLoadTextureCube(content_manager, asset_name, out_texture);
+    });
+}
+
+CNA_Result cna_content_manager_load_sprite_font(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_Handle* const out_sprite_font,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sprite_font == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_sprite_font: out_sprite_font is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_sprite_font: out_texture is null.");
+        }
+        *out_sprite_font = CNA_INVALID_HANDLE;
+        *out_texture = CNA_INVALID_HANDLE;
+        return ContentManagerLoadSpriteFont(content_manager, asset_name, out_sprite_font, out_texture);
+    });
+}
+
+CNA_Result cna_content_manager_load_foreign_ext(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    void** const out_object)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_object == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_foreign_ext: out_object is null.");
+        }
+        return ContentManagerLoadForeignExt(content_manager, asset_name, out_object);
+    });
+}
+
+CNA_Result cna_content_manager_get_asset_path_size(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_get_asset_path_size: out_bytes is null.");
+        }
+        return ContentManagerGetAssetPathSize(content_manager, asset_name, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_get_normalized_key_size(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_get_normalized_key_size: out_bytes is null.");
+        }
+        return ContentManagerGetNormalizedKeySize(content_manager, asset_name, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_get_graphics_device(
+    const CNA_Handle content_manager,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        return ContentManagerGetGraphicsDevice(content_manager, out_graphics_device);
+    });
+}
+
+CNA_Result cna_game_get_content_manager_ext(
+    const CNA_Handle game,
+    CNA_Handle* const out_content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_content_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_get_content_manager_ext: out_content_manager is null.");
+        }
+        *out_content_manager = CNA_INVALID_HANDLE;
+        return GameGetContentManagerExt(game, out_content_manager);
+    });
+}
+
+CNA_Result cna_content_manager_get_manifest_entry(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    CNA_ContentManifestEntryInfo* const out_entry)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_entry == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_get_manifest_entry: out_entry is null.");
+        }
+        return ContentManagerGetManifestEntry(content_manager, index, out_entry);
+    });
+}
+
+CNA_Result cna_content_manager_get_xnb_reader_usage(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    CNA_ContentReaderUsageInfo* const out_usage)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_usage == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_get_xnb_reader_usage: out_usage is null.");
+        }
+        return ContentManagerGetXnbReaderUsage(content_manager, index, out_usage);
+    });
+}
+
+CNA_Result cna_content_manager_copy_asset_path(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerCopyAssetPath(content_manager, asset_name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_copy_normalized_key(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerCopyNormalizedKey(content_manager, asset_name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerCopyXnbReaderUsageName(content_manager, index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_register_cnj_loader_ext(
+    const CNA_Handle content_manager,
+    const CNA_StringView type_name,
+    const CNA_CnjLoaderCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerRegisterCnjLoaderExt(content_manager, type_name, callback, context);
+    });
+}
+
+CNA_Result cna_content_manager_set_graphics_device(
+    const CNA_Handle content_manager,
+    const CNA_Handle graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerSetGraphicsDevice(content_manager, graphics_device);
+    });
+}
+
+CNA_Result cna_content_manager_destroy(
+    const CNA_Handle content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentManagerDestroy(content_manager);
+    });
+}

@@ -79,3 +79,44 @@ object = "std::shared_ptr<ForeignReaderRegistration>"
 
 [foreign_registration.routes]
 cna_content_type_reader_manager_unregister = { release = "static_cast<void>(ContentTypeReaderManager::RemoveTypeCreatorEXT(object->canonicalName))" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_content_reader_create = { result = "ContentReaderCreate(create_info, out_reader)" }
+cna_content_reader_get_content_manager = { result = "ContentReaderGetContentManager(reader, out_content_manager)" }
+cna_content_reader_read_bytes_exact = { result = "ContentReaderReadBytesExact(reader, count, reader_name, destination, capacity, out_bytes)" }
+cna_content_type_reader_manager_register = { result = "ContentTypeReaderManagerRegister(canonical_name, callbacks, out_registration)" }
+cna_content_type_reader_manager_create_reader = { result = "ContentTypeReaderManagerCreateReader(canonical_name, out_type_reader)" }
+cna_content_type_reader_read_untyped = { result = "ContentTypeReaderReadUntyped(type_reader, reader, out_has_value)" }
+cna_reflective_type_reader_builder_create = { result = "ReflectiveTypeReaderBuilderCreate(target_type_name, create_callback, context, out_builder)" }
+cna_object_dictionary_ext_get_key_size_at = { result = "ObjectDictionaryExtGetKeySizeAt(dictionary, index, out_byte_count)" }
+cna_object_dictionary_ext_copy_key_at = { result = "ObjectDictionaryExtCopyKeyAt(dictionary, index, destination, capacity, out_byte_count)" }
+cna_object_dictionary_ext_get_entry = { result = "ObjectDictionaryExtGetEntry(dictionary, key, out_entry)" }
+cna_object_dictionary_ext_copy_type_name = { result = "ObjectDictionaryExtCopyTypeName(dictionary, key, destination, capacity, out_byte_count)" }
+cna_object_dictionary_ext_copy_array = { result = "ObjectDictionaryExtCopyArray(dictionary, key, kind, destination, capacity, out_byte_count)" }
+cna_object_dictionary_ext_get_string_size = { result = "ObjectDictionaryExtGetStringSize(dictionary, key, out_byte_count)" }
+cna_object_dictionary_ext_copy_string = { result = "ObjectDictionaryExtCopyString(dictionary, key, destination, capacity, out_byte_count)" }
+cna_object_dictionary_ext_get_foreign_object = { result = "ObjectDictionaryExtGetForeignObject(dictionary, key, out_object)" }
+cna_content_manager_load_object_dictionary_ext = { result = "ContentManagerLoadObjectDictionaryExt(content_manager, asset_name, out_dictionary)" }
+cna_content_reader_read_matrix = { result = "ContentReaderReadMatrix(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_quaternion = { result = "ContentReaderReadQuaternion(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_vector2 = { result = "ContentReaderReadVector2(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_vector3 = { result = "ContentReaderReadVector3(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_vector4 = { result = "ContentReaderReadVector4(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_color = { result = "ContentReaderReadColor(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_bounding_sphere = { result = "ContentReaderReadBoundingSphere(reader, out_value)", optional = ["out_value"] }
+cna_content_reader_read_object_tag = { result = "ContentReaderReadObjectTag(reader, out_has_value)", optional = ["out_has_value"] }
+cna_content_reader_check_collection_element_count = { result = "ContentReaderCheckCollectionElementCount(reader, count, reader_name)" }
+cna_content_reader_check_decoded_byte_size = { result = "ContentReaderCheckDecodedByteSize(reader, byte_size, reader_name)" }
+cna_content_type_reader_initialize = { result = "ContentTypeReaderInitialize(type_reader)" }
+cna_reflective_type_reader_builder_add_field = { result = "ReflectiveTypeReaderBuilderAddField(builder, kind, offset_in_bytes)" }
+cna_reflective_type_reader_builder_add_enum_field = { result = "ReflectiveTypeReaderBuilderAddEnumField(builder, offset_in_bytes, enum_type_name)" }
+cna_reflective_type_reader_builder_add_custom = { result = "ReflectiveTypeReaderBuilderAddCustom(builder, callback, context)" }
+cna_reflective_type_reader_builder_register = { result = "ReflectiveTypeReaderBuilderRegister(builder)" }
+cna_reflective_type_reader_builder_register_shared = { result = "ReflectiveTypeReaderBuilderRegisterShared(builder)" }
+cna_object_dictionary_ext_copy_value = { result = "ObjectDictionaryExtCopyValue(dictionary, key, kind, destination, capacity)" }

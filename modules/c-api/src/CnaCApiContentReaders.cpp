@@ -162,279 +162,245 @@ template<typename TCallable>
         ObjectKind::ContentTypeReader, std::move(typeReader), outTypeReader);
 }
 
-} // namespace
-
-CNA_Result cna_content_reader_create(
+[[nodiscard]] CNA_Result ContentReaderCreate(
     const CNA_ContentReaderCreateInfo* const createInfo,
     CNA_ContentReaderHandle* const outReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReader == nullptr) {
-            return InvalidArgument("The ContentReader output handle is null.");
-        }
-        *outReader = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(createInfo) || createInfo->reserved[0] != 0U ||
-            createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U) {
-            return InvalidArgument("The ContentReader creation configuration is invalid.");
-        }
+    if (!IsVersionedStructure(createInfo) || createInfo->reserved[0] != 0U ||
+        createInfo->reserved[1] != 0U || createInfo->reserved[2] != 0U) {
+        return InvalidArgument("The ContentReader creation configuration is invalid.");
+    }
 
-        std::string assetName;
-        if (const CNA_Result result = ReadText(
-                createInfo->asset_name, "The ContentReader asset name is not valid UTF-8.",
-                &assetName, EmbeddedNul::Refused);
+    std::string assetName;
+    if (const CNA_Result result = ReadText(
+            createInfo->asset_name, "The ContentReader asset name is not valid UTF-8.",
+            &assetName, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    const auto resource = std::make_shared<ContentReaderResource>();
+    if (createInfo->content_manager != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = BorrowContentManager(
+                createInfo->content_manager,
+                &resource->contentManager);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        resource->contentManagerHandle = createInfo->content_manager;
+    }
+    if (const CNA_Result result = AcquireStorageStream(createInfo->stream, &resource->stream);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        const auto resource = std::make_shared<ContentReaderResource>();
-        if (createInfo->content_manager != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = BorrowContentManager(
-                    createInfo->content_manager,
-                    &resource->contentManager);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            resource->contentManagerHandle = createInfo->content_manager;
-        }
-        if (const CNA_Result result = AcquireStorageStream(createInfo->stream, &resource->stream);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    resource->value = std::make_shared<ContentReader>(
+        resource->contentManager.value,
+        resource->stream.value,
+        std::move(assetName),
+        createInfo->version,
+        static_cast<char>(createInfo->platform));
 
-        resource->value = std::make_shared<ContentReader>(
-            resource->contentManager.value,
-            resource->stream.value,
-            std::move(assetName),
-            createInfo->version,
-            static_cast<char>(createInfo->platform));
-
-        return CreateHandle(ObjectKind::ContentReader, resource, outReader);
-    });
+    return CreateHandle(ObjectKind::ContentReader, resource, outReader);
 }
 
-CNA_Result cna_content_reader_get_content_manager(
+[[nodiscard]] CNA_Result ContentReaderGetContentManager(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Handle* const outContentManager)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContentManager == nullptr) {
-            return InvalidArgument("The ContentManager output handle is null.");
-        }
-        *outContentManager = CNA_INVALID_HANDLE;
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (reader->value->getContentManagerProperty() != reader->contentManager.value) {
-            return InternalError("The canonical reader reported a different content manager.");
-        }
-        *outContentManager = reader->contentManagerHandle;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (reader->value->getContentManagerProperty() != reader->contentManager.value) {
+        return InternalError("The canonical reader reported a different content manager.");
+    }
+    *outContentManager = reader->contentManagerHandle;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_reader_read_matrix(
+[[nodiscard]] CNA_Result ContentReaderReadMatrix(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Matrix* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The matrix output is null.",
-            [outValue](ContentReader& reader) {
-                const Matrix value = reader.ReadMatrix();
-                outValue->m11 = value.M11;
-                outValue->m12 = value.M12;
-                outValue->m13 = value.M13;
-                outValue->m14 = value.M14;
-                outValue->m21 = value.M21;
-                outValue->m22 = value.M22;
-                outValue->m23 = value.M23;
-                outValue->m24 = value.M24;
-                outValue->m31 = value.M31;
-                outValue->m32 = value.M32;
-                outValue->m33 = value.M33;
-                outValue->m34 = value.M34;
-                outValue->m41 = value.M41;
-                outValue->m42 = value.M42;
-                outValue->m43 = value.M43;
-                outValue->m44 = value.M44;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The matrix output is null.",
+        [outValue](ContentReader& reader) {
+            const Matrix value = reader.ReadMatrix();
+            outValue->m11 = value.M11;
+            outValue->m12 = value.M12;
+            outValue->m13 = value.M13;
+            outValue->m14 = value.M14;
+            outValue->m21 = value.M21;
+            outValue->m22 = value.M22;
+            outValue->m23 = value.M23;
+            outValue->m24 = value.M24;
+            outValue->m31 = value.M31;
+            outValue->m32 = value.M32;
+            outValue->m33 = value.M33;
+            outValue->m34 = value.M34;
+            outValue->m41 = value.M41;
+            outValue->m42 = value.M42;
+            outValue->m43 = value.M43;
+            outValue->m44 = value.M44;
+        });
 }
 
-CNA_Result cna_content_reader_read_quaternion(
+[[nodiscard]] CNA_Result ContentReaderReadQuaternion(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Quaternion* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The quaternion output is null.",
-            [outValue](ContentReader& reader) {
-                const Quaternion value = reader.ReadQuaternion();
-                outValue->x = value.X;
-                outValue->y = value.Y;
-                outValue->z = value.Z;
-                outValue->w = value.W;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The quaternion output is null.",
+        [outValue](ContentReader& reader) {
+            const Quaternion value = reader.ReadQuaternion();
+            outValue->x = value.X;
+            outValue->y = value.Y;
+            outValue->z = value.Z;
+            outValue->w = value.W;
+        });
 }
 
-CNA_Result cna_content_reader_read_vector2(
+[[nodiscard]] CNA_Result ContentReaderReadVector2(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Vector2* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The vector output is null.",
-            [outValue](ContentReader& reader) {
-                const Vector2 value = reader.ReadVector2();
-                outValue->x = value.X;
-                outValue->y = value.Y;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The vector output is null.",
+        [outValue](ContentReader& reader) {
+            const Vector2 value = reader.ReadVector2();
+            outValue->x = value.X;
+            outValue->y = value.Y;
+        });
 }
 
-CNA_Result cna_content_reader_read_vector3(
+[[nodiscard]] CNA_Result ContentReaderReadVector3(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Vector3* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The vector output is null.",
-            [outValue](ContentReader& reader) {
-                const Vector3 value = reader.ReadVector3();
-                outValue->x = value.X;
-                outValue->y = value.Y;
-                outValue->z = value.Z;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The vector output is null.",
+        [outValue](ContentReader& reader) {
+            const Vector3 value = reader.ReadVector3();
+            outValue->x = value.X;
+            outValue->y = value.Y;
+            outValue->z = value.Z;
+        });
 }
 
-CNA_Result cna_content_reader_read_vector4(
+[[nodiscard]] CNA_Result ContentReaderReadVector4(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Vector4* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The vector output is null.",
-            [outValue](ContentReader& reader) {
-                const Vector4 value = reader.ReadVector4();
-                outValue->x = value.X;
-                outValue->y = value.Y;
-                outValue->z = value.Z;
-                outValue->w = value.W;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The vector output is null.",
+        [outValue](ContentReader& reader) {
+            const Vector4 value = reader.ReadVector4();
+            outValue->x = value.X;
+            outValue->y = value.Y;
+            outValue->z = value.Z;
+            outValue->w = value.W;
+        });
 }
 
-CNA_Result cna_content_reader_read_color(
+[[nodiscard]] CNA_Result ContentReaderReadColor(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Color* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The color output is null.",
-            [outValue](ContentReader& reader) {
-                const Color value = reader.ReadColor();
-                outValue->r = value.getRProperty();
-                outValue->g = value.getGProperty();
-                outValue->b = value.getBProperty();
-                outValue->a = value.getAProperty();
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The color output is null.",
+        [outValue](ContentReader& reader) {
+            const Color value = reader.ReadColor();
+            outValue->r = value.getRProperty();
+            outValue->g = value.getGProperty();
+            outValue->b = value.getBProperty();
+            outValue->a = value.getAProperty();
+        });
 }
 
-CNA_Result cna_content_reader_read_bounding_sphere(
+[[nodiscard]] CNA_Result ContentReaderReadBoundingSphere(
     const CNA_ContentReaderHandle readerHandle,
     CNA_BoundingSphere* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outValue,
-            "The bounding-sphere output is null.",
-            [outValue](ContentReader& reader) {
-                const BoundingSphere value = reader.ReadBoundingSphere();
-                outValue->center.x = value.Center.X;
-                outValue->center.y = value.Center.Y;
-                outValue->center.z = value.Center.Z;
-                outValue->radius = value.Radius;
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outValue,
+        "The bounding-sphere output is null.",
+        [outValue](ContentReader& reader) {
+            const BoundingSphere value = reader.ReadBoundingSphere();
+            outValue->center.x = value.Center.X;
+            outValue->center.y = value.Center.Y;
+            outValue->center.z = value.Center.Z;
+            outValue->radius = value.Radius;
+        });
 }
 
-CNA_Result cna_content_reader_read_object_tag(
+[[nodiscard]] CNA_Result ContentReaderReadObjectTag(
     const CNA_ContentReaderHandle readerHandle,
     CNA_Bool* const outHasValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        return ReadValue(
-            readerHandle,
-            outHasValue,
-            "The object-presence output is null.",
-            [outHasValue](ContentReader& reader) {
-                const std::any value = reader.ReadObject();
-                *outHasValue = ToCBool(value.has_value());
-            });
-    });
+    return ReadValue(
+        readerHandle,
+        outHasValue,
+        "The object-presence output is null.",
+        [outHasValue](ContentReader& reader) {
+            const std::any value = reader.ReadObject();
+            *outHasValue = ToCBool(value.has_value());
+        });
 }
 
-CNA_Result cna_content_reader_check_collection_element_count(
+[[nodiscard]] CNA_Result ContentReaderCheckCollectionElementCount(
     const CNA_ContentReaderHandle readerHandle,
     const int64_t count,
     const CNA_StringView readerName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string readerNameCopy;
-        if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->CheckCollectionElementCount(count, readerNameCopy);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string readerNameCopy;
+    if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    reader->value->CheckCollectionElementCount(count, readerNameCopy);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_reader_check_decoded_byte_size(
+[[nodiscard]] CNA_Result ContentReaderCheckDecodedByteSize(
     const CNA_ContentReaderHandle readerHandle,
     const int64_t byteSize,
     const CNA_StringView readerName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string readerNameCopy;
-        if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        reader->value->CheckDecodedByteSize(byteSize, readerNameCopy);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::string readerNameCopy;
+    if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    reader->value->CheckDecodedByteSize(byteSize, readerNameCopy);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_reader_read_bytes_exact(
+[[nodiscard]] CNA_Result ContentReaderReadBytesExact(
     const CNA_ContentReaderHandle readerHandle,
     const int32_t count,
     const CNA_StringView readerName,
@@ -442,41 +408,37 @@ CNA_Result cna_content_reader_read_bytes_exact(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The exact-read output buffer is invalid.");
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The exact-read output buffer is invalid.");
+    }
+    std::string readerNameCopy;
+    if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The capacity is decided before the stream is touched, so a destination that is too small
+    // never consumes bytes the caller would then have to seek back over.
+    if (count >= 0) {
+        *outBytes = static_cast<uint64_t>(count);
+        if (capacity < *outBytes) {
+            return BufferTooSmall("The exact-read output buffer is too small.");
         }
-        std::string readerNameCopy;
-        if (const CNA_Result result = CopyReaderName(readerName, &readerNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The capacity is decided before the stream is touched, so a destination that is too small
-        // never consumes bytes the caller would then have to seek back over.
-        if (count >= 0) {
-            *outBytes = static_cast<uint64_t>(count);
-            if (capacity < *outBytes) {
-                return BufferTooSmall("The exact-read output buffer is too small.");
-            }
-        } else {
-            *outBytes = 0U;
-        }
+    } else {
+        *outBytes = 0U;
+    }
 
-        const std::vector<uint8_t> data =
-            reader->value->ReadBytesExactOrThrow(count, readerNameCopy);
-        if (!data.empty()) {
-            std::memcpy(destination, data.data(), data.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    const std::vector<uint8_t> data =
+        reader->value->ReadBytesExactOrThrow(count, readerNameCopy);
+    if (!data.empty()) {
+        std::memcpy(destination, data.data(), data.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 /// One registered caller-supplied factory, kept alive by its registration handle.
 ///
@@ -584,135 +546,117 @@ private:
     return LookupHandle(handle, ObjectKind::ContentTypeReaderRegistration, outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_content_type_reader_manager_register(
+[[nodiscard]] CNA_Result ContentTypeReaderManagerRegister(
     const CNA_StringView canonicalName,
     const CNA_ContentTypeReaderCallbacks* const callbacks,
     CNA_Handle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The reader registration output handle is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (!IsVersionedStructure(callbacks) ||
-            callbacks->reserved[0] != 0U || callbacks->reserved[1] != 0U ||
-            callbacks->reserved[2] != 0U ||
-            callbacks->create == nullptr || callbacks->read == nullptr ||
-            (callbacks->can_deserialize_into_existing_object != CNA_FALSE &&
-             callbacks->can_deserialize_into_existing_object != CNA_TRUE)) {
-            return InvalidArgument("The content type-reader callback table is invalid.");
-        }
+    if (!IsVersionedStructure(callbacks) ||
+        callbacks->reserved[0] != 0U || callbacks->reserved[1] != 0U ||
+        callbacks->reserved[2] != 0U ||
+        callbacks->create == nullptr || callbacks->read == nullptr ||
+        (callbacks->can_deserialize_into_existing_object != CNA_FALSE &&
+         callbacks->can_deserialize_into_existing_object != CNA_TRUE)) {
+        return InvalidArgument("The content type-reader callback table is invalid.");
+    }
 
-        const auto registration = std::make_shared<ForeignReaderRegistration>();
-        registration->callbacks = *callbacks;
-        if (const CNA_Result result = ReadText(
-                canonicalName, "The canonical reader name is not valid UTF-8.",
-                &registration->canonicalName, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (registration->canonicalName.empty()) {
-            return InvalidArgument("The canonical reader name must not be empty.");
-        }
-        if (const CNA_Result result = ReadText(
-                callbacks->target_type_name, "The reader target type name is not valid UTF-8.",
-                &registration->targetTypeName, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (registration->targetTypeName.empty()) {
-            return InvalidArgument("The reader target type name must not be empty.");
-        }
-        // The copied name owns the storage the adapter reads; the caller's view does not outlive
-        // this call.
-        registration->callbacks.target_type_name.data = nullptr;
-        registration->callbacks.target_type_name.byte_length = 0U;
+    const auto registration = std::make_shared<ForeignReaderRegistration>();
+    registration->callbacks = *callbacks;
+    if (const CNA_Result result = ReadText(
+            canonicalName, "The canonical reader name is not valid UTF-8.",
+            &registration->canonicalName, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (registration->canonicalName.empty()) {
+        return InvalidArgument("The canonical reader name must not be empty.");
+    }
+    if (const CNA_Result result = ReadText(
+            callbacks->target_type_name, "The reader target type name is not valid UTF-8.",
+            &registration->targetTypeName, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (registration->targetTypeName.empty()) {
+        return InvalidArgument("The reader target type name must not be empty.");
+    }
+    // The copied name owns the storage the adapter reads; the caller's view does not outlive
+    // this call.
+    registration->callbacks.target_type_name.data = nullptr;
+    registration->callbacks.target_type_name.byte_length = 0U;
 
-        if (ContentTypeReaderManager::IsRegistered(registration->canonicalName)) {
-            return InvalidState(
-                "A content type-reader factory is already registered under that canonical name.");
-        }
+    if (ContentTypeReaderManager::IsRegistered(registration->canonicalName)) {
+        return InvalidState(
+            "A content type-reader factory is already registered under that canonical name.");
+    }
 
-        if (const CNA_Result result = CreateHandle(
-                ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
+    if (const CNA_Result result = CreateHandle(
+            ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
 
-        ContentTypeReaderManager::AddTypeCreator(
-            registration->canonicalName,
-            [registration]() -> std::unique_ptr<ContentTypeReaderBase> {
-                return std::make_unique<ForeignContentTypeReader>(registration);
-            });
-        return CNA_RESULT_SUCCESS;
-    });
+    ContentTypeReaderManager::AddTypeCreator(
+        registration->canonicalName,
+        [registration]() -> std::unique_ptr<ContentTypeReaderBase> {
+            return std::make_unique<ForeignContentTypeReader>(registration);
+        });
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_type_reader_manager_create_reader(
+[[nodiscard]] CNA_Result ContentTypeReaderManagerCreateReader(
     const CNA_StringView canonicalName,
     CNA_ContentTypeReaderHandle* const outTypeReader)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTypeReader == nullptr) {
-            return InvalidArgument("The type-reader output handle is null.");
-        }
-        *outTypeReader = CNA_INVALID_HANDLE;
-        std::string canonicalNameCopy;
-        if (const CNA_Result result = CopyReaderName(canonicalName, &canonicalNameCopy);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::unique_ptr<ContentTypeReaderBase> typeReader =
-            ContentTypeReaderManager::CreateReader(canonicalNameCopy);
-        if (typeReader == nullptr) {
-            return NotSupported("No content type reader is registered under that canonical name.");
-        }
-        return CreateTypeReaderHandle(std::move(typeReader), outTypeReader);
-    });
+    std::string canonicalNameCopy;
+    if (const CNA_Result result = CopyReaderName(canonicalName, &canonicalNameCopy);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::unique_ptr<ContentTypeReaderBase> typeReader =
+        ContentTypeReaderManager::CreateReader(canonicalNameCopy);
+    if (typeReader == nullptr) {
+        return NotSupported("No content type reader is registered under that canonical name.");
+    }
+    return CreateTypeReaderHandle(std::move(typeReader), outTypeReader);
 }
 
-CNA_Result cna_content_type_reader_initialize(const CNA_ContentTypeReaderHandle typeReaderHandle)
+[[nodiscard]] CNA_Result ContentTypeReaderInitialize(
+    const CNA_ContentTypeReaderHandle typeReaderHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical registry is entirely static, so the manager parameter carries no state and
-        // the adapter supplies an instance rather than exposing an empty object to C.
-        ContentTypeReaderManager manager;
-        typeReader->value->Initialize(manager);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentTypeReaderResource> typeReader;
+    if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical registry is entirely static, so the manager parameter carries no state and
+    // the adapter supplies an instance rather than exposing an empty object to C.
+    ContentTypeReaderManager manager;
+    typeReader->value->Initialize(manager);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_content_type_reader_read_untyped(
+[[nodiscard]] CNA_Result ContentTypeReaderReadUntyped(
     const CNA_ContentTypeReaderHandle typeReaderHandle,
     const CNA_ContentReaderHandle readerHandle,
     CNA_Bool* const outHasValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasValue == nullptr) {
-            return InvalidArgument("The object-presence output is null.");
-        }
-        std::shared_ptr<ContentTypeReaderResource> typeReader;
-        if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::any value = typeReader->value->ReadUntyped(*reader->value, std::any{});
-        *outHasValue = ToCBool(value.has_value());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ContentTypeReaderResource> typeReader;
+    if (const CNA_Result result = GetTypeReader(typeReaderHandle, &typeReader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<ContentReaderResource> reader;
+    if (const CNA_Result result = GetReader(readerHandle, &reader);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::any value = typeReader->value->ReadUntyped(*reader->value, std::any{});
+    *outHasValue = ToCBool(value.has_value());
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-105: the reflective content readers ------------------------------------------------- */
 
@@ -1004,138 +948,124 @@ struct ReflectiveBuilderResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_reflective_type_reader_builder_create(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderCreate(
     const CNA_StringView targetTypeName,
     const CNA_ReflectiveObjectCreateCallback createCallback,
     void* const context,
     CNA_ReflectiveTypeReaderBuilderHandle* const outBuilder)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBuilder == nullptr) {
-            return InvalidArgument("The reflective builder output handle is null.");
-        }
-        *outBuilder = CNA_INVALID_HANDLE;
-        if (createCallback == nullptr) {
-            return InvalidArgument("The reflective object factory is null.");
-        }
-        const auto resource = std::make_shared<ReflectiveBuilderResource>();
-        resource->registration = std::make_shared<ReflectiveRegistration>();
-        if (const CNA_Result result = ReadText(
-                targetTypeName, "The target type name is not valid UTF-8.",
-                &resource->registration->targetTypeName, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (resource->registration->targetTypeName.empty()) {
-            return InvalidArgument("The target type name must not be empty.");
-        }
-        resource->registration->create = createCallback;
-        resource->registration->createContext = context;
-        return CreateHandle(ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
-    });
+    if (createCallback == nullptr) {
+        return InvalidArgument("The reflective object factory is null.");
+    }
+    const auto resource = std::make_shared<ReflectiveBuilderResource>();
+    resource->registration = std::make_shared<ReflectiveRegistration>();
+    if (const CNA_Result result = ReadText(
+            targetTypeName, "The target type name is not valid UTF-8.",
+            &resource->registration->targetTypeName, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (resource->registration->targetTypeName.empty()) {
+        return InvalidArgument("The target type name must not be empty.");
+    }
+    resource->registration->create = createCallback;
+    resource->registration->createContext = context;
+    return CreateHandle(ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
 }
 
-CNA_Result cna_reflective_type_reader_builder_add_field(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderAddField(
     const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
     const CNA_ContentFieldKind kind,
     const uint64_t offsetInBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (kind > CNA_CONTENT_FIELD_MAXIMUM) {
-            return InvalidArgument("The content field kind is not a defined kind.");
-        }
-        builder->registration->fields.push_back(
-            ReflectiveField{kind, offsetInBytes, nullptr, nullptr});
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (kind > CNA_CONTENT_FIELD_MAXIMUM) {
+        return InvalidArgument("The content field kind is not a defined kind.");
+    }
+    builder->registration->fields.push_back(
+        ReflectiveField{kind, offsetInBytes, nullptr, nullptr});
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_reflective_type_reader_builder_add_enum_field(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderAddEnumField(
     const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
     const uint64_t offsetInBytes,
     const CNA_StringView enumTypeName)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string enumText;
-        if (const CNA_Result result = ReadText(
-                enumTypeName, "The enum type name is not valid UTF-8.", &enumText,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (enumText.empty()) {
-            return InvalidArgument("The enum type name must not be empty.");
-        }
-        // An enum is written inline as its Int32; the reader registered under its name exists so
-        // the file's type-reader table resolves in full, not because this dispatches to it.
-        builder->registration->fields.push_back(
-            ReflectiveField{CNA_CONTENT_FIELD_INT32, offsetInBytes, nullptr, nullptr});
-        builder->enumTypeNames.push_back(std::move(enumText));
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string enumText;
+    if (const CNA_Result result = ReadText(
+            enumTypeName, "The enum type name is not valid UTF-8.", &enumText,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (enumText.empty()) {
+        return InvalidArgument("The enum type name must not be empty.");
+    }
+    // An enum is written inline as its Int32; the reader registered under its name exists so
+    // the file's type-reader table resolves in full, not because this dispatches to it.
+    builder->registration->fields.push_back(
+        ReflectiveField{CNA_CONTENT_FIELD_INT32, offsetInBytes, nullptr, nullptr});
+    builder->enumTypeNames.push_back(std::move(enumText));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_reflective_type_reader_builder_add_custom(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderAddCustom(
     const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
     const CNA_ReflectiveFieldCallback callback,
     void* const context)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (callback == nullptr) {
-            return InvalidArgument("The custom member callback is null.");
-        }
-        builder->registration->fields.push_back(
-            ReflectiveField{ReflectiveCustomFieldKind, 0U, callback, context});
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (callback == nullptr) {
+        return InvalidArgument("The custom member callback is null.");
+    }
+    builder->registration->fields.push_back(
+        ReflectiveField{ReflectiveCustomFieldKind, 0U, callback, context});
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_reflective_type_reader_builder_register(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderRegister(
     const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        for (const std::string& enumTypeName : builder->enumTypeNames) {
-            ContentTypeReaderManager::AddTypeCreator(
-                EnumCanonicalName(enumTypeName),
-                [name = enumTypeName] {
-                    return std::unique_ptr<ContentTypeReaderBase>(
-                        std::make_unique<ReflectiveEnumReader>(name));
-                });
-        }
-        // A snapshot, so a builder that keeps being appended to after registering does not change
-        // what the table already holds -- the canonical Register() copies its field list too.
-        const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    for (const std::string& enumTypeName : builder->enumTypeNames) {
         ContentTypeReaderManager::AddTypeCreator(
-            ReflectiveCanonicalName(snapshot->targetTypeName),
-            [snapshot] {
+            EnumCanonicalName(enumTypeName),
+            [name = enumTypeName] {
                 return std::unique_ptr<ContentTypeReaderBase>(
-                    std::make_unique<ReflectiveForeignReader>(snapshot));
+                    std::make_unique<ReflectiveEnumReader>(name));
             });
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    // A snapshot, so a builder that keeps being appended to after registering does not change
+    // what the table already holds -- the canonical Register() copies its field list too.
+    const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+    ContentTypeReaderManager::AddTypeCreator(
+        ReflectiveCanonicalName(snapshot->targetTypeName),
+        [snapshot] {
+            return std::unique_ptr<ContentTypeReaderBase>(
+                std::make_unique<ReflectiveForeignReader>(snapshot));
+        });
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 /* --- CBIND-116: the reference-shaped reflective reader, and the dictionary a Model.Tag holds --- */
 
@@ -1190,39 +1120,33 @@ private:
     std::shared_ptr<ReflectiveRegistration> registration_;
 };
 
-} // namespace
-
-CNA_Result cna_reflective_type_reader_builder_register_shared(
+[[nodiscard]] CNA_Result ReflectiveTypeReaderBuilderRegisterShared(
     const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ReflectiveBuilderResource> builder;
-        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        for (const std::string& enumTypeName : builder->enumTypeNames) {
-            ContentTypeReaderManager::AddTypeCreator(
-                EnumCanonicalName(enumTypeName),
-                [name = enumTypeName] {
-                    return std::unique_ptr<ContentTypeReaderBase>(
-                        std::make_unique<ReflectiveEnumReader>(name));
-                });
-        }
-        // Snapshotted for the same reason the value-shaped registration snapshots: a builder that
-        // keeps being appended to after registering must not change what the table already holds.
-        const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    for (const std::string& enumTypeName : builder->enumTypeNames) {
         ContentTypeReaderManager::AddTypeCreator(
-            ReflectiveCanonicalName(snapshot->targetTypeName),
-            [snapshot] {
+            EnumCanonicalName(enumTypeName),
+            [name = enumTypeName] {
                 return std::unique_ptr<ContentTypeReaderBase>(
-                    std::make_unique<ReflectiveForeignSharedReader>(snapshot));
+                    std::make_unique<ReflectiveEnumReader>(name));
             });
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    // Snapshotted for the same reason the value-shaped registration snapshots: a builder that
+    // keeps being appended to after registering must not change what the table already holds.
+    const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+    ContentTypeReaderManager::AddTypeCreator(
+        ReflectiveCanonicalName(snapshot->targetTypeName),
+        [snapshot] {
+            return std::unique_ptr<ContentTypeReaderBase>(
+                std::make_unique<ReflectiveForeignSharedReader>(snapshot));
+        });
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 using Microsoft::Xna::Framework::BoundingBox;
 
@@ -1486,210 +1410,195 @@ template <typename T>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_object_dictionary_ext_get_key_size_at(
+[[nodiscard]] CNA_Result ObjectDictionaryExtGetKeySizeAt(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const uint64_t index,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dictionary key-size output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& values = dictionary->value->getValuesProperty();
-        if (index >= static_cast<uint64_t>(values.size())) {
-            return OutOfRange("The dictionary key index is past the end.");
-        }
-        auto entry = values.begin();
-        std::advance(entry, static_cast<std::ptrdiff_t>(index));
-        *outBytes = static_cast<uint64_t>(entry->first.size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& values = dictionary->value->getValuesProperty();
+    if (index >= static_cast<uint64_t>(values.size())) {
+        return OutOfRange("The dictionary key index is past the end.");
+    }
+    auto entry = values.begin();
+    std::advance(entry, static_cast<std::ptrdiff_t>(index));
+    *outBytes = static_cast<uint64_t>(entry->first.size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_copy_key_at(
+[[nodiscard]] CNA_Result ObjectDictionaryExtCopyKeyAt(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const uint64_t index,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The dictionary key output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const auto& values = dictionary->value->getValuesProperty();
-        if (index >= static_cast<uint64_t>(values.size())) {
-            return OutOfRange("The dictionary key index is past the end.");
-        }
-        auto entry = values.begin();
-        std::advance(entry, static_cast<std::ptrdiff_t>(index));
-        const std::string& name = entry->first;
-        *outBytes = static_cast<uint64_t>(name.size());
-        if (capacity < static_cast<uint64_t>(name.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the dictionary key.");
-        }
-        if (!name.empty()) {
-            std::memcpy(destination, name.data(), name.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The dictionary key output is invalid.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& values = dictionary->value->getValuesProperty();
+    if (index >= static_cast<uint64_t>(values.size())) {
+        return OutOfRange("The dictionary key index is past the end.");
+    }
+    auto entry = values.begin();
+    std::advance(entry, static_cast<std::ptrdiff_t>(index));
+    const std::string& name = entry->first;
+    *outBytes = static_cast<uint64_t>(name.size());
+    if (capacity < static_cast<uint64_t>(name.size())) {
+        return BufferTooSmall("The destination capacity is smaller than the dictionary key.");
+    }
+    if (!name.empty()) {
+        std::memcpy(destination, name.data(), name.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_get_entry(
+[[nodiscard]] CNA_Result ObjectDictionaryExtGetEntry(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     CNA_ObjectDictionaryEntry* const outEntry)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEntry == nullptr || outEntry->struct_size < sizeof(CNA_ObjectDictionaryEntry)) {
-            return InvalidArgument("The dictionary entry output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const DictionaryValueShape shape = ShapeOf(*value);
-        outEntry->struct_size = static_cast<uint32_t>(sizeof(CNA_ObjectDictionaryEntry));
-        outEntry->struct_version = UINT32_C(1);
-        outEntry->kind = shape.kind;
-        outEntry->is_array = ToCBool(shape.isArray);
-        outEntry->element_count = shape.elementCount;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (outEntry->struct_size < sizeof(CNA_ObjectDictionaryEntry)) {
+        return InvalidArgument("The dictionary entry output is invalid.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const DictionaryValueShape shape = ShapeOf(*value);
+    outEntry->struct_size = static_cast<uint32_t>(sizeof(CNA_ObjectDictionaryEntry));
+    outEntry->struct_version = UINT32_C(1);
+    outEntry->kind = shape.kind;
+    outEntry->is_array = ToCBool(shape.isArray);
+    outEntry->element_count = shape.elementCount;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_copy_type_name(
+[[nodiscard]] CNA_Result ObjectDictionaryExtCopyTypeName(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The dictionary type-name output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const char* const name = value->type().name();
-        const std::size_t length = std::strlen(name);
-        *outBytes = static_cast<uint64_t>(length);
-        if (capacity < static_cast<uint64_t>(length)) {
-            return BufferTooSmall("The destination capacity is smaller than the entry type name.");
-        }
-        if (length != 0U) {
-            std::memcpy(destination, name, length);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The dictionary type-name output is invalid.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const char* const name = value->type().name();
+    const std::size_t length = std::strlen(name);
+    *outBytes = static_cast<uint64_t>(length);
+    if (capacity < static_cast<uint64_t>(length)) {
+        return BufferTooSmall("The destination capacity is smaller than the entry type name.");
+    }
+    if (length != 0U) {
+        std::memcpy(destination, name, length);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_copy_value(
+[[nodiscard]] CNA_Result ObjectDictionaryExtCopyValue(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     const CNA_ObjectDictionaryValueKind kind,
     void* const destination,
     const uint64_t capacity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (destination == nullptr) {
-            return InvalidArgument("The dictionary value destination is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const DictionaryValueShape shape = ShapeOf(*value);
-        if (shape.isArray) {
-            return InvalidArgument(
-                "That dictionary entry is an array; read it with "
-                "cna_object_dictionary_ext_copy_array.");
-        }
-        if (shape.kind == CNA_OBJECT_DICTIONARY_VALUE_STRING ||
-            shape.kind == CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT ||
-            shape.kind == CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN) {
-            return InvalidArgument(
-                "That dictionary entry has no fixed-layout value; use the route for its kind.");
-        }
-        if (kind != shape.kind) {
-            // Naming the kind is the cast, and this is the C form of InvalidCastException.
-            return InvalidArgument("That dictionary entry does not hold the requested kind.");
-        }
-        if (capacity < shape.elementByteSize) {
-            return BufferTooSmall("The destination capacity is smaller than the entry value.");
-        }
-        const void* source = nullptr;
-        bool booleanValue = false;
-        switch (shape.kind) {
-        case CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN:
-            booleanValue = std::any_cast<bool>(*value);
-            source = &booleanValue;
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_INT32:
-            source = std::any_cast<std::int32_t>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_SINGLE:
-            source = std::any_cast<float>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_DOUBLE:
-            source = std::any_cast<double>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR2:
-            source = std::any_cast<Vector2>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR3:
-            source = std::any_cast<Vector3>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR4:
-            source = std::any_cast<Vector4>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_MATRIX:
-            source = std::any_cast<Matrix>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_QUATERNION:
-            source = std::any_cast<Quaternion>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_COLOR:
-            source = std::any_cast<Color>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE:
-            source = std::any_cast<BoundingSphere>(value);
-            break;
-        case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX:
-            source = std::any_cast<BoundingBox>(value);
-            break;
-        default:
-            return InvalidArgument("That dictionary entry kind has no fixed-layout value.");
-        }
-        WriteDictionaryElement(static_cast<std::uint8_t*>(destination), shape.kind, source);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (destination == nullptr) {
+        return InvalidArgument("The dictionary value destination is null.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const DictionaryValueShape shape = ShapeOf(*value);
+    if (shape.isArray) {
+        return InvalidArgument(
+            "That dictionary entry is an array; read it with "
+            "cna_object_dictionary_ext_copy_array.");
+    }
+    if (shape.kind == CNA_OBJECT_DICTIONARY_VALUE_STRING ||
+        shape.kind == CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT ||
+        shape.kind == CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN) {
+        return InvalidArgument(
+            "That dictionary entry has no fixed-layout value; use the route for its kind.");
+    }
+    if (kind != shape.kind) {
+        // Naming the kind is the cast, and this is the C form of InvalidCastException.
+        return InvalidArgument("That dictionary entry does not hold the requested kind.");
+    }
+    if (capacity < shape.elementByteSize) {
+        return BufferTooSmall("The destination capacity is smaller than the entry value.");
+    }
+    const void* source = nullptr;
+    bool booleanValue = false;
+    switch (shape.kind) {
+    case CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN:
+        booleanValue = std::any_cast<bool>(*value);
+        source = &booleanValue;
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_INT32:
+        source = std::any_cast<std::int32_t>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_SINGLE:
+        source = std::any_cast<float>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_DOUBLE:
+        source = std::any_cast<double>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR2:
+        source = std::any_cast<Vector2>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR3:
+        source = std::any_cast<Vector3>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR4:
+        source = std::any_cast<Vector4>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_MATRIX:
+        source = std::any_cast<Matrix>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_QUATERNION:
+        source = std::any_cast<Quaternion>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_COLOR:
+        source = std::any_cast<Color>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE:
+        source = std::any_cast<BoundingSphere>(value);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX:
+        source = std::any_cast<BoundingBox>(value);
+        break;
+    default:
+        return InvalidArgument("That dictionary entry kind has no fixed-layout value.");
+    }
+    WriteDictionaryElement(static_cast<std::uint8_t*>(destination), shape.kind, source);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_copy_array(
+[[nodiscard]] CNA_Result ObjectDictionaryExtCopyArray(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     const CNA_ObjectDictionaryValueKind kind,
@@ -1697,188 +1606,170 @@ CNA_Result cna_object_dictionary_ext_copy_array(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The dictionary array output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const DictionaryValueShape shape = ShapeOf(*value);
-        if (!shape.isArray) {
-            return InvalidArgument(
-                "That dictionary entry is not an array; read it with "
-                "cna_object_dictionary_ext_copy_value.");
-        }
-        if (kind != shape.kind) {
-            return InvalidArgument("That dictionary array does not hold the requested kind.");
-        }
-        const uint64_t required = shape.elementCount * shape.elementByteSize;
-        *outBytes = required;
-        if (capacity < required) {
-            return BufferTooSmall("The destination capacity is smaller than the entry array.");
-        }
-        auto* const bytes = static_cast<std::uint8_t*>(destination);
-        const bool written =
-            WriteVectorIfHeld<std::int32_t>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<float>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<double>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Vector2>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Vector3>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Vector4>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Matrix>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Quaternion>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<Color>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<BoundingSphere>(*value, shape.kind, shape.elementByteSize, bytes)
-            || WriteVectorIfHeld<BoundingBox>(*value, shape.kind, shape.elementByteSize, bytes);
-        if (!written) {
-            return Fail(
-                CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_STATE,
-                "The dictionary array was described but could not be copied.");
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The dictionary array output is invalid.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const DictionaryValueShape shape = ShapeOf(*value);
+    if (!shape.isArray) {
+        return InvalidArgument(
+            "That dictionary entry is not an array; read it with "
+            "cna_object_dictionary_ext_copy_value.");
+    }
+    if (kind != shape.kind) {
+        return InvalidArgument("That dictionary array does not hold the requested kind.");
+    }
+    const uint64_t required = shape.elementCount * shape.elementByteSize;
+    *outBytes = required;
+    if (capacity < required) {
+        return BufferTooSmall("The destination capacity is smaller than the entry array.");
+    }
+    auto* const bytes = static_cast<std::uint8_t*>(destination);
+    const bool written =
+        WriteVectorIfHeld<std::int32_t>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<float>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<double>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Vector2>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Vector3>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Vector4>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Matrix>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Quaternion>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<Color>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<BoundingSphere>(*value, shape.kind, shape.elementByteSize, bytes)
+        || WriteVectorIfHeld<BoundingBox>(*value, shape.kind, shape.elementByteSize, bytes);
+    if (!written) {
+        return Fail(
+            CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_STATE,
+            "The dictionary array was described but could not be copied.");
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_get_string_size(
+[[nodiscard]] CNA_Result ObjectDictionaryExtGetStringSize(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The dictionary string-size output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!AnyHolds<std::string>(*value)) {
-            return InvalidArgument("That dictionary entry does not hold a string.");
-        }
-        *outBytes =
-            static_cast<uint64_t>(std::any_cast<const std::string&>(*value).size());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!AnyHolds<std::string>(*value)) {
+        return InvalidArgument("That dictionary entry does not hold a string.");
+    }
+    *outBytes =
+        static_cast<uint64_t>(std::any_cast<const std::string&>(*value).size());
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_copy_string(
+[[nodiscard]] CNA_Result ObjectDictionaryExtCopyString(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The dictionary string output is invalid.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!AnyHolds<std::string>(*value)) {
-            return InvalidArgument("That dictionary entry does not hold a string.");
-        }
-        const auto& text = std::any_cast<const std::string&>(*value);
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < static_cast<uint64_t>(text.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the entry string.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The dictionary string output is invalid.");
+    }
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!AnyHolds<std::string>(*value)) {
+        return InvalidArgument("That dictionary entry does not hold a string.");
+    }
+    const auto& text = std::any_cast<const std::string&>(*value);
+    *outBytes = static_cast<uint64_t>(text.size());
+    if (capacity < static_cast<uint64_t>(text.size())) {
+        return BufferTooSmall("The destination capacity is smaller than the entry string.");
+    }
+    if (!text.empty()) {
+        std::memcpy(destination, text.data(), text.size());
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_object_dictionary_ext_get_foreign_object(
+[[nodiscard]] CNA_Result ObjectDictionaryExtGetForeignObject(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     const CNA_StringView key,
     void** const outObject)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outObject == nullptr) {
-            return InvalidArgument("The dictionary foreign-object output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        const std::any* value = nullptr;
-        if (const CNA_Result result =
-                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (AnyHolds<ForeignContentObjectEXT>(*value)) {
-            *outObject = std::any_cast<const ForeignContentObjectEXT&>(*value).value;
+    std::shared_ptr<ObjectDictionaryResource> dictionary;
+    const std::any* value = nullptr;
+    if (const CNA_Result result =
+            GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (AnyHolds<ForeignContentObjectEXT>(*value)) {
+        *outObject = std::any_cast<const ForeignContentObjectEXT&>(*value).value;
+        return CNA_RESULT_SUCCESS;
+    }
+    if (AnyHolds<std::shared_ptr<System::Object>>(*value)) {
+        const auto& stored = std::any_cast<const std::shared_ptr<System::Object>&>(*value);
+        if (const auto* const carrier =
+                dynamic_cast<const ForeignReferenceObject*>(stored.get());
+            carrier != nullptr) {
+            *outObject = carrier->getValue();
             return CNA_RESULT_SUCCESS;
         }
-        if (AnyHolds<std::shared_ptr<System::Object>>(*value)) {
-            const auto& stored = std::any_cast<const std::shared_ptr<System::Object>&>(*value);
-            if (const auto* const carrier =
-                    dynamic_cast<const ForeignReferenceObject*>(stored.get());
-                carrier != nullptr) {
-                *outObject = carrier->getValue();
-                return CNA_RESULT_SUCCESS;
-            }
-        }
-        return InvalidArgument("That dictionary entry does not hold a caller-made object.");
-    });
+    }
+    return InvalidArgument("That dictionary entry does not hold a caller-made object.");
 }
 
-CNA_Result cna_content_manager_load_object_dictionary_ext(
+[[nodiscard]] CNA_Result ContentManagerLoadObjectDictionaryExt(
     const CNA_Handle contentManagerHandle,
     const CNA_StringView assetName,
     CNA_ObjectDictionaryHandle* const outDictionary)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outDictionary == nullptr) {
-            return InvalidArgument("The object-dictionary output handle is null.");
-        }
-        *outDictionary = CNA_INVALID_HANDLE;
-        std::string assetNameText;
-        if (const CNA_Result result = ReadText(
-                assetName, "The content asset name is not valid UTF-8.", &assetNameText,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (assetNameText.empty()) {
-            return InvalidArgument("The content asset name must not be empty.");
-        }
-        BorrowedContentManager contentManager;
-        if (const CNA_Result result =
-                BorrowContentManager(contentManagerHandle, &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (contentManager.value == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
-                "The content manager handle does not name a manager.");
-        }
-        auto resource = std::make_shared<ObjectDictionaryResource>();
-        try {
-            // The dictionary reader's own product. Boxing it is the canonical constructor, which
-            // is also the only way this type is ever made: ModelReader does exactly this when the
-            // same payload arrives as a Model.Tag.
-            resource->value = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
-                contentManager.value->Load<std::map<std::string, std::any>>(assetNameText));
-        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-            return IoError(exception.what());
-        }
-        return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
-    });
+    std::string assetNameText;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameText,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameText.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
+    BorrowedContentManager contentManager;
+    if (const CNA_Result result =
+            BorrowContentManager(contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (contentManager.value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
+            "The content manager handle does not name a manager.");
+    }
+    auto resource = std::make_shared<ObjectDictionaryResource>();
+    try {
+        // The dictionary reader's own product. Boxing it is the canonical constructor, which
+        // is also the only way this type is ever made: ModelReader does exactly this when the
+        // same payload arrives as a Model.Tag.
+        resource->value = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
+            contentManager.value->Load<std::map<std::string, std::any>>(assetNameText));
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+        return IoError(exception.what());
+    }
+    return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
 }
+
+} // namespace
 
 namespace CNA::C::Detail {
 
