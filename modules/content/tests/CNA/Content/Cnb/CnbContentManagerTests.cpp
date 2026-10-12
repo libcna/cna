@@ -9,6 +9,7 @@
 // candidate files on disk at once and removes them one at a time, so each assertion is about the
 // whole ordering rather than a single comparison.
 
+#include <barrier>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -772,6 +774,48 @@ TEST_F(CnbContentManagerTest, ARemovedBuiltInLoaderStaysRemovedWhenItsTypeIsLoad
     EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
     EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
     EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+}
+
+TEST_F(CnbContentManagerTest, ALoaderRemovedWhileItsTypeLoadsStaysRemoved)
+{
+    // Removal racing the first load of its type: whichever comes first, the loader ends up removed.
+    // The load once checked "declared, not removed" and installed under separate locks, and a
+    // removal between the two was undone. The remover starts each round a little later than the
+    // last, so the rounds sweep the removal across the whole load.
+    ScratchContentRoot root;
+    constexpr int Rounds = 20000;
+    std::barrier sync(2);
+    std::thread remover(
+        [&sync]
+        {
+            for (int round = 0; round < Rounds; ++round)
+            {
+                sync.arrive_and_wait();
+                for (volatile int spin = (round * 7) % 4096; spin > 0; spin = spin - 1) {}
+                (void)CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve);
+                sync.arrive_and_wait();
+            }
+        });
+    int resurrected = 0;
+    for (int round = 0; round < Rounds; ++round)
+    {
+        ContentManager cm(nullptr, root.path().string()); // declares Curve's loader again
+        sync.arrive_and_wait();
+        EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
+        sync.arrive_and_wait();
+        if (CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve)) { ++resurrected; }
+    }
+    remover.join();
+    EXPECT_EQ(resurrected, 0) << "of " << Rounds << " rounds";
+
+    // An explicit registration still restores it.
+    ContentManager cm(nullptr, root.path().string());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+    cm.RegisterBuiltinLoaders();
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+    CnbLoaderRegistry::RegisterBuiltIns();
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
 }
 
 TEST_F(CnbContentManagerTest, ClearForgetsTheDeclaredBuiltInLoaders)

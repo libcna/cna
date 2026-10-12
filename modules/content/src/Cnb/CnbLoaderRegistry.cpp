@@ -109,8 +109,12 @@ namespace CNA::Content
     {
         /// The one implementation both registration routes share. `ownership` is decided by WHICH
         /// entry point was called, never by the caller (plans/plan_cnb.md `CNBF-122`).
+        /// `onlyWhileDeclared` installs a declared built-in only if it is still declared and not
+        /// removed, checked under the same lock as the installation: a Remove() between a separate
+        /// check and the installation would be undone by it.
         void RegisterWithOwnership(std::uint32_t assetTypeId, const std::string& canonicalTypeName,
-                                   CnbLoaderRegistry::LoaderFn loader, Ownership ownership)
+                                   CnbLoaderRegistry::LoaderFn loader, Ownership ownership,
+                                   bool onlyWhileDeclared = false)
         {
             const std::string who = ownership == Ownership::CnaBuiltIn
                                         ? "CnbLoaderRegistry::RegisterBuiltIn()"
@@ -163,6 +167,7 @@ namespace CNA::Content
             }
 
             const std::unique_lock lock(TableMutex());
+            if (onlyWhileDeclared && DeclaredName(assetTypeId).empty()) { return; }
             auto& table = Table();
             const auto existing = table.find(assetTypeId);
             if (existing != table.end())
@@ -217,11 +222,8 @@ namespace CNA::Content
                                                     const std::string& canonicalTypeName,
                                                     LoaderFn loader)
     {
-        {
-            const std::shared_lock lock(TableMutex());
-            if (DeclaredName(assetTypeId).empty()) { return; }
-        }
-        RegisterBuiltIn(assetTypeId, canonicalTypeName, std::move(loader));
+        RegisterWithOwnership(assetTypeId, canonicalTypeName, std::move(loader),
+                              Ownership::CnaBuiltIn, true);
     }
 
     bool CnbLoaderRegistry::DeclaredButNotInstalled(std::uint32_t assetTypeId)

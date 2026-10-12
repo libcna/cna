@@ -217,7 +217,8 @@ namespace CNA::Content
         /// a ContentManager's construction or RegisterBuiltinLoaders().
         static void DeclareBuiltIns();
 
-        /// A built-in family installing its loader: only while declared and not removed since.
+        /// A built-in family installing its loader: only while declared and not removed since,
+        /// checked and installed under one lock so that a concurrent Remove() holds.
         static void RegisterDeclaredBuiltIn(std::uint32_t assetTypeId,
                                             const std::string& canonicalTypeName, LoaderFn loader);
 
