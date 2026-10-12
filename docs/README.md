@@ -29,6 +29,9 @@ on it) rather than assuming either way.
   seven-layout audit and automated evidence across STUB, HEADLESS, OpenGL ES 3 and Vulkan.
 - **[`gltf-renderer-pbr-fallbacks.md`](gltf-renderer-pbr-fallbacks.md)** — five-map native binding
   ABIs and semantic neutral textures, audited across every PBR-capable renderer implementation.
+- **[`link-size-architecture.md`](link-size-architecture.md)** — why a CNA program contains only
+  the subsystems it uses: the link boundaries, the rules for adding features without growing
+  every game, size-oriented build options, how to check a binary, and the footprint gates.
 - **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."

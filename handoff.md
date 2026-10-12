@@ -80,6 +80,7 @@ checkout; the other workflows are subsystem- or platform-specific.
 | C API generation maintenance model and 2026-10-12 audit | `docs/c-api/GENERATED_ROUTES.md`, `docs/c-api/GENERATION_AUDIT.md` |
 | Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `plans/plan_bindings_upstream.md` |
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
+| Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
 | Index of the other documents | `docs/README.md`, `plans/README.md` |
 

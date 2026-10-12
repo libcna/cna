@@ -15,7 +15,10 @@ not say how something is decided. It is **not Xbox LIVE compatible** and does no
 Other documents: [`gamer-services-server.md`](gamer-services-server.md) (configuration and
 deployment), [`avatars.md`](avatars.md) (the avatar system),
 [`browser-network-readiness.md`](browser-network-readiness.md) (the browser boundary), the server's
-`README.md` and `protocol/v1.md` (service operations, limits and capacity). The final register
+`README.md` and `protocol/v1.md` (service operations, limits and capacity),
+[`link-size-architecture.md`](link-size-architecture.md) (which parts a program links: the Guide's
+license and dialogs without the system Guide, which `GamerServicesDispatcher.Initialize` installs,
+and the avatar catalog only with avatars). The final register
 ([`plans/gamer_services_server_final_register.md`](../plans/gamer_services_server_final_register.md))
 lists each refusal in the code with its evidence; the three GamerServices plans are history.
 

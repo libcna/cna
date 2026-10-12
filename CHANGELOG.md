@@ -11,13 +11,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
+- **A program links only the CNA subsystems it uses.** Mobile Eggbert (textures, sounds,
+  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 64.2 MB as a Debug executable
+  and from 44.6 MB to 6.3 MB stripped (3.0 MB as a Release build with `CNA_OPTIMIZE_FOR_SIZE`): it
+  no longer contains the 30 MB embedded avatar catalog, the avatar system, the system Guide, the
+  Gamer Services service client, the Model reader, glTF, Draco, MediaPlayer, Video, Microphone,
+  networking or the Headless and Terminal platforms. Nothing was removed or disabled; a program
+  that uses those features links them. See `docs/link-size-architecture.md`. Observable
+  differences: `ContentManager` registers a type's readers on the first `Load<T>()` of it rather
+  than in its constructor (and `Game` no longer registers every `.xnb` reader at construction), so
+  `ContentTypeReaderManager` and `GetXnbReaderUsageSummary()` report a built-in reader once its
+  type has been loaded; `RegisterBuiltinLoaders()` (CNAEXT) registers every family, `.xnb` readers
+  included. The system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as
+  before reachable only by signed-in players.
+- **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
+  `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
+  compiles CNA into per-function sections and collects unreferenced ones in every program that
+  links it. SDL3_image is no longer built: nothing in CNA used it.
+- `Effect::IsStockEffectEXT()` (CNAEXT) reports XNA's five stock effects without RTTI.
 - **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
   (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
   `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their
   values (0-7) are unchanged, and the C API's `CNA_SHADER_DIALECT_*` identities still match them.
   Code that spelled the internal name -- and included `IGraphicsRenderer.hpp` to get its values --
   includes the public header and writes `CNA::ShaderDialectEXT` instead.
-
 - **The C API's route boundaries are generated.** 3,202 of the 3,210 `cna_*` routes are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
   `tools/c-api/generate_routes.py`. 2,252 of them -- property reads and writes, commands, text
