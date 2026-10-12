@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +16,35 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+
+    namespace
+    {
+        // FrameworkDispatcher::Update()'s media step: the song tracking, then the events it owes.
+        void UpdateFrameworkMedia()
+        {
+            using Microsoft::Xna::Framework::FrameworkDispatcher;
+            MediaPlayer::Update();
+            if (FrameworkDispatcher::ActiveSongChanged)
+            {
+                MediaPlayer::OnActiveSongChanged();
+                FrameworkDispatcher::ActiveSongChanged = false;
+            }
+            if (FrameworkDispatcher::MediaStateChanged)
+            {
+                MediaPlayer::OnMediaStateChanged();
+                FrameworkDispatcher::MediaStateChanged = false;
+            }
+        }
+
+        // Every change the dispatcher must report passes here, so the media step is installed
+        // before its first event is owed (and before a song can start playing).
+        void NotifyDispatcher(bool& pending)
+        {
+            CNA::Internal::FrameworkUpdates::Install(CNA::Internal::FrameworkUpdates::Slot::MediaPlayer,
+                                                     &UpdateFrameworkMedia);
+            pending = true;
+        }
+    }
     System::EventHandler<System::EventArgs> MediaPlayer::ActiveSongChanged;
     System::EventHandler<System::EventArgs> MediaPlayer::MediaStateChanged;
 
@@ -160,7 +190,7 @@ namespace Microsoft::Xna::Framework::Media
         if (state_ != value)
         {
             state_ = value;
-            Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged = true;
+            NotifyDispatcher(Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged);
         }
     }
 
@@ -288,7 +318,7 @@ namespace Microsoft::Xna::Framework::Media
 
         if (previousSong != song)
         {
-            Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = true;
+            NotifyDispatcher(Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged);
         }
     }
 
@@ -421,7 +451,7 @@ namespace Microsoft::Xna::Framework::Media
             if (!isRepeating_)
             {
                 Stop();
-                Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = true;
+                NotifyDispatcher(Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged);
                 return;
             }
         }
@@ -503,7 +533,7 @@ namespace Microsoft::Xna::Framework::Media
             PlaySong(nextSong);
         }
 
-        Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = true;
+        NotifyDispatcher(Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged);
     }
 
     void MediaPlayer::PlaySong(Song* song)

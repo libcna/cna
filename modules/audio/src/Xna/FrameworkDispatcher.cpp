@@ -2,7 +2,19 @@
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 
-#include <algorithm>
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
+
+#include <array>
+#include <atomic>
+#include <cstddef>
+
+namespace
+{
+    // Constant-initialized: no static initialization order to depend on.
+    std::array<std::atomic<void (*)()>,
+               static_cast<std::size_t>(CNA::Internal::FrameworkUpdates::Slot::Count)>
+        frameworkUpdates{};
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -13,60 +25,27 @@ namespace Microsoft::Xna::Framework
 
     void FrameworkDispatcher::Update()
     {
-        // P11-DISPATCH-001: instance->Update() below can synchronously fire BufferNeeded (a
-        // realistic XNA usage pattern is disposing the instance from inside that very handler
-        // once no more data will be provided), which reaches DynamicSoundEffectInstance::
-        // StopInternal() -- which itself locks StreamsMutex to remove itself from Streams. A
-        // std::mutex is not recursive, so calling instance->Update() while still holding
-        // StreamsMutex here would self-deadlock the very first time real game code disposed a
-        // stream from its own BufferNeeded handler. Snapshot the list under the lock, then run
-        // every instance's Update() with the lock released; a disposed instance already removes
-        // itself from Streams via StopInternal(), so the trailing cleanup pass below is mostly
-        // defensive (matches the previous code's own belt-and-suspenders erase-if-disposed check).
-        std::vector<Audio::DynamicSoundEffectInstance*> snapshot;
+        // In XNA's order: dynamic sound effect streams, microphones, the media player and its
+        // events. Each subsystem installed its slot when it first had work (FrameworkUpdates.hpp).
+        for (const auto& update : frameworkUpdates)
         {
-            std::lock_guard<std::mutex> lock(StreamsMutex);
-            snapshot = Streams;
-        }
-
-        for (Audio::DynamicSoundEffectInstance* instance : snapshot)
-        {
-            if (instance != nullptr)
+            if (auto* const run = update.load(std::memory_order_acquire))
             {
-                instance->Update();
+                run();
             }
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(StreamsMutex);
-            Streams.erase(
-                std::remove_if(Streams.begin(), Streams.end(),
-                    [](Audio::DynamicSoundEffectInstance* instance)
-                    {
-                        return instance == nullptr || instance->getIsDisposedProperty();
-                    }),
-                Streams.end());
-        }
-
-        Audio::Microphone::CheckAllBuffers();
-
-        Media::MediaPlayer::Update();
-
-        if (ActiveSongChanged)
-        {
-            Media::MediaPlayer::OnActiveSongChanged();
-            ActiveSongChanged = false;
-        }
-
-        if (MediaStateChanged)
-        {
-            Media::MediaPlayer::OnMediaStateChanged();
-            MediaStateChanged = false;
         }
 
         if (Input::Touch::TouchPanel::getTouchDeviceExistsProperty())
         {
             Input::Touch::TouchPanel::Update();
         }
+    }
+}
+
+namespace CNA::Internal::FrameworkUpdates
+{
+    void Install(const Slot slot, void (*const update)()) noexcept
+    {
+        frameworkUpdates[static_cast<std::size_t>(slot)].store(update, std::memory_order_release);
     }
 }
