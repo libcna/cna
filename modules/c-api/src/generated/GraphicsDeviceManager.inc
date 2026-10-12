@@ -487,6 +487,18 @@ CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
     });
 }
 
+CNA_Result cna_graphics_device_information_init(
+    CNA_GraphicsDeviceInformation* const out_information)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_information == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_init: out_information is null.");
+        }
+        *out_information = ToCDeviceInformation(GraphicsDeviceInformation());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_device_information_get_type_name_size(
     uint64_t* const out_bytes)
 {

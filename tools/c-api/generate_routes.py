@@ -76,7 +76,9 @@ enough for this build, rather than only when it is null.
 A route may add ``invalid_if = "<C++ condition>"`` (or a list of them): an argument the route
 refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(volume)"``. The
 condition reads the parameters as the caller passed them, before any conversion, and is checked
-before the lookup.
+before the lookup. An input structure passed by const pointer is accepted only when a condition
+names it and so refuses an invalid one, null included (``!IsPresentationParameters(source)``);
+the contract test holds it to refusing null.
 
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
 null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
@@ -313,8 +315,14 @@ class Route:
             params = params[:-3]
         for param in params:
             if param.pointer:
-                raise self._fail(f"input '{param.name}' is a pointer, which this generator does "
-                                 "not convert; write the route by hand")
+                # A structure read through a pointer is passed as declared, and only when a
+                # refusal names it: that condition is what keeps a null one from being read.
+                if not param.const or not any(re.search(rf"\b{param.name}\b", condition)
+                                              for condition in self.refusals):
+                    raise self._fail(f"input '{param.name}' is a pointer; write the route by "
+                                     "hand, or refuse an invalid one (null included) with an "
+                                     "invalid_if condition that names it")
+                continue
             if self.types.kind_of(param.type) == "other":
                 raise self._fail(f"input '{param.name}' has type {param.type}, which this "
                                  "generator does not convert; write the route by hand")
@@ -709,6 +717,12 @@ def render_contract_test(routes: list[Route]) -> str:
             lines.append(_expect(f"{r.name}({_arguments(r, **{out_bytes: 'NULL'})})",
                                  "CNA_RESULT_INVALID_ARGUMENT", r.name, '"a null out_bytes"',
                                  "feature" in r.group))
+        for param in r.inputs:
+            if param.pointer:  # every other argument valid, so only the null input is wrong
+                if r.versioned:
+                    lines += _versioned_header(r, "1U")
+                lines.append(_expect(f"{r.name}({_arguments(r)})", "CNA_RESULT_INVALID_ARGUMENT",
+                                     r.name, f'"a null {param.name}"', "feature" in r.group))
     lines += ["    return failures;", "}", "",
               "/* `handle` goes to every route but the curve routes, which get `curve_routes_handle`. */",
               "static int handles_are_refused(const CNA_Handle handle,",

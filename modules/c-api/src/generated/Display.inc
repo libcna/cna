@@ -41,6 +41,44 @@ CNA_Result cna_graphics_device_reset(
     });
 }
 
+CNA_Result cna_graphics_device_get_display_mode(
+    const CNA_Handle graphics_device,
+    CNA_DisplayMode* const out_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_mode, "cna_graphics_device_get_display_mode: out_mode is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_mode = ToCDisplayMode(object->value->getDisplayModeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_presentation_parameters(
+    const CNA_Handle graphics_device,
+    CNA_PresentationParameters* const out_parameters)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_parameters, "cna_graphics_device_get_presentation_parameters: out_parameters is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_parameters = ToCPresentationParameters(object->value->getPresentationParametersProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_adapters_refresh(
     const CNA_Handle graphics_device)
 {
@@ -51,6 +89,68 @@ CNA_Result cna_graphics_adapters_refresh(
             return routeResult;
         }
         return NotSupported("The active C GraphicsDevice retains its adapter; refreshing the global native " "adapter cache would invalidate that reference.");
+    });
+}
+
+CNA_Result cna_display_mode_init(
+    const int32_t width,
+    const int32_t height,
+    const CNA_SurfaceFormat format,
+    CNA_DisplayMode* const out_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_mode == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_init: out_mode is null.");
+        }
+        if (!IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_init: invalid because !IsSurfaceFormat(format).");
+        }
+        *out_mode = ToCDisplayMode(DisplayMode(width, height, static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_presentation_parameters_init(
+    CNA_PresentationParameters* const out_parameters)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parameters == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_presentation_parameters_init: out_parameters is null.");
+        }
+        *out_parameters = ToCPresentationParameters(PresentationParameters());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_presentation_parameters_clone(
+    const CNA_PresentationParameters* const source,
+    CNA_PresentationParameters* const out_parameters)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parameters == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_presentation_parameters_clone: out_parameters is null.");
+        }
+        if (!IsPresentationParameters(source)) {
+            return CNA::C::Detail::InvalidArgument("cna_presentation_parameters_clone: invalid because !IsPresentationParameters(source).");
+        }
+        *out_parameters = ToCPresentationParameters(ToNativePresentationParameters(*source).Clone());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_presentation_parameters_get_bounds(
+    const CNA_PresentationParameters* const parameters,
+    CNA_Rectangle* const out_bounds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bounds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_presentation_parameters_get_bounds: out_bounds is null.");
+        }
+        if (!IsPresentationParameters(parameters)) {
+            return CNA::C::Detail::InvalidArgument("cna_presentation_parameters_get_bounds: invalid because !IsPresentationParameters(parameters).");
+        }
+        *out_bounds = CNA::C::Detail::ToC(ToNativePresentationParameters(*parameters).getBoundsProperty());
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -115,6 +215,27 @@ CNA_Result cna_graphics_adapter_query_backbuffer_format(
             return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_query_backbuffer_format: out_selection is null.");
         }
         return QueryFormat(graphics_device, adapter_index, profile, format, depth_format, multi_sample_count, out_selection, false);
+    });
+}
+
+CNA_Result cna_graphics_adapter_get_current_display_mode(
+    const CNA_Handle graphics_device,
+    const uint32_t adapter_index,
+    CNA_DisplayMode* const out_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_mode, "cna_graphics_adapter_get_current_display_mode: out_mode is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<void> owner{};
+        GraphicsAdapter* object{};
+        if (const CNA_Result routeResult = GetAdapter(graphics_device, adapter_index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_mode = ToCDisplayMode(object->getCurrentDisplayModeProperty());
+        return CNA_RESULT_SUCCESS;
     });
 }
 

@@ -338,12 +338,11 @@ namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
     return true;
 }
 
-/** @brief Writes canonical presentation parameters as the C structure, version 1. */
-inline void ToCPresentationParameters(
-    const XnaGraphics::PresentationParameters& source,
-    CNA_PresentationParameters* const destination) noexcept
+/** @brief Canonical presentation parameters as the C structure, version 1. */
+[[nodiscard]] inline CNA_PresentationParameters ToCPresentationParameters(
+    const XnaGraphics::PresentationParameters& source) noexcept
 {
-    *destination = CNA_PresentationParameters{
+    return CNA_PresentationParameters{
         .struct_size = sizeof(CNA_PresentationParameters),
         .struct_version = 1U,
         .back_buffer_format = static_cast<CNA_SurfaceFormat>(
@@ -384,6 +383,15 @@ inline void ApplyPresentationParameters(
         static_cast<XnaGraphics::RenderTargetUsage>(source.render_target_usage));
     destination->setIsFullScreenProperty(source.is_full_screen == CNA_TRUE);
     destination->setHeadlessEXTProperty(source.headless_ext == CNA_TRUE);
+}
+
+/** @brief Validated C presentation parameters as canonical ones, defaults elsewhere. */
+[[nodiscard]] inline XnaGraphics::PresentationParameters ToNativePresentationParameters(
+    const CNA_PresentationParameters& source)
+{
+    XnaGraphics::PresentationParameters result;
+    ApplyPresentationParameters(source, &result);
+    return result;
 }
 
 

@@ -36,10 +36,7 @@ using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsDepthFormat;
-using CNA::C::Detail::IsDisplayOrientation;
 using CNA::C::Detail::IsGraphicsProfile;
-using CNA::C::Detail::IsPresentInterval;
-using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
@@ -90,17 +87,28 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     return adapters[static_cast<std::size_t>(index)].get();
 }
 
-void ToCDeviceInformation(
-    const GraphicsDeviceInformation& source,
-    CNA_GraphicsDeviceInformation* const destination) noexcept
+[[nodiscard]] CNA_GraphicsDeviceInformation ToCDeviceInformation(
+    const GraphicsDeviceInformation& source) noexcept
 {
-    CNA_GraphicsDeviceInformation mapped = {};
-    mapped.struct_size = sizeof(CNA_GraphicsDeviceInformation);
-    mapped.struct_version = StructureVersion;
-    mapped.adapter_index = AdapterIndexOf(source.getAdapterProperty());
-    mapped.graphics_profile = static_cast<CNA_GraphicsProfile>(source.getGraphicsProfileProperty());
-    ToCPresentationParameters(source.getPresentationParametersProperty(), &mapped.presentation_parameters);
-    *destination = mapped;
+    return CNA_GraphicsDeviceInformation{
+        .struct_size = sizeof(CNA_GraphicsDeviceInformation),
+        .struct_version = StructureVersion,
+        .adapter_index = AdapterIndexOf(source.getAdapterProperty()),
+        .graphics_profile = static_cast<CNA_GraphicsProfile>(source.getGraphicsProfileProperty()),
+        .presentation_parameters =
+            ToCPresentationParameters(source.getPresentationParametersProperty())};
+}
+
+/** Writes validated C settings over canonical ones, keeping what C does not describe. */
+void ApplyDeviceInformation(
+    const CNA_GraphicsDeviceInformation& source,
+    GraphicsDeviceInformation* const destination)
+{
+    destination->setAdapterProperty(AdapterAt(source.adapter_index));
+    destination->setGraphicsProfileProperty(static_cast<GraphicsProfile>(source.graphics_profile));
+    PresentationParameters parameters = destination->getPresentationParametersProperty();
+    ApplyPresentationParameters(source.presentation_parameters, &parameters);
+    destination->setPresentationParametersProperty(parameters);
 }
 
 [[nodiscard]] bool IsDeviceInformation(
@@ -199,19 +207,6 @@ private:
 
 } // namespace
 
-CNA_Result cna_graphics_device_information_init(
-    CNA_GraphicsDeviceInformation* const outInformation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInformation == nullptr) {
-            return InvalidArgument("The device configuration output is null.");
-        }
-        const GraphicsDeviceInformation canonical;
-        ToCDeviceInformation(canonical, outInformation);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_information_clone(
     const CNA_GraphicsDeviceInformation* const information,
     CNA_GraphicsDeviceInformation* const outInformation)
@@ -224,14 +219,8 @@ CNA_Result cna_graphics_device_information_clone(
             return InvalidArgument("The device configuration is not a valid structure.");
         }
         GraphicsDeviceInformation canonical;
-        canonical.setAdapterProperty(AdapterAt(information->adapter_index));
-        canonical.setGraphicsProfileProperty(
-            static_cast<GraphicsProfile>(information->graphics_profile));
-        PresentationParameters parameters;
-        ApplyPresentationParameters(information->presentation_parameters, &parameters);
-        canonical.setPresentationParametersProperty(parameters);
-        const GraphicsDeviceInformation clone = canonical.Clone();
-        ToCDeviceInformation(clone, outInformation);
+        ApplyDeviceInformation(*information, &canonical);
+        *outInformation = ToCDeviceInformation(canonical.Clone());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -359,8 +348,8 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings(
         // const for that reason rather than by choice.
         const auto token = source->Add(
             [callback, context](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
-                CNA_GraphicsDeviceInformation mapped = {};
-                ToCDeviceInformation(args.getGraphicsDeviceInformationProperty(), &mapped);
+                const CNA_GraphicsDeviceInformation mapped =
+                    ToCDeviceInformation(args.getGraphicsDeviceInformationProperty());
                 callback(&mapped, context);
             });
         return PublishRegistration(
@@ -396,8 +385,7 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
                 // delivers never made them const. This accessor is what lets the canonical event
                 // do in this runtime what it does in XNA.
                 GraphicsDeviceInformation& canonical = args.getGraphicsDeviceInformationEXT();
-                CNA_GraphicsDeviceInformation mapped = {};
-                ToCDeviceInformation(canonical, &mapped);
+                CNA_GraphicsDeviceInformation mapped = ToCDeviceInformation(canonical);
                 callback(&mapped, context);
                 if (!IsDeviceInformation(&mapped)) {
                     // A handler that corrupted the structure or wrote an undefined identity is
@@ -405,13 +393,7 @@ CNA_Result cna_graphics_device_manager_subscribe_preparing_device_settings_ext(
                     // later, for a reason with no visible connection to what was written.
                     return;
                 }
-                canonical.setAdapterProperty(AdapterAt(mapped.adapter_index));
-                canonical.setGraphicsProfileProperty(
-                    static_cast<GraphicsProfile>(mapped.graphics_profile));
-                PresentationParameters parameters =
-                    canonical.getPresentationParametersProperty();
-                ApplyPresentationParameters(mapped.presentation_parameters, &parameters);
-                canonical.setPresentationParametersProperty(parameters);
+                ApplyDeviceInformation(mapped, &canonical);
             });
         return PublishRegistration(
             std::make_shared<ManagerRegistration<PreparingDeviceSettingsEventArgs>>(

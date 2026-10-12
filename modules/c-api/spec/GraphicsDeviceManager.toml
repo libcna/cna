@@ -37,5 +37,6 @@ cna_graphics_device_manager_set_preferred_presentation_mode_ext = { call = "obje
 
 [values]
 [values.routes]
+cna_graphics_device_information_init = { value = "ToCDeviceInformation(GraphicsDeviceInformation())" }
 cna_graphics_device_information_get_type_name_size = { size = "GraphicsDeviceInformation().GetTypeName()" }
 cna_graphics_device_information_copy_type_name = { copy = "GraphicsDeviceInformation().GetTypeName()" }

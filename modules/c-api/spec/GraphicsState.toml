@@ -1,0 +1,15 @@
+# GraphicsState routes, generated into src/generated/GraphicsState.inc,
+# which src/CnaCApiGraphicsState.cpp includes. Format: docs/c-api/GENERATED_ROUTES.md.
+
+[borrowed_graphics_device]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+
+[borrowed_graphics_device.routes]
+cna_graphics_device_get_blend_state = { versioned = true, get = "ToCBlendState(object->value->getBlendStateProperty())" }
+cna_graphics_device_get_depth_stencil_state = { versioned = true, get = "ToCDepthStencilState(object->value->getDepthStencilStateProperty())" }
+cna_graphics_device_get_rasterizer_state = { versioned = true, get = "ToCRasterizerState(object->value->getRasterizerStateProperty())" }
+cna_graphics_device_get_sampler_state = { versioned = true, invalid_if = ["stage != CNA_SHADER_STAGE_PIXEL && stage != CNA_SHADER_STAGE_VERTEX", "slot >= CNA_MAX_SAMPLERS"], get = '''
+ToCSamplerState(stage == CNA_SHADER_STAGE_PIXEL
+    ? object->value->getSamplerStatesProperty()[static_cast<int>(slot)]
+    : object->value->getVertexSamplerStatesProperty()[static_cast<int>(slot)])''' }

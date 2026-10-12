@@ -30,21 +30,17 @@ namespace CNA::C::Detail {
     const CNA_SamplerState* source,
     Microsoft::Xna::Framework::Graphics::SamplerState* destination);
 
-void ToCBlendState(
-    const Microsoft::Xna::Framework::Graphics::BlendState& source,
-    CNA_BlendState* destination) noexcept;
+[[nodiscard]] CNA_BlendState ToCBlendState(
+    const Microsoft::Xna::Framework::Graphics::BlendState& source) noexcept;
 
-void ToCDepthStencilState(
-    const Microsoft::Xna::Framework::Graphics::DepthStencilState& source,
-    CNA_DepthStencilState* destination) noexcept;
+[[nodiscard]] CNA_DepthStencilState ToCDepthStencilState(
+    const Microsoft::Xna::Framework::Graphics::DepthStencilState& source) noexcept;
 
-void ToCRasterizerState(
-    const Microsoft::Xna::Framework::Graphics::RasterizerState& source,
-    CNA_RasterizerState* destination) noexcept;
+[[nodiscard]] CNA_RasterizerState ToCRasterizerState(
+    const Microsoft::Xna::Framework::Graphics::RasterizerState& source) noexcept;
 
-void ToCSamplerState(
-    const Microsoft::Xna::Framework::Graphics::SamplerState& source,
-    CNA_SamplerState* destination) noexcept;
+[[nodiscard]] CNA_SamplerState ToCSamplerState(
+    const Microsoft::Xna::Framework::Graphics::SamplerState& source) noexcept;
 
 } // namespace CNA::C::Detail
 

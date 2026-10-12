@@ -134,6 +134,30 @@ CNA_Result cna_model_bone_collection_get_count(
     });
 }
 
+CNA_Result cna_model_mesh_part_get_sampler_state_ext(
+    const CNA_ModelMeshPartHandle part,
+    const CNA_PbrTextureSlot slot,
+    CNA_SamplerState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_sampler_state_ext: out_state is null.");
+        }
+        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
+            return CNA::C::Detail::InvalidArgument("cna_model_mesh_part_get_sampler_state_ext: invalid because slot > CNA_PBR_TEXTURE_MAXIMUM.");
+        }
+        std::shared_ptr<PartResource> object{};
+        if (const CNA_Result routeResult = GetPart(part, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_state = ToCSamplerState(slot < CNA_PBR_TEXTURE_SPECULAR_EXT
+            ? object->value->getSamplerStatesEXTProperty()[slot]
+            : object->value->getSpecularSamplerStatesEXTProperty()[slot - CNA_PBR_TEXTURE_SPECULAR_EXT]);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_model_mesh_part_get_num_vertices(
     const CNA_ModelMeshPartHandle part,
     int32_t* const out_value)

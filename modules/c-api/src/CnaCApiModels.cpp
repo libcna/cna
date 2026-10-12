@@ -71,6 +71,7 @@ using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToC;
 using CNA::C::Detail::ToCBool;
+using CNA::C::Detail::ToCSamplerState;
 using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateVersionedStructure;
 using CNA::C::Detail::VertexBufferResource;
@@ -4440,32 +4441,6 @@ CNA_Result cna_animation_player_get_current_clip_info(
         *outHasClip = CNA_TRUE;
         *outDurationSeconds = clip->Duration.getTotalSecondsProperty();
         *outTrackCount = static_cast<uint64_t>(clip->Tracks.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_mesh_part_get_sampler_state_ext(
-    const CNA_ModelMeshPartHandle partHandle,
-    const CNA_PbrTextureSlot slot,
-    CNA_SamplerState* const outState)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The ModelMeshPart sampler-state output is null.");
-        }
-        if (slot > CNA_PBR_TEXTURE_MAXIMUM) {
-            return InvalidArgument("The PBR texture slot is outside the valid range.");
-        }
-        std::shared_ptr<PartResource> part;
-        if (const CNA_Result result = GetPart(partHandle, &part);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const SamplerState& state = slot < CNA_PBR_TEXTURE_SPECULAR_EXT
-            ? part->value->getSamplerStatesEXTProperty()[slot]
-            : part->value->getSpecularSamplerStatesEXTProperty()
-                  [slot - CNA_PBR_TEXTURE_SPECULAR_EXT];
-        CNA::C::Detail::ToCSamplerState(state, outState);
         return CNA_RESULT_SUCCESS;
     });
 }

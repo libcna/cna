@@ -35,11 +35,8 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsDepthFormat;
-using CNA::C::Detail::IsDisplayOrientation;
 using CNA::C::Detail::IsGraphicsProfile;
-using CNA::C::Detail::IsPresentInterval;
 using CNA::C::Detail::IsPresentationParameters;
-using CNA::C::Detail::IsRenderTargetUsage;
 using CNA::C::Detail::IsSurfaceFormat;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -48,6 +45,7 @@ using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ToCPresentationParameters;
+using CNA::C::Detail::ToNativePresentationParameters;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::DisplayOrientation;
@@ -62,9 +60,9 @@ using Microsoft::Xna::Framework::Graphics::PresentInterval;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destination) noexcept
+[[nodiscard]] CNA_DisplayMode ToCDisplayMode(const DisplayMode& source) noexcept
 {
-    *destination = CNA_DisplayMode{
+    return CNA_DisplayMode{
         .struct_size = sizeof(CNA_DisplayMode),
         .struct_version = StructureVersion,
         .width = source.getWidthProperty(),
@@ -229,21 +227,6 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
 
 } // namespace
 
-CNA_Result cna_display_mode_init(
-    const int32_t width,
-    const int32_t height,
-    const CNA_SurfaceFormat format,
-    CNA_DisplayMode* const outMode)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outMode == nullptr || !IsSurfaceFormat(format)) {
-            return InvalidArgument("The DisplayMode initialization arguments are invalid.");
-        }
-        ToCDisplayMode(DisplayMode(width, height, static_cast<SurfaceFormat>(format)), outMode);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_display_mode_equals(
     const CNA_DisplayMode* const left,
     const CNA_DisplayMode* const right,
@@ -257,29 +240,6 @@ CNA_Result cna_display_mode_equals(
         const DisplayMode nativeRight(
             right->width, right->height, static_cast<SurfaceFormat>(right->format));
         *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_adapter_get_current_display_mode(
-    const CNA_Handle graphicsDeviceHandle,
-    const uint32_t adapterIndex,
-    CNA_DisplayMode* const outMode)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outMode, "The DisplayMode output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<void> context;
-        GraphicsAdapter* adapter = nullptr;
-        if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &context, &adapter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ToCDisplayMode(adapter->getCurrentDisplayModeProperty(), outMode);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -355,7 +315,7 @@ CNA_Result cna_graphics_adapter_copy_display_modes(
                 "The display-mode output buffer is too small.");
         }
         for (std::size_t index = 0U; index < modes.size(); ++index) {
-            ToCDisplayMode(modes[index], &destination[index]);
+            destination[index] = ToCDisplayMode(modes[index]);
         }
         return CNA_RESULT_SUCCESS;
     });
@@ -406,72 +366,6 @@ CNA_Result cna_graphics_adapter_get_native_monitor_handle(
     });
 }
 
-CNA_Result cna_presentation_parameters_init(CNA_PresentationParameters* const outParameters)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outParameters == nullptr) {
-            return InvalidArgument("The PresentationParameters output is null.");
-        }
-        const PresentationParameters nativeParameters;
-        ToCPresentationParameters(nativeParameters, outParameters);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_presentation_parameters_clone(
-    const CNA_PresentationParameters* const source,
-    CNA_PresentationParameters* const outParameters)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!IsPresentationParameters(source) || outParameters == nullptr) {
-            return InvalidArgument("The PresentationParameters clone arguments are invalid.");
-        }
-        PresentationParameters nativeSource;
-        ApplyPresentationParameters(*source, &nativeSource);
-        const PresentationParameters clone = nativeSource.Clone();
-        ToCPresentationParameters(clone, outParameters);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_presentation_parameters_get_bounds(
-    const CNA_PresentationParameters* const parameters,
-    CNA_Rectangle* const outBounds)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (!IsPresentationParameters(parameters) || outBounds == nullptr) {
-            return InvalidArgument("The PresentationParameters bounds arguments are invalid.");
-        }
-        PresentationParameters nativeParameters;
-        ApplyPresentationParameters(*parameters, &nativeParameters);
-        const Microsoft::Xna::Framework::Rectangle bounds = nativeParameters.getBoundsProperty();
-        *outBounds = CNA_Rectangle{bounds.X, bounds.Y, bounds.Width, bounds.Height};
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_presentation_parameters(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_PresentationParameters* const outParameters)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                outParameters, "The PresentationParameters output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ToCPresentationParameters(
-            graphicsDevice->value->getPresentationParametersProperty(), outParameters);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_set_presentation_parameters(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_PresentationParameters* const parameters)
@@ -494,27 +388,6 @@ CNA_Result cna_graphics_device_set_presentation_parameters(
         ApplyPresentationParameters(*parameters, &nativeParameters);
         nativeParameters.setDeviceWindowHandleProperty(windowHandle);
         graphicsDevice->value->SetPresentationParameters(nativeParameters);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_display_mode(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_DisplayMode* const outMode)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outMode, "The DisplayMode output structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        ToCDisplayMode(graphicsDevice->value->getDisplayModeProperty(), outMode);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -561,8 +434,7 @@ CNA_Result cna_graphics_device_create(
             return InvalidArgument("The graphics adapter index is out of range.");
         }
 
-        PresentationParameters nativeParameters;
-        ApplyPresentationParameters(*parameters, &nativeParameters);
+        const PresentationParameters nativeParameters = ToNativePresentationParameters(*parameters);
 
         auto owned = std::make_shared<CNA::C::Detail::OwnedGraphicsDevice>();
         // Construction is what acquires the platform video subsystem and the renderer, so it is

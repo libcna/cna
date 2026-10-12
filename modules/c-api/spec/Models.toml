@@ -25,6 +25,10 @@ lookup = "GetPart"
 object = "std::shared_ptr<PartResource>"
 
 [part.routes]
+cna_model_mesh_part_get_sampler_state_ext = { invalid_if = "slot > CNA_PBR_TEXTURE_MAXIMUM", get = '''
+ToCSamplerState(slot < CNA_PBR_TEXTURE_SPECULAR_EXT
+    ? object->value->getSamplerStatesEXTProperty()[slot]
+    : object->value->getSpecularSamplerStatesEXTProperty()[slot - CNA_PBR_TEXTURE_SPECULAR_EXT])''' }
 cna_model_mesh_part_get_num_vertices = { get = "object->value->getNumVerticesProperty()" }
 cna_model_mesh_part_get_primitive_count = { get = "object->value->getPrimitiveCountProperty()" }
 cna_model_mesh_part_get_start_index = { get = "object->value->getStartIndexProperty()" }

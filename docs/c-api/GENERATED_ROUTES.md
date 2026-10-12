@@ -112,7 +112,10 @@ cna_sound_effect_instance_set_pan = { call = "object->value->setPanProperty(pan)
 ```
 
 The route then answers `CNA_RESULT_INVALID_ARGUMENT`, with the condition in the message.
-`invalid_if` takes one condition or a list of them.
+`invalid_if` takes one condition or a list of them. A structure the route reads through a const
+pointer is accepted only when a condition names it, because that condition is what refuses a
+null or malformed one (`invalid_if = "!IsPresentationParameters(source)"`); the contract test
+checks that a null one is refused.
 
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a

@@ -14,10 +14,16 @@ object = "std::shared_ptr<BorrowedGraphicsDevice>"
 
 [borrowed_graphics_device.routes]
 cna_graphics_device_reset = { call = "object->value->Reset()" }
+cna_graphics_device_get_display_mode = { versioned = true, get = "ToCDisplayMode(object->value->getDisplayModeProperty())" }
+cna_graphics_device_get_presentation_parameters = { versioned = true, get = "ToCPresentationParameters(object->value->getPresentationParametersProperty())" }
 cna_graphics_adapters_refresh = { result = "NotSupported(\"The active C GraphicsDevice retains its adapter; refreshing the global native \" \"adapter cache would invalidate that reference.\")" }
 
 [calls]
 [calls.routes]
+cna_display_mode_init = { value = "ToCDisplayMode(DisplayMode(width, height, static_cast<SurfaceFormat>(format)))", invalid_if = "!IsSurfaceFormat(format)" }
+cna_presentation_parameters_init = { value = "ToCPresentationParameters(PresentationParameters())" }
+cna_presentation_parameters_clone = { value = "ToCPresentationParameters(ToNativePresentationParameters(*source).Clone())", invalid_if = "!IsPresentationParameters(source)" }
+cna_presentation_parameters_get_bounds = { value = "ToNativePresentationParameters(*parameters).getBoundsProperty()", invalid_if = "!IsPresentationParameters(parameters)" }
 cna_graphics_adapter_copy_description = { result = "CopyAdapterString(graphics_device, adapter_index, true, destination, capacity, out_bytes)" }
 cna_graphics_adapter_copy_device_name = { result = "CopyAdapterString(graphics_device, adapter_index, false, destination, capacity, out_bytes)" }
 cna_graphics_adapter_query_render_target_format = { result = "QueryFormat(graphics_device, adapter_index, profile, format, depth_format, multi_sample_count, out_selection, true)" }
@@ -30,6 +36,7 @@ owner = "std::shared_ptr<void>"
 arguments = 2
 
 [adapter.routes]
+cna_graphics_adapter_get_current_display_mode = { versioned = true, get = "ToCDisplayMode(object->getCurrentDisplayModeProperty())" }
 cna_graphics_adapter_is_profile_supported = { get = "object->IsProfileSupported(static_cast<GraphicsProfile>(profile))", invalid_if = "!IsGraphicsProfile(profile)" }
 cna_graphics_adapter_get_info = { versioned = true, get = '''
 CNA_GraphicsAdapterInfo{
