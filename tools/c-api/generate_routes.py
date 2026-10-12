@@ -67,7 +67,8 @@ unconverted. Every other parameter is passed as declared. The
 result is converted back by the output's C type: ToC for a marshaled struct, ToCBool for
 CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
 expression builds it. A group that says ``raw = true`` works on the C structures themselves:
-its struct parameters are passed as declared and a struct result is assigned as built.
+its struct parameters, converted or not, are passed as declared and a struct result is assigned
+as built.
 
 A ``value`` or ``get`` whose output is a versioned structure (``struct_size``, ``struct_version``)
 says ``versioned = true``: the output is then refused unless it is a version 1 structure large
@@ -341,9 +342,10 @@ class Route:
                                      "hand, or refuse an invalid one (null included) with an "
                                      "invalid_if or validate that names it")
                 continue
-            if self.types.kind_of(param.type) == "other":
+            if self.types.kind_of(param.type) == "other" and not self.group.get("raw"):
                 raise self._fail(f"input '{param.name}' has type {param.type}, which this "
-                                 "generator does not convert; write the route by hand")
+                                 "generator does not convert; write the route by hand, or "
+                                 "in a raw group that takes C structures as declared")
         self.inputs = params
         self._check_names()
 

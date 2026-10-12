@@ -532,6 +532,74 @@ CNA_Result cna_motion_get_is_supported(
     });
 }
 
+CNA_Result cna_accelerometer_create(
+    const CNA_Handle game,
+    CNA_AccelerometerHandle* const out_sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sensor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_create: out_sensor is null.");
+        }
+        *out_sensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSensor<Accelerometer>(out_sensor);
+    });
+}
+
+CNA_Result cna_gyroscope_create(
+    const CNA_Handle game,
+    CNA_GyroscopeHandle* const out_sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sensor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_create: out_sensor is null.");
+        }
+        *out_sensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSensor<Gyroscope>(out_sensor);
+    });
+}
+
+CNA_Result cna_compass_create(
+    const CNA_Handle game,
+    CNA_CompassHandle* const out_sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sensor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_create: out_sensor is null.");
+        }
+        *out_sensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSensor<Compass>(out_sensor);
+    });
+}
+
+CNA_Result cna_motion_create(
+    const CNA_Handle game,
+    CNA_MotionHandle* const out_sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sensor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_create: out_sensor is null.");
+        }
+        *out_sensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSensor<Motion>(out_sensor);
+    });
+}
+
 CNA_Result cna_accelerometer_get_state(
     const CNA_AccelerometerHandle sensor,
     CNA_SensorState* const out_state)
@@ -1725,5 +1793,39 @@ CNA_Result cna_motion_reading_copy_type_name(
 {
     return CNA::C::Detail::CopyFormattedText(destination, capacity, out_bytes, [&] {
         return MotionReading().GetTypeName();
+    });
+}
+
+CNA_Result cna_attitude_reading_init_from_values(
+    const float pitch,
+    const float roll,
+    const float yaw,
+    const CNA_Quaternion quaternion,
+    const CNA_Matrix rotation_matrix,
+    const CNA_DateTimeOffset timestamp,
+    CNA_AttitudeReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_attitude_reading_init_from_values: out_reading is null.");
+        }
+        *out_reading = MapAttitudeReading(AttitudeReading(pitch, roll, yaw, ToQuaternion(quaternion), ToMatrix(rotation_matrix), ToTimestamp(timestamp)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_reading_event_info_init_from_values(
+    const double x,
+    const double y,
+    const double z,
+    const CNA_DateTimeOffset timestamp,
+    CNA_AccelerometerReadingEventInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_init_from_values: out_info is null.");
+        }
+        *out_info = MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs(x, y, z, ToTimestamp(timestamp)));
+        return CNA_RESULT_SUCCESS;
     });
 }

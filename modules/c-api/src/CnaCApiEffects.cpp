@@ -931,12 +931,8 @@ template<typename TGetter>
 [[nodiscard]] CNA_Result GetRetainedEffectTexture(
     const RetainedTextureSlot& retained,
     CNA_Bool* const outHasTexture,
-    CNA_Handle* const outTexture,
-    const char* const nullMessage)
+    CNA_Handle* const outTexture)
 {
-    if (outHasTexture == nullptr || outTexture == nullptr) {
-        return InvalidArgument(nullMessage);
-    }
     *outHasTexture = retained.handle == CNA_INVALID_HANDLE ? CNA_FALSE : CNA_TRUE;
     *outTexture = retained.handle;
     return CNA_RESULT_SUCCESS;
@@ -2685,111 +2681,6 @@ CNA_Result cna_shader_effect_set_uniform_matrix(
     });
 }
 
-CNA_Result cna_shader_effect_set_uniform_vector4(
-    const CNA_EffectHandle effectHandle,
-    const CNA_StringView name,
-    const CNA_Vector4 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformVec4(copiedName.c_str(), value.x, value.y, value.z, value.w);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_uniform_vector3(
-    const CNA_EffectHandle effectHandle,
-    const CNA_StringView name,
-    const CNA_Vector3 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformVec3(copiedName.c_str(), value.x, value.y, value.z);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_uniform_vector2(
-    const CNA_EffectHandle effectHandle,
-    const CNA_StringView name,
-    const CNA_Vector2 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformVec2(copiedName.c_str(), value.x, value.y);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_uniform_float(
-    const CNA_EffectHandle effectHandle,
-    const CNA_StringView name,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformFloat(copiedName.c_str(), value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_shader_effect_set_uniform_int32(
-    const CNA_EffectHandle effectHandle,
-    const CNA_StringView name,
-    const int32_t value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copiedName;
-        if (const CNA_Result result = CopyUniformName(name, &copiedName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        shader->SetUniformInt(copiedName.c_str(), value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_shader_effect_declare_uniform_block_ext(
     const CNA_EffectHandle effectHandle,
     const int32_t blockSizeBytes,
@@ -3166,31 +3057,6 @@ CNA_Result cna_basic_effect_set_texture(
     });
 }
 
-CNA_Result cna_alpha_test_effect_get_texture(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasTexture,
-    CNA_Handle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("The AlphaTestEffect texture outputs are null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        AlphaTestEffect* alphaTest = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &alphaTest);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)alphaTest;
-        return GetRetainedEffectTexture(
-            GetEffectState(effect)->lifetime->stockTexture0,
-            outHasTexture,
-            outTexture,
-            "The AlphaTestEffect texture outputs are null.");
-    });
-}
-
 CNA_Result cna_alpha_test_effect_set_texture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
@@ -3240,8 +3106,7 @@ CNA_Result cna_dual_texture_effect_get_texture(
         return GetRetainedEffectTexture(
             textureIndex == 0U ? lifetime->stockTexture0 : lifetime->stockTexture1,
             outHasTexture,
-            outTexture,
-            "The DualTextureEffect texture outputs are null.");
+            outTexture);
     });
 }
 
@@ -3279,31 +3144,6 @@ CNA_Result cna_dual_texture_effect_set_texture(
     });
 }
 
-CNA_Result cna_environment_map_effect_get_texture(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasTexture,
-    CNA_Handle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect texture outputs are null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)environmentMap;
-        return GetRetainedEffectTexture(
-            GetEffectState(effect)->lifetime->stockTexture0,
-            outHasTexture,
-            outTexture,
-            "The EnvironmentMapEffect texture outputs are null.");
-    });
-}
-
 CNA_Result cna_environment_map_effect_set_texture(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle textureHandle)
@@ -3326,31 +3166,6 @@ CNA_Result cna_environment_map_effect_set_texture(
     });
 }
 
-CNA_Result cna_environment_map_effect_get_environment_map(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasEnvironmentMap,
-    CNA_Handle* const outEnvironmentMap)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasEnvironmentMap == nullptr || outEnvironmentMap == nullptr) {
-            return InvalidArgument("The EnvironmentMapEffect cube-map outputs are null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        EnvironmentMapEffect* environmentMap = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &environmentMap);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)environmentMap;
-        return GetRetainedEffectTexture(
-            GetEffectState(effect)->lifetime->environmentMap,
-            outHasEnvironmentMap,
-            outEnvironmentMap,
-            "The EnvironmentMapEffect cube-map outputs are null.");
-    });
-}
-
 CNA_Result cna_environment_map_effect_set_environment_map(
     const CNA_EffectHandle effectHandle,
     const CNA_Handle environmentMapHandle)
@@ -3370,31 +3185,6 @@ CNA_Result cna_environment_map_effect_set_environment_map(
             [environmentMap](std::shared_ptr<TextureCube> texture) {
                 environmentMap->SetOwnedEnvironmentMap(std::move(texture));
             });
-    });
-}
-
-CNA_Result cna_skinned_effect_get_texture(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outHasTexture,
-    CNA_Handle* const outTexture)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHasTexture == nullptr || outTexture == nullptr) {
-            return InvalidArgument("The SkinnedEffect texture outputs are null.");
-        }
-        std::shared_ptr<EffectResource> effect;
-        SkinnedEffect* skinned = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, &effect, &skinned);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        (void)skinned;
-        return GetRetainedEffectTexture(
-            GetEffectState(effect)->lifetime->stockTexture0,
-            outHasTexture,
-            outTexture,
-            "The SkinnedEffect texture outputs are null.");
     });
 }
 
@@ -3485,44 +3275,6 @@ CNA_Result cna_skinned_effect_copy_bone_transforms(
     });
 }
 
-CNA_Result cna_color_matrix_effect_get_matrix(
-    const CNA_EffectHandle effectHandle,
-    CNA_ColorMatrix4x4* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The ColorMatrixEffect matrix output is null.");
-        }
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::array<float, 16>& native = colorMatrix->GetColorMatrix();
-        std::copy(native.begin(), native.end(), std::begin(outValue->values));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_color_matrix_effect_set_matrix(
-    const CNA_EffectHandle effectHandle,
-    const CNA_ColorMatrix4x4 value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ColorMatrixEffect* colorMatrix = nullptr;
-        if (const CNA_Result result = GetStockEffect(
-                effectHandle, nullptr, &colorMatrix);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::array<float, 16> native{};
-        std::copy(std::begin(value.values), std::end(value.values), native.begin());
-        colorMatrix->SetColorMatrix(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_texture(
     const CNA_EffectHandle effectHandle,
     const CNA_PbrTextureSlot slot,
@@ -3578,11 +3330,6 @@ namespace {
         slot == CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT;
 }
 
-[[nodiscard]] CNA_Bool ToCBoolean(const bool value) noexcept
-{
-    return ToCBool(value);
-}
-
 [[nodiscard]] CNA_TextureTransformEXT ToC(const TextureTransformEXT& value) noexcept
 {
     return CNA_TextureTransformEXT{
@@ -3607,23 +3354,6 @@ namespace {
 }
 
 } // namespace
-
-CNA_Result cna_texture_transform_ext_equals(
-    const CNA_TextureTransformEXT* const left,
-    const CNA_TextureTransformEXT* const right,
-    CNA_Bool* const outEqual)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The texture transform comparison output is null.");
-        }
-        if (!IsTextureTransform(left) || !IsTextureTransform(right)) {
-            return InvalidArgument("A texture transform operand is null or malformed.");
-        }
-        *outEqual = ToCBoolean(ToNative(*left) == ToNative(*right));
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_pbr_effect_get_texture_coordinate_set_ext(
     const CNA_EffectHandle effectHandle,
@@ -3796,7 +3526,7 @@ CNA_Result cna_pbr_effect_get_texture_is_srgb_ext(
                 return effect.getBaseColorTextureIsSrgbEXTProperty();
             }
         };
-        *outValue = ToCBoolean(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
+        *outValue = ToCBool(view.pbr != nullptr ? read(*view.pbr) : read(*view.skinned));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3842,26 +3572,6 @@ CNA_Result cna_pbr_effect_set_texture_is_srgb_ext(
     });
 }
 
-CNA_Result cna_pbr_effect_get_encode_output_to_srgb_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR output-encoding output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBoolean(view.pbr != nullptr
-            ? view.pbr->getEncodeOutputToSrgbEXTProperty()
-            : view.skinned->getEncodeOutputToSrgbEXTProperty());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_pbr_effect_set_alpha_mode_ext(
     const CNA_EffectHandle effectHandle,
     const CNA_AlphaModeEXT value)
@@ -3881,26 +3591,6 @@ CNA_Result cna_pbr_effect_set_alpha_mode_ext(
         } else {
             view.skinned->setAlphaModeEXTProperty(native);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_pbr_effect_get_double_sided_ext(
-    const CNA_EffectHandle effectHandle,
-    CNA_Bool* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The PBR double-sided output is null.");
-        }
-        PbrEffectView view;
-        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = ToCBoolean(view.pbr != nullptr
-            ? view.pbr->getDoubleSidedEXTProperty()
-            : view.skinned->getDoubleSidedEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }

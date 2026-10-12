@@ -198,6 +198,25 @@ CNA_Result cna_achievement_get_info(
     });
 }
 
+CNA_Result cna_achievement_copy_picture(
+    const CNA_AchievementHandle achievement,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_achievement_copy_picture: out_bytes is null.");
+        }
+        std::shared_ptr<AchievementResource> object{};
+        if (const CNA_Result routeResult = BorrowAchievement(achievement, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyPictureStream(std::unique_ptr<System::IO::Stream>(object->value->GetPicture()).get(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_achievement_collection_get_count(
     const CNA_AchievementCollectionHandle collection,
     int32_t* const out_count)

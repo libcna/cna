@@ -1043,6 +1043,114 @@ CNA_Result cna_shader_effect_set_projection(
     });
 }
 
+CNA_Result cna_shader_effect_set_uniform_vector4(
+    const CNA_EffectHandle effect,
+    const CNA_StringView c_name,
+    const CNA_Vector4 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_shader_effect_set_uniform_vector4: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->SetUniformVec4(name.c_str(), value.X, value.Y, value.Z, value.W);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector3(
+    const CNA_EffectHandle effect,
+    const CNA_StringView c_name,
+    const CNA_Vector3 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_shader_effect_set_uniform_vector3: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->SetUniformVec3(name.c_str(), value.X, value.Y, value.Z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector2(
+    const CNA_EffectHandle effect,
+    const CNA_StringView c_name,
+    const CNA_Vector2 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_shader_effect_set_uniform_vector2: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->SetUniformVec2(name.c_str(), value.X, value.Y);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_float(
+    const CNA_EffectHandle effect,
+    const CNA_StringView c_name,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_shader_effect_set_uniform_float: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->SetUniformFloat(name.c_str(), value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_int32(
+    const CNA_EffectHandle effect,
+    const CNA_StringView c_name,
+    const int32_t value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_shader_effect_set_uniform_int32: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->SetUniformInt(name.c_str(), value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_directional_light_get_diffuse_color(
     const CNA_DirectionalLightHandle light,
     CNA_Vector3* const out_value)
@@ -2606,6 +2714,40 @@ CNA_Result cna_color_matrix_effect_reset(
     });
 }
 
+CNA_Result cna_color_matrix_effect_get_matrix(
+    const CNA_EffectHandle effect,
+    CNA_ColorMatrix4x4* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_color_matrix_effect_get_matrix: out_value is null.");
+        }
+        ColorMatrixEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ColorMatrixEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToC(object->GetColorMatrix());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_set_matrix(
+    const CNA_EffectHandle effect,
+    const CNA_ColorMatrix4x4 c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        ColorMatrixEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ColorMatrixEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto value = CNA::C::Detail::ToNative(c_value);
+        object->SetColorMatrix(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_pbr_effect_get_diffuse_color(
     const CNA_EffectHandle effect,
     CNA_Vector3* const out_value)
@@ -2862,7 +3004,7 @@ CNA_Result cna_pbr_effect_get_texture(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture, "The PBR texture outputs are null.");
+        return GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture);
     });
 }
 
@@ -3090,6 +3232,42 @@ CNA_Result cna_pbr_effect_set_double_sided_ext(
         }
         const bool value = CNA::C::Detail::FromCBool(c_value);
         object.pbr != nullptr ? object.pbr->setDoubleSidedEXTProperty(value) : object.skinned->setDoubleSidedEXTProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_encode_output_to_srgb_ext(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_encode_output_to_srgb_ext: out_value is null.");
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object.pbr != nullptr ? object.pbr->getEncodeOutputToSrgbEXTProperty() : object.skinned->getEncodeOutputToSrgbEXTProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_double_sided_ext(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_pbr_effect_get_double_sided_ext: out_value is null.");
+        }
+        PbrEffectView object{};
+        if (const CNA_Result routeResult = GetPbrEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(object.pbr != nullptr ? object.pbr->getDoubleSidedEXTProperty() : object.skinned->getDoubleSidedEXTProperty());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -3716,6 +3894,26 @@ CNA_Result cna_texture_transform_ext_init(
     });
 }
 
+CNA_Result cna_texture_transform_ext_equals(
+    const CNA_TextureTransformEXT* const left,
+    const CNA_TextureTransformEXT* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_transform_ext_equals: out_equal is null.");
+        }
+        if (!IsTextureTransform(left)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_transform_ext_equals: invalid because !IsTextureTransform(left).");
+        }
+        if (!IsTextureTransform(right)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_transform_ext_equals: invalid because !IsTextureTransform(right).");
+        }
+        *out_equal = CNA::C::Detail::ToCBool(ToNative(*left) == ToNative(*right));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
     const CNA_EffectHandle effect,
     uint64_t* const out_count)
@@ -3752,5 +3950,97 @@ CNA_Result cna_effect_annotation_collection_add(
         }
         object->value->Add(*other->value);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_texture(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_alpha_test_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_alpha_test_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> owner{};
+        AlphaTestEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<AlphaTestEffect>(effect, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture);
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_texture(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_environment_map_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_environment_map_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> owner{};
+        EnvironmentMapEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<EnvironmentMapEffect>(effect, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture);
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_environment_map(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_has_environment_map,
+    CNA_Handle* const out_environment_map)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_environment_map == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_environment_map_effect_get_environment_map: out_has_environment_map is null.");
+        }
+        if (out_environment_map == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_environment_map_effect_get_environment_map: out_environment_map is null.");
+        }
+        *out_environment_map = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> owner{};
+        EnvironmentMapEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<EnvironmentMapEffect>(effect, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRetainedEffectTexture(GetEffectState(owner)->lifetime->environmentMap, out_has_environment_map, out_environment_map);
+    });
+}
+
+CNA_Result cna_skinned_effect_get_texture(
+    const CNA_EffectHandle effect,
+    CNA_Bool* const out_has_texture,
+    CNA_Handle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_effect_get_texture: out_has_texture is null.");
+        }
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_effect_get_texture: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> owner{};
+        SkinnedEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<SkinnedEffect>(effect, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture);
     });
 }

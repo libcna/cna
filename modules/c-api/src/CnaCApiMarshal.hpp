@@ -12,6 +12,7 @@
 
 #include "CNA/C/core.h"
 #include "CNA/C/curve.h"
+#include "CNA/C/effects.h"
 #include "CNA/C/graphics3d.h"
 #include "CNA/C/graphics_device.h"
 #include "CNA/C/input.h"
@@ -52,6 +53,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -532,6 +534,22 @@ inline void ApplyPresentationParameters(
     const XnaGraphics::VertexPositionTexture& value) noexcept
 {
     return CNA_VertexPositionTexture{ToC(value.Position), ToC(value.TextureCoordinate)};
+}
+
+/** @brief The sixteen row-major elements of a ColorMatrixEffect matrix. */
+[[nodiscard]] inline std::array<float, 16> ToNative(const CNA_ColorMatrix4x4& value) noexcept
+{
+    std::array<float, 16> matrix{};
+    std::copy(std::begin(value.values), std::end(value.values), matrix.begin());
+    return matrix;
+}
+
+/** @brief A ColorMatrixEffect matrix as the C structure. */
+[[nodiscard]] inline CNA_ColorMatrix4x4 ToC(const std::array<float, 16>& value) noexcept
+{
+    CNA_ColorMatrix4x4 matrix{};
+    std::copy(value.begin(), value.end(), std::begin(matrix.values));
+    return matrix;
 }
 
 } // namespace CNA::C::Detail

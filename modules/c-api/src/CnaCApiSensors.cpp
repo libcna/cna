@@ -39,8 +39,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::StructureVersion;
@@ -314,17 +312,15 @@ template<typename TSensor>
     const CNA_Handle handle,
     std::shared_ptr<SensorResource<TSensor>>* const outSensor)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
-        handle,
-        SensorKind<TSensor>::Kind,
-        outSensor);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The sensor handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, SensorKind<TSensor>::Kind, outSensor);
+}
+
+template<typename TSensor>
+[[nodiscard]] CNA_Result CreateSensor(CNA_Handle* const outSensor)
+{
+    auto resource = std::make_shared<SensorResource<TSensor>>();
+    resource->value = std::make_unique<TSensor>();
+    return CreateHandle(SensorKind<TSensor>::Kind, std::move(resource), outSensor);
 }
 
 [[nodiscard]] CNA_AccelerometerReading MapAccelerometerReadingValue(
@@ -420,30 +416,6 @@ CNA_Result cna_gyroscope_reading_init_from_values(
         reading.timestamp = MapTimestamp(native.getTimestampProperty());
         reading.rotation_rate = MapVector(native.getRotationRateProperty());
         *outReading = reading;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_attitude_reading_init_from_values(
-    const float pitch,
-    const float roll,
-    const float yaw,
-    const CNA_Quaternion quaternion,
-    const CNA_Matrix rotationMatrix,
-    const CNA_DateTimeOffset timestamp,
-    CNA_AttitudeReading* const outReading)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outReading == nullptr) {
-            return InvalidArgument("The attitude reading output is null.");
-        }
-        *outReading = MapAttitudeReading(AttitudeReading(
-            pitch,
-            roll,
-            yaw,
-            ToQuaternion(quaternion),
-            ToMatrix(rotationMatrix),
-            ToTimestamp(timestamp)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -703,25 +675,6 @@ CNA_Result cna_sensor_unsubscribe_ext(const CNA_SensorEventRegistrationHandle re
     });
 }
 
-CNA_Result cna_accelerometer_create(const CNA_Handle gameHandle, CNA_AccelerometerHandle* const outSensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSensor == nullptr) {
-            return InvalidArgument("The sensor output is null.");
-        }
-        *outSensor = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<SensorResource<Accelerometer>>();
-        resource->value = std::make_unique<Accelerometer>();
-        return CreateHandle(ObjectKind::Accelerometer,
-            std::move(resource),
-            outSensor);
-    });
-}
-
 CNA_Result cna_accelerometer_subscribe_current_value_changed(
     const CNA_AccelerometerHandle sensor,
     const CNA_AccelerometerReadingCallback callback,
@@ -803,25 +756,6 @@ CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
         resource->value->SetDisposalCleanupHookForTesting(
             [callback, context]() { callback(context); });
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gyroscope_create(const CNA_Handle gameHandle, CNA_GyroscopeHandle* const outSensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSensor == nullptr) {
-            return InvalidArgument("The sensor output is null.");
-        }
-        *outSensor = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<SensorResource<Gyroscope>>();
-        resource->value = std::make_unique<Gyroscope>();
-        return CreateHandle(ObjectKind::Gyroscope,
-            std::move(resource),
-            outSensor);
     });
 }
 
@@ -1141,23 +1075,6 @@ template<typename TSensor>
 
 } // namespace
 
-CNA_Result cna_accelerometer_reading_event_info_init_from_values(
-    const double x,
-    const double y,
-    const double z,
-    const CNA_DateTimeOffset timestamp,
-    CNA_AccelerometerReadingEventInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The accelerometer reading description output is null.");
-        }
-        *outInfo = MapAccelerometerReadingEventArgs(
-            AccelerometerReadingEventArgs(x, y, z, ToTimestamp(timestamp)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_accelerometer_reading_event_info_equals(
     const CNA_AccelerometerReadingEventInfo* const left,
     const CNA_AccelerometerReadingEventInfo* const right,
@@ -1211,25 +1128,6 @@ CNA_Result cna_accelerometer_subscribe_reading_changed(
             std::make_shared<SensorRegistration<AccelerometerReadingEventArgs>>(
                 resource, source, token),
             outRegistration);
-    });
-}
-
-CNA_Result cna_compass_create(const CNA_Handle gameHandle, CNA_CompassHandle* const outSensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSensor == nullptr) {
-            return InvalidArgument("The sensor output is null.");
-        }
-        *outSensor = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<SensorResource<Compass>>();
-        resource->value = std::make_unique<Compass>();
-        return CreateHandle(ObjectKind::Compass,
-            std::move(resource),
-            outSensor);
     });
 }
 
@@ -1333,25 +1231,6 @@ CNA_Result cna_compass_inject_calibration_request_ext(const CNA_CompassHandle se
             return NoTestBackend();
         }
         return DeliverTestCalibration(state);
-    });
-}
-
-CNA_Result cna_motion_create(const CNA_Handle gameHandle, CNA_MotionHandle* const outSensor)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSensor == nullptr) {
-            return InvalidArgument("The sensor output is null.");
-        }
-        *outSensor = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<SensorResource<Motion>>();
-        resource->value = std::make_unique<Motion>();
-        return CreateHandle(ObjectKind::Motion,
-            std::move(resource),
-            outSensor);
     });
 }
 

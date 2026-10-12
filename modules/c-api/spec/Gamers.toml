@@ -55,6 +55,7 @@ CNA_GamerProfileInfo{
     ToCBool(object->value->getIsDisposedProperty()),
     {0U, 0U, 0U}
 }''' }
+cna_gamer_profile_copy_picture = { result = "CopyPictureStream(std::unique_ptr<System::IO::Stream>(object->value->GetGamerPicture()).get(), destination, capacity, out_bytes)" }
 
 [collection]
 lookup = "BorrowCollection"

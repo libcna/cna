@@ -136,6 +136,11 @@ cna_shader_effect_get_view = { get = "object->getViewProperty()" }
 cna_shader_effect_set_view = { call = "object->setViewProperty(value)" }
 cna_shader_effect_get_projection = { get = "object->getProjectionProperty()" }
 cna_shader_effect_set_projection = { call = "object->setProjectionProperty(value)" }
+cna_shader_effect_set_uniform_vector4 = { call = "object->SetUniformVec4(name.c_str(), value.X, value.Y, value.Z, value.W)", refuse_nul = ["name"] }
+cna_shader_effect_set_uniform_vector3 = { call = "object->SetUniformVec3(name.c_str(), value.X, value.Y, value.Z)", refuse_nul = ["name"] }
+cna_shader_effect_set_uniform_vector2 = { call = "object->SetUniformVec2(name.c_str(), value.X, value.Y)", refuse_nul = ["name"] }
+cna_shader_effect_set_uniform_float = { call = "object->SetUniformFloat(name.c_str(), value)", refuse_nul = ["name"] }
+cna_shader_effect_set_uniform_int32 = { call = "object->SetUniformInt(name.c_str(), value)", refuse_nul = ["name"] }
 
 [directional_light]
 lookup = "GetDirectionalLight"
@@ -287,6 +292,8 @@ cna_color_matrix_effect_get_offset = { get = "object->GetColorOffset()" }
 cna_color_matrix_effect_set_offset = { call = "object->SetColorOffset(value)" }
 cna_color_matrix_effect_set_grayscale = { call = "object->SetGrayscale()" }
 cna_color_matrix_effect_reset = { call = "object->Reset()" }
+cna_color_matrix_effect_get_matrix = { get = "object->GetColorMatrix()" }
+cna_color_matrix_effect_set_matrix = { call = "object->SetColorMatrix(value)" }
 
 [pbr_effect]
 lookup = "GetPbrEffect"
@@ -306,7 +313,7 @@ cna_pbr_effect_get_occlusion_strength_ext = { get = "object.pbr != nullptr ? obj
 cna_pbr_effect_get_alpha_mode_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaModeEXTProperty() : object.skinned->getAlphaModeEXTProperty()" }
 cna_pbr_effect_get_alpha_cutoff_ext = { get = "object.pbr != nullptr ? object.pbr->getAlphaCutoffEXTProperty() : object.skinned->getAlphaCutoffEXTProperty()" }
 cna_pbr_effect_get_vertex_color_enabled_ext = { get = "static_cast<bool>(object.pbr != nullptr ? object.pbr->VertexColorEnabledEXT : object.skinned->VertexColorEnabledEXT)" }
-cna_pbr_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture, \"The PBR texture outputs are null.\")", invalid_if = "slot > CNA_PBR_TEXTURE_MAXIMUM" }
+cna_pbr_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(object.resource)->lifetime->pbrTextures[slot], out_has_texture, out_texture)", invalid_if = "slot > CNA_PBR_TEXTURE_MAXIMUM" }
 cna_pbr_effect_set_diffuse_color = { call = "object.pbr != nullptr ? object.pbr->setDiffuseColorProperty(value) : object.skinned->setDiffuseColorProperty(value)" }
 cna_pbr_effect_set_alpha = { call = "object.pbr != nullptr ? object.pbr->setAlphaProperty(value) : object.skinned->setAlphaProperty(value)" }
 cna_pbr_effect_set_metallic_factor = { call = "object.pbr != nullptr ? object.pbr->setMetallicFactorProperty(value) : object.skinned->setMetallicFactorProperty(value)" }
@@ -321,6 +328,8 @@ cna_pbr_effect_set_occlusion_strength_ext = { call = "object.pbr != nullptr ? ob
 cna_pbr_effect_set_encode_output_to_srgb_ext = { call = "object.pbr != nullptr ? object.pbr->setEncodeOutputToSrgbEXTProperty(value) : object.skinned->setEncodeOutputToSrgbEXTProperty(value)" }
 cna_pbr_effect_set_alpha_cutoff_ext = { call = "object.pbr != nullptr ? object.pbr->setAlphaCutoffEXTProperty(value) : object.skinned->setAlphaCutoffEXTProperty(value)" }
 cna_pbr_effect_set_double_sided_ext = { call = "object.pbr != nullptr ? object.pbr->setDoubleSidedEXTProperty(value) : object.skinned->setDoubleSidedEXTProperty(value)" }
+cna_pbr_effect_get_encode_output_to_srgb_ext = { get = "object.pbr != nullptr ? object.pbr->getEncodeOutputToSrgbEXTProperty() : object.skinned->getEncodeOutputToSrgbEXTProperty()" }
+cna_pbr_effect_get_double_sided_ext = { get = "object.pbr != nullptr ? object.pbr->getDoubleSidedEXTProperty() : object.skinned->getDoubleSidedEXTProperty()" }
 
 [skinned_pbr_effect]
 lookup = "GetStockEffect<SkinnedPbrEffect>"
@@ -402,6 +411,7 @@ cna_depth_effect_get_dither_mode = { get = "object->getDitherMode()" }
 [values]
 [values.routes]
 cna_texture_transform_ext_init = { value = "ToC(TextureTransformEXT{})" }
+cna_texture_transform_ext_equals = { value = "ToNative(*left) == ToNative(*right)", invalid_if = ["!IsTextureTransform(left)", "!IsTextureTransform(right)"] }
 
 [effect_material]
 lookup = "GetEffectMaterial"
@@ -418,3 +428,29 @@ other = { lookup = "GetAnnotation", object = "std::shared_ptr<AnnotationResource
 
 [collection_and_annotation.routes]
 cna_effect_annotation_collection_add = { call = "object->value->Add(*other->value)" }
+
+# The retained textures belong to the effect's resource, the owner the stock lookups hand back.
+[alpha_test_effect_resource]
+lookup = "GetStockEffect<AlphaTestEffect>"
+object = "AlphaTestEffect*"
+owner = "std::shared_ptr<EffectResource>"
+
+[alpha_test_effect_resource.routes]
+cna_alpha_test_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture)" }
+
+[environment_map_effect_resource]
+lookup = "GetStockEffect<EnvironmentMapEffect>"
+object = "EnvironmentMapEffect*"
+owner = "std::shared_ptr<EffectResource>"
+
+[environment_map_effect_resource.routes]
+cna_environment_map_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture)" }
+cna_environment_map_effect_get_environment_map = { result = "GetRetainedEffectTexture(GetEffectState(owner)->lifetime->environmentMap, out_has_environment_map, out_environment_map)" }
+
+[skinned_effect_resource]
+lookup = "GetStockEffect<SkinnedEffect>"
+object = "SkinnedEffect*"
+owner = "std::shared_ptr<EffectResource>"
+
+[skinned_effect_resource.routes]
+cna_skinned_effect_get_texture = { result = "GetRetainedEffectTexture(GetEffectState(owner)->lifetime->stockTexture0, out_has_texture, out_texture)" }

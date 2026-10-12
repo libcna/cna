@@ -435,6 +435,25 @@ CNA_Result cna_gamer_profile_get_info(
     });
 }
 
+CNA_Result cna_gamer_profile_copy_picture(
+    const CNA_GamerProfileHandle profile,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_profile_copy_picture: out_bytes is null.");
+        }
+        std::shared_ptr<GamerProfileResource> object{};
+        if (const CNA_Result routeResult = BorrowProfile(profile, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CopyPictureStream(std::unique_ptr<System::IO::Stream>(object->value->GetGamerPicture()).get(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_gamer_collection_get_count(
     const CNA_GamerCollectionHandle collection,
     int32_t* const out_count)

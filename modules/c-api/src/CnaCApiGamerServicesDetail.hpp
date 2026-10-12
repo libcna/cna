@@ -18,10 +18,21 @@ class SignedInGamer;
 
 namespace System::IO { class Stream; }
 namespace CNA::C::Detail {
-/** @brief Copies a bounded picture stream into caller storage.
- * @param stream Optional readable stream. @param destination Output bytes. @param capacity Capacity.
- * @param outBytes Required byte count. @return Native result. */
-CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uint64_t capacity,uint64_t* outBytes);
+/**
+ * @brief Copies a picture stream into caller storage under the size-then-copy protocol.
+ *
+ * @param stream The picture, or null for none (zero bytes).
+ * @param destination Receives the bytes; may be null when `capacity` is zero.
+ * @param capacity The number of bytes `destination` holds.
+ * @param outBytes Receives the picture's size, also when `destination` is too small.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT`, `CNA_RESULT_BUFFER_TOO_SMALL` or
+ *         `CNA_RESULT_IO` for a stream that is larger than 16 MiB or ends early.
+ */
+[[nodiscard]] CNA_Result CopyPictureStream(
+    System::IO::Stream* stream,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* outBytes);
 
 
 // A network session cannot be created without at least one signed-in gamer, so the session adapter

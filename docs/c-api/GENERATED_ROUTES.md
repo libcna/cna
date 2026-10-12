@@ -87,8 +87,9 @@ The generator takes the signature from the header and the conversions from the C
   the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
   decide ownership, so they are a `result`;
 - a group that says `raw = true` works on the C structures themselves — Point and Rectangle
-  arithmetic, which wraps like XNA's integers: struct parameters are passed as declared and a
-  struct result is assigned as the expression builds it.
+  arithmetic, which wraps like XNA's integers, or a snapshot built from C fields: every struct
+  parameter, including one with no conversion, is passed as declared and a struct result is
+  assigned as the expression builds it.
 
 An output that is a versioned structure (`struct_size`, `struct_version`) says `versioned = true`,
 and is then refused unless it is a version 1 structure large enough for this build. A long

@@ -26,6 +26,7 @@ CNA_AchievementInfo{
     0U,
     static_cast<int64_t>(object->value->getEarnedDateTimeProperty().getTicksProperty())
 }''' }
+cna_achievement_copy_picture = { result = "CopyPictureStream(std::unique_ptr<System::IO::Stream>(object->value->GetPicture()).get(), destination, capacity, out_bytes)" }
 
 [collection]
 lookup = "BorrowCollection"

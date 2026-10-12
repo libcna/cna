@@ -64,6 +64,10 @@ cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext = { copy = "Gyr
 cna_gyroscope_is_sensor_connected_for_tests_ext = { get = "Gyroscope::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensor_id))" }
 cna_compass_get_is_supported = { get = "Compass::getIsSupportedProperty()" }
 cna_motion_get_is_supported = { get = "Motion::getIsSupportedProperty()" }
+cna_accelerometer_create = { result = "CreateSensor<Accelerometer>(out_sensor)" }
+cna_gyroscope_create = { result = "CreateSensor<Gyroscope>(out_sensor)" }
+cna_compass_create = { result = "CreateSensor<Compass>(out_sensor)" }
+cna_motion_create = { result = "CreateSensor<Motion>(out_sensor)" }
 
 [accelerometer]
 lookup = "BorrowSensor<Accelerometer>"
@@ -178,3 +182,11 @@ cna_gyroscope_reading_copy_type_name = { copy = "GyroscopeReading().GetTypeName(
 cna_attitude_reading_copy_type_name = { copy = "AttitudeReading().GetTypeName()" }
 cna_compass_reading_copy_type_name = { copy = "CompassReading().GetTypeName()" }
 cna_motion_reading_copy_type_name = { copy = "MotionReading().GetTypeName()" }
+
+# Readings built from C fields; the timestamp has no conversion of its own.
+[reading_values]
+raw = true
+
+[reading_values.routes]
+cna_attitude_reading_init_from_values = { value = "MapAttitudeReading(AttitudeReading(pitch, roll, yaw, ToQuaternion(quaternion), ToMatrix(rotation_matrix), ToTimestamp(timestamp)))" }
+cna_accelerometer_reading_event_info_init_from_values = { value = "MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs(x, y, z, ToTimestamp(timestamp)))" }

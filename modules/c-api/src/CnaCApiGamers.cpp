@@ -35,6 +35,7 @@ namespace {
 
 using CNA::C::Detail::BorrowSignedIn;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyPictureStream;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
 using CNA::C::Detail::CreateHandle;
@@ -727,18 +728,6 @@ CNA_Result cna_gamer_profile_get_picture_size(
         *outHasPicture = CNA_TRUE;
         *outBytes = static_cast<uint64_t>(picture->getLengthProperty());
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_profile_copy_picture(const CNA_GamerProfileHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if(const auto result=ValidateCopyOutput(destination,capacity,outBytes);
-           result!=CNA_RESULT_SUCCESS)return result;
-        std::shared_ptr<GamerProfileResource> profile;
-        if(const auto result=BorrowProfile(handle,&profile);result!=CNA_RESULT_SUCCESS)return result;
-        std::unique_ptr<System::IO::Stream> picture(profile->value->GetGamerPicture());
-        return CNA::C::Detail::CopyPictureStream(picture.get(),destination,capacity,outBytes);
     });
 }
 
