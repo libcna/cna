@@ -49,8 +49,13 @@ namespace CNA::Internal::Renderers::DirectX11
 
         const ComPtr<ID3D11Device>& GetAdapterQueryDevice()
         {
-            static const ComPtr<ID3D11Device> device = CreateAdapterQueryDevice();
-            return device;
+            // Immortal, like the platform's process-wide state (NPV-0102): a function-local
+            // ComPtr would release the device from a static destructor during process exit, after
+            // ExitProcess has already ended the driver's worker threads, and the release then
+            // waits on them forever -- the hang a C API suite showed under Wine at 100% CPU.
+            static const auto* const device =
+                new ComPtr<ID3D11Device>(CreateAdapterQueryDevice());
+            return *device;
         }
 
         bool HasFormatSupport(DXGI_FORMAT format, UINT required)

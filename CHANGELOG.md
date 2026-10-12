@@ -24,6 +24,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Fixed
 
+- **A process that asked a `DIRECTX11` build which formats an adapter supports no longer hangs at
+  exit.** `QueryRenderTargetFormat`, `QueryBackBufferFormat` and multisample clamping keep a
+  Direct3D 11 device for their queries, which a function-local static released from a static
+  destructor during process exit, after the driver's worker threads had already ended; the
+  release then waited on them forever. The device is now never destroyed. Found by the C API's
+  suites under Wine, where the ones that queried formats hung after `main` returned.
 - **Every C API text argument is read by one reader, under the documented UTF-8 rule.** The
   achievement, gamer, gamer-property, guide and XACT routes accepted malformed UTF-8 (they copied
   the bytes unchecked); they now refuse it with `CNA_RESULT_ENCODING` like every other route, as
