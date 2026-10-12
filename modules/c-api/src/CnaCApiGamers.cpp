@@ -54,6 +54,7 @@ using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::TryBorrowSignedInGamerQuietly;
 using CNA::C::Detail::TryMapPlayerIndex;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateCopyOutput;
 using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::PlayerIndex;
@@ -557,8 +558,8 @@ CNA_Result cna_signed_in_gamer_get_presence(
     CNA_GamerPresence* const outPresence)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outPresence, "The GamerPresence output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outPresence, "The GamerPresence output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -631,8 +632,8 @@ CNA_Result cna_signed_in_gamer_get_privileges(
     CNA_GamerPrivileges* const outPrivileges)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outPrivileges, "The GamerPrivileges output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outPrivileges, "The GamerPrivileges output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -796,7 +797,8 @@ CNA_Result cna_gamer_unsubscribe_ext(const CNA_Handle registration)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<GamerRegistrationBase> value;
-        if (const CNA_Result result = LookupHandle(registration, ObjectKind::GamerEventRegistration, &value);
+        if (const CNA_Result result =
+                LookupHandle(registration, ObjectKind::GamerEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -833,7 +835,8 @@ CNA_Result cna_gamer_profile_get_picture_size(
 CNA_Result cna_gamer_profile_copy_picture(const CNA_GamerProfileHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if(!outBytes||(!destination&&capacity))return InvalidArgument("The picture output is invalid.");
+        if(const auto result=ValidateCopyOutput(destination,capacity,outBytes);
+           result!=CNA_RESULT_SUCCESS)return result;
         std::shared_ptr<GamerProfileResource> profile;
         if(const auto result=BorrowProfile(handle,&profile);result!=CNA_RESULT_SUCCESS)return result;
         std::unique_ptr<System::IO::Stream> picture(profile->value->GetGamerPicture());
@@ -873,11 +876,13 @@ CNA_Result cna_friend_gamer_create_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ValidateCanonicalBool(friendRequestSentTo, "friend_request_sent_to");
+        if (const CNA_Result result =
+                ValidateCanonicalBool(friendRequestSentTo, "friend_request_sent_to");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ValidateCanonicalBool(friendRequestReceivedFrom, "friend_request_received_from");
+        if (const CNA_Result result =
+                ValidateCanonicalBool(friendRequestReceivedFrom, "friend_request_received_from");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1231,5 +1236,5 @@ CNA_Result cna_gamer_enumerator_destroy(const CNA_GamerEnumeratorHandle enumerat
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Gamers.toml.
+// The routes generated from modules/c-api/spec/Gamers.toml.
 #include "generated/Gamers.inc"

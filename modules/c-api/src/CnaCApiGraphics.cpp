@@ -512,7 +512,8 @@ CNA_Result CreateGameFrameTexture2D(
     auto resource = std::make_shared<Texture2DResource>(
         Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U, 0U});
     resource->ownedResource = false;
-    const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Texture2D, resource, outTexture);
+    const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::Texture2D, resource, outTexture);
     if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
     }
@@ -613,8 +614,8 @@ CNA_Result cna_graphics_device_get_renderer_info(
     CNA_RendererInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The renderer-info output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outInfo, "The renderer-info output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -820,8 +821,8 @@ CNA_Result cna_graphics_device_get_backbuffer_info(
     CNA_BackBufferInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The backbuffer-info output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outInfo, "The backbuffer-info output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1690,5 +1691,5 @@ CNA_Result cna_sprite_batch_draw_string(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Graphics.toml.
+// The routes generated from modules/c-api/spec/Graphics.toml.
 #include "generated/Graphics.inc"

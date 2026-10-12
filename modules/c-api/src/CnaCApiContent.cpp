@@ -107,10 +107,7 @@ CNA_Handle& BorrowedGameContentHandle()
 [[nodiscard]] CNA_Result CopyAssetName(const CNA_StringView value, std::string* const outValue)
 {
     if (const CNA_Result result = ReadText(
-            value,
-            "The content asset name is not valid UTF-8.",
-            outValue,
-            EmbeddedNul::Refused);
+            value, "The content asset name is not valid UTF-8.", outValue, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -197,10 +194,8 @@ CNA_Result cna_content_manager_create(
 
         std::string rootDirectory;
         if (const CNA_Result result = ReadText(
-                createInfo->root_directory,
-                "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectory,
-                EmbeddedNul::Refused);
+                createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectory, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -274,10 +269,8 @@ CNA_Result cna_content_manager_set_root_directory(
     return CallWithExceptionBarrier([&]() {
         std::string rootDirectoryCopy;
         if (const CNA_Result result = ReadText(
-                rootDirectory,
-                "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectoryCopy,
-                EmbeddedNul::Refused);
+                rootDirectory, "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectoryCopy, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -306,9 +299,7 @@ CNA_Result cna_content_manager_load_texture2d(
 
         std::string assetNameCopy;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameCopy,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -366,10 +357,8 @@ CNA_Result cna_content_manager_create_resource(
 
         std::string rootDirectory;
         if (const CNA_Result result = ReadText(
-                createInfo->root_directory,
-                "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectory,
-                EmbeddedNul::Refused);
+                createInfo->root_directory, "The ContentManager root directory is not valid UTF-8.",
+                &rootDirectory, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -522,9 +511,7 @@ CNA_Result cna_content_manager_load_sprite_font(
 
         std::string assetNameCopy;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameCopy,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -612,9 +599,7 @@ CNA_Result cna_content_manager_load_foreign_ext(
 
         std::string assetNameCopy;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameCopy,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -665,9 +650,7 @@ CNA_Result cna_content_manager_register_cnj_loader_ext(
         }
         std::string typeNameCopy;
         if (const CNA_Result result = ReadText(
-                typeName,
-                "The .cnj type name is not valid UTF-8.",
-                &typeNameCopy,
+                typeName, "The .cnj type name is not valid UTF-8.", &typeNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -879,8 +862,8 @@ CNA_Result cna_content_manager_get_manifest_entry(
     CNA_ContentManifestEntryInfo* const outEntry)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outEntry, "The manifest entry output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outEntry, "The manifest entry output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -975,8 +958,8 @@ CNA_Result cna_content_manager_get_xnb_reader_usage(
     CNA_ContentReaderUsageInfo* const outUsage)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outUsage, "The reader-usage output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outUsage, "The reader-usage output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1139,5 +1122,5 @@ CNA_Result GetContentManagerObject(
 
 } // namespace CNA::C::Detail
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Content.toml.
+// The routes generated from modules/c-api/spec/Content.toml.
 #include "generated/Content.inc"

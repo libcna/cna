@@ -361,8 +361,8 @@ CNA_Result cna_keyboard_get_state(
     CNA_KeyboardState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outState, "The keyboard-state output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outState, "The keyboard-state output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1662,10 +1662,7 @@ using KeyLookupRoute = Keys (*)(const std::string&);
     }
     std::string text;
     if (const CNA_Result result = CNA::C::Detail::ReadText(
-            name,
-            "The key name is invalid.",
-            &text,
-            CNA::C::Detail::EmbeddedNul::Refused);
+            name, "The key name is invalid.", &text, CNA::C::Detail::EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -2059,7 +2056,8 @@ CNA_Result cna_mouse_unsubscribe_clicked_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<MouseClickedRegistration> resource;
-        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::MouseEventRegistration, &resource);
+        const CNA_Result getResult = LookupHandle(
+            registration, CNA::C::Detail::ObjectKind::MouseEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -2458,7 +2456,8 @@ CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle 
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<TextInputRegistration> resource;
-        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::TextInputEventRegistration, &resource);
+        const CNA_Result getResult = LookupHandle(
+            registration, CNA::C::Detail::ObjectKind::TextInputEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -2485,9 +2484,7 @@ CNA_Result cna_text_input_raise_text_editing_ext(
         // Composition text is byte-length delimited on both sides, so an embedded NUL is
         // representable and is not rejected; invalid UTF-8 still is.
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                text,
-                "The text-editing composition is not valid UTF-8.",
-                &copied);
+                text, "The text-editing composition is not valid UTF-8.", &copied);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2526,9 +2523,7 @@ CNA_Result cna_text_input_raise_text_editing_candidates_ext(
         for (int32_t index = 0; index < candidateCount; ++index) {
             std::string candidate;
             if (const CNA_Result result = CNA::C::Detail::ReadText(
-                    candidates[index],
-                    "A text-editing candidate is not valid UTF-8.",
-                    &candidate);
+                    candidates[index], "A text-editing candidate is not valid UTF-8.", &candidate);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -3288,5 +3283,5 @@ CNA_Result cna_touch_panel_set_finger_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Input.toml.
+// The routes generated from modules/c-api/spec/Input.toml.
 #include "generated/Input.inc"

@@ -330,16 +330,12 @@ CNA_Result cna_sensor_info_equals(
             return result;
         }
         if (const CNA_Result result = ReadText(
-                leftName,
-                "The first sensor name is not valid UTF-8.",
-                &nativeLeft.name);
+                leftName, "The first sensor name is not valid UTF-8.", &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                rightName,
-                "The second sensor name is not valid UTF-8.",
-                &nativeRight.name);
+                rightName, "The second sensor name is not valid UTF-8.", &nativeRight.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -447,16 +443,12 @@ CNA_Result cna_input_device_info_equals(
         InputDeviceInfoEXT nativeLeft;
         InputDeviceInfoEXT nativeRight;
         if (const CNA_Result result = ReadText(
-                leftName,
-                "The first input-device name is not valid UTF-8.",
-                &nativeLeft.name);
+                leftName, "The first input-device name is not valid UTF-8.", &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                rightName,
-                "The second input-device name is not valid UTF-8.",
-                &nativeRight.name);
+                rightName, "The second input-device name is not valid UTF-8.", &nativeRight.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -472,7 +464,8 @@ CNA_Result cna_input_devices_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DeviceRegistration> resource;
-        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::InputDeviceEventRegistration, &resource);
+        const CNA_Result getResult = LookupHandle(
+            registration, CNA::C::Detail::ObjectKind::InputDeviceEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -489,9 +482,7 @@ CNA_Result cna_clipboard_set_text(const CNA_Handle gameHandle, const CNA_StringV
         }
         std::string value;
         if (const CNA_Result result = ReadText(
-                text,
-                "The clipboard text is not valid UTF-8.",
-                &value);
+                text, "The clipboard text is not valid UTF-8.", &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -524,5 +515,5 @@ CNA_Result cna_power_get_info(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/InputDevices.toml.
+// The routes generated from modules/c-api/spec/InputDevices.toml.
 #include "generated/InputDevices.inc"

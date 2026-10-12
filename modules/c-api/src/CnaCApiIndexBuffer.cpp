@@ -263,7 +263,8 @@ CNA_Result cna_index_buffer_create(
 
         const auto resource = std::make_shared<IndexBufferResource>(
             IndexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        if (const CNA_Result result = CreateHandle(ObjectKind::IndexBuffer, resource, outIndexBuffer);
+        if (const CNA_Result result =
+                CreateHandle(ObjectKind::IndexBuffer, resource, outIndexBuffer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -504,7 +505,8 @@ CNA_Result cna_index_buffer_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::IndexBufferEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::IndexBufferEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -520,5 +522,5 @@ CNA_Result cna_index_buffer_unsubscribe_content_lost(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/IndexBuffer.toml.
+// The routes generated from modules/c-api/spec/IndexBuffer.toml.
 #include "generated/IndexBuffer.inc"

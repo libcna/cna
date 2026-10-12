@@ -666,10 +666,7 @@ CNA_Result cna_texture2d_create_from_file(
         *outTexture = CNA_INVALID_HANDLE;
         std::string copiedPath;
         if (const CNA_Result result = ReadText(
-                path,
-                "The texture path is invalid UTF-8.",
-                &copiedPath,
-                EmbeddedNul::Refused);
+                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -690,10 +687,7 @@ CNA_Result cna_texture2d_create_from_file_with_device(
         *outTexture = CNA_INVALID_HANDLE;
         std::string copiedPath;
         if (const CNA_Result result = ReadText(
-                path,
-                "The texture path is invalid UTF-8.",
-                &copiedPath,
-                EmbeddedNul::Refused);
+                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1033,10 +1027,7 @@ CNA_Result cna_texture2d_save_file(
         }
         std::string copiedPath;
         if (const CNA_Result result = ReadText(
-                path,
-                "The texture path is invalid UTF-8.",
-                &copiedPath,
-                EmbeddedNul::Refused);
+                path, "The texture path is invalid UTF-8.", &copiedPath, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1054,5 +1045,5 @@ CNA_Result cna_texture2d_save_file(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Texture.toml.
+// The routes generated from modules/c-api/spec/Texture.toml.
 #include "generated/Texture.inc"

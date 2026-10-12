@@ -534,14 +534,13 @@ struct SystemTrayResource final {
             return InvalidArgument("A file dialog filter is not a valid structure.");
         }
         FileDialogFilter mapped;
-        if (const CNA_Result result =
-                ReadText(filter.name, "A file dialog filter name is not valid UTF-8.", &mapped.Name);
+        if (const CNA_Result result = ReadText(
+                filter.name, "A file dialog filter name is not valid UTF-8.", &mapped.Name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                filter.pattern,
-                "A file dialog filter pattern is not valid UTF-8.",
+                filter.pattern, "A file dialog filter pattern is not valid UTF-8.",
                 &mapped.Pattern);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -773,9 +772,7 @@ CNA_Result cna_vibrate_controller_set_test_backend_ext(
         auto state = std::make_shared<VibrationTestState>();
         state->supported = (supported != CNA_FALSE);
         if (const CNA_Result result = ReadText(
-                deviceName,
-                "The vibration device name is not valid UTF-8.",
-                &state->deviceName);
+                deviceName, "The vibration device name is not valid UTF-8.", &state->deviceName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1008,9 +1005,7 @@ CNA_Result cna_message_box_show_ext(
         for (uint64_t index = UINT64_C(0); index < buttonCount; ++index) {
             std::string label;
             if (const CNA_Result result = ReadText(
-                    buttonLabels[index],
-                    "A message box button label is not valid UTF-8.",
-                    &label);
+                    buttonLabels[index], "A message box button label is not valid UTF-8.", &label);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -1115,9 +1110,7 @@ CNA_Result cna_file_dialog_show_open_file_ext(
         }
         std::string location;
         if (const CNA_Result result = ReadText(
-                defaultLocation,
-                "The file dialog default location is not valid UTF-8.",
-                &location);
+                defaultLocation, "The file dialog default location is not valid UTF-8.", &location);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1155,9 +1148,7 @@ CNA_Result cna_file_dialog_show_save_file_ext(
         }
         std::string location;
         if (const CNA_Result result = ReadText(
-                defaultLocation,
-                "The file dialog default location is not valid UTF-8.",
-                &location);
+                defaultLocation, "The file dialog default location is not valid UTF-8.", &location);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1192,9 +1183,7 @@ CNA_Result cna_file_dialog_show_open_folder_ext(
         }
         std::string location;
         if (const CNA_Result result = ReadText(
-                defaultLocation,
-                "The file dialog default location is not valid UTF-8.",
-                &location);
+                defaultLocation, "The file dialog default location is not valid UTF-8.", &location);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1910,5 +1899,5 @@ CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
 
 #endif // CNA_DEVICES
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Devices.toml.
+// The routes generated from modules/c-api/spec/Devices.toml.
 #include "generated/Devices.inc"

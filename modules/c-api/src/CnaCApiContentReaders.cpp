@@ -123,10 +123,7 @@ struct ContentTypeReaderResource final {
 [[nodiscard]] CNA_Result CopyReaderName(const CNA_StringView value, std::string* const outValue)
 {
     if (const CNA_Result result = ReadText(
-            value,
-            "The canonical reader name is not valid UTF-8.",
-            outValue,
-            EmbeddedNul::Refused);
+            value, "The canonical reader name is not valid UTF-8.", outValue, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -189,10 +186,8 @@ CNA_Result cna_content_reader_create(
 
         std::string assetName;
         if (const CNA_Result result = ReadText(
-                createInfo->asset_name,
-                "The ContentReader asset name is not valid UTF-8.",
-                &assetName,
-                EmbeddedNul::Refused);
+                createInfo->asset_name, "The ContentReader asset name is not valid UTF-8.",
+                &assetName, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -659,10 +654,8 @@ CNA_Result cna_content_type_reader_manager_register(
         const auto registration = std::make_shared<ForeignReaderRegistration>();
         registration->callbacks = *callbacks;
         if (const CNA_Result result = ReadText(
-                canonicalName,
-                "The canonical reader name is not valid UTF-8.",
-                &registration->canonicalName,
-                EmbeddedNul::Refused);
+                canonicalName, "The canonical reader name is not valid UTF-8.",
+                &registration->canonicalName, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -670,10 +663,8 @@ CNA_Result cna_content_type_reader_manager_register(
             return InvalidArgument("The canonical reader name must not be empty.");
         }
         if (const CNA_Result result = ReadText(
-                callbacks->target_type_name,
-                "The reader target type name is not valid UTF-8.",
-                &registration->targetTypeName,
-                EmbeddedNul::Refused);
+                callbacks->target_type_name, "The reader target type name is not valid UTF-8.",
+                &registration->targetTypeName, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -690,7 +681,8 @@ CNA_Result cna_content_type_reader_manager_register(
                 "A content type-reader factory is already registered under that canonical name.");
         }
 
-        if (const CNA_Result result = CreateHandle(ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
+        if (const CNA_Result result = CreateHandle(
+                ObjectKind::ContentTypeReaderRegistration, registration, outRegistration);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1061,9 +1053,7 @@ struct ReflectiveBuilderResource final {
     }
     std::string nameText;
     if (const CNA_Result result = ReadText(
-            targetTypeName,
-            "The target type name is not valid UTF-8.",
-            &nameText,
+            targetTypeName, "The target type name is not valid UTF-8.", &nameText,
             EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
@@ -1084,9 +1074,7 @@ struct ReflectiveBuilderResource final {
     }
     std::string nameText;
     if (const CNA_Result result = ReadText(
-            targetTypeName,
-            "The target type name is not valid UTF-8.",
-            &nameText,
+            targetTypeName, "The target type name is not valid UTF-8.", &nameText,
             EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
@@ -1124,10 +1112,8 @@ CNA_Result cna_reflective_type_reader_builder_create(
         const auto resource = std::make_shared<ReflectiveBuilderResource>();
         resource->registration = std::make_shared<ReflectiveRegistration>();
         if (const CNA_Result result = ReadText(
-                targetTypeName,
-                "The target type name is not valid UTF-8.",
-                &resource->registration->targetTypeName,
-                EmbeddedNul::Refused);
+                targetTypeName, "The target type name is not valid UTF-8.",
+                &resource->registration->targetTypeName, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1173,9 +1159,7 @@ CNA_Result cna_reflective_type_reader_builder_add_enum_field(
         }
         std::string enumText;
         if (const CNA_Result result = ReadText(
-                enumTypeName,
-                "The enum type name is not valid UTF-8.",
-                &enumText,
+                enumTypeName, "The enum type name is not valid UTF-8.", &enumText,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1609,10 +1593,7 @@ CNA_Result cna_object_dictionary_ext_contains_key(
         }
         std::string keyText;
         if (const CNA_Result result = ReadText(
-                key,
-                "The dictionary key is not valid UTF-8.",
-                &keyText,
-                EmbeddedNul::Refused);
+                key, "The dictionary key is not valid UTF-8.", &keyText, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1994,9 +1975,7 @@ CNA_Result cna_content_manager_load_object_dictionary_ext(
         *outDictionary = CNA_INVALID_HANDLE;
         std::string assetNameText;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameText,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameText,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2065,5 +2044,5 @@ bool TryGetForeignReferenceObject(const System::Object* const tag, void** const 
 
 } // namespace CNA::C::Detail
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/ContentReaders.toml.
+// The routes generated from modules/c-api/spec/ContentReaders.toml.
 #include "generated/ContentReaders.inc"

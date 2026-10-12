@@ -649,9 +649,7 @@ CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(const CNA_StringView 
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string text;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                name,
-                "The renderer name is not valid UTF-8 text.",
-                &text,
+                name, "The renderer name is not valid UTF-8 text.", &text,
                 CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -751,9 +749,7 @@ CNA_Result cna_graphics_renderer_try_parse_name_ext(
         *outRecognized = CNA_FALSE;
         std::string text;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                name,
-                "The renderer name is not valid UTF-8 text.",
-                &text,
+                name, "The renderer name is not valid UTF-8 text.", &text,
                 CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -779,9 +775,7 @@ CNA_Result cna_assembly_set_title_ext(const CNA_StringView title)
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copied;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                title,
-                "The assembly title is not valid UTF-8 text.",
-                &copied,
+                title, "The assembly title is not valid UTF-8 text.", &copied,
                 CNA::C::Detail::EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -813,5 +807,5 @@ CNA_Result cna_assembly_copy_title_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/CoreExt.toml.
+// The routes generated from modules/c-api/spec/CoreExt.toml.
 #include "generated/CoreExt.inc"

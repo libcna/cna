@@ -68,5 +68,5 @@ CNA_Result cna_color_pack_from_vector4(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Color.toml.
+// The routes generated from modules/c-api/spec/Color.toml.
 #include "generated/Color.inc"

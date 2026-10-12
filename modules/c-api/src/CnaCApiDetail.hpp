@@ -261,13 +261,13 @@ void SetLastError(
     CNA_ErrorCategory category,
     std::string_view message) noexcept;
 
-/** @brief Records and returns the C layer's own refusal of an argument (a null output, a bad value). */
+/** @brief Records and returns the C layer's refusal of an argument: a null output, a bad value. */
 [[nodiscard]] inline CNA_Result InvalidArgument(const std::string_view message) noexcept
 {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
 }
 
-/** @brief Records and returns a refusal because the object's current state does not allow the call. */
+/** @brief Records and returns a refusal because the object's state does not allow the call. */
 [[nodiscard]] inline CNA_Result InvalidState(const std::string_view message) noexcept
 {
     return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, message);
@@ -709,7 +709,8 @@ template<typename TObject>
     CNA_Handle* const outHandle)
 {
     const CNA_Result result = GetRuntimeHandles().Create(kind, std::move(object), outHandle);
-    return result == CNA_RESULT_SUCCESS ? result : FailHandle(result, kind, "could not be created.");
+    return result == CNA_RESULT_SUCCESS ? result
+                                        : FailHandle(result, kind, "could not be created.");
 }
 
 /**
@@ -723,7 +724,8 @@ template<typename TObject>
     ObjectKind kind = ObjectKind::Unknown;
     (void)GetRuntimeHandles().GetKind(handle, &kind);
     const CNA_Result result = GetRuntimeHandles().Release(handle);
-    return result == CNA_RESULT_SUCCESS ? result : FailHandle(result, kind, "could not be released.");
+    return result == CNA_RESULT_SUCCESS ? result
+                                        : FailHandle(result, kind, "could not be released.");
 }
 
 } // namespace CNA::C::Detail

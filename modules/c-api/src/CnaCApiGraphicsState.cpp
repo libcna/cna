@@ -229,7 +229,8 @@ CNA_Result ToNativeRasterizerState(
         source->reserved[1] != 0U || !IsCullMode(source->cull_mode) ||
         !IsFillMode(source->fill_mode) || !std::isfinite(source->depth_bias) ||
         !std::isfinite(source->slope_scale_depth_bias) ||
-        !IsCanonicalBool(source->multi_sample_anti_alias) || !IsCanonicalBool(source->scissor_test_enable)) {
+        !IsCanonicalBool(source->multi_sample_anti_alias) ||
+        !IsCanonicalBool(source->scissor_test_enable)) {
         return InvalidArgument("The RasterizerState descriptor is invalid.");
     }
 
@@ -535,8 +536,8 @@ CNA_Result cna_graphics_device_get_depth_stencil_state(
     CNA_DepthStencilState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outState, "The DepthStencilState output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outState, "The DepthStencilState output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -577,8 +578,8 @@ CNA_Result cna_graphics_device_get_rasterizer_state(
     CNA_RasterizerState* const outState)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outState, "The RasterizerState output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outState, "The RasterizerState output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

@@ -512,7 +512,8 @@ struct UserPrimitiveRequest final {
 
     std::shared_ptr<VertexDeclaration> declaration;
     if (primitives->vertex_declaration != CNA_INVALID_HANDLE) {
-        const CNA_Result result = LookupHandle(primitives->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
+        const CNA_Result result = LookupHandle(
+            primitives->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
         if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1001,7 +1002,8 @@ CNA_Result cna_graphics_device_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DeviceRegistration> registration;
-        const CNA_Result result = LookupHandle(registrationHandle, ObjectKind::GraphicsDeviceEventRegistration, &registration);
+        const CNA_Result result = LookupHandle(
+            registrationHandle, ObjectKind::GraphicsDeviceEventRegistration, &registration);
         if (result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1017,8 +1019,8 @@ CNA_Result cna_graphics_device_get_texture(
     CNA_TextureSlotInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The texture-slot output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outInfo, "The texture-slot output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1617,7 +1619,8 @@ CNA_Result cna_occlusion_query_create(
         auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);
         const auto resource = std::make_shared<OcclusionQueryResource>(
             OcclusionQueryResource{std::move(native), graphicsDevice->parentGame});
-        if (const CNA_Result result = CreateHandle(ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
+        if (const CNA_Result result =
+                CreateHandle(ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1673,7 +1676,8 @@ CNA_Result cna_graphics_device_set_display_color_space_ext(
     // ordinary answer, not a caller mistake.
     return DeviceQuery<CNA_Bool>(
         graphicsDeviceHandle, outChanged, [space](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
-            return ToCBool(device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space)));
+            return ToCBool(
+                device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space)));
         });
 }
 
@@ -1703,5 +1707,5 @@ CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
         });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsDevice.toml.
+// The routes generated from modules/c-api/spec/GraphicsDevice.toml.
 #include "generated/GraphicsDevice.inc"

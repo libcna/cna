@@ -180,7 +180,8 @@ CNA_Result cna_signed_in_gamer_create_ext(
             return InvalidArgument("The SignedInGamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateCanonicalBool(isSignedInToLive, "is_signed_in_to_live");
+        if (const CNA_Result result =
+                ValidateCanonicalBool(isSignedInToLive, "is_signed_in_to_live");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -193,10 +194,7 @@ CNA_Result cna_signed_in_gamer_create_ext(
         }
         std::string gamertagCopy;
         if (const CNA_Result result = ReadText(
-                gamertag,
-                "The gamertag is not valid UTF-8.",
-                &gamertagCopy,
-                EmbeddedNul::Refused);
+                gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -340,5 +338,5 @@ CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uin
 }
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GamerServices.toml.
+// The routes generated from modules/c-api/spec/GamerServices.toml.
 #include "generated/GamerServices.inc"

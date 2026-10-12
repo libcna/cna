@@ -363,7 +363,8 @@ CNA_Result cna_vertex_buffer_create(
                 *graphicsDevice->value, createInfo->vertex_count);
         } else {
             std::shared_ptr<VertexDeclaration> declaration;
-            const CNA_Result declarationResult = LookupHandle(createInfo->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
+            const CNA_Result declarationResult = LookupHandle(
+                createInfo->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
             if (declarationResult != CNA_RESULT_SUCCESS) {
                 return declarationResult;
             }
@@ -385,7 +386,8 @@ CNA_Result cna_vertex_buffer_create(
 
         const auto resource = std::make_shared<VertexBufferResource>(
             VertexBufferResource{std::move(native), graphicsDevice->parentGame, dynamic});
-        if (const CNA_Result result = CreateHandle(ObjectKind::VertexBuffer, resource, outVertexBuffer);
+        if (const CNA_Result result =
+                CreateHandle(ObjectKind::VertexBuffer, resource, outVertexBuffer);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -419,8 +421,8 @@ CNA_Result cna_vertex_buffer_get_info(
     CNA_VertexBufferInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The VertexBuffer info output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outInfo, "The VertexBuffer info output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -791,7 +793,8 @@ CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::VertexBufferEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::VertexBufferEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -897,5 +900,5 @@ CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/VertexBuffer.toml.
+// The routes generated from modules/c-api/spec/VertexBuffer.toml.
 #include "generated/VertexBuffer.inc"

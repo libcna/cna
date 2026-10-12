@@ -363,5 +363,5 @@ CNA_Result cna_packed_vector_not_equals(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/PackedVectors.toml.
+// The routes generated from modules/c-api/spec/PackedVectors.toml.
 #include "generated/PackedVectors.inc"

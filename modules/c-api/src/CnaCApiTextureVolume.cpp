@@ -683,7 +683,8 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<TextureCubeResource> texture;
-        if (const CNA_Result result = LookupHandle(textureHandle, ObjectKind::TextureCube, &texture);
+        if (const CNA_Result result =
+                LookupHandle(textureHandle, ObjectKind::TextureCube, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -790,5 +791,5 @@ CNA_Result cna_texturecube_get_data(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/TextureVolume.toml.
+// The routes generated from modules/c-api/spec/TextureVolume.toml.
 #include "generated/TextureVolume.inc"

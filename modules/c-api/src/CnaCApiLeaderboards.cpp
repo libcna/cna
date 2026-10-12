@@ -119,8 +119,8 @@ struct LeaderboardEntryResource final {
     const LeaderboardIdentity& identity,
     CNA_LeaderboardIdentity* const outIdentity)
 {
-    if (const CNA_Result result =
-            ValidateVersionedStructure(outIdentity, "The LeaderboardIdentity output structure is invalid.");
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outIdentity, "The LeaderboardIdentity output structure is invalid.");
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -451,5 +451,5 @@ CNA_Result cna_leaderboard_entry_set_rating_changed_hook_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Leaderboards.toml.
+// The routes generated from modules/c-api/spec/Leaderboards.toml.
 #include "generated/Leaderboards.inc"

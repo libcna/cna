@@ -200,8 +200,8 @@ void StoreOptional(const std::optional<int>& value, CNA_OptionalInt32* const out
     const QualityOfService& value,
     CNA_QualityOfService* const outValue)
 {
-    if (const CNA_Result result =
-            ValidateVersionedStructure(outValue, "The quality-of-service output structure is invalid.");
+    if (const CNA_Result result = ValidateVersionedStructure(
+            outValue, "The quality-of-service output structure is invalid.");
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -859,5 +859,5 @@ CNA_Result cna_packet_reader_destroy(const CNA_PacketReaderHandle readerHandle)
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Net.toml.
+// The routes generated from modules/c-api/spec/Net.toml.
 #include "generated/Net.inc"

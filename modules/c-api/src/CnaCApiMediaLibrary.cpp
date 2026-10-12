@@ -677,9 +677,7 @@ CNA_Result cna_media_library_get_picture_from_token(
         }
         std::string nativeToken;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                token,
-                "The picture token is not valid UTF-8.",
-                &nativeToken);
+                token, "The picture token is not valid UTF-8.", &nativeToken);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -809,5 +807,5 @@ CNA_Result cna_media_library_save_picture_from_stream(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/MediaLibrary.toml.
+// The routes generated from modules/c-api/spec/MediaLibrary.toml.
 #include "generated/MediaLibrary.inc"

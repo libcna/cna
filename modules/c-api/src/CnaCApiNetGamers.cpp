@@ -234,10 +234,7 @@ CNA_Result cna_network_gamer_create(
 
         std::string gamertagCopy;
         if (const CNA_Result result = ReadText(
-                gamertag,
-                "The gamertag is not valid UTF-8.",
-                &gamertagCopy,
-                EmbeddedNul::Refused);
+                gamertag, "The gamertag is not valid UTF-8.", &gamertagCopy, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -615,5 +612,5 @@ CNA_Result cna_write_leaderboards_event_info_init(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/NetGamers.toml.
+// The routes generated from modules/c-api/spec/NetGamers.toml.
 #include "generated/NetGamers.inc"

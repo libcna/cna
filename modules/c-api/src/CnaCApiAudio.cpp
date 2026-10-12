@@ -201,8 +201,8 @@ CNA_Result cna_audio_get_capabilities(
     CNA_AudioCapabilities* const outCapabilities)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outCapabilities, "The audio-capabilities output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outCapabilities, "The audio-capabilities output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -531,9 +531,7 @@ CNA_Result cna_sound_effect_create_from_asset_ext(
         }
         std::string path;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                assetName,
-                "The audio asset name is not valid UTF-8.",
-                &path);
+                assetName, "The audio asset name is not valid UTF-8.", &path);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -810,7 +808,8 @@ CNA_Result cna_audio_unsubscribe_ext(const CNA_Handle registration)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<AudioRegistrationBase> value;
-        if (const CNA_Result result = LookupHandle(registration, ObjectKind::AudioEventRegistration, &value);
+        if (const CNA_Result result =
+                LookupHandle(registration, ObjectKind::AudioEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1065,5 +1064,5 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Audio.toml.
+// The routes generated from modules/c-api/spec/Audio.toml.
 #include "generated/Audio.inc"

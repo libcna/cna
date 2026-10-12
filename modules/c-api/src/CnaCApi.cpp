@@ -101,7 +101,8 @@ CNA_Result cna_error_copy_last_exception_type_ext(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CopyErrorText(CNA::C::Detail::GetLastError().exceptionType, destination, capacity, outBytes);
+    return CopyErrorText(
+        CNA::C::Detail::GetLastError().exceptionType, destination, capacity, outBytes);
 }
 
 CNA_Result cna_error_get_last_exception_param_name_size_ext(uint64_t* const outBytes)
@@ -118,5 +119,6 @@ CNA_Result cna_error_copy_last_exception_param_name_ext(
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CopyErrorText(CNA::C::Detail::GetLastError().exceptionParamName, destination, capacity, outBytes);
+    return CopyErrorText(
+        CNA::C::Detail::GetLastError().exceptionParamName, destination, capacity, outBytes);
 }

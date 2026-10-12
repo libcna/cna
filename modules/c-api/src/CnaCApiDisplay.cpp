@@ -185,8 +185,8 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     CNA_GraphicsFormatSelection* const outSelection,
     const bool renderTarget)
 {
-    if (!IsVersionedStructure(outSelection) || !IsGraphicsProfile(profile) || !IsSurfaceFormat(format) ||
-        !IsDepthFormat(depthFormat) || multiSampleCount < 0) {
+    if (!IsVersionedStructure(outSelection) || !IsGraphicsProfile(profile) ||
+        !IsSurfaceFormat(format) || !IsDepthFormat(depthFormat) || multiSampleCount < 0) {
         return InvalidArgument("The graphics-format query is invalid.");
     }
     std::shared_ptr<void> context;
@@ -455,8 +455,8 @@ CNA_Result cna_graphics_device_get_presentation_parameters(
     CNA_PresentationParameters* const outParameters)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outParameters, "The PresentationParameters output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outParameters, "The PresentationParameters output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -573,7 +573,8 @@ CNA_Result cna_graphics_device_create(
             static_cast<GraphicsProfile>(graphicsProfile),
             nativeParameters);
 
-        if (const CNA_Result result = CreateHandle(CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
+        if (const CNA_Result result = CreateHandle(
+                CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -589,7 +590,8 @@ CNA_Result cna_graphics_device_destroy(const CNA_Handle graphicsDeviceHandle)
 {
     return CallWithExceptionBarrier([&]() {
         std::shared_ptr<CNA::C::Detail::OwnedGraphicsDevice> owned;
-        const CNA_Result getResult = LookupHandle(graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
+        const CNA_Result getResult = LookupHandle(
+            graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -636,5 +638,5 @@ CNA_Result cna_graphics_device_reset_with_parameters(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Display.toml.
+// The routes generated from modules/c-api/spec/Display.toml.
 #include "generated/Display.inc"

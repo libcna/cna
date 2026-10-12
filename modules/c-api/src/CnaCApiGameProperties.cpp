@@ -221,7 +221,8 @@ CNA_Result cna_game_unsubscribe(const CNA_GameEventRegistrationHandle registrati
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<GameRegistrationBase> value;
-        if (const CNA_Result result = LookupHandle(registration, ObjectKind::GameEventRegistration, &value);
+        if (const CNA_Result result =
+                LookupHandle(registration, ObjectKind::GameEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -528,8 +529,9 @@ CNA_Result cna_game_window_get_native_window_ext(
     CNA_NativeWindowHandle* const handle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(handle, "The native-window-handle structure is invalid.", NativeWindowHandleVersion);
+        if (const CNA_Result result = ValidateVersionedStructure(
+                handle, "The native-window-handle structure is invalid.",
+                NativeWindowHandleVersion);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -623,5 +625,5 @@ CNA_Result cna_game_window_subscribe(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GameProperties.toml.
+// The routes generated from modules/c-api/spec/GameProperties.toml.
 #include "generated/GameProperties.inc"

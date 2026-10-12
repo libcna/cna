@@ -226,9 +226,7 @@ private:
 {
     std::string pattern;
     if (const CNA_Result result = ReadText(
-            searchPattern,
-            "The storage search pattern is not valid UTF-8.",
-            &pattern,
+            searchPattern, "The storage search pattern is not valid UTF-8.", &pattern,
             EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
@@ -530,9 +528,7 @@ CNA_Result cna_storage_set_app_name_ext(const CNA_StringView appName)
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string appNameCopy;
         if (const CNA_Result result = ReadText(
-                appName,
-                "The storage application name is not valid UTF-8.",
-                &appNameCopy,
+                appName, "The storage application name is not valid UTF-8.", &appNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -597,7 +593,8 @@ CNA_Result cna_storage_device_unsubscribe_device_changed(const CNA_Handle regist
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::StorageDeviceEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::StorageDeviceEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -758,7 +755,8 @@ CNA_Result cna_storage_container_unsubscribe_disposing(const CNA_Handle registra
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<StorageRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::StorageContainerEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::StorageContainerEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -1084,5 +1082,5 @@ CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Storage.toml.
+// The routes generated from modules/c-api/spec/Storage.toml.
 #include "generated/Storage.inc"

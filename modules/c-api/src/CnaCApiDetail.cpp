@@ -156,17 +156,20 @@ std::string_view ObjectKindName(const ObjectKind kind) noexcept
         case ObjectKind::StorageContainer: return "StorageContainer";
         case ObjectKind::StorageStream: return "StorageStream";
         case ObjectKind::StorageDeviceEventRegistration: return "StorageDeviceEventRegistration";
-        case ObjectKind::StorageContainerEventRegistration: return "StorageContainerEventRegistration";
+        case ObjectKind::StorageContainerEventRegistration:
+            return "StorageContainerEventRegistration";
         case ObjectKind::ContentReader: return "ContentReader";
         case ObjectKind::ContentTypeReader: return "ContentTypeReader";
         case ObjectKind::NetworkSessionProperties: return "NetworkSessionProperties";
-        case ObjectKind::NetworkSessionPropertyEnumerator: return "NetworkSessionPropertyEnumerator";
+        case ObjectKind::NetworkSessionPropertyEnumerator:
+            return "NetworkSessionPropertyEnumerator";
         case ObjectKind::PacketWriter: return "PacketWriter";
         case ObjectKind::PacketReader: return "PacketReader";
         case ObjectKind::NetworkGamer: return "NetworkGamer";
         case ObjectKind::NetworkMachine: return "NetworkMachine";
         case ObjectKind::AvailableNetworkSession: return "AvailableNetworkSession";
-        case ObjectKind::AvailableNetworkSessionCollection: return "AvailableNetworkSessionCollection";
+        case ObjectKind::AvailableNetworkSessionCollection:
+            return "AvailableNetworkSessionCollection";
         case ObjectKind::NetworkSession: return "NetworkSession";
         case ObjectKind::SignedInGamer: return "SignedInGamer";
         case ObjectKind::NetworkSessionEventRegistration: return "NetworkSessionEventRegistration";
@@ -352,7 +355,8 @@ CNA_Result ServeOnGameThread(CNA_Result (*const run)(void*), void* const context
         try {
             queue.calls.push_back(&call);
         } catch (...) {
-            return Fail(CNA_RESULT_OUT_OF_MEMORY, CNA_ERROR_CATEGORY_MEMORY, "Native allocation failed.");
+            return Fail(
+                CNA_RESULT_OUT_OF_MEMORY, CNA_ERROR_CATEGORY_MEMORY, "Native allocation failed.");
         }
         queue.arrived.notify_all();
         queue.finished.wait(lock, [&call] { return call.done; });

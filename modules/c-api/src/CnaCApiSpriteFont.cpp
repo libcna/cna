@@ -342,5 +342,5 @@ CNA_Result GetOwnedSpriteFont(
 
 } // namespace CNA::C::Detail
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/SpriteFont.toml.
+// The routes generated from modules/c-api/spec/SpriteFont.toml.
 #include "generated/SpriteFont.inc"

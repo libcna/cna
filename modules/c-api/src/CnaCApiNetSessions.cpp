@@ -160,8 +160,8 @@ CNA_Result cna_available_network_session_create_ext(
             return InvalidArgument("The AvailableNetworkSession output handle is null.");
         }
         *outSession = CNA_INVALID_HANDLE;
-        if (const CNA_Result result =
-                ValidateVersionedStructure(createInfo, "The discovered-session creation configuration is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                createInfo, "The discovered-session creation configuration is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -183,17 +183,13 @@ CNA_Result cna_available_network_session_create_ext(
         std::string hostGamertag;
         std::string hostAddress;
         if (const CNA_Result result = ReadText(
-                createInfo->host_gamertag,
-                "The host gamertag is not valid UTF-8.",
-                &hostGamertag,
+                createInfo->host_gamertag, "The host gamertag is not valid UTF-8.", &hostGamertag,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                createInfo->host_address,
-                "The host address is not valid UTF-8.",
-                &hostAddress,
+                createInfo->host_address, "The host address is not valid UTF-8.", &hostAddress,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -239,8 +235,8 @@ CNA_Result cna_available_network_session_get_quality_of_service(
     CNA_QualityOfService* const outValue)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outValue, "The quality-of-service output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outValue, "The quality-of-service output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -680,7 +676,8 @@ CNA_Result cna_network_session_add_local_gamer(
         // CNA_INVALID_HANDLE is the canonical null gamer, which AddLocalGamer refuses.
         Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
         if (signedInGamer != CNA_INVALID_HANDLE) {
-            if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(signedInGamer, &gamer);
+            if (const CNA_Result result =
+                    CNA::C::Detail::BorrowSignedInGamer(signedInGamer, &gamer);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
@@ -1359,7 +1356,8 @@ CNA_Result cna_network_session_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SessionEventRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::NetworkSessionEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::NetworkSessionEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -1711,7 +1709,8 @@ CNA_Result cna_network_session_join_invited_async(
             static_cast<int>(maxLocalGamers),
             CompletionDelegate(callback, context),
             std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending.get()), outSession);
+        return CreateSessionResourceHandle(
+            NetworkSession::EndJoinInvited(pending.get()), outSession);
     });
 }
 
@@ -1736,7 +1735,8 @@ CNA_Result cna_network_session_join_invited_with_local_gamers_async(
             gamers,
             CompletionDelegate(callback, context),
             std::any{}));
-        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending.get()), outSession);
+        return CreateSessionResourceHandle(
+            NetworkSession::EndJoinInvited(pending.get()), outSession);
     });
 }
 
@@ -2203,5 +2203,5 @@ CNA_Result cna_local_network_gamer_enqueue_packet_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/NetSessions.toml.
+// The routes generated from modules/c-api/spec/NetSessions.toml.
 #include "generated/NetSessions.inc"

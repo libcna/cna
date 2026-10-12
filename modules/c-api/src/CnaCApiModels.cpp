@@ -853,9 +853,7 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
         const CNA_NamedAnimationClipEXTDescriptor& source = descriptor.clips[index];
         std::string name;
         if (const CNA_Result result = ReadText(
-                source.name,
-                "A SkinningData clip name is not valid UTF-8 text.",
-                &name,
+                source.name, "A SkinningData clip name is not valid UTF-8 text.", &name,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1656,9 +1654,7 @@ CNA_Result cna_model_bone_create(
         *outBone = CNA_INVALID_HANDLE;
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The ModelBone name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The ModelBone name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1804,9 +1800,7 @@ CNA_Result cna_model_bone_collection_find(
         *outBone = CNA_INVALID_HANDLE;
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The ModelBone lookup name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The ModelBone lookup name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2131,9 +2125,7 @@ CNA_Result cna_model_mesh_create_named(
         *outMesh = CNA_INVALID_HANDLE;
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The ModelMesh name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The ModelMesh name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2347,9 +2339,7 @@ CNA_Result cna_model_mesh_collection_find(
         *outMesh = CNA_INVALID_HANDLE;
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The ModelMesh lookup name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The ModelMesh lookup name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2778,8 +2768,9 @@ CNA_Result cna_model_get_gltf_import_report_ext(
     CNA_GltfImportReportEXT* const outReport)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outReport, "The glTF import report output is null or malformed.", ReportStructureVersion);
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outReport, "The glTF import report output is null or malformed.",
+                ReportStructureVersion);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2819,8 +2810,8 @@ CNA_Result cna_model_set_gltf_import_report_ext(
     const CNA_GltfImportReportEXT* const report)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(report, "The glTF import report is null or malformed.", ReportStructureVersion);
+        if (const CNA_Result result = ValidateVersionedStructure(
+                report, "The glTF import report is null or malformed.", ReportStructureVersion);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2881,26 +2872,20 @@ CNA_Result cna_model_add_gltf_import_diagnostic_ext(
         }
         GltfImportDiagnosticEXT entry;
         if (const CNA_Result result = ReadText(
-                descriptor->code,
-                "The glTF import diagnostic code is not valid UTF-8 text.",
-                &entry.Code,
-                EmbeddedNul::Refused);
+                descriptor->code, "The glTF import diagnostic code is not valid UTF-8 text.",
+                &entry.Code, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                descriptor->subject,
-                "The glTF import diagnostic subject is not valid UTF-8 text.",
-                &entry.Subject,
-                EmbeddedNul::Refused);
+                descriptor->subject, "The glTF import diagnostic subject is not valid UTF-8 text.",
+                &entry.Subject, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                descriptor->message,
-                "The glTF import diagnostic message is not valid UTF-8 text.",
-                &entry.Message,
-                EmbeddedNul::Refused);
+                descriptor->message, "The glTF import diagnostic message is not valid UTF-8 text.",
+                &entry.Message, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2909,8 +2894,7 @@ CNA_Result cna_model_add_gltf_import_diagnostic_ext(
             std::string detail;
             if (const CNA_Result result = ReadText(
                     descriptor->details[index],
-                    "A glTF import diagnostic detail is not valid UTF-8 text.",
-                    &detail,
+                    "A glTF import diagnostic detail is not valid UTF-8 text.", &detail,
                     EmbeddedNul::Refused);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
@@ -2939,8 +2923,9 @@ CNA_Result cna_model_get_gltf_import_diagnostic_ext(
     CNA_GltfImportDiagnosticEXT* const outDiagnostic)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outDiagnostic, "The glTF import diagnostic output is null or malformed.", ReportStructureVersion);
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outDiagnostic, "The glTF import diagnostic output is null or malformed.",
+                ReportStructureVersion);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3526,9 +3511,7 @@ CNA_Result cna_skinned_model_ext_create(
             const CNA_NamedAnimationClipEXTDescriptor& source = descriptor->clips[index];
             std::string name;
             if (const CNA_Result result = ReadText(
-                    source.name,
-                    "A SkinnedModelEXT clip name is not valid UTF-8 text.",
-                    &name,
+                    source.name, "A SkinnedModelEXT clip name is not valid UTF-8 text.", &name,
                     EmbeddedNul::Refused);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
@@ -3661,9 +3644,7 @@ CNA_Result cna_skinned_model_ext_set_clip(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The AnimationClipEXT name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3690,9 +3671,7 @@ CNA_Result cna_skinned_model_ext_remove_clip(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The AnimationClipEXT name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3766,9 +3745,7 @@ CNA_Result cna_skinned_model_ext_get_clip_info(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The AnimationClipEXT name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3808,9 +3785,7 @@ CNA_Result cna_skinned_model_ext_copy_clip_track(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The AnimationClipEXT name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3864,9 +3839,7 @@ CNA_Result cna_skinned_model_ext_compute_bone_transforms(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                clipName,
-                "The AnimationClipEXT name is not valid UTF-8 text.",
-                &copiedName,
+                clipName, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -3907,9 +3880,7 @@ CNA_Result cna_skinned_model_ext_add_part(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The SkinnedModelEXT part name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4071,9 +4042,7 @@ CNA_Result cna_skinned_model_ext_remove_part(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The SkinnedModelEXT part name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The SkinnedModelEXT part name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4304,9 +4273,7 @@ CNA_Result cna_skinning_data_get_clip_info(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The SkinningData clip name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4346,9 +4313,7 @@ CNA_Result cna_skinning_data_copy_clip_track(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The SkinningData clip name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The SkinningData clip name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4426,9 +4391,7 @@ CNA_Result cna_animation_player_start_clip(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                clipName,
-                "The AnimationPlayer clip name is not valid UTF-8 text.",
-                &copiedName,
+                clipName, "The AnimationPlayer clip name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4809,9 +4772,7 @@ CNA_Result cna_model_add_camera_ext(
         }
         ModelCameraEXT camera;
         if (const CNA_Result result = ReadText(
-                descriptor->name,
-                "The Model camera name is not valid UTF-8 text.",
-                &camera.Name,
+                descriptor->name, "The Model camera name is not valid UTF-8 text.", &camera.Name,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4968,9 +4929,7 @@ CNA_Result cna_model_add_skin_ext(
         }
         ModelSkinEXT skin;
         if (const CNA_Result result = ReadText(
-                name,
-                "The Model skin name is not valid UTF-8 text.",
-                &skin.Name,
+                name, "The Model skin name is not valid UTF-8 text.", &skin.Name,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -5135,9 +5094,7 @@ CNA_Result cna_model_animations_ext_create(
             const CNA_NamedAnimationClipEXTDescriptor& source = clips[index];
             std::string name;
             if (const CNA_Result result = ReadText(
-                    source.name,
-                    "A ModelAnimationsEXT clip name is not valid UTF-8 text.",
-                    &name,
+                    source.name, "A ModelAnimationsEXT clip name is not valid UTF-8 text.", &name,
                     EmbeddedNul::Refused);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
@@ -5303,9 +5260,7 @@ CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
         }
         std::string copied;
         if (const CNA_Result result = ReadText(
-                name,
-                "The SkinningData skeleton-root name is not valid UTF-8 text.",
-                &copied,
+                name, "The SkinningData skeleton-root name is not valid UTF-8 text.", &copied,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -5529,9 +5484,7 @@ CNA_Result cna_content_manager_load_model(
         *outModel = CNA_INVALID_HANDLE;
         std::string assetNameText;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameText,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameText,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -5643,5 +5596,5 @@ CNA_Result cna_model_get_content_tag_foreign_object_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Models.toml.
+// The routes generated from modules/c-api/spec/Models.toml.
 #include "generated/Models.inc"

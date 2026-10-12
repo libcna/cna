@@ -305,5 +305,5 @@ CNA_Result cna_debug_draw_copy_vertices(CNA_DebugDrawHandle, CNA_Bool,
 }
 #endif // CNA_CNAEXT
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/DebugDraw.toml.
+// The routes generated from modules/c-api/spec/DebugDraw.toml.
 #include "generated/DebugDraw.inc"

@@ -283,5 +283,5 @@ CNA_Result cna_bounding_frustum_intersects_ray(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Geometry.toml.
+// The routes generated from modules/c-api/spec/Geometry.toml.
 #include "generated/Geometry.inc"

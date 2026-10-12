@@ -278,5 +278,5 @@ CNA_Result cna_vertex_buffer_binding_init(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/VertexResources.toml.
+// The routes generated from modules/c-api/spec/VertexResources.toml.
 #include "generated/VertexResources.inc"

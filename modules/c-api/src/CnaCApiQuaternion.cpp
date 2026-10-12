@@ -51,5 +51,5 @@ CNA_Result cna_quaternion_normalize_in_place(CNA_Quaternion* const value)
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Quaternion.toml.
+// The routes generated from modules/c-api/spec/Quaternion.toml.
 #include "generated/Quaternion.inc"

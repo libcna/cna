@@ -709,9 +709,7 @@ CNA_Result cna_game_create(
 
         std::string title;
         if (const CNA_Result titleResult = ReadText(
-                createInfo->window_title,
-                "The initial window title could not be copied.",
-                &title,
+                createInfo->window_title, "The initial window title could not be copied.", &title,
                 EmbeddedNul::Refused);
             titleResult != CNA_RESULT_SUCCESS) {
             return titleResult;
@@ -828,10 +826,7 @@ CNA_Result cna_game_set_window_title(
 
         std::string titleCopy;
         if (const CNA_Result titleResult = ReadText(
-                title,
-                "The window title is not valid UTF-8.",
-                &titleCopy,
-                EmbeddedNul::Refused);
+                title, "The window title is not valid UTF-8.", &titleCopy, EmbeddedNul::Refused);
             titleResult != CNA_RESULT_SUCCESS) {
             return titleResult;
         }
@@ -888,5 +883,5 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Runtime.toml.
+// The routes generated from modules/c-api/spec/Runtime.toml.
 #include "generated/Runtime.inc"

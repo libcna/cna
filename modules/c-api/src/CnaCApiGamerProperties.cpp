@@ -725,5 +725,5 @@ CNA_Result cna_property_dictionary_copy_key_at(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GamerProperties.toml.
+// The routes generated from modules/c-api/spec/GamerProperties.toml.
 #include "generated/GamerProperties.inc"

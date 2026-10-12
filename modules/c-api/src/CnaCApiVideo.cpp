@@ -172,9 +172,7 @@ CNA_Result cna_video_create(
         }
         std::string nativeName;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                fileName,
-                "The video file name is not valid UTF-8.",
-                &nativeName);
+                fileName, "The video file name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -211,9 +209,7 @@ CNA_Result cna_video_create_with_metadata(
         }
         std::string nativeName;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                fileName,
-                "The video file name is not valid UTF-8.",
-                &nativeName);
+                fileName, "The video file name is not valid UTF-8.", &nativeName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -326,8 +322,9 @@ CNA_Result cna_video_player_get_frame_ext(
     CNA_VideoFrameEXT* const outFrame)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outFrame, "The video frame descriptor is null or malformed.", CNA_VIDEO_FRAME_EXT_STRUCT_VERSION);
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outFrame, "The video frame descriptor is null or malformed.",
+                CNA_VIDEO_FRAME_EXT_STRUCT_VERSION);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -355,7 +352,8 @@ CNA_Result cna_video_player_get_frame_ext(
         // Same borrow as cna_video_player_get_texture: the player owns the texture and this keeps
         // it alive while the handle exists; the next call on the player releases it.
         const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result = CreateGameFrameTexture2D(borrowed, resource->parentGame, &outFrame->texture);
+        if (const CNA_Result result =
+                CreateGameFrameTexture2D(borrowed, resource->parentGame, &outFrame->texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -390,7 +388,8 @@ CNA_Result cna_video_player_get_texture(
         // resource alive for as long as the handle exists. The handle is released again by the
         // next call on this player, before anything can replace the frame.
         const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result = CreateGameFrameTexture2D(borrowed, resource->parentGame, outTexture);
+        if (const CNA_Result result =
+                CreateGameFrameTexture2D(borrowed, resource->parentGame, outTexture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -424,5 +423,5 @@ CNA_Result cna_video_player_play(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Video.toml.
+// The routes generated from modules/c-api/spec/Video.toml.
 #include "generated/Video.inc"

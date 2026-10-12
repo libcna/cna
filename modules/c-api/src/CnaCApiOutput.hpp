@@ -166,7 +166,8 @@ template<typename TElement>
     const uint64_t capacity,
     uint64_t* const outBytes) noexcept
 {
-    return CopyElements(std::span<const char>(text.data(), text.size()), destination, capacity, outBytes);
+    return CopyElements(
+        std::span<const char>(text.data(), text.size()), destination, capacity, outBytes);
 }
 
 /** @brief CopyText for bytes rather than text. */

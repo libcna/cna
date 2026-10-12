@@ -725,5 +725,5 @@ CNA_Result cna_curve_compute_tangent_in_out(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Curve.toml.
+// The routes generated from modules/c-api/spec/Curve.toml.
 #include "generated/Curve.inc"

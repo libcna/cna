@@ -512,5 +512,5 @@ CNA_Result cna_avatar_renderer_draw_bones(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Avatars.toml.
+// The routes generated from modules/c-api/spec/Avatars.toml.
 #include "generated/Avatars.inc"

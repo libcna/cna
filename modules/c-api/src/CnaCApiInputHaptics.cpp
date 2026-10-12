@@ -342,16 +342,12 @@ CNA_Result cna_haptic_capabilities_equals(
         std::string leftText;
         std::string rightText;
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                leftName,
-                "The first haptic device name is not valid UTF-8.",
-                &leftText);
+                leftName, "The first haptic device name is not valid UTF-8.", &leftText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = CNA::C::Detail::ReadText(
-                rightName,
-                "The second haptic device name is not valid UTF-8.",
-                &rightText);
+                rightName, "The second haptic device name is not valid UTF-8.", &rightText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -458,5 +454,5 @@ CNA_Result cna_haptic_device_update_effect(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/InputHaptics.toml.
+// The routes generated from modules/c-api/spec/InputHaptics.toml.
 #include "generated/InputHaptics.inc"

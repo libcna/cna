@@ -1411,9 +1411,7 @@ CNA_Result cna_cnb_document_get_external_reference(
         }
         std::string what;
         if (const CNA_Result result = ReadText(
-                whatForDiagnostics,
-                "The what_for_diagnostics text is not valid UTF-8.",
-                &what);
+                whatForDiagnostics, "The what_for_diagnostics text is not valid UTF-8.", &what);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1604,9 +1602,7 @@ CNA_Result cna_cnb_reader_read_count(
         }
         std::string what;
         if (const CNA_Result result = ReadText(
-                whatIsBeingCounted,
-                "The what_is_being_counted text is not valid UTF-8.",
-                &what);
+                whatIsBeingCounted, "The what_is_being_counted text is not valid UTF-8.", &what);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2684,9 +2680,7 @@ CNA_Result cna_cnb_model_add_part(
         }
         std::string effectText;
         if (const CNA_Result result = ReadText(
-                externalEffect,
-                "The external_effect text is not valid UTF-8.",
-                &effectText);
+                externalEffect, "The external_effect text is not valid UTF-8.", &effectText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -3982,7 +3976,8 @@ CNA_Result cna_cnb_model_get_animation_name_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        return ReportTextSize(model->value->animations[static_cast<std::size_t>(index)].name, outBytes);
+        return ReportTextSize(
+            model->value->animations[static_cast<std::size_t>(index)].name, outBytes);
     });
 }
 
@@ -4793,8 +4788,7 @@ CNA_Result cna_cnb_encode_song(
         }
         Cnb::CnbSongData data;
         if (const CNA_Result result = ReadText(
-                streamReference,
-                "The stream_reference text is not valid UTF-8.",
+                streamReference, "The stream_reference text is not valid UTF-8.",
                 &data.streamReference);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -4836,8 +4830,7 @@ CNA_Result cna_cnb_encode_video(
         }
         Cnb::CnbVideoData data;
         if (const CNA_Result result = ReadText(
-                streamReference,
-                "The stream_reference text is not valid UTF-8.",
+                streamReference, "The stream_reference text is not valid UTF-8.",
                 &data.streamReference);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -5129,9 +5122,7 @@ CNA_Result cna_cnb_loader_registry_register(
         }
         std::string nameText;
         if (const CNA_Result result = ReadText(
-                canonicalTypeName,
-                "The canonical_type_name text is not valid UTF-8.",
-                &nameText);
+                canonicalTypeName, "The canonical_type_name text is not valid UTF-8.", &nameText);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -5497,5 +5488,5 @@ CNA_Result cna_cnb_cnj_result_copy_external_reference(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Cnb.toml.
+// The routes generated from modules/c-api/spec/Cnb.toml.
 #include "generated/Cnb.inc"

@@ -456,5 +456,5 @@ void ResetGraphicsDeviceManagerState() noexcept
 
 } // namespace CNA::C::Detail
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsDeviceManager.toml.
+// The routes generated from modules/c-api/spec/GraphicsDeviceManager.toml.
 #include "generated/GraphicsDeviceManager.inc"

@@ -278,7 +278,8 @@ CNA_Result cna_media_player_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<PlayerRegistration> resource;
-        const CNA_Result getResult = LookupHandle(registration, ObjectKind::MediaPlayerEventRegistration, &resource);
+        const CNA_Result getResult =
+                LookupHandle(registration, ObjectKind::MediaPlayerEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -343,5 +344,5 @@ CNA_Result cna_media_queue_get_at(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/MediaPlayer.toml.
+// The routes generated from modules/c-api/spec/MediaPlayer.toml.
 #include "generated/MediaPlayer.inc"

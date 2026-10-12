@@ -30,6 +30,7 @@ using CNA::C::Detail::ReadText;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ValidateCopyOutput;
 using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::GamerServices::Achievement;
@@ -92,7 +93,8 @@ CNA_Result cna_achievement_create_ext(
             return InvalidArgument("The Achievement output handle is null.");
         }
         *outAchievement = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateCanonicalBool(displayBeforeEarned, "display_before_earned");
+        if (const CNA_Result result =
+                ValidateCanonicalBool(displayBeforeEarned, "display_before_earned");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -112,8 +114,8 @@ CNA_Result cna_achievement_create_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result =
-                ReadText(description, "The achievement description is invalid.", &nativeDescription);
+        if (const CNA_Result result = ReadText(
+                description, "The achievement description is invalid.", &nativeDescription);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -152,7 +154,8 @@ CNA_Result cna_achievement_get_picture_size(
 CNA_Result cna_achievement_copy_picture(const CNA_AchievementHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if(!outBytes||(!destination&&capacity))return InvalidArgument("The picture output is invalid.");
+        if(const auto result=ValidateCopyOutput(destination,capacity,outBytes);
+           result!=CNA_RESULT_SUCCESS)return result;
         std::shared_ptr<AchievementResource> achievement;
         if(const auto result=BorrowAchievement(handle,&achievement);result!=CNA_RESULT_SUCCESS)return result;
         std::unique_ptr<System::IO::Stream> picture(achievement->value->GetPicture());
@@ -301,5 +304,5 @@ CNA_Result cna_signed_in_gamer_begin_get_achievements(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Achievements.toml.
+// The routes generated from modules/c-api/spec/Achievements.toml.
 #include "generated/Achievements.inc"

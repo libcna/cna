@@ -396,8 +396,8 @@ CNA_Result cna_render_target_get_info(
     CNA_RenderTargetInfo* const outInfo)
 {
     return CallWithExceptionBarrier([&]() {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outInfo, "The render-target output structure is invalid.");
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outInfo, "The render-target output structure is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -714,7 +714,8 @@ CNA_Result cna_render_target_unsubscribe_content_lost(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<RenderTargetContentLostRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
+        const CNA_Result getResult = LookupHandle(
+            registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -771,5 +772,5 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/RenderTarget.toml.
+// The routes generated from modules/c-api/spec/RenderTarget.toml.
 #include "generated/RenderTarget.inc"

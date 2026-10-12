@@ -223,7 +223,8 @@ CNA_Result cna_guide_set_is_screen_saver_enabled(const CNA_Bool isEnabled)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ValidateBoolean(isEnabled, "The screen-saver flag is invalid.");
+        if (const CNA_Result result =
+                ValidateBoolean(isEnabled, "The screen-saver flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -601,7 +602,8 @@ CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool online
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ValidateBoolean(onlineOnly, "The online-only flag is invalid.");
+        if (const CNA_Result result =
+                ValidateBoolean(onlineOnly, "The online-only flag is invalid.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -632,5 +634,5 @@ CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Guide.toml.
+// The routes generated from modules/c-api/spec/Guide.toml.
 #include "generated/Guide.inc"

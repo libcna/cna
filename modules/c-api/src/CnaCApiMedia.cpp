@@ -224,9 +224,7 @@ CNA_Result cna_song_create(
         std::string nativeFileName;
         std::string nativeName;
         if (const CNA_Result result = ReadText(
-                fileName,
-                "The song file name is not valid UTF-8.",
-                &nativeFileName);
+                fileName, "The song file name is not valid UTF-8.", &nativeFileName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -261,16 +259,12 @@ CNA_Result cna_song_create_with_duration(
         std::string nativeFileName;
         std::string nativeAssetName;
         if (const CNA_Result result = ReadText(
-                fileName,
-                "The song file name is not valid UTF-8.",
-                &nativeFileName);
+                fileName, "The song file name is not valid UTF-8.", &nativeFileName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The song asset name is not valid UTF-8.",
-                &nativeAssetName);
+                assetName, "The song asset name is not valid UTF-8.", &nativeAssetName);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -397,5 +391,5 @@ CNA_Result cna_song_collection_get_at(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Media.toml.
+// The routes generated from modules/c-api/spec/Media.toml.
 #include "generated/Media.inc"

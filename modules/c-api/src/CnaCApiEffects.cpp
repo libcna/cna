@@ -409,18 +409,14 @@ struct EffectState final {
     std::string name;
     std::string semantic;
     if (const CNA_Result result = ReadText(
-            createInfo->name,
-            "The EffectParameter name is not valid UTF-8 text.",
-            &name,
+            createInfo->name, "The EffectParameter name is not valid UTF-8 text.", &name,
             EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     if (const CNA_Result result = ReadText(
-            createInfo->semantic,
-            "The EffectParameter semantic is not valid UTF-8 text.",
-            &semantic,
-            EmbeddedNul::Refused);
+            createInfo->semantic, "The EffectParameter semantic is not valid UTF-8 text.",
+            &semantic, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -822,7 +818,8 @@ template<typename TInterface>
     }
     auto* const interfaceValue = dynamic_cast<TInterface*>(effect->value.get());
     if (interfaceValue == nullptr) {
-        return NotSupported(std::string("The Effect does not implement ") + EffectTypeName<TInterface> + ".");
+        return NotSupported(
+            std::string("The Effect does not implement ") + EffectTypeName<TInterface> + ".");
     }
     if (outResource != nullptr) {
         *outResource = std::move(effect);
@@ -1075,25 +1072,20 @@ CNA_Result cna_effect_annotation_create(
         std::string semantic;
         std::string cachedString;
         if (const CNA_Result result = ReadText(
-                createInfo->name,
-                "The EffectAnnotation name is not valid UTF-8 text.",
-                &name,
+                createInfo->name, "The EffectAnnotation name is not valid UTF-8 text.", &name,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                createInfo->semantic,
-                "The EffectAnnotation semantic is not valid UTF-8 text.",
-                &semantic,
-                EmbeddedNul::Refused);
+                createInfo->semantic, "The EffectAnnotation semantic is not valid UTF-8 text.",
+                &semantic, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
                 createInfo->cached_string,
-                "The EffectAnnotation cached string is not valid UTF-8 text.",
-                &cachedString,
+                "The EffectAnnotation cached string is not valid UTF-8 text.", &cachedString,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1228,9 +1220,7 @@ CNA_Result cna_effect_annotation_collection_find(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The EffectAnnotation lookup name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The EffectAnnotation lookup name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1732,9 +1722,7 @@ CNA_Result cna_effect_parameter_set_value_string(
         }
         std::string copied;
         if (const CNA_Result result = ReadText(
-                value,
-                "The EffectParameter string value is not valid UTF-8 text.",
-                &copied,
+                value, "The EffectParameter string value is not valid UTF-8 text.", &copied,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2028,9 +2016,7 @@ CNA_Result cna_effect_parameter_collection_find_name(
         }
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The EffectParameter lookup name is not valid UTF-8 text.",
-                &copiedName,
+                name, "The EffectParameter lookup name is not valid UTF-8 text.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2067,10 +2053,8 @@ CNA_Result cna_effect_parameter_collection_find_semantic(
         }
         std::string copiedSemantic;
         if (const CNA_Result result = ReadText(
-                semantic,
-                "The EffectParameter lookup semantic is not valid UTF-8 text.",
-                &copiedSemantic,
-                EmbeddedNul::Refused);
+                semantic, "The EffectParameter lookup semantic is not valid UTF-8 text.",
+                &copiedSemantic, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -2577,9 +2561,7 @@ CNA_Result cna_content_manager_load_effect(
         *outEffect = CNA_INVALID_HANDLE;
         std::string assetNameCopy;
         if (const CNA_Result result = ReadText(
-                assetName,
-                "The content asset name is not valid UTF-8.",
-                &assetNameCopy,
+                assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -2631,18 +2613,14 @@ CNA_Result cna_shader_effect_create(
         std::string vertex;
         std::string fragment;
         if (const CNA_Result result = ReadText(
-                vertexSource,
-                "The ShaderEffect vertex source is not valid UTF-8 text.",
-                &vertex,
+                vertexSource, "The ShaderEffect vertex source is not valid UTF-8 text.", &vertex,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                fragmentSource,
-                "The ShaderEffect fragment source is not valid UTF-8 text.",
-                &fragment,
-                EmbeddedNul::Refused);
+                fragmentSource, "The ShaderEffect fragment source is not valid UTF-8 text.",
+                &fragment, EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -4629,5 +4607,5 @@ CNA_Result cna_effect_material_retain_parameter_texture_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Effects.toml.
+// The routes generated from modules/c-api/spec/Effects.toml.
 #include "generated/Effects.inc"

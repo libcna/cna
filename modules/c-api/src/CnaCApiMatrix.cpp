@@ -175,5 +175,5 @@ CNA_Result cna_matrix_create_constrained_billboard(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Matrix.toml.
+// The routes generated from modules/c-api/spec/Matrix.toml.
 #include "generated/Matrix.inc"

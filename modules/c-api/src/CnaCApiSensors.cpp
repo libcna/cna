@@ -694,7 +694,8 @@ CNA_Result cna_sensor_unsubscribe_ext(const CNA_SensorEventRegistrationHandle re
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorRegistrationBase> resource;
-        const CNA_Result getResult = LookupHandle(registration, ObjectKind::SensorEventRegistration, &resource);
+        const CNA_Result getResult =
+                LookupHandle(registration, ObjectKind::SensorEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -1463,5 +1464,5 @@ CNA_Result cna_motion_inject_calibration_request_ext(const CNA_MotionHandle sens
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Sensors.toml.
+// The routes generated from modules/c-api/spec/Sensors.toml.
 #include "generated/Sensors.inc"

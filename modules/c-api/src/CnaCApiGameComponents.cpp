@@ -560,7 +560,8 @@ CNA_Result cna_game_component_unsubscribe(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<ComponentRegistrationBase> value;
-        if (const CNA_Result result = LookupHandle(registration, ObjectKind::GameComponentEventRegistration, &value);
+        if (const CNA_Result result =
+                LookupHandle(registration, ObjectKind::GameComponentEventRegistration, &value);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -758,5 +759,5 @@ CNA_Result cna_game_services_remove_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GameComponents.toml.
+// The routes generated from modules/c-api/spec/GameComponents.toml.
 #include "generated/GameComponents.inc"

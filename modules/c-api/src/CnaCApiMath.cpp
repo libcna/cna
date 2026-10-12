@@ -225,5 +225,5 @@ CNA_Result cna_rectangle_union(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Math.toml.
+// The routes generated from modules/c-api/spec/Math.toml.
 #include "generated/Math.inc"

@@ -281,7 +281,8 @@ CNA_Result cna_ascii_post_process_effect_create(
             std::make_shared<Ext::AsciiPostProcessEffect>(*graphicsDevice->value);
         const auto resource = std::make_shared<AsciiEffectResource>(
             AsciiEffectResource{std::move(native), graphicsDevice->parentGame});
-        if (const CNA_Result result = CreateHandle(ObjectKind::AsciiPostProcessEffect, resource, outEffect);
+        if (const CNA_Result result =
+                CreateHandle(ObjectKind::AsciiPostProcessEffect, resource, outEffect);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -413,5 +414,5 @@ CNA_Result cna_ascii_post_process_effect_destroy(
 
 #endif // CNA_CNAEXT
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsExt.toml.
+// The routes generated from modules/c-api/spec/GraphicsExt.toml.
 #include "generated/GraphicsExt.inc"

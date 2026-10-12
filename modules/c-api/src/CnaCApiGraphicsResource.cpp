@@ -355,9 +355,7 @@ CNA_Result cna_graphics_resource_set_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string copiedName;
         if (const CNA_Result result = ReadText(
-                name,
-                "The graphics-resource name is not valid UTF-8.",
-                &copiedName,
+                name, "The graphics-resource name is not valid UTF-8.", &copiedName,
                 EmbeddedNul::Refused);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -484,7 +482,8 @@ CNA_Result cna_graphics_resource_unsubscribe_disposing(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<DisposingRegistration> registration;
-        const CNA_Result getResult = LookupHandle(registrationHandle, ObjectKind::EventRegistration, &registration);
+        const CNA_Result getResult =
+                LookupHandle(registrationHandle, ObjectKind::EventRegistration, &registration);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -500,5 +499,5 @@ CNA_Result cna_graphics_resource_unsubscribe_disposing(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/GraphicsResource.toml.
+// The routes generated from modules/c-api/spec/GraphicsResource.toml.
 #include "generated/GraphicsResource.inc"

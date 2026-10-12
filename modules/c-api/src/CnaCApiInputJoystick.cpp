@@ -275,16 +275,12 @@ CNA_Result cna_joystick_info_equals(
             return result;
         }
         if (const CNA_Result result = ReadText(
-                leftName,
-                "The first joystick name is not valid UTF-8.",
-                &nativeLeft.name);
+                leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                rightName,
-                "The second joystick name is not valid UTF-8.",
-                &nativeRight.name);
+                rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -339,30 +335,22 @@ CNA_Result cna_joystick_capabilities_equals(
             return result;
         }
         if (const CNA_Result result = ReadText(
-                leftName,
-                "The first joystick name is not valid UTF-8.",
-                &nativeLeft.name);
+                leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                rightName,
-                "The second joystick name is not valid UTF-8.",
-                &nativeRight.name);
+                rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                leftGuid,
-                "The first joystick GUID is not valid UTF-8.",
-                &nativeLeft.guid);
+                leftGuid, "The first joystick GUID is not valid UTF-8.", &nativeLeft.guid);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         if (const CNA_Result result = ReadText(
-                rightGuid,
-                "The second joystick GUID is not valid UTF-8.",
-                &nativeRight.guid);
+                rightGuid, "The second joystick GUID is not valid UTF-8.", &nativeRight.guid);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -409,7 +397,8 @@ CNA_Result cna_joysticks_unsubscribe_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<JoystickRegistration> resource;
-        const CNA_Result getResult = LookupHandle(registration, CNA::C::Detail::ObjectKind::JoystickEventRegistration, &resource);
+        const CNA_Result getResult = LookupHandle(
+            registration, CNA::C::Detail::ObjectKind::JoystickEventRegistration, &resource);
         if (getResult != CNA_RESULT_SUCCESS) {
             return getResult;
         }
@@ -417,5 +406,5 @@ CNA_Result cna_joysticks_unsubscribe_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/InputJoystick.toml.
+// The routes generated from modules/c-api/spec/InputJoystick.toml.
 #include "generated/InputJoystick.inc"

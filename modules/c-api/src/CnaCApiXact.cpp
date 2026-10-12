@@ -335,7 +335,8 @@ CNA_Result cna_audio_engine_renderers_equal(
         std::shared_ptr<EngineResource> engine;
         const Microsoft::Xna::Framework::Audio::RendererDetail* first = nullptr;
         const Microsoft::Xna::Framework::Audio::RendererDetail* second = nullptr;
-        if (const CNA_Result result = GetRendererDetail(engineHandle, rendererIndex, &engine, &first);
+        if (const CNA_Result result =
+                GetRendererDetail(engineHandle, rendererIndex, &engine, &first);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -925,5 +926,5 @@ CNA_Result cna_cue_subscribe_disposing_ext(
     });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Xact.toml.
+// The routes generated from modules/c-api/spec/Xact.toml.
 #include "generated/Xact.inc"

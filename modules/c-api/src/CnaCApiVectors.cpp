@@ -321,5 +321,5 @@ CNA_Result cna_vector4_transform_quaternion_array(
         });
 }
 
-// The mechanically regular routes of this family, generated from modules/c-api/spec/Vectors.toml.
+// The routes generated from modules/c-api/spec/Vectors.toml.
 #include "generated/Vectors.inc"
