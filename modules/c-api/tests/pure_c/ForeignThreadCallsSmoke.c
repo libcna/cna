@@ -135,10 +135,13 @@ static CNA_Result on_update(const CNA_Handle game, const CNA_GameTime* const gam
                             void* const context, CNA_CallbackError* const out_error)
 {
     Shared* const shared = (Shared*)context;
-    (void)game_time;
     (void)out_error;
     ++shared->updates;
-    if (shared->failed || shared->updates > 600) {
+    /* The game runs unthrottled, so a count of updates is no measure of how long the worker has
+       had: under Wine six hundred of them pass before its thread has made both calls. Give up
+       only when the game has also run for ten seconds. */
+    if (shared->failed ||
+        (shared->updates > 600 && game_time->total_game_time_ticks > INT64_C(100000000))) {
         shared->failed = 1;
         return cna_game_request_exit(game);
     }

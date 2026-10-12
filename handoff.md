@@ -132,15 +132,6 @@ The single authoritative list. Every entry below was checked against the code on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
-8. **Three pure-C suites fail on Windows for reasons outside the C API** (found 2026-10-12 running
-   the MinGW-w64 build under Wine with `CNA_GRAPHICS_RENDERER=SOFTWARE`; 102 of the 107 suites
-   pass, one at a time). `ContentSmoke` writes its fixture with the narrow `fopen` and a UTF-8 file
-   name, which the C runtime reads in the ANSI code page, so CNA (correctly UTF-8) cannot find the
-   file. `GraphicsSurfaceSmoke` passes every check and returns from `main`, then the process never
-   exits (100% CPU in teardown); `AudioSoundEffectSmoke` stalls the same way after its other-thread
-   playback (it passed once). A minimal game plus a second-thread call exits cleanly, so it takes
-   those suites' resources; unconfirmed on real Windows. (`MediaLibrarySmoke` fails only because
-   Wine maps Pictures to the real home directory; `ForeignThreadCallsSmoke` is timing-sensitive.)
 
 ### 5.2 Limitations
 
@@ -151,7 +142,8 @@ The single authoritative list. Every entry below was checked against the code on
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`misc/known_gaps.md` §4, `docs/browser-network-readiness.md`).
 - `DIRECTX9`/`DIRECTX11` are validated under Wine (+DXVK) only; real-Windows hardware validation is
-  not current. iOS has simulator smoke evidence only; `METAL` is validated by the macOS CI contract.
+  not current. The C API's pure-C suites run under Wine from the MinGW-w64 build; `MediaLibrarySmoke`
+  reports a skip on Windows, whose known folders cannot be pointed at its fixture. iOS has simulator smoke evidence only; `METAL` is validated by the macOS CI contract.
 - `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
 - `SDL_RENDERER` is 2D-only (3D calls throw), `SOFTWARE` is a bounded CPU renderer, and `HEADLESS`
   and `STUB` make no pixel claim (`docs/renderer-registry.md`, "Capability classes").

@@ -2163,6 +2163,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     add_test(NAME CApi_MediaLibrarySmoke COMMAND cna_c_api_media_library_smoke)
+    set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES SKIP_RETURN_CODE 77)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"

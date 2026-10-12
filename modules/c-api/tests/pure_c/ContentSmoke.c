@@ -2,6 +2,7 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestFiles.h"
 #include "CnaTestReport.h"
 
 #include <stddef.h>
@@ -124,7 +125,7 @@ static size_t build_minimal_wav(uint8_t data[48])
 
 static int write_fixture(void)
 {
-    FILE* const file = fopen(FixturePath, "wb");
+    FILE* const file = cna_test_fopen(FixturePath, "wb");
     if (file == 0) {
         return 0;
     }
@@ -132,7 +133,7 @@ static int write_fixture(void)
     const int closed = fclose(file) == 0;
     const int ok = wrote && closed;
     if (!ok) {
-        (void)remove(FixturePath);
+        (void)cna_test_remove(FixturePath);
     }
     return ok;
 }
@@ -228,6 +229,20 @@ static int destroy_root_fixture(const RootFixture* const fixture)
         cna_storage_device_destroy(fixture->device) == CNA_RESULT_SUCCESS;
 }
 
+/* Windows paths may mix separators: TitleLocation reports the native '\\', while a resolved asset
+   path is written with '/'. Both name the same file, so the comparison treats them as one. */
+static int same_path_bytes(const char* const left, const char* const right, const size_t count)
+{
+    for (size_t index = 0U; index < count; ++index) {
+        const char a = left[index] == '\\' ? '/' : left[index];
+        const char b = right[index] == '\\' ? '/' : right[index];
+        if (a != b) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static int validate_paths_and_device(
     const CNA_Handle game,
     const CNA_Handle manager,
@@ -241,11 +256,12 @@ static int validate_paths_and_device(
     CNA_Handle device = CNA_INVALID_HANDLE;
 
     /* The root is ".", which names the title's own directory (CBIND-140): the resolved root is the
-       title path as TitleLocation reports it, separator included, and an asset's path is that root
-       followed by the asset name. */
+       title path as TitleLocation reports it, separator included -- '\\' on Windows, as in XNA --
+       and an asset's path is that root followed by the asset name. */
     if (cna_title_location_copy_path(game, title, (uint64_t)sizeof(title), &title_bytes) !=
             CNA_RESULT_SUCCESS ||
-        title_bytes == 0U || title_bytes + 5U >= sizeof(buffer) || title[title_bytes - 1U] != '/') {
+        title_bytes == 0U || title_bytes + 5U >= sizeof(buffer) ||
+        (title[title_bytes - 1U] != '/' && title[title_bytes - 1U] != '\\')) {
         return 0;
     }
     if (cna_content_manager_get_asset_path_size(manager, view("a.bmp"), &bytes) !=
@@ -260,7 +276,7 @@ static int validate_paths_and_device(
             buffer,
             (uint64_t)sizeof(buffer),
             &bytes) != CNA_RESULT_SUCCESS ||
-        bytes != title_bytes + 5U || memcmp(buffer, title, (size_t)title_bytes) != 0 ||
+        bytes != title_bytes + 5U || !same_path_bytes(buffer, title, (size_t)title_bytes) ||
         memcmp(buffer + title_bytes, "a.bmp", 5U) != 0) {
         return 0;
     }
@@ -529,7 +545,7 @@ static const char CnbTypeName[] = "CNA.Test.ContentSmoke.Level";
 
 static int write_text_file(const char* const path, const char* const text)
 {
-    FILE* const file = fopen(path, "wb");
+    FILE* const file = cna_test_fopen(path, "wb");
     size_t length = 0U;
     if (file == 0) {
         return 0;
@@ -544,7 +560,7 @@ static int write_text_file(const char* const path, const char* const text)
 
 static int write_binary_file(const char* const path, const uint8_t* const data, const size_t count)
 {
-    FILE* const file = fopen(path, "wb");
+    FILE* const file = cna_test_fopen(path, "wb");
     if (file == 0) {
         return 0;
     }
@@ -2443,7 +2459,7 @@ static CNA_Result on_load(
     }
 
     if (cna_content_manager_unload(state->content_manager) != CNA_RESULT_SUCCESS ||
-        !pixel_is_fixture_color(state->texture) || remove(FixturePath) != 0) {
+        !pixel_is_fixture_color(state->texture) || cna_test_remove(FixturePath) != 0) {
         return CNA_RESULT_INVALID_STATE;
     }
     invalid_texture = UINT64_C(99);
@@ -2500,7 +2516,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.load_validated != 1 ||
         state.content_manager == CNA_INVALID_HANDLE || state.texture == CNA_INVALID_HANDLE) {
-        (void)remove(FixturePath);
+        (void)cna_test_remove(FixturePath);
         return CNA_TEST_FAIL(2);
     }
     if (cna_game_destroy(game) != CNA_RESULT_INVALID_STATE) {
@@ -2514,19 +2530,19 @@ int main(void)
         return CNA_TEST_FAIL(4);
     }
 
-    (void)remove(FontAtlasPath);
-    (void)remove(FontDescriptorPath);
-    (void)remove(ForeignAssetPath);
-    (void)remove(NormalizedByte2AssetPath);
-    (void)remove(UnsupportedTextureAssetPath);
-    (void)remove(ReflectiveAssetPath);
-    (void)remove(CnbAssetPath);
-    (void)remove(DictionaryAssetPath);
-    (void)remove(TaggedModelPath);
-    (void)remove(ForeignModelPath);
-    (void)remove(ValueModelPath);
-    (void)remove(EffectDescriptorPath);
-    (void)remove(CnjDescriptorPath);
+    (void)cna_test_remove(FontAtlasPath);
+    (void)cna_test_remove(FontDescriptorPath);
+    (void)cna_test_remove(ForeignAssetPath);
+    (void)cna_test_remove(NormalizedByte2AssetPath);
+    (void)cna_test_remove(UnsupportedTextureAssetPath);
+    (void)cna_test_remove(ReflectiveAssetPath);
+    (void)cna_test_remove(CnbAssetPath);
+    (void)cna_test_remove(DictionaryAssetPath);
+    (void)cna_test_remove(TaggedModelPath);
+    (void)cna_test_remove(ForeignModelPath);
+    (void)cna_test_remove(ValueModelPath);
+    (void)cna_test_remove(EffectDescriptorPath);
+    (void)cna_test_remove(CnjDescriptorPath);
 
     if (cna_content_manager_destroy(state.content_manager) != CNA_RESULT_SUCCESS ||
         cna_content_manager_unload(state.content_manager) != CNA_RESULT_INVALID_HANDLE ||

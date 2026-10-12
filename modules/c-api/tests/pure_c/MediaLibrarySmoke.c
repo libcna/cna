@@ -1058,7 +1058,23 @@ static int query_on_wrong_thread(void* const context)
     return 0;
 }
 
+int run_library_suite(void);
+
 int main(void)
+{
+#if defined(_WIN32)
+    /* Windows answers Music and Pictures from the user's known folders, which no environment
+       variable redirects, and this suite must never read or write a real user directory. With no
+       way to show the library the fixture, there is nothing hermetic to check: report a skip
+       (CTest's SKIP_RETURN_CODE) rather than a pass. */
+    fprintf(stderr, "MediaLibrarySmoke: skipped; Windows user folders cannot name the fixture.\n");
+    return 77;
+#else
+    return run_library_suite();
+#endif
+}
+
+int run_library_suite(void)
 {
     if (!create_fixture()) {
         return CNA_TEST_FAIL(1);
