@@ -365,8 +365,8 @@ namespace CNA::Platform::Terminal {
     IPlatformClipboard* TerminalPlatform::GetClipboard() { return nullptr; }
     IPlatformDisplays* TerminalPlatform::GetDisplays() { return nullptr; }
     IPlatformDialogs* TerminalPlatform::GetDialogs() { return nullptr; }
-    IPlatformTray* TerminalPlatform::GetTray() { return nullptr; }
-    IPlatformCameraProvider* TerminalPlatform::GetCamera() { return nullptr; }
+    IPlatformTray* TerminalPlatform::GetTrayService() { return nullptr; }
+    IPlatformCameraProvider* TerminalPlatform::GetCameraService() { return nullptr; }
     IPlatformFileSystem* TerminalPlatform::GetFileSystem() { return fileSystem_.get(); }
     IPlatformSystemInfo* TerminalPlatform::GetSystemInfo() { return systemInfo_.get(); }
     IPlatformGlContext* TerminalPlatform::GetGlContext() { return nullptr; }

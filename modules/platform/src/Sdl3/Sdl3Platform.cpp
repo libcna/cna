@@ -29,9 +29,9 @@ namespace CNA::Platform::Sdl3 {
 
     namespace {
 
-        // The optional services' factories, set by Install*() (Sdl3CameraService.cpp and
-        // Sdl3TrayService.cpp, which EnableCameraService() and EnableTrayService() link). Support
-        // is reported without them (Sdl3ServiceSupport.cpp).
+        // The optional services' factories, set by Install*() from IPlatform::GetCamera() and
+        // GetTray() (Sdl3CameraService.cpp, Sdl3TrayService.cpp), so that only a program that calls
+        // them links the implementations. Support is reported without them (Sdl3ServiceSupport.cpp).
         std::atomic<std::unique_ptr<IPlatformTray> (*)()> createTray{nullptr};
         std::atomic<std::unique_ptr<IPlatformCameraProvider> (*)()> createCamera{nullptr};
 
@@ -730,7 +730,7 @@ namespace CNA::Platform::Sdl3 {
     }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
-    IPlatformTray* Sdl3Platform::GetTray()
+    IPlatformTray* Sdl3Platform::GetTrayService()
     {
         const auto create = createTray.load();
         if (create == nullptr || !TraySupported())
@@ -745,7 +745,7 @@ namespace CNA::Platform::Sdl3 {
         return tray_.get();
     }
 
-    IPlatformCameraProvider* Sdl3Platform::GetCamera()
+    IPlatformCameraProvider* Sdl3Platform::GetCameraService()
     {
         const auto create = createCamera.load();
         if (create == nullptr || !CameraSupported())

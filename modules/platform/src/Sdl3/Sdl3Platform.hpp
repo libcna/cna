@@ -124,10 +124,6 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return The SDL3 dialog service; never null. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
-        /** @brief Gets the tray service. @return The service on desktop targets, otherwise null. */
-        [[nodiscard]] IPlatformTray* GetTray() override;
-        /** @brief Gets the camera provider. @return The provider when SDL has a camera driver. */
-        [[nodiscard]] IPlatformCameraProvider* GetCamera() override;
         /** @brief Gets the filesystem service. @return The SDL3 filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return The SDL3 system info; never null. */
@@ -146,15 +142,21 @@ namespace CNA::Platform::Sdl3 {
             IPlatformWindow& window) override;
 
         /**
-         * @brief Installs the tray service (EnableTrayService(), Sdl3TrayService.cpp).
+         * @brief Installs the tray service (IPlatform::GetTray(), Sdl3TrayService.cpp).
          * @param create Creates the service on the first GetTray().
          */
         static void InstallTray(std::unique_ptr<IPlatformTray> (*create)());
         /**
-         * @brief Installs the camera service (EnableCameraService(), Sdl3CameraService.cpp).
+         * @brief Installs the camera service (IPlatform::GetCamera(), Sdl3CameraService.cpp).
          * @param create Creates the provider on the first GetCamera().
          */
         static void InstallCamera(std::unique_ptr<IPlatformCameraProvider> (*create)());
+
+    protected:
+        /** @brief The tray service. @return The service on desktop targets, otherwise null. */
+        [[nodiscard]] IPlatformTray* GetTrayService() override;
+        /** @brief The camera provider. @return The provider when cameras are supported. */
+        [[nodiscard]] IPlatformCameraProvider* GetCameraService() override;
 
     private:
         /// Every capability but `camera`, whose probe starts SDL's camera subsystem.
@@ -210,7 +212,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Haptics haptics_;
         Sdl3InputDevices inputDevices_;
         Sdl3Dialogs dialogs_;
-        // Installed on first use (CNA/Platform/OptionalServices.hpp), created on first request.
+        // Installed and created by the first IPlatform::GetTray()/GetCamera() (Sdl3*Service.cpp).
         std::mutex optionalServicesMutex_;
         std::unique_ptr<IPlatformTray> tray_;
         std::unique_ptr<IPlatformCameraProvider> camera_;

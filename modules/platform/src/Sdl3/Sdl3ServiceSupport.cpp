@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // Whether the camera and the tray are supported: what Sdl3Platform::GetCapabilities() reports,
-// whether or not a program has enabled the services.
+// whether or not a program has asked for the services.
 //
 // Link boundary: apart from the providers (Sdl3Camera.cpp, Sdl3Tray.cpp), which only
-// EnableCameraService()/EnableTrayService() link, so that reporting support links neither
+// IPlatform::GetCamera()/GetTray() link, so that reporting support links neither
 // (docs/link-size-architecture.md).
 #include "Sdl3ServiceSupport.hpp"
 #include "Sdl3Synchronization.hpp"

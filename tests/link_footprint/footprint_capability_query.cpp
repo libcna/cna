@@ -2,7 +2,8 @@
 // Link-footprint consumer: a program that asks whether the platform supports a camera and a tray
 // -- through the whole capability set, one capability at a time, and CNA::Devices -- but uses
 // neither. Reporting support must not link the camera or the tray implementation, which only
-// enabling the service does (LinkFootprint_CapabilityQuery, docs/link-size-architecture.md).
+// IPlatform::GetCamera()/GetTray() do (LinkFootprint_CapabilityQuery,
+// docs/link-size-architecture.md).
 // It is linked, not run: with no argument main returns at once.
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"

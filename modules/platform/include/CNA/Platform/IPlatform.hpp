@@ -333,28 +333,27 @@ namespace CNA::Platform {
         [[nodiscard]] virtual IPlatformDialogs* GetDialogs() = 0;
 
         /**
-         * @brief Gets the system-tray service.
+         * @brief Gets the system-tray service, creating it on the first call.
          *
-         * An optional service: it exists once EnableTrayService() has run
-         * (CNA/Platform/OptionalServices.hpp), the call that links its implementation, while the
-         * `Tray` capability reports platform support whether or not it has.
+         * Not virtual: the call links the tray implementation into a program, so a program that
+         * never makes it does not contain one (docs/link-size-architecture.md). A platform answers
+         * through GetTrayService().
          *
-         * @return The service, or null when this platform reports no `Tray` capability or the
-         *         service is not enabled.
+         * @return The service, or null when this platform reports no `Tray` capability.
          */
-        [[nodiscard]] virtual IPlatformTray* GetTray() = 0;
+        [[nodiscard]] IPlatformTray* GetTray();
 
         /**
-         * @brief Gets the camera provider.
+         * @brief Gets the camera provider, creating it on the first call.
          *
-         * An optional service: it exists once EnableCameraService() has run
-         * (CNA/Platform/OptionalServices.hpp), the call that links its implementation, while the
-         * `Camera` capability reports platform support whether or not it has.
+         * Not virtual: the call links the camera implementation into a program, so a program that
+         * never makes it does not contain one (docs/link-size-architecture.md). A platform answers
+         * through GetCameraService(). As asking about the `Camera` capability does, the first call
+         * starts the platform's camera subsystem.
          *
-         * @return The provider, or null when this platform reports no `Camera` capability or the
-         *         service is not enabled.
+         * @return The provider, or null when this platform reports no `Camera` capability.
          */
-        [[nodiscard]] virtual IPlatformCameraProvider* GetCamera() = 0;
+        [[nodiscard]] IPlatformCameraProvider* GetCamera();
 
         /**
          * @brief Gets the filesystem service.
@@ -394,6 +393,21 @@ namespace CNA::Platform {
          */
         [[nodiscard]] virtual std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
             IPlatformWindow& window) = 0;
+
+    protected:
+        /**
+         * @brief The platform's system-tray service, for GetTray().
+         *
+         * @return The service, or null when this platform reports no `Tray` capability.
+         */
+        [[nodiscard]] virtual IPlatformTray* GetTrayService() = 0;
+
+        /**
+         * @brief The platform's camera provider, for GetCamera().
+         *
+         * @return The provider, or null when this platform reports no `Camera` capability.
+         */
+        [[nodiscard]] virtual IPlatformCameraProvider* GetCameraService() = 0;
     };
 
     /**

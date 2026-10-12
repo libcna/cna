@@ -159,10 +159,6 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return Null; there is no native dialog in a terminal. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
-        /** @brief Gets the tray service. @return Null; a terminal has no notification area. */
-        [[nodiscard]] IPlatformTray* GetTray() override;
-        /** @brief Gets the camera provider. @return Null; a terminal exposes no camera device. */
-        [[nodiscard]] IPlatformCameraProvider* GetCamera() override;
         /** @brief Gets the filesystem service. @return A real filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return Real host information; never null. */
@@ -214,6 +210,12 @@ namespace CNA::Platform::Terminal {
          * @return True when standard output is a terminal.
          */
         [[nodiscard]] bool IsAttachedToTerminal() const;
+
+    protected:
+        /** @brief The tray service. @return Null; a terminal has no notification area. */
+        [[nodiscard]] IPlatformTray* GetTrayService() override;
+        /** @brief The camera provider. @return Null; a terminal exposes no camera device. */
+        [[nodiscard]] IPlatformCameraProvider* GetCameraService() override;
 
     private:
         void EnsureCapabilitiesDetected() const;

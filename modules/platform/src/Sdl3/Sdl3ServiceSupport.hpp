@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 // Whether the SDL3 platform supports its optional camera and tray services, answered without the
-// services themselves: Sdl3Platform reports these capabilities from here, and links the providers
-// (Sdl3Camera.cpp, Sdl3Tray.cpp) only when a program enables them (CNA/Platform/OptionalServices.hpp).
+// services themselves: Sdl3Platform reports these capabilities from here, and a program links the
+// providers (Sdl3Camera.cpp, Sdl3Tray.cpp) only by calling IPlatform::GetCamera() or GetTray().
 
 namespace CNA::Platform::Sdl3 {
 

@@ -95,20 +95,18 @@ An SDL-free build does not have to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` pl
 Read `PlatformCapabilities` once and cache it outside hot paths. Every field defaults to false.
 An implementation opts into only behavior it actually provides.
 
-- A service accessor is non-null exactly when its presence capability is true; the camera and the
-  tray also need their service enabled (below).
+- A service accessor is non-null exactly when its presence capability is true.
 - Keyboard and mouse quality flags are exceptions to that equality: a Terminal keyboard exists
   while `exactKeyboardState` is false, and its mouse may exist while coordinates are not pixel
   accurate.
 - Filesystem and system-information services are always non-null. Their individual queries may
   return an unavailable/unknown result.
 - `GetDialogs()` is non-null when either message boxes or native file dialogs are supported.
-- Capabilities do not change during an instance's lifetime. `camera` and `tray` report what the
-  platform supports, but their services are optional: a consumer enables them
-  (`EnableCameraService()`, `EnableTrayService()`, `CNA/Platform/OptionalServices.hpp`), and until
-  then `GetCamera()`/`GetTray()` are null even where the capability is true. A program that never
-  enables them does not link them (docs/link-size-architecture.md). `CNA::Devices::Camera` and
-  `SystemTray` enable their service before reading it; any other consumer must do the same.
+- Capabilities do not change during an instance's lifetime.
+- `GetCamera()` and `GetTray()` are not virtual: the first call creates the service, and the call
+  is what links its implementation, so a program that never makes it contains neither
+  (docs/link-size-architecture.md). A platform implements `GetCameraService()` and
+  `GetTrayService()` (protected) instead.
 - `Supports(capability)` answers one capability. On SDL3, reading the whole set or asking about the
   camera starts SDL's camera subsystem, because only a running subsystem knows whether cameras
   work; no other question does. The runtime therefore asks `Supports()`, and

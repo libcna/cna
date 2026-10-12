@@ -217,8 +217,8 @@ namespace CNA::Platform::Headless {
     IPlatformClipboard* HeadlessPlatform::GetClipboard() { return nullptr; }
     IPlatformDisplays* HeadlessPlatform::GetDisplays() { return nullptr; }
     IPlatformDialogs* HeadlessPlatform::GetDialogs() { return nullptr; }
-    IPlatformTray* HeadlessPlatform::GetTray() { return nullptr; }
-    IPlatformCameraProvider* HeadlessPlatform::GetCamera() { return nullptr; }
+    IPlatformTray* HeadlessPlatform::GetTrayService() { return nullptr; }
+    IPlatformCameraProvider* HeadlessPlatform::GetCameraService() { return nullptr; }
     IPlatformFileSystem* HeadlessPlatform::GetFileSystem() { return fileSystem_.get(); }
     IPlatformSystemInfo* HeadlessPlatform::GetSystemInfo() { return systemInfo_.get(); }
     IPlatformGlContext* HeadlessPlatform::GetGlContext() { return nullptr; }

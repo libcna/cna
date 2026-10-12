@@ -25,6 +25,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   registries is asked about it by name, which is what keeps unused importers out of a game. The
   system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as before
   reachable only by signed-in players.
+- **C++ ABI: rebuild against this revision.** The link-boundary work adds virtual functions and
+  changes class layouts: `IPlatform::Supports()` and the protected
+  `GetCameraService()`/`GetTrayService()` (`GetCamera()`/`GetTray()` are no longer virtual),
+  `Effect::IsStockEffectEXT()`, `Texture::AsTextureCubeEXT()`/`AsTexture3DEXT()`,
+  `IRenderTargetBindingSource` on the render targets, and `Game`'s members. C++ programs and
+  libraries compiled against an earlier CNA are not binary-compatible with it; source that only
+  calls these APIs compiles unchanged, and an `IPlatform` implementation renames its two
+  overrides. The C API's headers are unchanged.
 - **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
   `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
   compiles CNA into per-function sections and collects unreferenced ones in every program that
@@ -34,14 +42,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 - `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
   `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses
   them, so a program that never makes a cube map or a volume links neither.
-- The platform's camera and tray are optional services: `IPlatform::GetCamera()`/`GetTray()` are
-  null until `CNA::Platform::EnableCameraService()`/`EnableTrayService()` runs, which
-  `CNA::Devices::Camera` and `SystemTray` do first. `PlatformCapabilities::camera`/`tray` still
-  report what the platform supports. The new `IPlatform::Supports(PlatformCapability)` answers one
-  capability; the runtime asks it instead of reading the whole set, and
-  `Game::GetPlatformCapabilitiesEXT()` reads the set on its first call rather than during
-  construction, so an SDL3 game that never asks about cameras no longer starts SDL's camera
-  subsystem.
+- The platform's camera and tray are linked only into a program that asks for them:
+  `IPlatform::GetCamera()` and `GetTray()` are no longer virtual and create the service on their
+  first call, answering as before (the service when the platform supports it, otherwise null). A
+  platform implementation overrides the new protected `GetCameraService()`/`GetTrayService()`
+  instead. The new `IPlatform::Supports(PlatformCapability)` answers one capability; the runtime
+  asks it instead of reading the whole set, and `Game::GetPlatformCapabilitiesEXT()` reads the set
+  on its first call (once, thread-safely) rather than during construction, so an SDL3 game that
+  never asks about cameras no longer starts SDL's camera subsystem.
 - **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
   (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
   `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their

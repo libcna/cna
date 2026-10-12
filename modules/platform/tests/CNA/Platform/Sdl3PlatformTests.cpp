@@ -8,7 +8,6 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
-#include "CNA/Platform/OptionalServices.hpp"
 #include "CNA/Platform/PlatformCapabilities.hpp"
 #include "../../../src/Sdl3/Sdl3ServiceSupport.hpp"
 
@@ -168,8 +167,7 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.inputDeviceEnumeration);
     EXPECT_TRUE(capabilities.messageBox);
     EXPECT_TRUE(capabilities.nativeFileDialog);
-    // Optional services: the capability is the platform's support; the service exists once
-    // enabled (CNA/Platform/OptionalServices.hpp).
+    // The capability is the platform's support; the first accessor call creates the service.
     EXPECT_EQ(capabilities.tray, Sdl3::TraySupported());
     EXPECT_EQ(capabilities.camera, Sdl3::CameraSupported());
 
@@ -185,29 +183,25 @@ TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
 }
 
-TEST_F(Sdl3PlatformTest, CameraAndTrayCapabilitiesReportSupportWhetherOrNotTheServicesAreEnabled)
+TEST_F(Sdl3PlatformTest, ASupportedCameraAndTrayAreThereWhenAskedFor)
 {
-    // The contract the two capabilities always had: what the platform supports, so that an
-    // application can ask before it uses the service. The services themselves are installed on
-    // first use (CNA/Platform/OptionalServices.hpp), so that a program that uses neither links
-    // neither; enabling one changes whether its service exists, never its capability.
-    const PlatformCapabilities before = platform_->GetCapabilities();
-    EXPECT_EQ(before.tray, Sdl3::TraySupported());
-    EXPECT_EQ(before.camera, Sdl3::CameraSupported());
-    EXPECT_EQ(platform_->Supports(PlatformCapability::Tray), before.tray);
-    EXPECT_EQ(platform_->Supports(PlatformCapability::Camera), before.camera);
+    // As when the platform owned both services: the capability is what the platform supports, and
+    // a supported platform hands the service to whoever asks, with no step before. Asking is what
+    // creates the service and links it (Sdl3CameraService.cpp, Sdl3TrayService.cpp), so a program
+    // that never asks contains neither.
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Camera), Sdl3::CameraSupported());
+    EXPECT_EQ(platform_->GetCamera() != nullptr, platform_->Supports(PlatformCapability::Camera));
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Tray), Sdl3::TraySupported());
+    EXPECT_EQ(platform_->GetTray() != nullptr, platform_->Supports(PlatformCapability::Tray));
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-    EXPECT_TRUE(before.tray);
+    EXPECT_NE(platform_->GetTray(), nullptr);
 #endif
-
-    EnableCameraService();
-    EnableTrayService();
-    const PlatformCapabilities after = platform_->GetCapabilities();
-    EXPECT_EQ(after.tray, before.tray);
-    EXPECT_EQ(after.camera, before.camera);
-    EXPECT_EQ(platform_->GetTray() != nullptr, after.tray);
-    EXPECT_EQ(platform_->GetCamera() != nullptr, after.camera);
     EXPECT_EQ(platform_->GetCamera(), platform_->GetCamera()) << "created once, then reused";
+    EXPECT_EQ(platform_->GetTray(), platform_->GetTray()) << "created once, then reused";
+
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_EQ(capabilities.camera, platform_->GetCamera() != nullptr);
+    EXPECT_EQ(capabilities.tray, platform_->GetTray() != nullptr);
 }
 
 TEST_F(Sdl3PlatformTest, AskingAboutAnythingButTheCameraDoesNotStartTheCameraSubsystem)
