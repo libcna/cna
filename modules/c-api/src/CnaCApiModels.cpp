@@ -60,6 +60,7 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::InvalidArgumentIf;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
@@ -2060,29 +2061,6 @@ CNA_Result cna_model_mesh_collection_create(
     });
 }
 
-CNA_Result cna_model_mesh_collection_get_at(
-    const CNA_ModelMeshCollectionHandle collectionHandle,
-    const uint64_t index,
-    CNA_ModelMeshHandle* const outMesh)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outMesh == nullptr) {
-            return InvalidArgument("The ModelMeshCollection mesh output is null.");
-        }
-        *outMesh = CNA_INVALID_HANDLE;
-        std::shared_ptr<MeshCollectionResource> collection;
-        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= collection->meshes.size()) {
-            return InvalidArgument("The ModelMeshCollection index is outside the valid range.");
-        }
-        return CreateMeshHandle(
-            collection->meshes[static_cast<std::size_t>(index)], outMesh);
-    });
-}
-
 CNA_Result cna_model_mesh_collection_find(
     const CNA_ModelMeshCollectionHandle collectionHandle,
     const CNA_StringView name,
@@ -2657,59 +2635,6 @@ CNA_Result cna_model_get_gltf_import_diagnostic_ext(
     });
 }
 
-CNA_Result cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    const uint64_t detailIndex,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The glTF import diagnostic byte-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (detailIndex >= diagnostic->Details.size()) {
-            return InvalidArgument(
-                "The glTF import diagnostic detail index is outside the valid range.");
-        }
-        *outByteCount = static_cast<uint64_t>(
-            diagnostic->Details[static_cast<std::size_t>(detailIndex)].size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_copy_gltf_import_diagnostic_detail_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    const uint64_t detailIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        const GltfImportDiagnosticEXT* diagnostic = nullptr;
-        if (const CNA_Result result = GetImportDiagnostic(modelHandle, index, &model, &diagnostic);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (detailIndex >= diagnostic->Details.size()) {
-            return InvalidArgument(
-                "The glTF import diagnostic detail index is outside the valid range.");
-        }
-        return CopyText(
-            diagnostic->Details[static_cast<std::size_t>(detailIndex)],
-            destination,
-            capacity,
-            outByteCount);
-    });
-}
-
 CNA_Result cna_morph_target_data_ext_create(
     const CNA_MorphTargetDataEXTDescriptor* const descriptor,
     CNA_MorphTargetDataEXTHandle* const outData)
@@ -2727,56 +2652,6 @@ CNA_Result cna_morph_target_data_ext_create(
         auto resource = std::make_shared<MorphDataResource>();
         resource->value = std::make_shared<MorphTargetDataEXT>(std::move(copied));
         return CreateMorphDataHandle(std::move(resource), outData);
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_copy_position_deltas(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    const uint64_t targetIndex,
-    CNA_Vector3* const destination,
-    const uint64_t capacity,
-    uint64_t* const outDeltaCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (targetIndex >= data->value->PositionDeltas.size()) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT target index is outside the valid range.");
-        }
-        return CopyOutputValues(
-            data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)],
-            destination, capacity, outDeltaCount, ToCVector3,
-            "The MorphTargetDataEXT position-delta output is invalid.",
-            "The destination cannot hold all morph position deltas.");
-    });
-}
-
-CNA_Result cna_morph_target_data_ext_copy_normal_deltas(
-    const CNA_MorphTargetDataEXTHandle dataHandle,
-    const uint64_t targetIndex,
-    CNA_Vector3* const destination,
-    const uint64_t capacity,
-    uint64_t* const outDeltaCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MorphDataResource> data;
-        if (const CNA_Result result = GetMorphData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (targetIndex >= data->value->NormalDeltas.size()) {
-            return InvalidArgument(
-                "The MorphTargetDataEXT target index is outside the valid range.");
-        }
-        return CopyOutputValues(
-            data->value->NormalDeltas[static_cast<std::size_t>(targetIndex)],
-            destination, capacity, outDeltaCount, ToCVector3,
-            "The MorphTargetDataEXT normal-delta output is invalid.",
-            "The destination cannot hold all morph normal deltas.");
     });
 }
 
@@ -3641,51 +3516,6 @@ CNA_Result cna_skinned_model_ext_remove_part(
     });
 }
 
-CNA_Result cna_skinned_model_ext_get_part_name_byte_count_at(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    const uint64_t partIndex,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The SkinnedModelEXT part-name size output is null.");
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (partIndex >= model->parts.size()) {
-            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
-        }
-        *outByteCount = static_cast<uint64_t>(
-            model->parts[static_cast<std::size_t>(partIndex)].name.size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinned_model_ext_copy_part_name_at(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    const uint64_t partIndex,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (partIndex >= model->parts.size()) {
-            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
-        }
-        return CopyText(
-            model->parts[static_cast<std::size_t>(partIndex)].name,
-            destination, capacity, outByteCount);
-    });
-}
-
 CNA_Result cna_skinned_model_ext_get_part_at(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t partIndex,
@@ -4487,53 +4317,6 @@ CNA_Result cna_model_get_bounding_sphere_ext(
         *outHasValue = ToCBool(sphere.has_value());
         *outSphere = sphere.has_value() ? ToC(*sphere) : CNA_BoundingSphere{};
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_get_material_variant_name_byte_count_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outByteCount == nullptr) {
-            return InvalidArgument("The Model material-variant byte-count output is null.");
-        }
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string>& names =
-            model->value->getMaterialVariantNamesEXTProperty();
-        if (index >= names.size()) {
-            return InvalidArgument("The Model material-variant index is outside the valid range.");
-        }
-        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(index)].size());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_copy_material_variant_name_ext(
-    const CNA_ModelHandle modelHandle,
-    const uint64_t index,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<std::string>& names =
-            model->value->getMaterialVariantNamesEXTProperty();
-        if (index >= names.size()) {
-            return InvalidArgument("The Model material-variant index is outside the valid range.");
-        }
-        return CopyText(
-            names[static_cast<std::size_t>(index)], destination, capacity, outByteCount);
     });
 }
 

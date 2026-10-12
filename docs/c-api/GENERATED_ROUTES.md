@@ -128,9 +128,10 @@ same kind of call made after the lookup:
 cna_cnb_model_get_bone_name_size = { size = "object->value->bones[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->bones.size(), "The bone index is out of range.")' }
 ```
 
-`RequireIndex`, `InvalidStateIf` and `NotSupportedIf` in `src/CnaCApiDetail.hpp` cover the usual
-cases: an index past a count, an object in a state that forbids the call (a document a reader
-still borrows), a renderer without the capability.
+`RequireIndex`, `InvalidArgumentIf`, `InvalidStateIf` and `NotSupportedIf` in
+`src/CnaCApiDetail.hpp` cover the usual cases: an index past a count, an argument the object
+refuses, an object in a state that forbids the call (a document a reader still borrows), a
+renderer without the capability.
 
 A structure the route reads through a const pointer is accepted only when an `invalid_if` or a
 `validate` names it, because that check is what refuses a null or malformed one

@@ -106,6 +106,7 @@ static CNA_MediaState o_CNA_MediaState;
 static CNA_MicrophoneState o_CNA_MicrophoneState;
 static CNA_ModelBoneCollectionHandle o_CNA_ModelBoneCollectionHandle;
 static CNA_ModelEffectCollectionHandle o_CNA_ModelEffectCollectionHandle;
+static CNA_ModelMeshHandle o_CNA_ModelMeshHandle;
 static CNA_ModelMeshPartTag o_CNA_ModelMeshPartTag;
 static CNA_ModelMeshTag o_CNA_ModelMeshTag;
 static CNA_ModelTag o_CNA_ModelTag;
@@ -1846,6 +1847,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_model_mesh_get_tag(v_CNA_ModelMeshHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_mesh_get_tag", "a null out_tag");
     failures += expect(cna_model_mesh_get_effects(v_CNA_ModelMeshHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_mesh_get_effects", "a null out_effects");
     failures += expect(cna_model_mesh_collection_get_count(v_CNA_ModelMeshCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_mesh_collection_get_count", "a null out_count");
+    failures += expect(cna_model_mesh_collection_get_at(v_CNA_ModelMeshCollectionHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_mesh_collection_get_at", "a null out_mesh");
     failures += expect(cna_model_effect_collection_get_count(v_CNA_ModelEffectCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_effect_collection_get_count", "a null out_count");
     failures += expect(cna_model_get_bone_transform_count(v_CNA_ModelHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_bone_transform_count", "a null out_count");
     failures += expect(cna_model_get_camera_count_ext(v_CNA_ModelHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_camera_count_ext", "a null out_count");
@@ -1853,6 +1855,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_model_get_material_variant_count_ext(v_CNA_ModelHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_material_variant_count_ext", "a null out_count");
     failures += expect(cna_model_get_material_variant_ext(v_CNA_ModelHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_material_variant_ext", "a null out_value");
     failures += expect(cna_model_get_tag(v_CNA_ModelHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_tag", "a null out_tag");
+    failures += expect(cna_model_get_material_variant_name_byte_count_ext(v_CNA_ModelHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_material_variant_name_byte_count_ext", "a null out_byte_count");
+    failures += expect(cna_model_copy_material_variant_name_ext(v_CNA_ModelHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_material_variant_name_ext", "a null destination with a capacity");
+    failures += expect(cna_model_copy_material_variant_name_ext(v_CNA_ModelHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_material_variant_name_ext", "a null out_bytes");
     failures += expect(cna_morph_target_data_ext_get_type_name_byte_count(v_CNA_MorphTargetDataEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_morph_target_data_ext_get_stride(v_CNA_MorphTargetDataEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_get_stride", "a null out_stride");
     failures += expect(cna_morph_target_data_ext_get_base_vertex_byte_count(v_CNA_MorphTargetDataEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_get_base_vertex_byte_count", "a null out_byte_count");
@@ -1864,12 +1869,17 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_morph_target_data_ext_copy_base_vertex_bytes(v_CNA_MorphTargetDataEXTHandle, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_base_vertex_bytes", "a null out_bytes");
     failures += expect(cna_morph_target_data_ext_copy_type_name(v_CNA_MorphTargetDataEXTHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_morph_target_data_ext_copy_type_name(v_CNA_MorphTargetDataEXTHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_type_name", "a null out_bytes");
+    failures += expect(cna_morph_target_data_ext_copy_position_deltas(v_CNA_MorphTargetDataEXTHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_position_deltas", "a null out_delta_count");
+    failures += expect(cna_morph_target_data_ext_copy_normal_deltas(v_CNA_MorphTargetDataEXTHandle, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_morph_target_data_ext_copy_normal_deltas", "a null out_delta_count");
     failures += expect(cna_skinned_model_ext_get_bone_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_bone_count", "a null out_bone_count");
     failures += expect(cna_skinned_model_ext_get_clip_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_clip_count", "a null out_clip_count");
     failures += expect(cna_skinned_model_ext_get_part_count(v_CNA_SkinnedModelEXTHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_part_count", "a null out_part_count");
     failures += expect(cna_skinned_model_ext_copy_parent_bone_indices(v_CNA_SkinnedModelEXTHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_parent_bone_indices", "a null out_count");
     failures += expect(cna_skinned_model_ext_copy_bind_pose_local(v_CNA_SkinnedModelEXTHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_bind_pose_local", "a null out_count");
     failures += expect(cna_skinned_model_ext_copy_inverse_bind_pose_global(v_CNA_SkinnedModelEXTHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_inverse_bind_pose_global", "a null out_count");
+    failures += expect(cna_skinned_model_ext_get_part_name_byte_count_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_part_name_byte_count_at", "a null out_byte_count");
+    failures += expect(cna_skinned_model_ext_copy_part_name_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_part_name_at", "a null destination with a capacity");
+    failures += expect(cna_skinned_model_ext_copy_part_name_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_part_name_at", "a null out_bytes");
     failures += expect(cna_skinning_data_get_type_name_byte_count(v_CNA_SkinningDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_skinning_data_copy_type_name(v_CNA_SkinningDataHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_skinning_data_copy_type_name(v_CNA_SkinningDataHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_copy_type_name", "a null out_bytes");
@@ -1910,6 +1920,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_model_copy_gltf_import_diagnostic_subject_ext(v_CNA_ModelHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_gltf_import_diagnostic_subject_ext", "a null out_bytes");
     failures += expect(cna_model_copy_gltf_import_diagnostic_message_ext(v_CNA_ModelHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_gltf_import_diagnostic_message_ext", "a null destination with a capacity");
     failures += expect(cna_model_copy_gltf_import_diagnostic_message_ext(v_CNA_ModelHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_gltf_import_diagnostic_message_ext", "a null out_bytes");
+    failures += expect(cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(v_CNA_ModelHandle, v_uint64_t, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_gltf_import_diagnostic_detail_byte_count_ext", "a null out_byte_count");
+    failures += expect(cna_model_copy_gltf_import_diagnostic_detail_ext(v_CNA_ModelHandle, v_uint64_t, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_gltf_import_diagnostic_detail_ext", "a null destination with a capacity");
+    failures += expect(cna_model_copy_gltf_import_diagnostic_detail_ext(v_CNA_ModelHandle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_gltf_import_diagnostic_detail_ext", "a null out_bytes");
     failures += expect(cna_model_get_camera_name_byte_count_ext(v_CNA_ModelHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_get_camera_name_byte_count_ext", "a null out_byte_count");
     failures += expect(cna_model_copy_camera_name_ext(v_CNA_ModelHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_camera_name_ext", "a null destination with a capacity");
     failures += expect(cna_model_copy_camera_name_ext(v_CNA_ModelHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_copy_camera_name_ext", "a null out_bytes");
@@ -3633,6 +3646,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_model_mesh_draw(handle), CNA_RESULT_INVALID_HANDLE, "cna_model_mesh_draw", what);
     failures += expect(cna_model_mesh_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_mesh_collection_get_count", what);
     failures += expect(cna_model_mesh_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_model_mesh_collection_destroy", what);
+    o_CNA_ModelMeshHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_model_mesh_collection_get_at(handle, v_uint64_t, &o_CNA_ModelMeshHandle), CNA_RESULT_INVALID_HANDLE, "cna_model_mesh_collection_get_at", what);
+    failures += expect_cleared(o_CNA_ModelMeshHandle, "cna_model_mesh_collection_get_at");
     failures += expect(cna_model_effect_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_effect_collection_get_count", what);
     failures += expect(cna_model_effect_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_model_effect_collection_destroy", what);
     failures += expect(cna_model_set_tag(handle, v_CNA_ModelTag), CNA_RESULT_INVALID_HANDLE, "cna_model_set_tag", what);
@@ -3645,6 +3661,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_model_set_material_variant_ext(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_model_set_material_variant_ext", what);
     failures += expect(cna_model_get_tag(handle, &o_CNA_ModelTag), CNA_RESULT_INVALID_HANDLE, "cna_model_get_tag", what);
     failures += expect(cna_model_draw(handle, v_CNA_Matrix, v_CNA_Matrix, v_CNA_Matrix), CNA_RESULT_INVALID_HANDLE, "cna_model_draw", what);
+    failures += expect(cna_model_get_material_variant_name_byte_count_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_get_material_variant_name_byte_count_ext", what);
+    failures += expect(cna_model_copy_material_variant_name_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_material_variant_name_ext", what);
     failures += expect(cna_morph_target_data_ext_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_get_type_name_byte_count", what);
     failures += expect(cna_morph_target_data_ext_get_stride(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_get_stride", what);
     failures += expect(cna_morph_target_data_ext_get_base_vertex_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_get_base_vertex_byte_count", what);
@@ -3656,6 +3674,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_morph_target_data_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_destroy", what);
     failures += expect(cna_morph_target_data_ext_copy_base_vertex_bytes(handle, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_base_vertex_bytes", what);
     failures += expect(cna_morph_target_data_ext_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_type_name", what);
+    failures += expect(cna_morph_target_data_ext_copy_position_deltas(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_position_deltas", what);
+    failures += expect(cna_morph_target_data_ext_copy_normal_deltas(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_morph_target_data_ext_copy_normal_deltas", what);
     failures += expect(cna_skinned_model_ext_get_bone_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_bone_count", what);
     failures += expect(cna_skinned_model_ext_get_clip_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_clip_count", what);
     failures += expect(cna_skinned_model_ext_get_part_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_part_count", what);
@@ -3664,6 +3684,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_skinned_model_ext_copy_inverse_bind_pose_global(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_inverse_bind_pose_global", what);
     failures += expect(cna_skinned_model_ext_remove_clip(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_remove_clip", what);
     failures += expect(cna_skinned_model_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_destroy", what);
+    failures += expect(cna_skinned_model_ext_get_part_name_byte_count_at(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_part_name_byte_count_at", what);
+    failures += expect(cna_skinned_model_ext_copy_part_name_at(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_part_name_at", what);
     failures += expect(cna_skinning_data_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_type_name_byte_count", what);
     failures += expect(cna_skinning_data_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_type_name", what);
     failures += expect(cna_skinning_data_get_bone_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_bone_count", what);
@@ -3692,6 +3714,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_model_copy_gltf_import_diagnostic_code_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_gltf_import_diagnostic_code_ext", what);
     failures += expect(cna_model_copy_gltf_import_diagnostic_subject_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_gltf_import_diagnostic_subject_ext", what);
     failures += expect(cna_model_copy_gltf_import_diagnostic_message_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_gltf_import_diagnostic_message_ext", what);
+    failures += expect(cna_model_get_gltf_import_diagnostic_detail_byte_count_ext(handle, v_uint64_t, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_get_gltf_import_diagnostic_detail_byte_count_ext", what);
+    failures += expect(cna_model_copy_gltf_import_diagnostic_detail_ext(handle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_gltf_import_diagnostic_detail_ext", what);
     failures += expect(cna_model_get_camera_name_byte_count_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_get_camera_name_byte_count_ext", what);
     failures += expect(cna_model_copy_camera_name_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_copy_camera_name_ext", what);
     failures += expect(cna_model_get_skin_name_byte_count_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_get_skin_name_byte_count_ext", what);
@@ -4509,6 +4533,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2227 generated routes\n", failures);
+    printf("%d failed checks across 2236 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

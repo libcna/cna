@@ -74,6 +74,7 @@ object = "std::shared_ptr<MeshCollectionResource>"
 [mesh_collection.routes]
 cna_model_mesh_collection_get_count = { get = "object->meshes.size()" }
 cna_model_mesh_collection_destroy = { release = true }
+cna_model_mesh_collection_get_at = { result = "CreateMeshHandle(object->meshes[static_cast<std::size_t>(index)], out_mesh)", require = 'InvalidArgumentIf(index >= object->meshes.size(), "The ModelMeshCollection index is outside the valid range.")' }
 
 [effect_collection]
 lookup = "GetEffectCollection"
@@ -98,6 +99,8 @@ cna_model_get_material_variant_ext = { get = "object->value->getMaterialVariantE
 cna_model_set_material_variant_ext = { call = "object->value->setMaterialVariantEXTProperty(static_cast<int>(value))" }
 cna_model_get_tag = { get = "object->tag" }
 cna_model_draw = { call = "object->value->Draw(world, view, projection)", require = 'NotSupportedIf(!object->meshes.empty() && !object->supportsThreeD, "Model drawing requires a renderer with 3D support.")' }
+cna_model_get_material_variant_name_byte_count_ext = { size = "object->value->getMaterialVariantNamesEXTProperty()[static_cast<std::size_t>(index)]", require = 'InvalidArgumentIf(index >= object->value->getMaterialVariantNamesEXTProperty().size(), "The Model material-variant index is outside the valid range.")' }
+cna_model_copy_material_variant_name_ext = { copy = "object->value->getMaterialVariantNamesEXTProperty()[static_cast<std::size_t>(index)]", require = 'InvalidArgumentIf(index >= object->value->getMaterialVariantNamesEXTProperty().size(), "The Model material-variant index is outside the valid range.")' }
 
 [morph_data]
 lookup = "GetMorphData"
@@ -115,6 +118,8 @@ cna_morph_target_data_ext_set_recompute_flat_normals_ext = { call = "object->val
 cna_morph_target_data_ext_destroy = { release = true }
 cna_morph_target_data_ext_copy_base_vertex_bytes = { copy = "object->value->BaseVertexBytes" }
 cna_morph_target_data_ext_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_morph_target_data_ext_copy_position_deltas = { result = "CopyOutputValues(object->value->PositionDeltas[static_cast<std::size_t>(target_index)], destination, capacity, out_delta_count, ToCVector3, \"The MorphTargetDataEXT position-delta output is invalid.\", \"The destination cannot hold all morph position deltas.\")", require = 'InvalidArgumentIf(target_index >= object->value->PositionDeltas.size(), "The MorphTargetDataEXT target index is outside the valid range.")' }
+cna_morph_target_data_ext_copy_normal_deltas = { result = "CopyOutputValues(object->value->NormalDeltas[static_cast<std::size_t>(target_index)], destination, capacity, out_delta_count, ToCVector3, \"The MorphTargetDataEXT normal-delta output is invalid.\", \"The destination cannot hold all morph normal deltas.\")", require = 'InvalidArgumentIf(target_index >= object->value->NormalDeltas.size(), "The MorphTargetDataEXT target index is outside the valid range.")' }
 
 [skinned_model]
 lookup = "GetSkinnedModel"
@@ -129,6 +134,8 @@ cna_skinned_model_ext_copy_bind_pose_local = { result = "CopyOutputValues(object
 cna_skinned_model_ext_copy_inverse_bind_pose_global = { result = "CopyOutputValues(object->value->InverseBindPoseGlobal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinnedModelEXT inverse-bind-pose output is invalid.\", \"The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.\")" }
 cna_skinned_model_ext_remove_clip = { call = "object->value->Clips.erase(name)", refuse_nul = ["name"] }
 cna_skinned_model_ext_destroy = { release = true }
+cna_skinned_model_ext_get_part_name_byte_count_at = { size = "object->parts[static_cast<std::size_t>(part_index)].name", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
+cna_skinned_model_ext_copy_part_name_at = { copy = "object->parts[static_cast<std::size_t>(part_index)].name", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
 
 [skinning_data]
 lookup = "GetSkinningData"
@@ -199,6 +206,8 @@ arguments = 2
 cna_model_copy_gltf_import_diagnostic_code_ext = { copy = "object->Code" }
 cna_model_copy_gltf_import_diagnostic_subject_ext = { copy = "object->Subject" }
 cna_model_copy_gltf_import_diagnostic_message_ext = { copy = "object->Message" }
+cna_model_get_gltf_import_diagnostic_detail_byte_count_ext = { size = "object->Details[static_cast<std::size_t>(detail_index)]", require = 'InvalidArgumentIf(detail_index >= object->Details.size(), "The glTF import diagnostic detail index is outside the valid range.")' }
+cna_model_copy_gltf_import_diagnostic_detail_ext = { copy = "object->Details[static_cast<std::size_t>(detail_index)]", require = 'InvalidArgumentIf(detail_index >= object->Details.size(), "The glTF import diagnostic detail index is outside the valid range.")' }
 
 [model_camera]
 lookup = "GetModelCamera"

@@ -280,6 +280,14 @@ void SetLastError(
     return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, message);
 }
 
+/** @brief InvalidArgument(message) when `refused`: an argument checked against the object. */
+[[nodiscard]] inline CNA_Result InvalidArgumentIf(
+    const bool refused,
+    const std::string_view message) noexcept
+{
+    return refused ? InvalidArgument(message) : CNA_RESULT_SUCCESS;
+}
+
 /** @brief InvalidState(message) when `refused`, success otherwise: a check of an object's state. */
 [[nodiscard]] inline CNA_Result InvalidStateIf(
     const bool refused,
