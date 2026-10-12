@@ -68,25 +68,24 @@ public:
     void clear() override {entries_.clear();waiting_=0;}
     [[nodiscard]] int waiting() const override {return waiting_;}
 private:
-    struct Entry;
+    // Complete here: the class's implicit virtual destructor destroys entries_ at the class's end.
+    struct Entry {
+        std::vector<unsigned char> bytes;
+        Framing framing=Framing::Head;
+        int width=0,height=0;
+        bool live=false;
+        std::unique_ptr<GS::AvatarDescription> description;
+        std::unique_ptr<GS::AvatarRenderer> renderer;
+        std::unique_ptr<GS::AvatarAnimation> animation;
+        std::unique_ptr<Xna::Graphics::RenderTarget2D> target;
+        bool drawn=false;
+        int unused=0;
+        bool requested=false;
+    };
     std::vector<std::unique_ptr<Entry>> entries_;
     int waiting_=0;
 };
 }
-
-struct AvatarPortraits::Entry {
-    std::vector<unsigned char> bytes;
-    Framing framing=Framing::Head;
-    int width=0,height=0;
-    bool live=false;
-    std::unique_ptr<GS::AvatarDescription> description;
-    std::unique_ptr<GS::AvatarRenderer> renderer;
-    std::unique_ptr<GS::AvatarAnimation> animation;
-    std::unique_ptr<Xna::Graphics::RenderTarget2D> target;
-    bool drawn=false;
-    int unused=0;
-    bool requested=false;
-};
 
 std::unique_ptr<PortraitSource> makeAvatarPortraits(){return std::make_unique<AvatarPortraits>();}
 
