@@ -36,7 +36,6 @@ using CNA::C::Detail::AddOwnedContentManager;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
@@ -55,7 +54,6 @@ using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedContentManager;
 using CNA::C::Detail::SpriteFontResource;
-using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateVersionedStructure;
@@ -258,30 +256,6 @@ CNA_Result cna_content_manager_copy_root_directory(
         if (!rootDirectory.empty()) {
             std::memcpy(destination, rootDirectory.data(), rootDirectory.size());
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_set_root_directory(
-    const CNA_Handle contentManagerHandle,
-    const CNA_StringView rootDirectory)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::string rootDirectoryCopy;
-        if (const CNA_Result result = ReadText(
-                rootDirectory, "The ContentManager root directory is not valid UTF-8.",
-                &rootDirectoryCopy, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        contentManager->value->setRootDirectoryProperty(std::move(rootDirectoryCopy));
         return CNA_RESULT_SUCCESS;
     });
 }

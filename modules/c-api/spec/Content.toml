@@ -13,6 +13,7 @@ cna_content_manager_get_has_service_provider = { get = "object->value->getServic
 cna_content_manager_refresh_content_manifest = { call = "object->value->RefreshContentManifest()" }
 cna_content_manager_get_manifest_entry_count = { get = "object->value->GetContentManifest().size()" }
 cna_content_manager_get_xnb_reader_usage_count = { get = "SortedReaderUsage(object).size()" }
+cna_content_manager_set_root_directory = { call = "object->value->setRootDirectoryProperty(std::move(root_directory))", refuse_nul = ["root_directory"] }
 
 [manifest_entry]
 lookup = "GetManifestEntry"

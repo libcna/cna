@@ -52,3 +52,4 @@ cna_storage_container_open_file_share = { result = "OpenFileHandle(container, fi
 [values]
 [values.routes]
 cna_storage_get_root_size_ext = { size = "StorageDevice::GetStorageRootEXT()" }
+cna_storage_set_app_name_ext = { call = "StorageDevice::SetAppNameEXT(app_name)", refuse_nul = ["app_name"] }

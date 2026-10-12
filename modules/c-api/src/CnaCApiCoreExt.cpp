@@ -26,7 +26,6 @@
 #include <utility>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -640,21 +639,6 @@ CNA_Result cna_logger_reset_sink_ext(void)
             state.context = nullptr;
         }
         CNA::Logger::ResetSink();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string text;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                name, "The renderer name is not valid UTF-8 text.", &text,
-                CNA::C::Detail::EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::GraphicsRendererSelection::SetPreferred(std::string_view(text));
         return CNA_RESULT_SUCCESS;
     });
 }

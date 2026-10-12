@@ -427,6 +427,26 @@ CNA_Result cna_effect_parameter_get_info(
     });
 }
 
+CNA_Result cna_effect_parameter_set_value_string(
+    const CNA_EffectParameterHandle parameter,
+    const CNA_StringView c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string value;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_effect_parameter_set_value_string: value is not valid UTF-8.", &value, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ParameterResource> object{};
+        if (const CNA_Result routeResult = GetParameter(parameter, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetValue(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_effect_parameter_collection_get_count(
     const CNA_EffectParameterCollectionHandle collection,
     uint64_t* const out_count)

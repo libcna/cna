@@ -230,32 +230,6 @@ CNA_Result cna_game_unsubscribe(const CNA_GameEventRegistrationHandle registrati
     });
 }
 
-CNA_Result cna_game_launch_parameters_contains_key(
-    const CNA_Handle gameHandle,
-    const CNA_StringView key,
-    CNA_Bool* const outPresent)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPresent == nullptr) {
-            return InvalidArgument("The launch parameter presence output is null.");
-        }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string name;
-        if (const CNA_Result result =
-                ReadText(key, "The launch parameter name is not valid UTF-8.", &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outPresent =
-            ToCBool(game->getLaunchParametersProperty().ContainsKey(name));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace {
 
 [[nodiscard]] CNA_Result FindLaunchParameter(
@@ -329,34 +303,6 @@ namespace {
 
 } // namespace
 
-CNA_Result cna_game_launch_parameters_add(
-    const CNA_Handle gameHandle,
-    const CNA_StringView key,
-    const CNA_StringView value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string name;
-        std::string text;
-        if (const CNA_Result result =
-                ReadText(key, "The launch parameter name is not valid UTF-8.", &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ReadText(value, "The launch parameter value is not valid UTF-8.", &text);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        game->getLaunchParametersProperty().Add(name, text);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_launch_parameters_parse_ext(
     const CNA_Handle gameHandle,
     const CNA_StringView* const arguments,
@@ -383,25 +329,6 @@ CNA_Result cna_game_launch_parameters_parse_ext(
             parsed.push_back(std::move(argument));
         }
         game->getLaunchParametersProperty() = LaunchParameters(parsed);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_title_location_set_path_ext(const CNA_Handle gameHandle, const CNA_StringView path)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string value;
-        if (const CNA_Result result =
-                ReadText(path, "The title path is not valid UTF-8.", &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TitleLocation::setPathProperty(value);
         return CNA_RESULT_SUCCESS;
     });
 }

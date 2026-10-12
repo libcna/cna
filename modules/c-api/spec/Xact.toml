@@ -11,6 +11,8 @@ cna_audio_engine_get_renderer_count = { get = "object->value->getRendererDetails
 cna_audio_engine_update = { call = "object->value->Update()" }
 cna_audio_engine_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_audio_engine_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_audio_engine_get_global_variable = { get = "object->value->GetGlobalVariable(name)" }
+cna_audio_engine_set_global_variable = { call = "object->value->SetGlobalVariable(name, value)", invalid_if = "!std::isfinite(value)" }
 
 [category]
 lookup = "GetCategory"
@@ -44,6 +46,7 @@ cna_sound_bank_get_is_disposed = { get = "object->value->getIsDisposedProperty()
 cna_sound_bank_get_is_in_use = { get = "object->value->getIsInUseProperty()" }
 cna_sound_bank_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_sound_bank_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_sound_bank_play_cue = { call = "object->value->PlayCue(name)" }
 
 [cue]
 lookup = "GetCue"
@@ -70,6 +73,8 @@ CNA_CueInfo{
     ToCBool(object->value->getIsStoppedProperty()),
     ToCBool(object->value->getIsStoppingProperty())
 }''' }
+cna_cue_get_variable = { get = "object->value->GetVariable(name)" }
+cna_cue_set_variable = { call = "object->value->SetVariable(name, value)", invalid_if = "!std::isfinite(value)" }
 
 [calls]
 [calls.routes]

@@ -77,7 +77,11 @@ The generator takes the signature from the header and the conversions from the C
 
 - a parameter whose struct type `CnaCApiMarshal.hpp` converts is available to the expression under
   its header name as the native value (`ToNative`); a `CNA_Bool` is first refused unless it is
-  `CNA_FALSE` or `CNA_TRUE`, then available as `bool`; every other parameter is passed as declared;
+  `CNA_FALSE` or `CNA_TRUE`, then available as `bool`; a `CNA_StringView` is read by `ReadText`
+  into a `std::string` and refused with `CNA_RESULT_ENCODING` unless it is UTF-8 (a route that
+  also forbids an embedded NUL lists the parameter in `refuse_nul = ["name"]`); a lookup's own
+  parameters and a `result` route's parameters are passed unconverted; every other parameter is
+  passed as declared;
 - the result is converted by the output's type: `ToC` for a marshaled struct, `ToCBool` for
   `CNA_Bool`, `static_cast` for an enumeration or a number; any other C structure is assigned as
   the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
@@ -115,8 +119,8 @@ output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `
 null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
 `result`, every non-const `out_*` pointer, and a handle
 output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
-`invalid_if` conditions, then the lookup (and `other`'s), whose own result is returned when it
-refuses. So a call with two faults always reports the null output.
+`invalid_if` conditions, then text inputs, then the lookup (and `other`'s), whose own result is
+returned when it refuses. So a call with two faults always reports the null output.
 
 A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
 a child handle, filling an info structure, copying an array — and the spec line only calls it:
@@ -171,10 +175,8 @@ unavailable = "ExtensionUnavailable()"  # otherwise each returns this, clearing 
   after them;
 - routes that check an argument against the object (an index against its count, a state the
   object is in), or need an output that may be null;
-- routes that read text: the families read it through different helpers (`ReadText`,
-  `ReadTextBytes`, `CopyStringView`, `BorrowText`, `RelativePath`) with different rules, and
-  disagree on whether the text or the handle is checked first. Those rules should be made one
-  before such routes are generated.
+- routes whose text is a path, a name to resolve, or a key the lookup itself takes: they follow
+  the rules of what the text names (`RelativePath`, `ReadImportPath`), not only the UTF-8 rule.
 
 Write such a route like the ones around it: the body in `CallWithExceptionBarrier`, bad arguments
 refused with `InvalidArgument`, handles resolved through the family's lookups, conversions through

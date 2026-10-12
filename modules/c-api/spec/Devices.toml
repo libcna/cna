@@ -29,6 +29,7 @@ cna_file_dialog_get_is_supported_ext = { get = "FileDialog::getIsSupportedProper
 cna_system_tray_get_is_supported_ext = { get = "SystemTray::getIsSupportedProperty()" }
 cna_camera_get_is_supported_ext = { get = "Camera::getIsSupportedProperty()" }
 cna_camera_get_count_ext = { get = "Camera::getAvailableCamerasProperty().size()" }
+cna_devices_clipboard_set_text_ext = { get = "Clipboard::setTextProperty(text)" }
 
 [locale]
 lookup = "BorrowLocale"
@@ -64,6 +65,8 @@ cna_system_tray_get_entry_checked = { get = "object->value->GetEntryChecked(stat
 cna_system_tray_set_entry_enabled = { call = "object->value->SetEntryEnabled(static_cast<std::size_t>(index), enabled)" }
 cna_system_tray_get_entry_enabled = { get = "object->value->GetEntryEnabled(static_cast<std::size_t>(index))" }
 cna_system_tray_destroy = { release = true }
+cna_system_tray_set_tooltip = { call = "object->value->setTooltipProperty(tooltip)" }
+cna_system_tray_set_entry_label = { call = "object->value->SetEntryLabel(static_cast<std::size_t>(index), label)" }
 
 [enumerated_camera]
 lookup = "BorrowEnumeratedCamera"

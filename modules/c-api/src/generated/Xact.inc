@@ -96,6 +96,54 @@ CNA_Result cna_audio_engine_copy_type_name(
     });
 }
 
+CNA_Result cna_audio_engine_get_global_variable(
+    const CNA_Handle engine,
+    const CNA_StringView c_name,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_global_variable: out_value is null.");
+        }
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_get_global_variable: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<EngineResource> object{};
+        if (const CNA_Result routeResult = GetEngine(engine, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(object->value->GetGlobalVariable(name));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_audio_engine_set_global_variable(
+    const CNA_Handle engine,
+    const CNA_StringView c_name,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(value)) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_engine_set_global_variable: invalid because !std::isfinite(value).");
+        }
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_set_global_variable: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<EngineResource> object{};
+        if (const CNA_Result routeResult = GetEngine(engine, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetGlobalVariable(name, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_audio_category_get_name_size(
     const CNA_Handle category,
     uint64_t* const out_bytes)
@@ -361,6 +409,26 @@ CNA_Result cna_sound_bank_copy_type_name(
     });
 }
 
+CNA_Result cna_sound_bank_play_cue(
+    const CNA_Handle sound_bank,
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_bank_play_cue: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SoundBankResource> object{};
+        if (const CNA_Result routeResult = GetSoundBank(sound_bank, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->PlayCue(name);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_cue_get_name_size(
     const CNA_Handle cue,
     uint64_t* const out_bytes)
@@ -503,6 +571,54 @@ CNA_Result cna_cue_get_info(
             ToCBool(object->value->getIsStoppedProperty()),
             ToCBool(object->value->getIsStoppingProperty())
         };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cue_get_variable(
+    const CNA_Handle cue,
+    const CNA_StringView c_name,
+    float* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cue_get_variable: out_value is null.");
+        }
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_get_variable: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CueResource> object{};
+        if (const CNA_Result routeResult = GetCue(cue, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = static_cast<float>(object->value->GetVariable(name));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cue_set_variable(
+    const CNA_Handle cue,
+    const CNA_StringView c_name,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(value)) {
+            return CNA::C::Detail::InvalidArgument("cna_cue_set_variable: invalid because !std::isfinite(value).");
+        }
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_set_variable: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CueResource> object{};
+        if (const CNA_Result routeResult = GetCue(cue, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetVariable(name, value);
         return CNA_RESULT_SUCCESS;
     });
 }

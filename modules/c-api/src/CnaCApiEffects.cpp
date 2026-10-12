@@ -63,7 +63,6 @@ using CNA::C::Detail::BorrowGameGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyElements;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -1707,28 +1706,6 @@ CNA_Result cna_effect_parameter_set_values(
         default:
             return InvalidArgument("The EffectParameter array value type is invalid.");
         }
-    });
-}
-
-CNA_Result cna_effect_parameter_set_value_string(
-    const CNA_EffectParameterHandle parameterHandle,
-    const CNA_StringView value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ParameterResource> parameter;
-        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copied;
-        if (const CNA_Result result = ReadText(
-                value, "The EffectParameter string value is not valid UTF-8 text.", &copied,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        parameter->value->SetValue(copied);
-        return CNA_RESULT_SUCCESS;
     });
 }
 

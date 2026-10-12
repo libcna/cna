@@ -352,56 +352,6 @@ CNA_Result cna_audio_engine_renderers_equal(
     });
 }
 
-CNA_Result cna_audio_engine_get_global_variable(
-    const CNA_Handle engineHandle,
-    const CNA_StringView name,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The global-variable output is null.");
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(name, "The global-variable name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = engine->value->GetGlobalVariable(nativeName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_engine_set_global_variable(
-    const CNA_Handle engineHandle,
-    const CNA_StringView name,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(value)) {
-            return InvalidArgument("The global-variable value must be finite.");
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(name, "The global-variable name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<EngineResource> engine;
-        if (const CNA_Result result = GetEngine(engineHandle, &engine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        engine->value->SetGlobalVariable(nativeName, value);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_audio_engine_subscribe_disposing_ext(
     const CNA_Handle engineHandle,
     const CNA_AudioEventCallback callback,
@@ -715,24 +665,6 @@ CNA_Result cna_sound_bank_get_cue(
     });
 }
 
-CNA_Result cna_sound_bank_play_cue(const CNA_Handle soundBankHandle, const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeName;
-        if (const CNA_Result result = ReadText(name, "The cue name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SoundBankResource> soundBank;
-        if (const CNA_Result result = GetSoundBank(soundBankHandle, &soundBank);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        soundBank->value->PlayCue(nativeName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_bank_play_cue_3d(
     const CNA_Handle soundBankHandle,
     const CNA_StringView name,
@@ -827,56 +759,6 @@ CNA_Result cna_cue_apply_3d(
             return result;
         }
         cue->value->Apply3D(nativeListener, nativeEmitter);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_get_variable(
-    const CNA_Handle cueHandle,
-    const CNA_StringView name,
-    float* const outValue)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The cue-variable output is null.");
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(name, "The cue-variable name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outValue = cue->value->GetVariable(nativeName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cue_set_variable(
-    const CNA_Handle cueHandle,
-    const CNA_StringView name,
-    const float value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (!std::isfinite(value)) {
-            return InvalidArgument("The cue-variable value must be finite.");
-        }
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(name, "The cue-variable name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CueResource> cue;
-        if (const CNA_Result result = GetCue(cueHandle, &cue);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        cue->value->SetVariable(nativeName, value);
         return CNA_RESULT_SUCCESS;
     });
 }

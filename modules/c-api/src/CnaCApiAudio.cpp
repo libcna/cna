@@ -541,27 +541,6 @@ CNA_Result cna_sound_effect_create_from_asset_ext(
     });
 }
 
-CNA_Result cna_sound_effect_set_name(
-    const CNA_Handle soundEffectHandle,
-    const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SoundEffectResource> soundEffect;
-        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string value;
-        if (const CNA_Result result =
-                CNA::C::Detail::ReadText(name, "The SoundEffect name is not valid UTF-8.", &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        soundEffect->value->setNameProperty(std::move(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_effect_get_sample_duration_ticks(
     const int32_t sizeInBytes,
     const int32_t sampleRate,

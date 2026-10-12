@@ -2473,33 +2473,6 @@ CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle 
     });
 }
 
-CNA_Result cna_text_input_raise_text_editing_ext(
-    const CNA_Handle gameHandle,
-    const CNA_StringView text,
-    const int32_t start,
-    const int32_t length)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copied;
-        // Composition text is byte-length delimited on both sides, so an embedded NUL is
-        // representable and is not rejected; invalid UTF-8 still is.
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                text, "The text-editing composition is not valid UTF-8.", &copied);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        TextInputEXT::INTERNAL_OnTextEditing(
-            copied,
-            static_cast<int>(start),
-            static_cast<int>(length));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_text_input_raise_text_editing_candidates_ext(
     const CNA_Handle gameHandle,
     const CNA_StringView* const candidates,

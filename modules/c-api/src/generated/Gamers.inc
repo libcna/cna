@@ -171,6 +171,26 @@ CNA_Result cna_gamer_get_profile(
     });
 }
 
+CNA_Result cna_gamer_set_display_name(
+    const CNA_GamerHandle gamer,
+    const CNA_StringView c_display_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string display_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_display_name, "cna_gamer_set_display_name: display_name is not valid UTF-8.", &display_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* object{};
+        if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->setDisplayNameProperty(display_name);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_signed_in_gamer_get_is_guest(
     const CNA_SignedInGamerHandle gamer,
     CNA_Bool* const out_is_guest)
@@ -254,6 +274,46 @@ CNA_Result cna_signed_in_gamer_get_player_index(
             return routeResult;
         }
         *out_player_index = static_cast<CNA_PlayerIndex>(object->getPlayerIndexProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_StringView c_mode)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string mode;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_mode, "cna_signed_in_gamer_set_presence_mode_string_ext: mode is not valid UTF-8.", &mode);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        SignedInGamer* object{};
+        if (const CNA_Result routeResult = BorrowSignedIn(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->getPresenceProperty().SetPresenceModeStringEXT(mode);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_signed_in_gamer_award_achievement(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_StringView c_achievement_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string achievement_key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_achievement_key, "cna_signed_in_gamer_award_achievement: achievement_key is not valid UTF-8.", &achievement_key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        SignedInGamer* object{};
+        if (const CNA_Result routeResult = BorrowSignedIn(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->AwardAchievement(achievement_key);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -521,5 +581,42 @@ CNA_Result cna_signed_in_gamer_is_friend(
         }
         *out_is_friend = CNA::C::Detail::ToCBool(object->IsFriend(other));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_get_partner_token_size(
+    const CNA_StringView c_audience_uri,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_partner_token_size: out_bytes is null.");
+        }
+        std::string audience_uri;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_get_partner_token_size: audience_uri is not valid UTF-8.", &audience_uri);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(Gamer::GetPartnerToken(audience_uri), out_bytes);
+    });
+}
+
+CNA_Result cna_gamer_copy_partner_token(
+    const CNA_StringView c_audience_uri,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string audience_uri;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_copy_partner_token: audience_uri is not valid UTF-8.", &audience_uri);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(Gamer::GetPartnerToken(audience_uri), destination, capacity, out_bytes);
     });
 }

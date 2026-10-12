@@ -461,3 +461,17 @@ CNA_Result cna_storage_get_root_size_ext(
         return CNA::C::Detail::ReportTextSize(StorageDevice::GetStorageRootEXT(), out_bytes);
     });
 }
+
+CNA_Result cna_storage_set_app_name_ext(
+    const CNA_StringView c_app_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string app_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_app_name, "cna_storage_set_app_name_ext: app_name is not valid UTF-8.", &app_name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        StorageDevice::SetAppNameEXT(app_name);
+        return CNA_RESULT_SUCCESS;
+    });
+}

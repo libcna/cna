@@ -39,6 +39,7 @@ cna_gamer_services_dispatcher_get_freed_gamer_count_ext = { value = "GamerServic
 cna_guide_set_notification_position = { call = "Guide::setNotificationPositionProperty(static_cast<NotificationPosition>(position))", invalid_if = "position > CNA_NOTIFICATION_POSITION_MAXIMUM" }
 
 # `object` is the canonical PlayerIndex the C player index maps to; `other` the gamer shown.
+cna_guide_show_game_invite_for_session = { call = "Guide::ShowGameInvite(session_id)" }
 [player_and_gamer]
 lookup = "ValidatePlayer"
 object = "PlayerIndex"

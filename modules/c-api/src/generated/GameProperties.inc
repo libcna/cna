@@ -383,6 +383,76 @@ CNA_Result cna_game_set_inactive_sleep_time_ticks(
     });
 }
 
+CNA_Result cna_game_launch_parameters_contains_key(
+    const CNA_Handle game,
+    const CNA_StringView c_key,
+    CNA_Bool* const out_present)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_present == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_launch_parameters_contains_key: out_present is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_contains_key: key is not valid UTF-8.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Game* object{};
+        if (const CNA_Result routeResult = BorrowGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_present = CNA::C::Detail::ToCBool(object->getLaunchParametersProperty().ContainsKey(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_launch_parameters_add(
+    const CNA_Handle game,
+    const CNA_StringView c_key,
+    const CNA_StringView c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_add: key is not valid UTF-8.", &key);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string value;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_game_launch_parameters_add: value is not valid UTF-8.", &value);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Game* object{};
+        if (const CNA_Result routeResult = BorrowGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->getLaunchParametersProperty().Add(key, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_title_location_set_path_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_path)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string path;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_path, "cna_title_location_set_path_ext: path is not valid UTF-8.", &path);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Game* object{};
+        if (const CNA_Result routeResult = BorrowGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        TitleLocation::setPathProperty(path);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_window_get_allow_user_resizing(
     const CNA_Handle game,
     CNA_Bool* const out_allowed)

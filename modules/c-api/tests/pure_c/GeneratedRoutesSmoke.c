@@ -437,6 +437,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_reader_read_i32(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_i32", "a null out_value");
     failures += expect(cna_cnb_reader_read_f32(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_f32", "a null out_value");
     failures += expect(cna_cnb_reader_read_f64(v_CNA_CnbReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_f64", "a null out_value");
+    failures += expect(cna_cnb_reader_read_count(v_CNA_CnbReaderHandle, v_uint64_t, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_count", "a null out_count");
+    failures += expect(cna_cnb_reader_read_seconds(v_CNA_CnbReaderHandle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_reader_read_seconds", "a null out_seconds");
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(v_CNA_CnjToCnbResultHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_asset_type_name", "a null destination with a capacity");
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(v_CNA_CnjToCnbResultHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_asset_type_name", "a null out_bytes");
     failures += expect(cna_cnb_cnj_result_get_asset_type_id(v_CNA_CnjToCnbResultHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_get_asset_type_id", "a null out_asset_type_id");
@@ -547,6 +549,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_object_dictionary_ext_get_count(v_CNA_ObjectDictionaryHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_get_count", "a null out_count");
     failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(v_CNA_ObjectDictionaryHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_copy_runtime_type_name", "a null destination with a capacity");
     failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(v_CNA_ObjectDictionaryHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_copy_runtime_type_name", "a null out_bytes");
+    failures += expect(cna_object_dictionary_ext_contains_key(v_CNA_ObjectDictionaryHandle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_contains_key", "a null out_contains");
     failures += expect(cna_reflective_type_reader_get_canonical_name_size(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_reflective_type_reader_get_canonical_name_size", "a null out_byte_count");
     failures += expect(cna_reflective_type_reader_copy_canonical_name(v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_reflective_type_reader_copy_canonical_name", "a null out_byte_count");
     failures += expect(cna_enum_type_reader_get_canonical_name_size(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_enum_type_reader_get_canonical_name_size", "a null out_byte_count");
@@ -610,6 +613,7 @@ static int null_outputs_are_refused(void)
     failures += expect_unless_compiled_out(cna_system_tray_get_is_supported_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_system_tray_get_is_supported_ext", "a null out_supported");
     failures += expect_unless_compiled_out(cna_camera_get_is_supported_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_get_is_supported_ext", "a null out_supported");
     failures += expect_unless_compiled_out(cna_camera_get_count_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_get_count_ext", "a null out_count");
+    failures += expect_unless_compiled_out(cna_devices_clipboard_set_text_ext(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_devices_clipboard_set_text_ext", "a null out_accepted");
     failures += expect_unless_compiled_out(cna_locale_get_language_size_at_ext(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_get_language_size_at_ext", "a null out_bytes");
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(v_CNA_Handle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_copy_language_at_ext", "a null destination with a capacity");
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(v_CNA_Handle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_locale_copy_language_at_ext", "a null out_bytes");
@@ -821,6 +825,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_title_location_get_path_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_title_location_get_path_size", "a null out_bytes");
     failures += expect(cna_title_location_copy_path(v_CNA_Handle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_title_location_copy_path", "a null destination with a capacity");
     failures += expect(cna_title_location_copy_path(v_CNA_Handle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_title_location_copy_path", "a null out_bytes");
+    failures += expect(cna_game_launch_parameters_contains_key(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_launch_parameters_contains_key", "a null out_present");
     failures += expect(cna_game_window_get_allow_user_resizing(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_allow_user_resizing", "a null out_allowed");
     failures += expect(cna_game_window_get_current_orientation(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_current_orientation", "a null out_orientation");
     failures += expect(cna_game_window_get_native_handle_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_native_handle_ext", "a null out_handle");
@@ -885,6 +890,9 @@ static int null_outputs_are_refused(void)
     o_CNA_FriendGamerInfo.struct_version = 0U;
     failures += expect(cna_friend_gamer_get_info(v_CNA_GamerHandle, &o_CNA_FriendGamerInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_friend_gamer_get_info", "a out_info of version 0");
     failures += expect(cna_signed_in_gamer_is_friend(v_CNA_SignedInGamerHandle, v_CNA_GamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_signed_in_gamer_is_friend", "a null out_is_friend");
+    failures += expect(cna_gamer_get_partner_token_size(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_get_partner_token_size", "a null out_bytes");
+    failures += expect(cna_gamer_copy_partner_token(v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_copy_partner_token", "a null destination with a capacity");
+    failures += expect(cna_gamer_copy_partner_token(v_CNA_StringView, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_copy_partner_token", "a null out_bytes");
     failures += expect(cna_plane_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_init", "a null out_value");
     failures += expect(cna_plane_init_abcd(v_float, v_float, v_float, v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_init_abcd", "a null out_value");
     failures += expect(cna_plane_dot(v_CNA_Plane, v_CNA_Vector4, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_plane_dot", "a null out_value");
@@ -2015,6 +2023,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_audio_engine_get_type_name_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_type_name_size", "a null out_bytes");
     failures += expect(cna_audio_engine_copy_type_name(v_CNA_Handle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_audio_engine_copy_type_name(v_CNA_Handle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_copy_type_name", "a null out_bytes");
+    failures += expect(cna_audio_engine_get_global_variable(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_global_variable", "a null out_value");
     failures += expect(cna_audio_category_get_name_size(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_category_get_name_size", "a null out_bytes");
     failures += expect(cna_audio_category_copy_name(v_CNA_Handle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_category_copy_name", "a null destination with a capacity");
     failures += expect(cna_audio_category_copy_name(v_CNA_Handle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_category_copy_name", "a null out_bytes");
@@ -2040,6 +2049,7 @@ static int null_outputs_are_refused(void)
     o_CNA_CueInfo.struct_size = (uint32_t)sizeof(CNA_CueInfo);
     o_CNA_CueInfo.struct_version = 0U;
     failures += expect(cna_cue_get_info(v_CNA_Handle, &o_CNA_CueInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_cue_get_info", "a out_info of version 0");
+    failures += expect(cna_cue_get_variable(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cue_get_variable", "a null out_value");
     failures += expect(cna_audio_engine_create_with_renderer(v_CNA_Handle, v_CNA_StringView, v_int64_t, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_create_with_renderer", "a null out_engine");
     failures += expect(cna_audio_engine_get_renderer_friendly_name_size(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_get_renderer_friendly_name_size", "a null out_bytes");
     failures += expect(cna_audio_engine_copy_renderer_friendly_name(v_CNA_Handle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_audio_engine_copy_renderer_friendly_name", "a null destination with a capacity");
@@ -2096,6 +2106,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_sound_effect_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_copy_name", what);
     failures += expect(cna_sound_effect_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_get_type_name_size", what);
     failures += expect(cna_sound_effect_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_copy_type_name", what);
+    failures += expect(cna_sound_effect_set_name(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_set_name", what);
     failures += expect(cna_sound_effect_instance_play(handle), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_instance_play", what);
     failures += expect(cna_sound_effect_instance_pause(handle), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_instance_pause", what);
     failures += expect(cna_sound_effect_instance_resume(handle), CNA_RESULT_INVALID_HANDLE, "cna_sound_effect_instance_resume", what);
@@ -2194,6 +2205,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_reader_read_i32(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_i32", what);
     failures += expect(cna_cnb_reader_read_f32(handle, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_f32", what);
     failures += expect(cna_cnb_reader_read_f64(handle, &o_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_f64", what);
+    failures += expect(cna_cnb_reader_read_count(handle, v_uint64_t, v_CNA_StringView, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_count", what);
+    failures += expect(cna_cnb_reader_read_seconds(handle, v_CNA_StringView, &o_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_reader_read_seconds", what);
     failures += expect(cna_cnb_model_clear_skeleton(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_clear_skeleton", what);
     failures += expect(cna_cnb_model_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_destroy", what);
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_asset_type_name", what);
@@ -2211,8 +2224,10 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_byte_writer_write_i32(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_i32", what);
     failures += expect(cna_cnb_byte_writer_write_f32(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f32", what);
     failures += expect(cna_cnb_byte_writer_write_f64(handle, v_double), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_f64", what);
+    failures += expect(cna_cnb_byte_writer_write_string(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_byte_writer_write_string", what);
     failures += expect(cna_cnb_writer_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_destroy", what);
     failures += expect(cna_cnb_writer_get_schema_chunk_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_get_schema_chunk_count", what);
+    failures += expect(cna_cnb_writer_set_metadata(handle, v_CNA_StringView, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_set_metadata", what);
     failures += expect(cna_cnb_texture_data_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_destroy", what);
     failures += expect(cna_cnb_texture_data_get_representation_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_texture_data_get_representation_count", what);
     failures += expect(cna_cnb_model_from_cnj_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_from_cnj_destroy", what);
@@ -2230,6 +2245,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_model_copy_part_external_effect(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_part_external_effect", what);
     failures += expect(cna_cnb_model_clear_morph(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_clear_morph", what);
     failures += expect(cna_cnb_model_copy_morph_weights(handle, v_uint64_t, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_morph_weights", what);
+    failures += expect(cna_cnb_writer_append_embedded_texture2d(handle, v_CNA_CnbTextureDataHandle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_cnb_writer_append_embedded_texture2d", what);
     failures += expect(cna_content_manager_get_root_directory_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_root_directory_size", what);
     failures += expect(cna_content_manager_unload(handle), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_unload", what);
     failures += expect(cna_content_manager_register_builtin_loaders(handle), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_register_builtin_loaders", what);
@@ -2237,6 +2253,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_content_manager_refresh_content_manifest(handle), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_refresh_content_manifest", what);
     failures += expect(cna_content_manager_get_manifest_entry_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_manifest_entry_count", what);
     failures += expect(cna_content_manager_get_xnb_reader_usage_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_xnb_reader_usage_count", what);
+    failures += expect(cna_content_manager_set_root_directory(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_set_root_directory", what);
     failures += expect(cna_content_manager_copy_manifest_relative_path(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_copy_manifest_relative_path", what);
     failures += expect(cna_game_set_content_manager_ext(handle, v_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_game_set_content_manager_ext", what);
     failures += expect(cna_content_reader_get_asset_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_reader_get_asset_name_size", what);
@@ -2254,6 +2271,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_object_dictionary_ext_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_get_count", what);
     failures += expect(cna_object_dictionary_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_destroy", what);
     failures += expect(cna_object_dictionary_ext_copy_runtime_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_copy_runtime_type_name", what);
+    failures += expect(cna_object_dictionary_ext_contains_key(handle, v_CNA_StringView, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_contains_key", what);
     failures += expect(cna_reflective_type_reader_builder_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_reflective_type_reader_builder_destroy", what);
     failures += expect(cna_object_dictionary_ext_get_type_name_size(handle, v_CNA_StringView, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_object_dictionary_ext_get_type_name_size", what);
     failures += expect(cna_curve_key_collection_clear(handle), CNA_RESULT_INVALID_HANDLE, "cna_curve_key_collection_clear", what);
@@ -2284,6 +2302,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_compiled_out(cna_system_tray_get_is_supported_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_get_is_supported_ext", what);
     failures += expect_unless_compiled_out(cna_camera_get_is_supported_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_is_supported_ext", what);
     failures += expect_unless_compiled_out(cna_camera_get_count_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_count_ext", what);
+    failures += expect_unless_compiled_out(cna_devices_clipboard_set_text_ext(handle, v_CNA_StringView, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_devices_clipboard_set_text_ext", what);
     failures += expect_unless_compiled_out(cna_locale_get_language_size_at_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_get_language_size_at_ext", what);
     failures += expect_unless_compiled_out(cna_locale_copy_language_at_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_copy_language_at_ext", what);
     failures += expect_unless_compiled_out(cna_locale_get_country_size_at_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_locale_get_country_size_at_ext", what);
@@ -2294,6 +2313,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_compiled_out(cna_system_tray_set_entry_enabled(handle, v_uint64_t, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_set_entry_enabled", what);
     failures += expect_unless_compiled_out(cna_system_tray_get_entry_enabled(handle, v_uint64_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_get_entry_enabled", what);
     failures += expect_unless_compiled_out(cna_system_tray_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_destroy", what);
+    failures += expect_unless_compiled_out(cna_system_tray_set_tooltip(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_set_tooltip", what);
+    failures += expect_unless_compiled_out(cna_system_tray_set_entry_label(handle, v_uint64_t, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_system_tray_set_entry_label", what);
     failures += expect_unless_compiled_out(cna_camera_get_name_size_at_ext(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_name_size_at_ext", what);
     failures += expect_unless_compiled_out(cna_camera_copy_name_at_ext(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_copy_name_at_ext", what);
     failures += expect_unless_compiled_out(cna_camera_get_state_ext(handle, &o_CNA_CameraState), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_state_ext", what);
@@ -2333,6 +2354,7 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_EffectParameterInfo.struct_size = (uint32_t)sizeof(CNA_EffectParameterInfo);
     o_CNA_EffectParameterInfo.struct_version = 1U;
     failures += expect(cna_effect_parameter_get_info(handle, &o_CNA_EffectParameterInfo), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_get_info", what);
+    failures += expect(cna_effect_parameter_set_value_string(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_set_value_string", what);
     failures += expect(cna_effect_parameter_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_collection_get_count", what);
     failures += expect(cna_effect_pass_get_index_ext(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_get_index_ext", what);
     failures += expect(cna_effect_pass_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_copy_name", what);
@@ -2581,6 +2603,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_title_location_copy_path(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_title_location_copy_path", what);
     failures += expect_unless_arguments_refused(cna_game_set_target_elapsed_time_ticks(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_set_target_elapsed_time_ticks", what);
     failures += expect_unless_arguments_refused(cna_game_set_inactive_sleep_time_ticks(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_set_inactive_sleep_time_ticks", what);
+    failures += expect(cna_game_launch_parameters_contains_key(handle, v_CNA_StringView, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_launch_parameters_contains_key", what);
+    failures += expect(cna_game_launch_parameters_add(handle, v_CNA_StringView, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_game_launch_parameters_add", what);
+    failures += expect(cna_title_location_set_path_ext(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_title_location_set_path_ext", what);
     failures += expect(cna_game_window_get_allow_user_resizing(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_allow_user_resizing", what);
     failures += expect(cna_game_window_get_current_orientation(handle, &o_CNA_DisplayOrientation), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_current_orientation", what);
     failures += expect(cna_game_window_get_native_handle_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_native_handle_ext", what);
@@ -2619,11 +2644,14 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_GamerProfileHandle = UINT64_C(0xDEAD);
     failures += expect(cna_gamer_get_profile(handle, &o_CNA_GamerProfileHandle), CNA_RESULT_INVALID_HANDLE, "cna_gamer_get_profile", what);
     failures += expect_cleared(o_CNA_GamerProfileHandle, "cna_gamer_get_profile");
+    failures += expect(cna_gamer_set_display_name(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_gamer_set_display_name", what);
     failures += expect(cna_signed_in_gamer_get_is_guest(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_get_is_guest", what);
     failures += expect(cna_signed_in_gamer_get_is_signed_in_to_live(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_get_is_signed_in_to_live", what);
     failures += expect(cna_signed_in_gamer_get_party_size(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_get_party_size", what);
     failures += expect(cna_signed_in_gamer_set_party_size(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_set_party_size", what);
     failures += expect(cna_signed_in_gamer_get_player_index(handle, &o_CNA_PlayerIndex), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_get_player_index", what);
+    failures += expect(cna_signed_in_gamer_set_presence_mode_string_ext(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_set_presence_mode_string_ext", what);
+    failures += expect(cna_signed_in_gamer_award_achievement(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_signed_in_gamer_award_achievement", what);
     failures += expect(cna_gamer_profile_get_motto_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_gamer_profile_get_motto_size", what);
     failures += expect(cna_gamer_profile_copy_motto(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_gamer_profile_copy_motto", what);
     failures += expect(cna_gamer_profile_get_region_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_gamer_profile_get_region_name_size", what);
@@ -2719,6 +2747,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_compiled_out(cna_ascii_post_process_effect_get_quantize_mode(handle, &o_CNA_AsciiQuantizeMode), CNA_RESULT_INVALID_HANDLE, "cna_ascii_post_process_effect_get_quantize_mode", what);
     failures += expect(cna_graphics_resource_get_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_resource_get_name_byte_count", what);
     failures += expect(cna_graphics_resource_get_string_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_resource_get_string_byte_count", what);
+    failures += expect(cna_graphics_resource_set_name(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_graphics_resource_set_name", what);
     failures += expect(cna_gamer_services_dispatcher_initialize(handle), CNA_RESULT_INVALID_HANDLE, "cna_gamer_services_dispatcher_initialize", what);
     o_CNA_Handle = UINT64_C(0xDEAD);
     failures += expect(cna_gamer_services_component_create(handle, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_gamer_services_component_create", what);
@@ -2767,6 +2796,7 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_GestureSample.struct_size = (uint32_t)sizeof(CNA_GestureSample);
     o_CNA_GestureSample.struct_version = 1U;
     failures += expect(cna_touch_panel_read_gesture(handle, &o_CNA_GestureSample), CNA_RESULT_INVALID_HANDLE, "cna_touch_panel_read_gesture", what);
+    failures += expect(cna_text_input_raise_text_editing_ext(handle, v_CNA_StringView, v_int32_t, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_text_input_raise_text_editing_ext", what);
     failures += expect(cna_mouse_cursor_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_mouse_cursor_dispose", what);
     failures += expect(cna_gamepad_set_vibration(handle, v_CNA_PlayerIndex, v_float, v_float, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_vibration", what);
     failures += expect(cna_gamepad_set_trigger_vibration_ext(handle, v_CNA_PlayerIndex, v_float, v_float, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_trigger_vibration_ext", what);
@@ -2781,6 +2811,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_clipboard_get_text_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_text_size", what);
     failures += expect(cna_clipboard_get_has_text(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_get_has_text", what);
     failures += expect(cna_clipboard_copy_text(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_copy_text", what);
+    failures += expect(cna_clipboard_set_text(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_clipboard_set_text", what);
     failures += expect(cna_haptics_get_count(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_count", what);
     failures += expect(cna_haptics_get_is_joystick_haptic(handle, v_uint32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_is_joystick_haptic", what);
     failures += expect(cna_haptics_get_is_mouse_haptic(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_haptics_get_is_mouse_haptic", what);
@@ -3068,6 +3099,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_skinned_model_ext_copy_parent_bone_indices(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_parent_bone_indices", what);
     failures += expect(cna_skinned_model_ext_copy_bind_pose_local(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_bind_pose_local", what);
     failures += expect(cna_skinned_model_ext_copy_inverse_bind_pose_global(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_inverse_bind_pose_global", what);
+    failures += expect(cna_skinned_model_ext_remove_clip(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_remove_clip", what);
     failures += expect(cna_skinning_data_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_type_name_byte_count", what);
     failures += expect(cna_skinning_data_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_type_name", what);
     failures += expect(cna_skinning_data_get_bone_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_bone_count", what);
@@ -3080,6 +3112,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_skinning_data_copy_bind_pose(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_bind_pose", what);
     failures += expect(cna_skinning_data_copy_inverse_bind_pose(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_inverse_bind_pose", what);
     failures += expect(cna_skinning_data_copy_skeleton_root_prefix(handle, NULL, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_skeleton_root_prefix", what);
+    failures += expect(cna_skinning_data_set_skeleton_root_name_ext(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_set_skeleton_root_name_ext", what);
     failures += expect(cna_animation_player_get_current_position(handle, &o_double), CNA_RESULT_INVALID_HANDLE, "cna_animation_player_get_current_position", what);
     failures += expect(cna_animation_player_get_current_clip_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_animation_player_get_current_clip_name_byte_count", what);
     failures += expect(cna_animation_player_copy_current_clip_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_animation_player_copy_current_clip_name", what);
@@ -3208,6 +3241,7 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_Handle = UINT64_C(0xDEAD);
     failures += expect(cna_game_get_graphics_device(handle, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_game_get_graphics_device", what);
     failures += expect_cleared(o_CNA_Handle, "cna_game_get_graphics_device");
+    failures += expect(cna_game_set_window_title(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_game_set_window_title", what);
     failures += expect(cna_game_tick(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_tick", what);
     failures += expect(cna_accelerometer_get_is_supported(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_get_is_supported", what);
     failures += expect(cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_set_event_watch_registration_failure_for_tests_ext", what);
@@ -3357,6 +3391,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_audio_engine_update(handle), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_update", what);
     failures += expect(cna_audio_engine_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_type_name_size", what);
     failures += expect(cna_audio_engine_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_copy_type_name", what);
+    failures += expect(cna_audio_engine_get_global_variable(handle, v_CNA_StringView, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_global_variable", what);
+    failures += expect_unless_arguments_refused(cna_audio_engine_set_global_variable(handle, v_CNA_StringView, v_float), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_set_global_variable", what);
     failures += expect(cna_audio_category_get_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_category_get_name_size", what);
     failures += expect(cna_audio_category_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_category_copy_name", what);
     failures += expect(cna_audio_category_pause(handle), CNA_RESULT_INVALID_HANDLE, "cna_audio_category_pause", what);
@@ -3372,6 +3408,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_sound_bank_get_is_in_use(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_sound_bank_get_is_in_use", what);
     failures += expect(cna_sound_bank_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_bank_get_type_name_size", what);
     failures += expect(cna_sound_bank_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_sound_bank_copy_type_name", what);
+    failures += expect(cna_sound_bank_play_cue(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_sound_bank_play_cue", what);
     failures += expect(cna_cue_get_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cue_get_name_size", what);
     failures += expect(cna_cue_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cue_copy_name", what);
     failures += expect(cna_cue_play(handle), CNA_RESULT_INVALID_HANDLE, "cna_cue_play", what);
@@ -3382,6 +3419,8 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_CueInfo.struct_size = (uint32_t)sizeof(CNA_CueInfo);
     o_CNA_CueInfo.struct_version = 1U;
     failures += expect(cna_cue_get_info(handle, &o_CNA_CueInfo), CNA_RESULT_INVALID_HANDLE, "cna_cue_get_info", what);
+    failures += expect(cna_cue_get_variable(handle, v_CNA_StringView, &o_float), CNA_RESULT_INVALID_HANDLE, "cna_cue_get_variable", what);
+    failures += expect_unless_arguments_refused(cna_cue_set_variable(handle, v_CNA_StringView, v_float), CNA_RESULT_INVALID_HANDLE, "cna_cue_set_variable", what);
     failures += expect(cna_audio_engine_get_renderer_friendly_name_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_renderer_friendly_name_size", what);
     failures += expect(cna_audio_engine_copy_renderer_friendly_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_copy_renderer_friendly_name", what);
     failures += expect(cna_audio_engine_get_renderer_id_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_audio_engine_get_renderer_id_size", what);
@@ -3488,6 +3527,19 @@ static int text_protocol_holds(void)
             ++failures;
         }
         failures += expect(cna_graphics_renderer_copy_current_name(text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_graphics_renderer_copy_current_name", "an exact buffer");
+    }
+    size_result = cna_gamer_get_partner_token_size(v_CNA_StringView, &size);
+    if (size_result != CNA_RESULT_SUCCESS) {
+        failures += expect(cna_gamer_copy_partner_token(v_CNA_StringView, text, (uint64_t)sizeof(text), &o_uint64_t), size_result, "cna_gamer_copy_partner_token", "the refusal its size half gave");
+    }
+    if (size_result == CNA_RESULT_SUCCESS && size > 0U && size <= sizeof(text)) {
+        memset(text, 0x5A, sizeof(text));
+        failures += expect(cna_gamer_copy_partner_token(v_CNA_StringView, text, size - 1U, &o_uint64_t), CNA_RESULT_BUFFER_TOO_SMALL, "cna_gamer_copy_partner_token", "one byte short");
+        if (o_uint64_t != size || text[0] != 0x5A) {
+            printf("cna_gamer_copy_partner_token: a short buffer was written or the size not reported\n");
+            ++failures;
+        }
+        failures += expect(cna_gamer_copy_partner_token(v_CNA_StringView, text, size, &o_uint64_t), CNA_RESULT_SUCCESS, "cna_gamer_copy_partner_token", "an exact buffer");
     }
     size_result = cna_plane_get_string_size(v_CNA_Plane, &size);
     if (size_result != CNA_RESULT_SUCCESS) {
@@ -3854,6 +3906,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 1923 generated routes\n", failures);
+    printf("%d failed checks across 1957 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

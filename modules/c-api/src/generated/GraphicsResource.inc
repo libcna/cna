@@ -42,3 +42,23 @@ CNA_Result cna_graphics_resource_get_string_byte_count(
         return CNA::C::Detail::ReportTextSize(object.value->ToString(), out_byte_count);
     });
 }
+
+CNA_Result cna_graphics_resource_set_name(
+    const CNA_Handle resource,
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_resource_set_name: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        GraphicsResourceView object{};
+        if (const CNA_Result routeResult = ResolveGraphicsResource(resource, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object.value->setNameProperty(name);
+        return CNA_RESULT_SUCCESS;
+    });
+}

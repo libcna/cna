@@ -75,6 +75,26 @@ CNA_Result cna_game_get_graphics_device(
     });
 }
 
+CNA_Result cna_game_set_window_title(
+    const CNA_Handle game,
+    const CNA_StringView c_title)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string title;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_title, "cna_game_set_window_title: title is not valid UTF-8.", &title, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CGame> object{};
+        if (const CNA_Result routeResult = GetGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->SetWindowTitle(title);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_tick(
     const CNA_Handle game)
 {

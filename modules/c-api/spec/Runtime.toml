@@ -10,6 +10,7 @@ cna_game_set_foreign_thread_calls_ext = { call = "CNA::C::Detail::SetForeignThre
 cna_game_run_foreign_thread_calls_ext = { call = "CNA::C::Detail::RunForeignThreadCalls()" }
 cna_game_request_exit = { call = "object->Exit()" }
 cna_game_get_graphics_device = { result = "object->BorrowGraphicsDevice(out_graphics_device)" }
+cna_game_set_window_title = { call = "object->SetWindowTitle(title)", refuse_nul = ["title"] }
 
 [callable_game]
 lookup = "GetCallableGame"

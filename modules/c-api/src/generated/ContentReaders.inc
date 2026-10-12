@@ -310,6 +310,30 @@ CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
     });
 }
 
+CNA_Result cna_object_dictionary_ext_contains_key(
+    const CNA_ObjectDictionaryHandle dictionary,
+    const CNA_StringView c_key,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_contains_key: out_contains is null.");
+        }
+        std::string key;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_object_dictionary_ext_contains_key: key is not valid UTF-8.", &key, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ObjectDictionaryResource> object{};
+        if (const CNA_Result routeResult = GetObjectDictionary(dictionary, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_contains = CNA::C::Detail::ToCBool(object->value->ContainsKey(key));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_reflective_type_reader_builder_destroy(
     const CNA_ReflectiveTypeReaderBuilderHandle builder)
 {

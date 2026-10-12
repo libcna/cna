@@ -651,6 +651,55 @@ CNA_Result cna_cnb_reader_read_f64(
     });
 }
 
+CNA_Result cna_cnb_reader_read_count(
+    const CNA_CnbReaderHandle reader,
+    const uint64_t element_size,
+    const CNA_StringView c_what_is_being_counted,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_count: out_count is null.");
+        }
+        std::string what_is_being_counted;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what_is_being_counted, "cna_cnb_reader_read_count: what_is_being_counted is not valid UTF-8.", &what_is_being_counted);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint32_t>(object->value->ReadCount(element_size, what_is_being_counted.c_str()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_seconds(
+    const CNA_CnbReaderHandle reader,
+    const CNA_StringView c_what,
+    double* const out_seconds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_seconds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_seconds: out_seconds is null.");
+        }
+        std::string what;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what, "cna_cnb_reader_read_seconds: what is not valid UTF-8.", &what);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_seconds = static_cast<double>(Cnb::ReadCnbSeconds(*object->value, what.c_str()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_cnb_model_clear_skeleton(
     const CNA_CnbModelDataHandle model)
 {
@@ -918,6 +967,26 @@ CNA_Result cna_cnb_byte_writer_write_f64(
     });
 }
 
+CNA_Result cna_cnb_byte_writer_write_string(
+    const CNA_CnbByteWriterHandle writer,
+    const CNA_StringView c_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string value;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_cnb_byte_writer_write_string: value is not valid UTF-8.", &value);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbByteWriterResource> object{};
+        if (const CNA_Result routeResult = GetByteWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->WriteString(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_cnb_writer_destroy(
     const CNA_CnbWriterHandle writer)
 {
@@ -945,6 +1014,32 @@ CNA_Result cna_cnb_writer_get_schema_chunk_count(
             return routeResult;
         }
         *out_count = static_cast<uint64_t>(object->value->SchemaChunkCount());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_writer_set_metadata(
+    const CNA_CnbWriterHandle writer,
+    const CNA_StringView c_asset_type_name,
+    const CNA_StringView c_content_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string asset_type_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_asset_type_name, "cna_cnb_writer_set_metadata: asset_type_name is not valid UTF-8.", &asset_type_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string content_name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_writer_set_metadata: content_name is not valid UTF-8.", &content_name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetMetadata(std::move(asset_type_name), std::move(content_name));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1767,5 +1862,31 @@ CNA_Result cna_cnb_model_copy_morph_weights(
             return routeResult;
         }
         return CopyElements<float>(object->weights, destination, capacity, out_value_count);
+    });
+}
+
+CNA_Result cna_cnb_writer_append_embedded_texture2d(
+    const CNA_CnbWriterHandle writer,
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_StringView c_label)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string label;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_cnb_writer_append_embedded_texture2d: label is not valid UTF-8.", &label);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbWriterResource> object{};
+        if (const CNA_Result routeResult = GetWriter(writer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbTextureDataResource> other{};
+        if (const CNA_Result routeResult = GetTextureData(texture, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Cnb::AppendEmbeddedTexture2DChunks(*object->value, *other->value, label.c_str());
+        return CNA_RESULT_SUCCESS;
     });
 }

@@ -41,6 +41,7 @@ cna_object_dictionary_ext_get_runtime_type_name_size = { size = "object->value->
 cna_object_dictionary_ext_get_count = { get = "object->value->getValuesProperty().size()" }
 cna_object_dictionary_ext_destroy = { result = "GetRuntimeHandles().Release(dictionary)" }
 cna_object_dictionary_ext_copy_runtime_type_name = { copy = "object->value->GetTypeName()" }
+cna_object_dictionary_ext_contains_key = { get = "object->value->ContainsKey(key)", refuse_nul = ["key"] }
 
 [reflective_builder]
 lookup = "GetReflectiveBuilder"

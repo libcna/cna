@@ -317,6 +317,20 @@ CNA_Result cna_graphics_renderer_get_current_type(
     });
 }
 
+CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_renderer_set_preferred_by_name_ext: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        CNA::GraphicsRendererSelection::SetPreferred(std::string_view(name));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_logger_set_minimum_level(
     const CNA_LogLevel level)
 {

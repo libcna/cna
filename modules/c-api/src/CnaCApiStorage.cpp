@@ -31,7 +31,6 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
@@ -522,21 +521,6 @@ void ReleaseStorageStream(const BorrowedStorageStream& stream) noexcept
 }
 
 } // namespace CNA::C::Detail
-
-CNA_Result cna_storage_set_app_name_ext(const CNA_StringView appName)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string appNameCopy;
-        if (const CNA_Result result = ReadText(
-                appName, "The storage application name is not valid UTF-8.", &appNameCopy,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        StorageDevice::SetAppNameEXT(appNameCopy);
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_storage_device_delete_container(
     const CNA_StorageDeviceHandle deviceHandle,

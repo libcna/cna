@@ -292,27 +292,6 @@ CNA_Result cna_gamer_destroy(const CNA_GamerHandle gamerHandle)
     });
 }
 
-CNA_Result cna_gamer_set_display_name(
-    const CNA_GamerHandle gamerHandle,
-    const CNA_StringView displayName)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeName;
-        if (const CNA_Result result =
-                ReadText(displayName, "The display name is invalid.", &nativeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Gamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowGamerBase(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->setDisplayNameProperty(nativeName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_get_tag(const CNA_GamerHandle gamerHandle, uint64_t* const outTag)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -390,46 +369,6 @@ CNA_Result cna_gamer_begin_get_from_gamertag(
             callback(context);
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_get_partner_token_size(
-    const CNA_StringView audienceUri,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The partner-token size output is null.");
-        }
-        std::string nativeAudienceUri;
-        if (const CNA_Result result =
-                ReadText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = Gamer::GetPartnerToken(nativeAudienceUri).size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_gamer_copy_partner_token(
-    const CNA_StringView audienceUri,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeAudienceUri;
-        if (const CNA_Result result =
-                ReadText(audienceUri, "The audience URI is invalid.", &nativeAudienceUri);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(
-            Gamer::GetPartnerToken(nativeAudienceUri),
-            destination,
-            capacity,
-            outBytes);
     });
 }
 
@@ -607,26 +546,6 @@ CNA_Result cna_signed_in_gamer_set_presence(
     });
 }
 
-CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const CNA_StringView mode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeMode;
-        if (const CNA_Result result = ReadText(mode, "The presence mode is invalid.", &nativeMode);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->getPresenceProperty().SetPresenceModeStringEXT(nativeMode);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_signed_in_gamer_get_privileges(
     const CNA_SignedInGamerHandle gamerHandle,
     CNA_GamerPrivileges* const outPrivileges)
@@ -702,27 +621,6 @@ CNA_Result cna_signed_in_gamer_get_friends(
         const auto resource = std::make_shared<GamerCollectionResource>();
         resource->friends = std::make_shared<FriendCollection>(gamer->GetFriends());
         return CreateHandle(ObjectKind::GamerCollection, resource, outFriends);
-    });
-}
-
-CNA_Result cna_signed_in_gamer_award_achievement(
-    const CNA_SignedInGamerHandle gamerHandle,
-    const CNA_StringView achievementKey)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeKey;
-        if (const CNA_Result result =
-                ReadText(achievementKey, "The achievement key is invalid.", &nativeKey);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SignedInGamer* gamer = nullptr;
-        if (const CNA_Result result = BorrowSignedIn(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        gamer->AwardAchievement(nativeKey);
-        return CNA_RESULT_SUCCESS;
     });
 }
 

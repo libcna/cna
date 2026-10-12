@@ -41,6 +41,7 @@ cna_graphics_renderer_reset_selection_for_tests_ext = { call = "CNA::GraphicsRen
 cna_graphics_renderer_get_current_type = { value = "MapRendererTypeToC(CNA::getCurrentGraphicsRendererType())" }
 
 # The lookup maps the C log level to the canonical one; `object` is that CNA::LogLevel.
+cna_graphics_renderer_set_preferred_by_name_ext = { call = "CNA::GraphicsRendererSelection::SetPreferred(std::string_view(name))", refuse_nul = ["name"] }
 [log_level]
 lookup = "MapLogLevel"
 object = "CNA::LogLevel"

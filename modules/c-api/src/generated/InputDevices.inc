@@ -74,6 +74,25 @@ CNA_Result cna_clipboard_copy_text(
     });
 }
 
+CNA_Result cna_clipboard_set_text(
+    const CNA_Handle game,
+    const CNA_StringView c_text)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string text;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_clipboard_set_text: text is not valid UTF-8.", &text);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Clipboard::SetTextEXT(text);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sensors_get_count(
     const CNA_Handle game,
     uint32_t* const out_count)

@@ -49,7 +49,6 @@ namespace {
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EffectResource;
@@ -3664,28 +3663,6 @@ CNA_Result cna_skinned_model_ext_set_clip(
     });
 }
 
-CNA_Result cna_skinned_model_ext_remove_clip(
-    const CNA_SkinnedModelEXTHandle modelHandle,
-    const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The AnimationClipEXT name is not valid UTF-8 text.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<SkinnedModelResource> model;
-        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        model->value->Clips.erase(copiedName);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_skinned_model_ext_get_clip_name_byte_count_at(
     const CNA_SkinnedModelEXTHandle modelHandle,
     const uint64_t clipIndex,
@@ -5244,28 +5221,6 @@ CNA_Result cna_model_apply_clip_to_bones_ext(
         // would pose the wrong bones without saying so. The canonical helper throws; the barrier
         // turns that into INVALID_ARGUMENT rather than letting it pass as success.
         ApplyClipToBonesEXT(*model->value, animations->value->Clips.at(name), time);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
-    const CNA_SkinningDataHandle dataHandle,
-    const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SkinningDataResource> data;
-        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string copied;
-        if (const CNA_Result result = ReadText(
-                name, "The SkinningData skeleton-root name is not valid UTF-8 text.", &copied,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        data->value->SkeletonRootNameEXT = std::move(copied);
         return CNA_RESULT_SUCCESS;
     });
 }

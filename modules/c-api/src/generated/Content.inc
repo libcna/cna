@@ -122,6 +122,26 @@ CNA_Result cna_content_manager_get_xnb_reader_usage_count(
     });
 }
 
+CNA_Result cna_content_manager_set_root_directory(
+    const CNA_Handle content_manager,
+    const CNA_StringView c_root_directory)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string root_directory;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_root_directory, "cna_content_manager_set_root_directory: root_directory is not valid UTF-8.", &root_directory, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ContentManagerResource> object{};
+        if (const CNA_Result routeResult = GetContentManager(content_manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setRootDirectoryProperty(std::move(root_directory));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_content_manager_copy_manifest_relative_path(
     const CNA_Handle content_manager,
     const uint64_t index,

@@ -59,8 +59,11 @@ Each route is ``name = { <kind> = "<C++>" }``:
                                        and a handle output is first set to CNA_INVALID_HANDLE.
 
 Inside an expression every route parameter is available under its header name, already converted
-to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, and a CNA_Bool is
-validated as canonical and read as ``bool``. Every other parameter is passed as declared. The
+to its native type: a struct CnaCApiMarshal.hpp converts through ToNative, a CNA_Bool is
+validated as canonical and read as ``bool``, and a CNA_StringView is read as UTF-8 into a
+``std::string`` (CNA_RESULT_ENCODING when it is not; ``refuse_nul = ["name"]`` also refuses an
+embedded NUL). A lookup's own parameters, and every parameter of a ``result`` route, are passed
+unconverted. Every other parameter is passed as declared. The
 result is converted back by the output's C type: ToC for a marshaled struct, ToCBool for
 CNA_Bool, static_cast for an enumeration or a number; any other C structure is assigned as the
 expression builds it. A group that says ``raw = true`` works on the C structures themselves:
@@ -78,7 +81,8 @@ before the lookup.
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
 null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
 doing anything else, then validates CNA_Bool inputs, then its
-``invalid_if`` conditions, and returns whatever the lookup returns when the handle is refused.
+``invalid_if`` conditions, then reads its text, and returns whatever the lookup returns when the
+handle is refused.
 
 Usage::
 
@@ -140,6 +144,8 @@ class CTypes:
     def kind_of(self, type_: str) -> str:
         if type_ == "CNA_Bool":
             return "bool"
+        if type_ == "CNA_StringView":
+            return "text"
         if type_ in self.handles:
             return "handle"
         if type_ in self.marshaled:
@@ -219,7 +225,7 @@ class Route:
         if not isinstance(entry, dict) or len([k for k in entry if k in KINDS]) != 1:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
-        unknown = set(entry) - set(KINDS) - {"invalid_if", "versioned"}
+        unknown = set(entry) - set(KINDS) - {"invalid_if", "versioned", "refuse_nul"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         refusals = entry.get("invalid_if", [])
@@ -227,6 +233,10 @@ class Route:
         if not isinstance(self.refusals, list) or not all(
                 isinstance(r, str) and r for r in self.refusals):
             raise SpecError(f"{name}: invalid_if takes a C++ condition in quotes, or a list of them")
+        self.refuse_nul = entry.get("refuse_nul", [])
+        if not isinstance(self.refuse_nul, list) or not all(
+                isinstance(n, str) for n in self.refuse_nul):
+            raise SpecError(f"{name}: refuse_nul takes a list of text parameter names")
         self.versioned = entry.get("versioned", False)
         if self.versioned is not False and self.versioned is not True:
             raise SpecError(f"{name}: versioned is either true or left out")
@@ -326,7 +336,9 @@ class Route:
             return False
         if self.has_lookup and param in self.lookup_params:
             return False  # a lookup receives its parameters as the caller passed them
-        return not param.pointer and kind in ("marshaled", "bool")
+        if kind == "text" and self.kind == "result":
+            return False  # the helper a `result` calls reads its own text
+        return not param.pointer and kind in ("marshaled", "bool", "text")
 
     # The second handle may itself be named `other`; the definition renames it, as the ABI allows.
     def _renamed(self, param: Param) -> bool:
@@ -365,6 +377,19 @@ class Route:
                       f'{indent}    return {DETAIL}InvalidArgument("{self.name}: invalid because '
                       f'{message}.");',
                       f"{indent}}}"]
+        return lines
+
+    def _text_reads(self, indent: str) -> list[str]:
+        """Each CNA_StringView input read once, as std::string under its own name."""
+        lines: list[str] = []
+        for param in self.inputs:
+            if self.types.kind_of(param.type) != "text" or not self._converted(param):
+                continue
+            rule = f", {DETAIL}EmbeddedNul::Refused" if param.name in self.refuse_nul else ""
+            lines.append(f"{indent}std::string {param.name};")
+            lines += returns_on_failure(
+                f'{DETAIL}ReadText({self._c_name(param)}, "{self.name}: {param.name} is not '
+                f'valid UTF-8.", &{param.name}{rule})', indent)
         return lines
 
     def _locals(self, indent: str) -> list[str]:
@@ -415,7 +440,8 @@ class Route:
 
     def body(self) -> list[str]:
         i = " " * 8
-        if self.kind == "copy" and not self.has_lookup:
+        reads_text = any(self.types.kind_of(p.type) == "text" for p in self.inputs)
+        if self.kind == "copy" and not self.has_lookup and not reads_text:
             destination, capacity, out_bytes = (p.name for p in self.outputs)
             return ([f"    return {DETAIL}CopyFormattedText({destination}, {capacity}, "
                      f"{out_bytes}, [&] {{"]
@@ -440,6 +466,7 @@ class Route:
                     lines.append(f"{i}*{output.name} = CNA_INVALID_HANDLE;")
         lines += self._bool_checks(i)
         lines += self._refusal_checks(i)
+        lines += self._text_reads(i)
         lines += self._lookup(i)
         lines += self._locals(i)
         if self.kind in ("value", "get"):

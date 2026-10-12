@@ -56,6 +56,7 @@ CNA_EffectParameterInfo{
     static_cast<CNA_EffectParameterClass>(object->value->getParameterClassProperty()),
     static_cast<CNA_EffectParameterType>(object->value->getParameterTypeProperty())
 }''' }
+cna_effect_parameter_set_value_string = { call = "object->value->SetValue(value)", refuse_nul = ["value"] }
 
 [parameter_collection]
 lookup = "GetParameterCollection"

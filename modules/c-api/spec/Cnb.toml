@@ -50,6 +50,8 @@ cna_cnb_reader_read_u64 = { get = "object->value->ReadU64()" }
 cna_cnb_reader_read_i32 = { get = "object->value->ReadI32()" }
 cna_cnb_reader_read_f32 = { get = "object->value->ReadF32()" }
 cna_cnb_reader_read_f64 = { get = "object->value->ReadF64()" }
+cna_cnb_reader_read_count = { get = "object->value->ReadCount(element_size, what_is_being_counted.c_str())" }
+cna_cnb_reader_read_seconds = { get = "Cnb::ReadCnbSeconds(*object->value, what.c_str())" }
 
 [model]
 lookup = "GetModel"
@@ -85,6 +87,7 @@ cna_cnb_byte_writer_write_u64 = { call = "object->value->WriteU64(value)" }
 cna_cnb_byte_writer_write_i32 = { call = "object->value->WriteI32(value)" }
 cna_cnb_byte_writer_write_f32 = { call = "object->value->WriteF32(value)" }
 cna_cnb_byte_writer_write_f64 = { call = "object->value->WriteF64(value)" }
+cna_cnb_byte_writer_write_string = { call = "object->value->WriteString(value)" }
 
 [writer]
 lookup = "GetWriter"
@@ -93,6 +96,7 @@ object = "std::shared_ptr<CnbWriterResource>"
 [writer.routes]
 cna_cnb_writer_destroy = { release = true }
 cna_cnb_writer_get_schema_chunk_count = { get = "object->value->SchemaChunkCount()" }
+cna_cnb_writer_set_metadata = { call = "object->value->SetMetadata(std::move(asset_type_name), std::move(content_name))" }
 
 [texture_data]
 lookup = "GetTextureData"
@@ -228,3 +232,11 @@ arguments = 2
 
 [model_morph.routes]
 cna_cnb_model_copy_morph_weights = { result = "CopyElements<float>(object->weights, destination, capacity, out_value_count)" }
+
+[writer_and_texture_data]
+lookup = "GetWriter"
+object = "std::shared_ptr<CnbWriterResource>"
+other = { lookup = "GetTextureData", object = "std::shared_ptr<CnbTextureDataResource>" }
+
+[writer_and_texture_data.routes]
+cna_cnb_writer_append_embedded_texture2d = { call = "Cnb::AppendEmbeddedTexture2DChunks(*object->value, *other->value, label.c_str())" }

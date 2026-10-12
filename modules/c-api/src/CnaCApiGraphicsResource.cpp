@@ -27,7 +27,6 @@ namespace {
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::BorrowGameGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -346,28 +345,6 @@ CNA_Result cna_graphics_resource_copy_name(
         capacity,
         outByteCount,
         [](GraphicsResource& resource) { return resource.getNameProperty(); });
-}
-
-CNA_Result cna_graphics_resource_set_name(
-    const CNA_Handle resourceHandle,
-    const CNA_StringView name)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string copiedName;
-        if (const CNA_Result result = ReadText(
-                name, "The graphics-resource name is not valid UTF-8.", &copiedName,
-                EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GraphicsResourceView resource;
-        if (const CNA_Result result = ResolveGraphicsResource(resourceHandle, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource.value->setNameProperty(copiedName);
-        return CNA_RESULT_SUCCESS;
-    });
 }
 
 CNA_Result cna_graphics_resource_copy_string(

@@ -28,6 +28,9 @@ cna_title_location_get_path_size = { size = "TitleLocation::getPathProperty()" }
 cna_title_location_copy_path = { copy = "TitleLocation::Path()" }
 cna_game_set_target_elapsed_time_ticks = { call = "object->setTargetElapsedTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", invalid_if = "ticks <= INT64_C(0)" }
 cna_game_set_inactive_sleep_time_ticks = { call = "object->setInactiveSleepTimeProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", invalid_if = "ticks < INT64_C(0)" }
+cna_game_launch_parameters_contains_key = { get = "object->getLaunchParametersProperty().ContainsKey(key)" }
+cna_game_launch_parameters_add = { call = "object->getLaunchParametersProperty().Add(key, value)" }
+cna_title_location_set_path_ext = { call = "TitleLocation::setPathProperty(path)" }
 
 [window]
 lookup = "CNA::C::Detail::GetGameWindow"

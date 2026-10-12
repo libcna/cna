@@ -8,3 +8,4 @@ object = "GraphicsResourceView"
 [resource.routes]
 cna_graphics_resource_get_name_byte_count = { size = "object.value->getNameProperty()" }
 cna_graphics_resource_get_string_byte_count = { size = "object.value->ToString()" }
+cna_graphics_resource_set_name = { call = "object.value->setNameProperty(name)", refuse_nul = ["name"] }

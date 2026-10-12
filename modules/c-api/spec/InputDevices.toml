@@ -9,6 +9,7 @@ cna_input_devices_reset_for_tests_ext = { call = "InputDevices::ResetForTests()"
 cna_clipboard_get_text_size = { size = "Clipboard::GetTextEXT()" }
 cna_clipboard_get_has_text = { get = "Clipboard::HasTextEXT()" }
 cna_clipboard_copy_text = { copy = "Clipboard::GetTextEXT()" }
+cna_clipboard_set_text = { call = "Clipboard::SetTextEXT(text)" }
 
 [calls]
 [calls.routes]

@@ -16,6 +16,7 @@ cna_gamer_get_is_disposed = { get = "object->getIsDisposedProperty()" }
 cna_gamer_set_tag = { call = "object->setTagProperty(std::any(tag))" }
 # The canonical accessor hands back a profile the caller owns and must delete.
 cna_gamer_get_profile = { result = "PublishProfile(std::shared_ptr<GamerProfile>(object->GetProfile()), out_profile)" }
+cna_gamer_set_display_name = { call = "object->setDisplayNameProperty(display_name)" }
 
 [signed_in]
 lookup = "BorrowSignedIn"
@@ -29,6 +30,8 @@ cna_signed_in_gamer_get_party_size = { get = "object->getPartySizeProperty()" }
 # CNA party service overwrites it at the next gamer-services update.
 cna_signed_in_gamer_set_party_size = { call = "CNA::Internal::GamerServices::GamerAccess::setPartySize(*object, static_cast<int>(party_size))" }
 cna_signed_in_gamer_get_player_index = { get = "object->getPlayerIndexProperty()" }
+cna_signed_in_gamer_set_presence_mode_string_ext = { call = "object->getPresenceProperty().SetPresenceModeStringEXT(mode)" }
+cna_signed_in_gamer_award_achievement = { call = "object->AwardAchievement(achievement_key)" }
 
 [profile]
 lookup = "BorrowProfile"
@@ -96,3 +99,8 @@ other = { lookup = "BorrowGamerBase", object = "Gamer*" }
 
 [signed_in_and_gamer.routes]
 cna_signed_in_gamer_is_friend = { get = "object->IsFriend(other)" }
+
+[values]
+[values.routes]
+cna_gamer_get_partner_token_size = { size = "Gamer::GetPartnerToken(audience_uri)" }
+cna_gamer_copy_partner_token = { copy = "Gamer::GetPartnerToken(audience_uri)" }

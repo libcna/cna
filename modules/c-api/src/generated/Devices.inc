@@ -400,6 +400,42 @@ CNA_Result cna_camera_get_count_ext(
 #endif
 
 #if defined(CNA_DEVICES)
+CNA_Result cna_devices_clipboard_set_text_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_text,
+    CNA_Bool* const out_accepted)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_accepted == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_devices_clipboard_set_text_ext: out_accepted is null.");
+        }
+        std::string text;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_devices_clipboard_set_text_ext: text is not valid UTF-8.", &text);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_accepted = CNA::C::Detail::ToCBool(Clipboard::setTextProperty(text));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_devices_clipboard_set_text_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_text,
+    CNA_Bool* const out_accepted)
+{
+    (void)game;
+    (void)c_text;
+    (void)out_accepted;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
 CNA_Result cna_locale_get_language_size_at_ext(
     const CNA_Handle game,
     const uint64_t index,
@@ -718,6 +754,71 @@ CNA_Result cna_system_tray_destroy(
     const CNA_SystemTrayHandle tray)
 {
     (void)tray;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_set_tooltip(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView c_tooltip)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string tooltip;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_tooltip, "cna_system_tray_set_tooltip: tooltip is not valid UTF-8.", &tooltip);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setTooltipProperty(tooltip);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_set_tooltip(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView c_tooltip)
+{
+    (void)tray;
+    (void)c_tooltip;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_set_entry_label(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_StringView c_label)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string label;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_system_tray_set_entry_label: label is not valid UTF-8.", &label);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SystemTrayResource> object{};
+        if (const CNA_Result routeResult = BorrowTray(tray, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SetEntryLabel(static_cast<std::size_t>(index), label);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_system_tray_set_entry_label(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index,
+    const CNA_StringView c_label)
+{
+    (void)tray;
+    (void)index;
+    (void)c_label;
     return ExtensionUnavailable();
 }
 #endif

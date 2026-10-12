@@ -581,20 +581,6 @@ CNA_Result cna_guide_show_game_invite(
     });
 }
 
-CNA_Result cna_guide_show_game_invite_for_session(const CNA_StringView sessionId)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::string nativeSessionId;
-        if (const CNA_Result result =
-                ReadText(sessionId, "The session identifier is invalid.", &nativeSessionId);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::ShowGameInvite(nativeSessionId);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_show_sign_in(const int32_t paneCount, const CNA_Bool onlineOnly)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

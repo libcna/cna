@@ -903,6 +903,26 @@ CNA_Result cna_skinned_model_ext_copy_inverse_bind_pose_global(
     });
 }
 
+CNA_Result cna_skinned_model_ext_remove_clip(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinned_model_ext_remove_clip: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Clips.erase(name);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_skinning_data_get_type_name_byte_count(
     const CNA_SkinningDataHandle data,
     uint64_t* const out_byte_count)
@@ -1119,6 +1139,26 @@ CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
             return routeResult;
         }
         return CopyOutputValues(object->value->SkeletonRootPrefix, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, "The SkinningData root-prefix output is invalid.", "The destination cannot hold all SkinningData root-prefix matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
+    const CNA_SkinningDataHandle data,
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinning_data_set_skeleton_root_name_ext: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SkinningDataResource> object{};
+        if (const CNA_Result routeResult = GetSkinningData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->SkeletonRootNameEXT = std::move(name);
+        return CNA_RESULT_SUCCESS;
     });
 }
 

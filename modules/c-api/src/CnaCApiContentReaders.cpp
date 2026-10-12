@@ -41,7 +41,6 @@ using CNA::C::Detail::BorrowContentManager;
 using CNA::C::Detail::BorrowedContentManager;
 using CNA::C::Detail::BorrowedStorageStream;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::EmbeddedNul;
@@ -1576,31 +1575,6 @@ template <typename T>
 }
 
 } // namespace
-
-CNA_Result cna_object_dictionary_ext_contains_key(
-    const CNA_ObjectDictionaryHandle dictionaryHandle,
-    const CNA_StringView key,
-    CNA_Bool* const outContains)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outContains == nullptr) {
-            return InvalidArgument("The dictionary containment output is null.");
-        }
-        std::shared_ptr<ObjectDictionaryResource> dictionary;
-        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string keyText;
-        if (const CNA_Result result = ReadText(
-                key, "The dictionary key is not valid UTF-8.", &keyText, EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outContains = ToCBool(dictionary->value->ContainsKey(keyText));
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_object_dictionary_ext_get_key_size_at(
     const CNA_ObjectDictionaryHandle dictionaryHandle,

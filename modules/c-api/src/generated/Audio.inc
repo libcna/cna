@@ -119,6 +119,26 @@ CNA_Result cna_sound_effect_copy_type_name(
     });
 }
 
+CNA_Result cna_sound_effect_set_name(
+    const CNA_Handle sound_effect,
+    const CNA_StringView c_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string name;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_effect_set_name: name is not valid UTF-8.", &name);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SoundEffectResource> object{};
+        if (const CNA_Result routeResult = GetSoundEffect(sound_effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->setNameProperty(std::move(name));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sound_effect_instance_play(
     const CNA_Handle instance)
 {

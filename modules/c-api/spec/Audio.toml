@@ -12,6 +12,7 @@ cna_sound_effect_get_name_size = { size = "object->value->getNameProperty()" }
 cna_sound_effect_copy_name = { copy = "object->value->getNameProperty()" }
 cna_sound_effect_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_sound_effect_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_sound_effect_set_name = { call = "object->value->setNameProperty(std::move(name))" }
 
 [sound_effect_instance]
 lookup = "GetSoundEffectInstance"

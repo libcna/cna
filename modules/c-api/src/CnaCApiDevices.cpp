@@ -880,30 +880,6 @@ CNA_Result cna_display_info_get_safe_area_ext(
     });
 }
 
-CNA_Result cna_devices_clipboard_set_text_ext(
-    const CNA_Handle gameHandle,
-    const CNA_StringView text,
-    CNA_Bool* const outAccepted)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAccepted == nullptr) {
-            return InvalidArgument("The clipboard acceptance output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string value;
-        if (const CNA_Result result =
-                ReadText(text, "The clipboard text is not valid UTF-8.", &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outAccepted = ToCBool(Clipboard::setTextProperty(value));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_url_launcher_open_ext(
     const CNA_Handle gameHandle,
     const CNA_StringView url,
@@ -1302,27 +1278,6 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
     });
 }
 
-CNA_Result cna_system_tray_set_tooltip(
-    const CNA_SystemTrayHandle tray,
-    const CNA_StringView tooltip)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string tooltipText;
-        if (const CNA_Result result =
-                ReadText(tooltip, "The system tray tooltip is not valid UTF-8.", &tooltipText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->setTooltipProperty(tooltipText);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_system_tray_add_entry(
     const CNA_SystemTrayHandle tray,
     const CNA_StringView label,
@@ -1370,28 +1325,6 @@ CNA_Result cna_system_tray_add_entry(
             initiallyChecked != CNA_FALSE,
             initiallyEnabled != CNA_FALSE,
             std::move(handler)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_system_tray_set_entry_label(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_StringView label)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SystemTrayResource> resource;
-        if (const CNA_Result result = BorrowTray(tray, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string labelText;
-        if (const CNA_Result result =
-                ReadText(label, "The tray entry label is not valid UTF-8.", &labelText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        resource->value->SetEntryLabel(static_cast<std::size_t>(index), labelText);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1622,17 +1555,6 @@ CNA_Result cna_display_info_get_safe_area_ext(const CNA_Handle game, CNA_Rectang
     return ExtensionUnavailable();
 }
 
-CNA_Result cna_devices_clipboard_set_text_ext(
-    const CNA_Handle game,
-    const CNA_StringView text,
-    CNA_Bool* const outAccepted)
-{
-    (void)game;
-    (void)text;
-    (void)outAccepted;
-    return ExtensionUnavailable();
-}
-
 CNA_Result cna_url_launcher_open_ext(
     const CNA_Handle game,
     const CNA_StringView url,
@@ -1786,15 +1708,6 @@ CNA_Result cna_system_tray_create_with_test_backend_ext(
     return ExtensionUnavailable();
 }
 
-CNA_Result cna_system_tray_set_tooltip(
-    const CNA_SystemTrayHandle tray,
-    const CNA_StringView tooltip)
-{
-    (void)tray;
-    (void)tooltip;
-    return ExtensionUnavailable();
-}
-
 CNA_Result cna_system_tray_add_entry(
     const CNA_SystemTrayHandle tray,
     const CNA_StringView label,
@@ -1813,17 +1726,6 @@ CNA_Result cna_system_tray_add_entry(
     (void)onClick;
     (void)context;
     (void)outIndex;
-    return ExtensionUnavailable();
-}
-
-CNA_Result cna_system_tray_set_entry_label(
-    const CNA_SystemTrayHandle tray,
-    const uint64_t index,
-    const CNA_StringView label)
-{
-    (void)tray;
-    (void)index;
-    (void)label;
     return ExtensionUnavailable();
 }
 

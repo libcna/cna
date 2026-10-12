@@ -814,27 +814,6 @@ CNA_Result cna_game_set_frame_hooks_ext(
     });
 }
 
-CNA_Result cna_game_set_window_title(
-    const CNA_Handle gameHandle,
-    const CNA_StringView title)
-{
-    return CallWithExceptionBarrier([&]() {
-        std::shared_ptr<CGame> game;
-        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        std::string titleCopy;
-        if (const CNA_Result titleResult = ReadText(
-                title, "The window title is not valid UTF-8.", &titleCopy, EmbeddedNul::Refused);
-            titleResult != CNA_RESULT_SUCCESS) {
-            return titleResult;
-        }
-        game->SetWindowTitle(titleCopy);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
 {
     return CallWithExceptionBarrier([&]() {

@@ -111,6 +111,7 @@ cna_skinned_model_ext_get_part_count = { get = "object->parts.size()" }
 cna_skinned_model_ext_copy_parent_bone_indices = { result = "CopyOutputValues(object->value->ParentBoneIndices, destination, capacity, out_count, [](const int value) noexcept { return static_cast<int32_t>(value); }, \"The SkinnedModelEXT parent-index output is invalid.\", \"The destination cannot hold all SkinnedModelEXT parent indices.\")" }
 cna_skinned_model_ext_copy_bind_pose_local = { result = "CopyOutputValues(object->value->BindPoseLocal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinnedModelEXT bind-pose output is invalid.\", \"The destination cannot hold all SkinnedModelEXT bind-pose matrices.\")" }
 cna_skinned_model_ext_copy_inverse_bind_pose_global = { result = "CopyOutputValues(object->value->InverseBindPoseGlobal, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinnedModelEXT inverse-bind-pose output is invalid.\", \"The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.\")" }
+cna_skinned_model_ext_remove_clip = { call = "object->value->Clips.erase(name)", refuse_nul = ["name"] }
 
 [skinning_data]
 lookup = "GetSkinningData"
@@ -129,6 +130,7 @@ cna_skinning_data_copy_skeleton_hierarchy = { result = "CopyOutputValues(object-
 cna_skinning_data_copy_bind_pose = { result = "CopyOutputValues(object->value->BindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData bind-pose output is invalid.\", \"The destination cannot hold all SkinningData bind-pose matrices.\")" }
 cna_skinning_data_copy_inverse_bind_pose = { result = "CopyOutputValues(object->value->InverseBindPose, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData inverse-bind-pose output is invalid.\", \"The destination cannot hold all SkinningData inverse-bind-pose matrices.\")" }
 cna_skinning_data_copy_skeleton_root_prefix = { result = "CopyOutputValues(object->value->SkeletonRootPrefix, destination, capacity, out_count, [](const Matrix value) noexcept { return ToC(value); }, \"The SkinningData root-prefix output is invalid.\", \"The destination cannot hold all SkinningData root-prefix matrices.\")" }
+cna_skinning_data_set_skeleton_root_name_ext = { call = "object->value->SkeletonRootNameEXT = std::move(name)", refuse_nul = ["name"] }
 
 [animation_player]
 lookup = "GetAnimationPlayer"

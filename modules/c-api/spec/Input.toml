@@ -74,6 +74,9 @@ cna_touch_panel_raise_touch_event_ext = { call = "TouchPanel::INTERNAL_onTouchEv
 # An empty queue throws canonically; the firewall reports that as an invalid state rather
 # than inventing a default sample, so "no gesture" stays distinguishable from a real one.
 cna_touch_panel_read_gesture = { get = "MapGestureSample(TouchPanel::ReadGesture())", versioned = true }
+# Composition text is byte-length delimited on both sides, so an embedded NUL is
+# representable and is not rejected; invalid UTF-8 still is.
+cna_text_input_raise_text_editing_ext = { call = "TextInputEXT::INTERNAL_OnTextEditing(text, static_cast<int>(start), static_cast<int>(length))" }
 
 [cursor]
 lookup = "GetCursorResource"

@@ -854,6 +854,27 @@ CNA_Result cna_touch_panel_read_gesture(
     });
 }
 
+CNA_Result cna_text_input_raise_text_editing_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_text,
+    const int32_t start,
+    const int32_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string text;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_text_input_raise_text_editing_ext: text is not valid UTF-8.", &text);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        TextInputEXT::INTERNAL_OnTextEditing(text, static_cast<int>(start), static_cast<int>(length));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_mouse_cursor_dispose(
     const CNA_MouseCursorHandle cursor)
 {

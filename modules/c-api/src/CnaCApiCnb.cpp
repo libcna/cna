@@ -45,7 +45,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -1585,32 +1584,6 @@ CNA_Result cna_cnb_reader_copy_string(
     });
 }
 
-CNA_Result cna_cnb_reader_read_count(
-    const CNA_CnbReaderHandle readerHandle,
-    const uint64_t elementSize,
-    const CNA_StringView whatIsBeingCounted,
-    uint32_t* const outCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outCount == nullptr) {
-            return InvalidArgument("The element-count output is null.");
-        }
-        std::string what;
-        if (const CNA_Result result = ReadText(
-                whatIsBeingCounted, "The what_is_being_counted text is not valid UTF-8.", &what);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outCount = reader->value->ReadCount(elementSize, what.c_str());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_reader_read_bytes(
     const CNA_CnbReaderHandle readerHandle,
     const uint64_t byteCount,
@@ -1720,26 +1693,6 @@ CNA_Result cna_cnb_byte_writer_create_from_bytes(
         resource->value = std::make_shared<Cnb::CnbByteWriter>(
             std::vector<uint8_t>(span.begin(), span.end()));
         return CreateHandle(ObjectKind::CnbByteWriter, resource, outWriter);
-    });
-}
-
-CNA_Result cna_cnb_byte_writer_write_string(
-    const CNA_CnbByteWriterHandle writerHandle,
-    const CNA_StringView value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbByteWriterResource> writer;
-        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string text;
-        if (const CNA_Result result = ReadText(value, "The value text is not valid UTF-8.", &text);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->WriteString(text);
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1861,34 +1814,6 @@ CNA_Result cna_cnb_writer_create(
         const auto resource = std::make_shared<CnbWriterResource>();
         resource->value = std::make_shared<Cnb::CnbWriter>(assetTypeId, assetSchemaVersion);
         return CreateHandle(ObjectKind::CnbWriter, resource, outWriter);
-    });
-}
-
-CNA_Result cna_cnb_writer_set_metadata(
-    const CNA_CnbWriterHandle writerHandle,
-    const CNA_StringView assetTypeName,
-    const CNA_StringView contentName)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string typeName;
-        std::string content;
-        if (const CNA_Result result =
-                ReadText(assetTypeName, "The asset_type_name text is not valid UTF-8.", &typeName);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ReadText(contentName, "The content_name text is not valid UTF-8.", &content);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        writer->value->SetMetadata(std::move(typeName), std::move(content));
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -2427,33 +2352,6 @@ using TextureDecoder = Cnb::CnbTextureData (*)(const Cnb::CnbDocument&);
 }
 
 } // namespace
-
-CNA_Result cna_cnb_writer_append_embedded_texture2d(
-    const CNA_CnbWriterHandle writerHandle,
-    const CNA_CnbTextureDataHandle textureHandle,
-    const CNA_StringView label)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbWriterResource> writer;
-        if (const CNA_Result result = GetWriter(writerHandle, &writer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<CnbTextureDataResource> texture;
-        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string labelText;
-        if (const CNA_Result result =
-                ReadText(label, "The label text is not valid UTF-8.", &labelText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Cnb::AppendEmbeddedTexture2DChunks(*writer->value, *texture->value, labelText.c_str());
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 CNA_Result cna_cnb_document_read_embedded_texture2d(
     const CNA_CnbDocumentHandle documentHandle,
@@ -5020,31 +4918,6 @@ CNA_Result cna_cnb_animation_clip_get_track(
         if (outKeyframeCount != nullptr) {
             *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_read_seconds(
-    const CNA_CnbReaderHandle readerHandle,
-    const CNA_StringView what,
-    double* const outSeconds)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSeconds == nullptr) {
-            return InvalidArgument("The seconds output is null.");
-        }
-        std::string whatText;
-        if (const CNA_Result result =
-                ReadText(what, "The what text is not valid UTF-8.", &whatText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSeconds = Cnb::ReadCnbSeconds(*reader->value, whatText.c_str());
         return CNA_RESULT_SUCCESS;
     });
 }
