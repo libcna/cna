@@ -760,6 +760,20 @@ TEST_F(CnbContentManagerTest, RemovingABuiltInLoaderHoldsUntilTheNextContentMana
     EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
 }
 
+TEST_F(CnbContentManagerTest, ARemovedBuiltInLoaderStaysRemovedWhenItsTypeIsLoaded)
+{
+    // Loading installs a declared loader, never one removed since: the constructor that once
+    // registered them all ran before the removal, and loading registered nothing.
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+
+    EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+}
+
 TEST_F(CnbContentManagerTest, ClearForgetsTheDeclaredBuiltInLoaders)
 {
     ScratchContentRoot root;

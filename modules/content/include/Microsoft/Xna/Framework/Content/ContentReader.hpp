@@ -159,10 +159,11 @@ namespace Microsoft::Xna::Framework::Content
          * follows the same `std::optional<T>` idiom already used throughout this reader subsystem
          * for `existingInstance`, rather than inventing a second one.
          *
-         * Declared here but defined (and explicitly instantiated for the concrete asset types
-         * that use it) in `ContentReader.cpp`, not inline: this method needs `ContentManager`'s
-         * full definition to call `Load<T>()`, but `ContentManager.hpp` already includes this
-         * header, so an inline body here would create a circular include.
+         * Declared here but defined as a template at the end of `ContentManager.hpp`, not inline:
+         * this method needs `ContentManager`'s full definition to call `Load<T>()`, but
+         * `ContentManager.hpp` already includes this header, so an inline body here would create
+         * a circular include. Each reader that follows a reference instantiates it for its own T;
+         * there are no explicit instantiations (docs/link-size-architecture.md).
          *
          * @tparam T Requested asset type; must match (via `std::any_cast` inside `Load<T>()`)
          *           whatever the referenced file's root type-reader actually produces.

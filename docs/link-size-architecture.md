@@ -11,7 +11,7 @@ to check it.
 |---|---|
 | Does the default build still support everything? | Yes. No feature is disabled, stubbed or moved behind a flag by this design. |
 | Does a 2D game pay for glTF, Draco, avatars or MediaPlayer? | No, unless it calls them (`LinkFootprint_2DGame` checks it). |
-| Does a game that uses them get them? | Yes (`LinkFootprint_FullFeatures` checks it). |
+| Does a game that uses them get them? | Yes. `LinkFootprint_FullFeatures` checks a representative set (glTF, the Model reader, Draco where built, avatars and the catalog, the system Guide, media, capture, streaming audio, cube and volume textures); the full test suite exercises the rest. |
 | Do I need to switch features off to get a small game? | No. Options exist for build time and deployment, not for correctness of the closure. |
 
 ## Why programs used to contain everything
@@ -54,13 +54,18 @@ dependency is not real.
 | `.cnb` encoders and `CnbWriter` | `Cnb*Encode.cpp`, `CnbModelCodec.cpp`, `CnbModelV2Codec.cpp` (decoders: `Cnb*Codec.cpp`, `CnbModel*Decode.cpp`) | content tools; loading never encodes |
 | `TextureCube`, `RenderTargetCube`, `Texture3D` | their own translation units; the device binds through `IRenderTargetBindingSource`, renderers ask `Texture::AsTextureCubeEXT`/`AsTexture3DEXT` | a program that creates, loads or binds one |
 | Streaming audio, capture, media updates | slots of `FrameworkDispatcher` (`FrameworkUpdates.hpp`) | the subsystem installs its slot on first use |
-| Camera, tray | `Sdl3CameraService.cpp`, `Sdl3TrayService.cpp` (`CNA/Platform/OptionalServices.hpp`), one each; their support probes are `Sdl3ServiceSupport.cpp` | `CNA::Devices::Camera` and `SystemTray`, which enable them; `PlatformCapabilities::camera`/`tray` and `Supports()` report support without either service, and only the camera question starts SDL's camera subsystem |
+| Camera, tray | `Sdl3CameraService.cpp`, `Sdl3TrayService.cpp`, one each, which define the non-virtual `IPlatform::GetCamera()`/`GetTray()`; their support probes are `Sdl3ServiceSupport.cpp` | a call of `GetCamera()`/`GetTray()` (as `CNA::Devices::Camera` and `SystemTray` make); `PlatformCapabilities::camera`/`tray` and `Supports()` report support without either service, and only the camera question starts SDL's camera subsystem |
 | Audio capture backend | `AudioRecordingDeviceFactory.cpp` | `Microphone` |
 | Other platforms | `PlatformFactory.cpp` (by name) | the platform conformance suite; games use `PlatformFactoryDefault.cpp` |
 | Renderers | the generated registry lists only the renderers this build compiles | single renderer by default; a multi-renderer build is requested with `CNA_GRAPHICS_RENDERERS` |
 | Networking (ENet) | `CNA_Net` | games that link `CNA::Net` |
 
 Each file at a boundary says so in a short `Link boundary:` comment, so that nobody merges it back.
+
+This work changed CNA's C++ ABI (new virtual functions on `IPlatform`, `Effect`, `Texture` and the
+render targets): rebuild C++ consumers against this revision (CHANGELOG.md). Source compatibility
+was kept, except that an `IPlatform` implementation overrides `GetCameraService()` and
+`GetTrayService()` instead of `GetCamera()` and `GetTray()`.
 
 ## How to add a feature without growing every game
 
@@ -69,11 +74,16 @@ Each file at a boundary says so in a short `Link boundary:` comment, so that nob
   as the renderer registry does), by type (`detail::BuiltinContent<T>` is a template the caller
   instantiates), or by installation (below).
 - **Declare what an API promises, install it when it is needed.** `Game` once registered every
-  `.xnb` reader and `ContentManager` every `.cnb` loader. Both still do as far as any API can see:
-  they declare the built-ins registered; a type's reader is installed by its first load; the
-  registries answer `IsRegistered` and type names from the declaration, and install everything only
-  when asked for a reader or loader object by hand -- in their own translation units, so only a
-  program that asks links everything. The load path uses lookups that never install anything.
+  `.xnb` reader and `ContentManager` every `.cnb` loader. Now they declare the built-ins
+  registered; a type's reader is installed by its first load; the registries answer `IsRegistered`
+  and type names from the declaration, and install everything only when asked for a reader or
+  loader object by hand -- in their own translation units, so only a program that asks links
+  everything. The load path uses lookups that never install anything. Removal and
+  re-registration keep their old meaning: once everything is installed a load installs nothing,
+  so a removed reader stays removed until the built-ins are registered again (a new `Game`, a
+  new `ContentManager` or `RegisterBuiltinLoaders()` for `.cnb` loaders). The registries'
+  observable answers are pinned by `ContentTypeReaderManagerTests` and the `.cnb` registry tests,
+  which cover removal followed by a load.
 - **Install optional work when it is first used.** `FrameworkDispatcher` and the Guide frame hold
   plain function pointers that the optional subsystem sets on its first use. No static
   "registrar" object: in a static archive nothing references it, so it is dropped, and the usual
@@ -84,11 +94,14 @@ Each file at a boundary says so in a short `Link boundary:` comment, so that nob
   class's typeinfo and so links the class. Use a virtual query (`Effect::IsStockEffectEXT`,
   `Texture::AsTextureCubeEXT`) or an interface the concrete classes implement
   (`IRenderTargetBindingSource`), whose typeinfo every user emits for itself.
-- **An optional platform service is enabled by its consumer.** A virtual service accessor links its
-  implementation; one installed by `EnableCameraService()` is linked only by the program that uses
-  it. Whether it is supported is a separate small probe, so the capability keeps its meaning
-  without linking the service. Where a question has a cost (the camera's starts SDL's camera
-  subsystem), ask `IPlatform::Supports()` for the capability needed rather than reading the set.
+- **An optional platform service is reached through a non-virtual accessor.** A virtual accessor
+  links whatever it returns into every program that links the platform. `IPlatform::GetCamera()`
+  and `GetTray()` are plain functions, each in the translation unit that creates the service, so
+  the call itself links it and a program that never calls them contains neither; the platform
+  answers through a protected virtual. Whether it is supported is a separate small probe, so the
+  capability keeps its meaning without linking the service. Where a question has a cost (the
+  camera's starts SDL's camera subsystem), ask `IPlatform::Supports()` for the capability needed
+  rather than reading the set.
 - **Large data is its own library**, referenced by the one function that serves it.
 - **Test doubles are their own translation unit**, referenced only by tests.
 - **Pass capabilities instead of looking them up.** The service client does not ask the avatar
@@ -128,15 +141,20 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
 - **Sizes.** `size -A game`, `objcopy --strip-debug game game.nodebug`, `strip -o game.stripped
   game`. Debug information is most of a Debug executable and is not shipped; compare stripped
   sizes, and `.rodata` for embedded data.
-- **Why is X linked?** Relink with GNU ld and a map (`-fuse-ld=bfd -Wl,-Map=game.map`; mold and
-  lld do not record the reason), then `tools/link_audit/why_linked.py game.map --why X` prints the
-  chain of references that pulled X in, and `--top 40`/`--modules` rank what costs the most.
-  `tools/link_audit/link_closure.py` lists *every* reference into a member, so a cut can be
-  planned against all of them.
-- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 31 subsystem
-  families it does not use; `LinkFootprint_GamerServicesGame` pins what the same game with a
-  `GamerServicesComponent` contains (the system Guide and avatars, nothing else);
-  `LinkFootprint_FullFeatures` fails if a game that uses everything lacks any of it;
+- **Why is X linked?** Ask the linker that produced the binary, with the same command line: mold
+  `-Wl,--print-dependencies` (every reference between input files), lld
+  `-Wl,--why-extract=why.txt` (why each archive member was extracted), GNU ld `-Wl,-Map=game.map`
+  and then `tools/link_audit/why_linked.py game.map --why X`, which prints the chain of references
+  that pulled X in (`--top 40`/`--modules` rank what costs the most). Relinking with a different
+  linker only to get a map can hide the problem: an extraction may happen with one linker and not
+  another (see "Linker independence"). `tools/link_audit/link_closure.py` lists *every*
+  reference into a member, so a cut can be planned against all of them.
+- **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of the subsystem
+  families it does not use (the list is in the CMake file); `LinkFootprint_GamerServicesGame` pins
+  what the same game with a `GamerServicesComponent` contains (the system Guide and avatars, and
+  none of the families it does not use); `LinkFootprint_FullFeatures` fails if a game that uses the
+  listed subsystems lacks any of them -- it is a representative check that the boundaries do not
+  cut a used feature, not a test of every CNA feature;
   `LinkFootprint_CapabilityQuery` fails if asking whether a camera or a tray is supported links
   either service, and `LinkFootprint_CameraOnly`/`_TrayOnly` if using one links the other
   (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes

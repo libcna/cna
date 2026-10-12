@@ -19,10 +19,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   networking, cube and volume textures, the camera, the tray, the `.cnb` writer or the Headless
   and Terminal platforms. Nothing was removed or disabled; a program
   that uses those features links them. See `docs/link-size-architecture.md`. A `Game` and every
-  `ContentManager` still register every built-in reader and `.cnb` loader as far as any API can
-  observe -- `ContentTypeReaderManager`, `CnbLoaderRegistry` and `GetXnbReaderUsageSummary()`
-  answer as before -- but each is installed when its type is first loaded, or when one of those
-  registries is asked about it by name, which is what keeps unused importers out of a game. The
+  `ContentManager` declare every built-in reader and `.cnb` loader registered, and
+  `ContentTypeReaderManager`, `CnbLoaderRegistry` and `GetXnbReaderUsageSummary()` answer queries,
+  removals and re-registrations as they did when everything was registered eagerly; each reader
+  or loader is installed when its type is first loaded, or when one of those registries is asked
+  for it by name, which is what keeps unused importers out of a game. The
   system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as before
   reachable only by signed-in players.
 - **C++ ABI: rebuild against this revision.** The link-boundary work adds virtual functions and

@@ -11,8 +11,10 @@ command line. This tool reads that record and the memory map that follows it.
     why_linked.py MAP --why EmbeddedAvatar  # reference chain from the program to each match
     why_linked.py MAP --modules             # runtime bytes per archive
 
-mold and lld do not write the "Archive member included" section; relink with -fuse-ld=bfd to get
-it (docs/link-size-architecture.md, "Inspecting a link").
+mold and lld do not write the "Archive member included" section. They answer the same question
+themselves (mold: -Wl,--print-dependencies; lld: -Wl,--why-extract=FILE), and that is the one to
+ask when a link misbehaves with them: relinking with GNU ld for a map can make an extraction that
+only one linker performs disappear (docs/link-size-architecture.md, "Checking a binary").
 """
 
 import argparse
