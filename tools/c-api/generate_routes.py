@@ -76,14 +76,16 @@ enough for this build, rather than only when it is null.
 A route may add ``invalid_if = "<C++ condition>"`` (or a list of them): an argument the route
 refuses with CNA_RESULT_INVALID_ARGUMENT, e.g. ``invalid_if = "!std::isfinite(volume)"``. The
 condition reads the parameters as the caller passed them, before any conversion, and is checked
-before the lookup. An input structure passed by const pointer is accepted only when a condition
+before the lookup. A check that needs its own result code or message is a call instead,
+``validate = "ValidateKey(key)"`` (or a list): any CNA_Result but success is returned as it is.
+An input structure passed by const pointer is accepted only when a condition or a validate call
 names it and so refuses an invalid one, null included (``!IsPresentationParameters(source)``);
 the contract test holds it to refusing null.
 
 Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
 null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
 doing anything else, then validates CNA_Bool inputs, then its
-``invalid_if`` conditions, then reads its text, and returns whatever the lookup returns when the
+``invalid_if`` conditions and ``validate`` calls, then reads its text, and returns whatever the lookup returns when the
 handle is refused.
 
 Usage::
@@ -227,7 +229,7 @@ class Route:
         if not isinstance(entry, dict) or len([k for k in entry if k in KINDS]) != 1:
             raise SpecError(f"{name}: write exactly one of {', '.join(KINDS)}, e.g. "
                             f'{{ get = "object->getXProperty()" }}')
-        unknown = set(entry) - set(KINDS) - {"invalid_if", "versioned", "refuse_nul"}
+        unknown = set(entry) - set(KINDS) - {"invalid_if", "validate", "versioned", "refuse_nul"}
         if unknown:
             raise SpecError(f"{name}: unknown key(s) {', '.join(sorted(unknown))}")
         refusals = entry.get("invalid_if", [])
@@ -235,6 +237,11 @@ class Route:
         if not isinstance(self.refusals, list) or not all(
                 isinstance(r, str) and r for r in self.refusals):
             raise SpecError(f"{name}: invalid_if takes a C++ condition in quotes, or a list of them")
+        validations = entry.get("validate", [])
+        self.validations = [validations] if isinstance(validations, str) else validations
+        if not isinstance(self.validations, list) or not all(
+                isinstance(v, str) and v for v in self.validations):
+            raise SpecError(f"{name}: validate takes a C++ call returning CNA_Result, or a list")
         self.refuse_nul = entry.get("refuse_nul", [])
         if not isinstance(self.refuse_nul, list) or not all(
                 isinstance(n, str) for n in self.refuse_nul):
@@ -256,8 +263,8 @@ class Route:
         self.has_lookup = "lookup" in group
         self.other: Param | None = None
         self._check_shape()
-        if self.refusals and self.kind == "copy" and not self.has_lookup:
-            raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if")
+        if (self.refusals or self.validations) and self.kind == "copy" and not self.has_lookup:
+            raise SpecError(f"{name}: a 'copy' without a lookup takes no invalid_if or validate")
         if self.versioned and self.kind not in ("value", "get"):
             raise SpecError(f"{name}: only a 'value' or 'get' output can be versioned")
 
@@ -317,11 +324,11 @@ class Route:
             if param.pointer:
                 # A structure read through a pointer is passed as declared, and only when a
                 # refusal names it: that condition is what keeps a null one from being read.
-                if not param.const or not any(re.search(rf"\b{param.name}\b", condition)
-                                              for condition in self.refusals):
+                if not param.const or not any(re.search(rf"\b{param.name}\b", check)
+                                              for check in self.refusals + self.validations):
                     raise self._fail(f"input '{param.name}' is a pointer; write the route by "
                                      "hand, or refuse an invalid one (null included) with an "
-                                     "invalid_if condition that names it")
+                                     "invalid_if or validate that names it")
                 continue
             if self.types.kind_of(param.type) == "other":
                 raise self._fail(f"input '{param.name}' has type {param.type}, which this "
@@ -371,20 +378,25 @@ class Route:
                     f'{DETAIL}ValidateCanonicalBool({self._c_name(param)}, "{param.name}")', indent)
         return lines
 
+    def _as_passed(self, code: str) -> str:
+        """`code` over the parameters exactly as the caller passed them, before conversion."""
+        for param in self.params:
+            if self._converted(param):
+                code = re.sub(rf"(?<![\w.>:]){param.name}(?!\w)", self._c_name(param), code)
+        return code
+
     def _refusal_checks(self, indent: str) -> list[str]:
-        """The `invalid_if` conditions, over the parameters exactly as the caller passed them."""
+        """The `invalid_if` conditions, then the `validate` calls, over the parameters as passed."""
         lines: list[str] = []
         for condition in self.refusals:
-            c_condition = condition
-            for param in self.params:
-                if self._converted(param):
-                    c_condition = re.sub(rf"(?<![\w.>:]){param.name}(?!\w)", self._c_name(param),
-                                         c_condition)
+            c_condition = self._as_passed(condition)
             message = condition.replace("\\", "\\\\").replace('"', '\\"')
             lines += [f"{indent}if ({c_condition}) {{",
                       f'{indent}    return {DETAIL}InvalidArgument("{self.name}: invalid because '
                       f'{message}.");',
                       f"{indent}}}"]
+        for validation in self.validations:
+            lines += returns_on_failure(self._as_passed(validation), indent)
         return lines
 
     def _text_reads(self, indent: str) -> list[str]:
@@ -397,7 +409,7 @@ class Route:
             lines.append(f"{indent}std::string {param.name};")
             lines += returns_on_failure(
                 f'{DETAIL}ReadText({self._c_name(param)}, "{self.name}: {param.name} is not '
-                f'valid UTF-8.", &{param.name}{rule})', indent)
+                f'valid text.", &{param.name}{rule})', indent)
         return lines
 
     def _locals(self, indent: str) -> list[str]:
@@ -739,7 +751,7 @@ def render_contract_test(routes: list[Route]) -> str:
                 lines += _versioned_header(r, "1U")
             check = [_expect(f"{r.name}({_arguments(r, handle)})",
                              "CNA_RESULT_INVALID_HANDLE", r.name, "what", "feature" in r.group,
-                             bool(r.refusals))]
+                             bool(r.refusals or r.validations))]
             check += [f'    failures += expect_cleared({_standin("o", o.type)}, "{r.name}");'
                       for o in cleared]
             if r.group.get("accepts_null_handle"):
@@ -754,7 +766,8 @@ def render_contract_test(routes: list[Route]) -> str:
               for r in routes if r.kind == "copy" and not r.has_lookup}
     for r in routes:
         pair = copies.get((r.group.get("lookup"), r.expression, tuple(r.inputs)))
-        if r.kind != "size" or r.has_lookup or pair is None or r.refusals or pair.refusals:
+        if (r.kind != "size" or r.has_lookup or pair is None or r.refusals or pair.refusals
+                or r.validations or pair.validations):
             continue
         size_args = _arguments(r, **{r.outputs[0].name: "&size"})
         capacity = pair.outputs[1].name

@@ -467,7 +467,7 @@ CNA_Result cna_storage_set_app_name_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string app_name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_app_name, "cna_storage_set_app_name_ext: app_name is not valid UTF-8.", &app_name, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_app_name, "cna_storage_set_app_name_ext: app_name is not valid text.", &app_name, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

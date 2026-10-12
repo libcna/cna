@@ -177,7 +177,7 @@ CNA_Result cna_gamer_set_display_name(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string display_name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_display_name, "cna_gamer_set_display_name: display_name is not valid UTF-8.", &display_name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_display_name, "cna_gamer_set_display_name: display_name is not valid text.", &display_name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -284,7 +284,7 @@ CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string mode;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_mode, "cna_signed_in_gamer_set_presence_mode_string_ext: mode is not valid UTF-8.", &mode);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_mode, "cna_signed_in_gamer_set_presence_mode_string_ext: mode is not valid text.", &mode);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -304,7 +304,7 @@ CNA_Result cna_signed_in_gamer_award_achievement(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string achievement_key;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_achievement_key, "cna_signed_in_gamer_award_achievement: achievement_key is not valid UTF-8.", &achievement_key);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_achievement_key, "cna_signed_in_gamer_award_achievement: achievement_key is not valid text.", &achievement_key);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -593,7 +593,7 @@ CNA_Result cna_gamer_get_partner_token_size(
             return CNA::C::Detail::InvalidArgument("cna_gamer_get_partner_token_size: out_bytes is null.");
         }
         std::string audience_uri;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_get_partner_token_size: audience_uri is not valid UTF-8.", &audience_uri);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_get_partner_token_size: audience_uri is not valid text.", &audience_uri);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -613,7 +613,7 @@ CNA_Result cna_gamer_copy_partner_token(
             return routeResult;
         }
         std::string audience_uri;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_copy_partner_token: audience_uri is not valid UTF-8.", &audience_uri);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_audience_uri, "cna_gamer_copy_partner_token: audience_uri is not valid text.", &audience_uri);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

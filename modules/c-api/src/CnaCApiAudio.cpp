@@ -26,6 +26,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -57,6 +58,8 @@ using CNA::C::Detail::ToNative;
 using CNA::C::Detail::ValidateActiveGameHandle;
 using CNA::C::Detail::ValidateVersionedStructure;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
+using Microsoft::Xna::Framework::Audio::AudioEmitter;
+using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::NoAudioHardwareException;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
@@ -128,7 +131,7 @@ struct SoundEffectInstanceResource final {
 
 [[nodiscard]] CNA_Result ToNativeListener(
     const CNA_AudioListener* const value,
-    Microsoft::Xna::Framework::Audio::AudioListener* const outListener)
+    AudioListener* const outListener)
 {
     if (const CNA_Result result =
             ValidateVersionedStructure(value, "The AudioListener structure is invalid.");
@@ -148,7 +151,7 @@ struct SoundEffectInstanceResource final {
 
 [[nodiscard]] CNA_Result ToNativeEmitter(
     const CNA_AudioEmitter* const value,
-    Microsoft::Xna::Framework::Audio::AudioEmitter* const outEmitter)
+    AudioEmitter* const outEmitter)
 {
     if (const CNA_Result result =
             ValidateVersionedStructure(value, "The AudioEmitter structure is invalid.");
@@ -169,6 +172,31 @@ struct SoundEffectInstanceResource final {
     outEmitter->setVelocityProperty(ToNative(value->velocity));
     return CNA_RESULT_SUCCESS;
 }
+
+[[nodiscard]] CNA_AudioEmitter ToCAudioEmitter(const AudioEmitter& emitter)
+{
+    return CNA_AudioEmitter{
+        sizeof(CNA_AudioEmitter),
+        StructureVersion,
+        emitter.getDopplerScaleProperty(),
+        ToC(emitter.getForwardProperty()),
+        ToC(emitter.getPositionProperty()),
+        ToC(emitter.getUpProperty()),
+        ToC(emitter.getVelocityProperty())};
+}
+
+[[nodiscard]] CNA_AudioListener ToCAudioListener(const AudioListener& listener)
+{
+    return CNA_AudioListener{
+        sizeof(CNA_AudioListener),
+        StructureVersion,
+        ToC(listener.getForwardProperty()),
+        ToC(listener.getPositionProperty()),
+        ToC(listener.getUpProperty()),
+        ToC(listener.getVelocityProperty())};
+}
+
+constexpr std::string_view MicrophoneTypeName = "Microsoft.Xna.Framework.Audio.Microphone";
 
 } // namespace
 
@@ -893,90 +921,14 @@ CNA_Result cna_microphone_subscribe_buffer_ready_at(
     });
 }
 
-CNA_Result cna_microphone_get_type_name_size(
-    const CNA_Handle gameHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The type-name size output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The name belongs to the type, so a machine with no microphone still answers it.
-        static const std::string typeName = "Microsoft.Xna.Framework.Audio.Microphone";
-        *outBytes = typeName.size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_microphone_copy_type_name(
-    const CNA_Handle gameHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        static const std::string typeName = "Microsoft.Xna.Framework.Audio.Microphone";
-        return CopyText(typeName, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_audio_emitter_init(CNA_AudioEmitter* const outEmitter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEmitter == nullptr) {
-            return InvalidArgument("The AudioEmitter output is null.");
-        }
-        const Microsoft::Xna::Framework::Audio::AudioEmitter emitter;
-        const CNA_AudioEmitter value = {
-            sizeof(CNA_AudioEmitter),
-            StructureVersion,
-            emitter.getDopplerScaleProperty(),
-            ToC(emitter.getForwardProperty()),
-            ToC(emitter.getPositionProperty()),
-            ToC(emitter.getUpProperty()),
-            ToC(emitter.getVelocityProperty())
-        };
-        *outEmitter = value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_audio_listener_init(CNA_AudioListener* const outListener)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outListener == nullptr) {
-            return InvalidArgument("The AudioListener output is null.");
-        }
-        const Microsoft::Xna::Framework::Audio::AudioListener listener;
-        const CNA_AudioListener value = {
-            sizeof(CNA_AudioListener),
-            StructureVersion,
-            ToC(listener.getForwardProperty()),
-            ToC(listener.getPositionProperty()),
-            ToC(listener.getUpProperty()),
-            ToC(listener.getVelocityProperty())
-        };
-        *outListener = value;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_sound_effect_instance_apply_3d(
     const CNA_Handle instanceHandle,
     const CNA_AudioListener* const listener,
     const CNA_AudioEmitter* const emitter)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::Audio::AudioListener nativeListener;
-        Microsoft::Xna::Framework::Audio::AudioEmitter nativeEmitter;
+        AudioListener nativeListener;
+        AudioEmitter nativeEmitter;
         if (const CNA_Result result = ToNativeListener(listener, &nativeListener);
             result != CNA_RESULT_SUCCESS) {
             return result;
@@ -1013,7 +965,7 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
         // for an empty array: a count of zero reaches the canonical count check and is refused
         // there, not mistaken for a null array. CABI-6: the canonical overload now accepts any
         // count of one or more, matching XNA, which hands its whole listener array to XACT.
-        std::vector<Microsoft::Xna::Framework::Audio::AudioListener> nativeListeners(
+        std::vector<AudioListener> nativeListeners(
             static_cast<std::size_t>(listenerCount == 0U ? 1U : listenerCount));
         for (uint64_t index = 0U; index < listenerCount; ++index) {
             if (const CNA_Result result =
@@ -1022,7 +974,7 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
                 return result;
             }
         }
-        Microsoft::Xna::Framework::Audio::AudioEmitter nativeEmitter;
+        AudioEmitter nativeEmitter;
         if (const CNA_Result result = ToNativeEmitter(emitter, &nativeEmitter);
             result != CNA_RESULT_SUCCESS) {
             return result;

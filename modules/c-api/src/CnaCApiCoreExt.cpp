@@ -160,21 +160,6 @@ using LoggerRoute = void (*)(std::string_view, CNA::LogCategory);
     return CNA_RESULT_SUCCESS;
 }
 
-using ConditionalLoggerRoute = void (*)(std::string_view, bool);
-
-[[nodiscard]] CNA_Result LogWithCondition(
-    const ConditionalLoggerRoute route,
-    const CNA_StringView message,
-    const CNA_Bool condition)
-{
-    std::string text;
-    if (const CNA_Result result = CopyMessage(message, &text); result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    route(text, condition != CNA_FALSE);
-    return CNA_RESULT_SUCCESS;
-}
-
 // The number of renderers CNA::GraphicsRendererType actually declares, counted through the
 // canonical namer rather than written down: it answers "UNKNOWN" for an ordinal past the last
 // enumerator, and the enumeration is dense.
@@ -373,83 +358,6 @@ CNA_Result cna_logger_log(
         }
         CNA::Logger::Log(nativeLevel, text, nativeCategory, condition != CNA_FALSE);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_logger_fatal_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::FatalIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_error_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::ErrorIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_warn_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::WarnIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_info_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::InfoIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_debug_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::DebugIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_trace_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::TraceIf, message, condition);
-    });
-}
-
-CNA_Result cna_logger_experiment_if(const CNA_StringView message, const CNA_Bool condition)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return LogWithCondition(&CNA::Logger::ExperimentIf, message, condition);
     });
 }
 

@@ -109,6 +109,146 @@ CNA_Result cna_logger_experiment(
     });
 }
 
+CNA_Result cna_logger_fatal_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_fatal_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::FatalIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_error_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_error_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::ErrorIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_warn_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_warn_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::WarnIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_info_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_info_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::InfoIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_debug_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_debug_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::DebugIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_trace_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_trace_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::TraceIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_logger_experiment_if(
+    const CNA_StringView c_message,
+    const CNA_Bool c_condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::string message;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_message, "cna_logger_experiment_if: message is not valid text.", &message, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool condition = CNA::C::Detail::FromCBool(c_condition);
+        CNA::Logger::ExperimentIf(message, condition);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_platform_copy_current_name_ext(
     char* const destination,
     const uint64_t capacity,
@@ -322,7 +462,7 @@ CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_renderer_set_preferred_by_name_ext: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_renderer_set_preferred_by_name_ext: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

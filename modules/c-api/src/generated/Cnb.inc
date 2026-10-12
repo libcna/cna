@@ -392,6 +392,96 @@ CNA_Result cna_cnb_decode_video_stream_reference_size(
     });
 }
 
+CNA_Result cna_cnb_decode_model(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbModelDataHandle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_model: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateModel(Cnb::DecodeModelFromCnb(*object->value), out_model);
+    });
+}
+
+CNA_Result cna_cnb_decode_sprite_font(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbSpriteFontDataHandle* const out_font)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_font == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_sprite_font: out_font is null.");
+        }
+        *out_font = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSpriteFont(Cnb::DecodeSpriteFontFromCnb(*object->value), out_font);
+    });
+}
+
+CNA_Result cna_cnb_decode_sound_effect(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbSoundEffectDataHandle* const out_sound)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_sound == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_sound_effect: out_sound is null.");
+        }
+        *out_sound = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSoundEffect(Cnb::DecodeSoundEffectFromCnb(*object->value), out_sound);
+    });
+}
+
+CNA_Result cna_cnb_decode_animation_clip(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbAnimationClipHandle* const out_clip)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_clip == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_decode_animation_clip: out_clip is null.");
+        }
+        *out_clip = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateAnimationClip(Cnb::DecodeAnimationClipFromCnb(*object->value), out_clip);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_resolve_for_document(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbLoaderHandle* const out_loader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_loader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_loader_registry_resolve_for_document: out_loader is null.");
+        }
+        *out_loader = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateLoader(CNA::Content::CnbLoaderRegistry::ResolveForDocument(*object->value), out_loader);
+    });
+}
+
 CNA_Result cna_cnb_reader_copy_context(
     const CNA_CnbReaderHandle reader,
     char* const destination,
@@ -662,7 +752,7 @@ CNA_Result cna_cnb_reader_read_count(
             return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_count: out_count is null.");
         }
         std::string what_is_being_counted;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what_is_being_counted, "cna_cnb_reader_read_count: what_is_being_counted is not valid UTF-8.", &what_is_being_counted);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what_is_being_counted, "cna_cnb_reader_read_count: what_is_being_counted is not valid text.", &what_is_being_counted);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -686,7 +776,7 @@ CNA_Result cna_cnb_reader_read_seconds(
             return CNA::C::Detail::InvalidArgument("cna_cnb_reader_read_seconds: out_seconds is null.");
         }
         std::string what;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what, "cna_cnb_reader_read_seconds: what is not valid UTF-8.", &what);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_what, "cna_cnb_reader_read_seconds: what is not valid text.", &what);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -973,7 +1063,7 @@ CNA_Result cna_cnb_byte_writer_write_string(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string value;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_cnb_byte_writer_write_string: value is not valid UTF-8.", &value);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_cnb_byte_writer_write_string: value is not valid text.", &value);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1025,12 +1115,12 @@ CNA_Result cna_cnb_writer_set_metadata(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string asset_type_name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_asset_type_name, "cna_cnb_writer_set_metadata: asset_type_name is not valid UTF-8.", &asset_type_name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_asset_type_name, "cna_cnb_writer_set_metadata: asset_type_name is not valid text.", &asset_type_name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
         std::string content_name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_writer_set_metadata: content_name is not valid UTF-8.", &content_name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_content_name, "cna_cnb_writer_set_metadata: content_name is not valid text.", &content_name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1134,6 +1224,24 @@ CNA_Result cna_cnb_sprite_font_data_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(font);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_copy_atlas(
+    const CNA_CnbSpriteFontDataHandle font,
+    CNA_CnbTextureDataHandle* const out_atlas)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_atlas == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sprite_font_data_copy_atlas: out_atlas is null.");
+        }
+        *out_atlas = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbSpriteFontResource> object{};
+        if (const CNA_Result routeResult = GetSpriteFont(font, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateTextureData(object->value->atlas, out_atlas);
     });
 }
 
@@ -1872,7 +1980,7 @@ CNA_Result cna_cnb_writer_append_embedded_texture2d(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string label;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_cnb_writer_append_embedded_texture2d: label is not valid UTF-8.", &label);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_cnb_writer_append_embedded_texture2d: label is not valid text.", &label);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

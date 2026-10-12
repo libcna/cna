@@ -18,6 +18,13 @@ cna_logger_info = { result = "LogWithCategory(&CNA::Logger::Info, message, categ
 cna_logger_debug = { result = "LogWithCategory(&CNA::Logger::Debug, message, category)" }
 cna_logger_trace = { result = "LogWithCategory(&CNA::Logger::Trace, message, category)" }
 cna_logger_experiment = { result = "LogWithCategory(&CNA::Logger::Experiment, message, category)" }
+cna_logger_fatal_if = { call = "CNA::Logger::FatalIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_error_if = { call = "CNA::Logger::ErrorIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_warn_if = { call = "CNA::Logger::WarnIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_info_if = { call = "CNA::Logger::InfoIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_debug_if = { call = "CNA::Logger::DebugIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_trace_if = { call = "CNA::Logger::TraceIf(message, condition)", refuse_nul = ["message"] }
+cna_logger_experiment_if = { call = "CNA::Logger::ExperimentIf(message, condition)", refuse_nul = ["message"] }
 cna_platform_copy_current_name_ext = { copy = "CNA::getCurrentPlatformName()" }
 cna_graphics_renderer_get_current_name_size = { size = "CNA::getCurrentGraphicsRendererName()" }
 cna_graphics_renderer_copy_current_name = { copy = "CNA::getCurrentGraphicsRendererName()" }

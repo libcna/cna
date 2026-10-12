@@ -81,7 +81,7 @@ CNA_Result cna_game_set_window_title(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string title;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_title, "cna_game_set_window_title: title is not valid UTF-8.", &title, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_title, "cna_game_set_window_title: title is not valid text.", &title, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

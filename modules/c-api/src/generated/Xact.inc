@@ -106,7 +106,7 @@ CNA_Result cna_audio_engine_get_global_variable(
             return CNA::C::Detail::InvalidArgument("cna_audio_engine_get_global_variable: out_value is null.");
         }
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_get_global_variable: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_get_global_variable: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -130,7 +130,7 @@ CNA_Result cna_audio_engine_set_global_variable(
             return CNA::C::Detail::InvalidArgument("cna_audio_engine_set_global_variable: invalid because !std::isfinite(value).");
         }
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_set_global_variable: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_audio_engine_set_global_variable: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -415,7 +415,7 @@ CNA_Result cna_sound_bank_play_cue(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_bank_play_cue: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_bank_play_cue: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -585,7 +585,7 @@ CNA_Result cna_cue_get_variable(
             return CNA::C::Detail::InvalidArgument("cna_cue_get_variable: out_value is null.");
         }
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_get_variable: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_get_variable: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -609,7 +609,7 @@ CNA_Result cna_cue_set_variable(
             return CNA::C::Detail::InvalidArgument("cna_cue_set_variable: invalid because !std::isfinite(value).");
         }
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_set_variable: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_cue_set_variable: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

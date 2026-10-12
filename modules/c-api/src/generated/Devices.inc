@@ -410,7 +410,7 @@ CNA_Result cna_devices_clipboard_set_text_ext(
             return CNA::C::Detail::InvalidArgument("cna_devices_clipboard_set_text_ext: out_accepted is null.");
         }
         std::string text;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_devices_clipboard_set_text_ext: text is not valid UTF-8.", &text);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_devices_clipboard_set_text_ext: text is not valid text.", &text);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -765,7 +765,7 @@ CNA_Result cna_system_tray_set_tooltip(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string tooltip;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_tooltip, "cna_system_tray_set_tooltip: tooltip is not valid UTF-8.", &tooltip);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_tooltip, "cna_system_tray_set_tooltip: tooltip is not valid text.", &tooltip);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -797,7 +797,7 @@ CNA_Result cna_system_tray_set_entry_label(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string label;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_system_tray_set_entry_label: label is not valid UTF-8.", &label);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_label, "cna_system_tray_set_entry_label: label is not valid text.", &label);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

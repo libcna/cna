@@ -80,7 +80,7 @@ CNA_Result cna_clipboard_set_text(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string text;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_clipboard_set_text: text is not valid UTF-8.", &text);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_clipboard_set_text: text is not valid text.", &text);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

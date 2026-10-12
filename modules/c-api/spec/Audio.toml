@@ -56,6 +56,9 @@ cna_sound_effect_get_speed_of_sound = { get = "SoundEffect::getSpeedOfSoundPrope
 cna_sound_effect_set_speed_of_sound = { call = "SoundEffect::setSpeedOfSoundProperty(speed)" }
 cna_microphone_get_count = { get = "Microphone::getAllProperty().size()" }
 cna_microphone_check_all_buffers_ext = { call = "Microphone::CheckAllBuffers()" }
+# The name belongs to the type, so a machine with no microphone still answers it.
+cna_microphone_get_type_name_size = { size = "MicrophoneTypeName" }
+cna_microphone_copy_type_name = { copy = "MicrophoneTypeName" }
 
 [sound_effect_to_play]
 lookup = "GetSoundEffectToPlay"
@@ -99,3 +102,8 @@ cna_dynamic_sound_effect_instance_get_sample_duration_ticks = { get = "object->G
 cna_dynamic_sound_effect_instance_get_sample_size_in_bytes = { get = "object->GetSampleSizeInBytes(System::TimeSpan(static_cast<SharpRuntime::longcs>(duration_ticks)))" }
 cna_dynamic_sound_effect_instance_get_type_name_size = { size = "object->GetTypeName()" }
 cna_dynamic_sound_effect_instance_copy_type_name = { copy = "object->GetTypeName()" }
+
+[values]
+[values.routes]
+cna_audio_emitter_init = { value = "ToCAudioEmitter(AudioEmitter())" }
+cna_audio_listener_init = { value = "ToCAudioListener(AudioListener())" }

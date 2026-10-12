@@ -4104,24 +4104,6 @@ CNA_Result cna_cnb_encode_model(
     });
 }
 
-CNA_Result cna_cnb_decode_model(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CnbModelDataHandle* const outModel)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outModel == nullptr) {
-            return InvalidArgument("The CNB model output handle is null.");
-        }
-        *outModel = CNA_INVALID_HANDLE;
-        return CreateModel(Cnb::DecodeModelFromCnb(*document->value), outModel);
-    });
-}
-
 CNA_Result cna_cnb_build_model_from_cnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,
@@ -4483,24 +4465,6 @@ CNA_Result cna_cnb_sprite_font_data_set_glyph(
     });
 }
 
-CNA_Result cna_cnb_sprite_font_data_copy_atlas(
-    const CNA_CnbSpriteFontDataHandle fontHandle,
-    CNA_CnbTextureDataHandle* const outAtlas)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbSpriteFontResource> font;
-        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outAtlas == nullptr) {
-            return InvalidArgument("The atlas output handle is null.");
-        }
-        *outAtlas = CNA_INVALID_HANDLE;
-        return CreateTextureData(font->value->atlas, outAtlas);
-    });
-}
-
 CNA_Result cna_cnb_encode_sprite_font(
     const CNA_CnbSpriteFontDataHandle fontHandle,
     const CNA_StringView contentName,
@@ -4525,24 +4489,6 @@ CNA_Result cna_cnb_encode_sprite_font(
         }
         const std::vector<uint8_t> encoded = Cnb::EncodeSpriteFontToCnb(*font->value, nameText);
         return CopyBytes(encoded, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_decode_sprite_font(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CnbSpriteFontDataHandle* const outFont)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outFont == nullptr) {
-            return InvalidArgument("The CNB font output handle is null.");
-        }
-        *outFont = CNA_INVALID_HANDLE;
-        return CreateSpriteFont(Cnb::DecodeSpriteFontFromCnb(*document->value), outFont);
     });
 }
 
@@ -4650,24 +4596,6 @@ CNA_Result cna_cnb_encode_sound_effect(
         }
         const std::vector<uint8_t> encoded = Cnb::EncodeSoundEffectToCnb(*sound->value, nameText);
         return CopyBytes(encoded, destination, capacity, outBytes);
-    });
-}
-
-CNA_Result cna_cnb_decode_sound_effect(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CnbSoundEffectDataHandle* const outSound)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outSound == nullptr) {
-            return InvalidArgument("The CNB sound output handle is null.");
-        }
-        *outSound = CNA_INVALID_HANDLE;
-        return CreateSoundEffect(Cnb::DecodeSoundEffectFromCnb(*document->value), outSound);
     });
 }
 
@@ -4851,24 +4779,6 @@ CNA_Result cna_cnb_encode_animation_clip(
     });
 }
 
-CNA_Result cna_cnb_decode_animation_clip(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CnbAnimationClipHandle* const outClip)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outClip == nullptr) {
-            return InvalidArgument("The CNB clip output handle is null.");
-        }
-        *outClip = CNA_INVALID_HANDLE;
-        return CreateAnimationClip(Cnb::DecodeAnimationClipFromCnb(*document->value), outClip);
-    });
-}
-
 CNA_Result cna_cnb_animation_clip_get(
     const CNA_CnbAnimationClipHandle clipHandle,
     double* const outDurationSeconds,
@@ -5037,25 +4947,6 @@ CNA_Result cna_cnb_loader_registry_find(
             return CNA_RESULT_SUCCESS;
         }
         return CreateLoader(std::move(found).value(), outLoader);
-    });
-}
-
-CNA_Result cna_cnb_loader_registry_resolve_for_document(
-    const CNA_CnbDocumentHandle documentHandle,
-    CNA_CnbLoaderHandle* const outLoader)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outLoader == nullptr) {
-            return InvalidArgument("The CNB loader output handle is null.");
-        }
-        *outLoader = CNA_INVALID_HANDLE;
-        return CreateLoader(
-            CNA::Content::CnbLoaderRegistry::ResolveForDocument(*document->value), outLoader);
     });
 }
 

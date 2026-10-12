@@ -433,7 +433,7 @@ CNA_Result cna_effect_parameter_set_value_string(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string value;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_effect_parameter_set_value_string: value is not valid UTF-8.", &value, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_effect_parameter_set_value_string: value is not valid text.", &value, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

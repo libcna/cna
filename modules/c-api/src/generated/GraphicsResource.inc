@@ -49,7 +49,7 @@ CNA_Result cna_graphics_resource_set_name(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_resource_set_name: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_graphics_resource_set_name: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

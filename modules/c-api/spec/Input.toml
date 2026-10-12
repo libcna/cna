@@ -10,9 +10,11 @@ cna_keyboard_state_get_hash_code = { get = "NativeKeyboardState(*state).GetHashC
 cna_keyboard_state_get_string_size = { size = "KeyboardState().ToString()" }
 cna_keyboard_state_copy_string = { copy = "KeyboardState().ToString()" }
 cna_keyboard_state_is_key_down = { get = "IsKeyDown(*state, key)", invalid_if = "key >= KeyboardSlotCount" }
+cna_keyboard_state_is_key_up = { get = "!IsKeyDown(*state, key)", invalid_if = "key >= KeyboardSlotCount" }
+cna_keyboard_state_get_key_state = { get = "NativeKeyboardState(*state).getItem(static_cast<Keys>(key)) == KeyState::Down ? CNA_KEY_STATE_DOWN : CNA_KEY_STATE_UP", invalid_if = "key >= KeyboardSlotCount" }
 
 [state]
-lookup = "ValidateState"
+lookup = "ValidateGamePadState"
 
 [state.routes]
 cna_gamepad_state_set_packet_number_ext = { call = "state->packet_number = packet_number" }
@@ -22,6 +24,10 @@ cna_gamepad_state_get_string_size = { size = "GamePadState().ToString()" }
 cna_gamepad_state_copy_string = { copy = "GamePadState().ToString()" }
 cna_gamepad_state_get_buttons = { get = "state->pressed_buttons" }
 cna_gamepad_state_get_dpad = { get = "state->pressed_buttons & DPadMask" }
+cna_gamepad_state_get_thumb_sticks = { get = "CNA_GamePadThumbSticks{state->analog.left_thumb_stick, state->analog.right_thumb_stick}" }
+cna_gamepad_state_get_triggers = { get = "CNA_GamePadTriggers{state->analog.left_trigger, state->analog.right_trigger}" }
+cna_gamepad_state_is_button_down = { get = "(state->pressed_buttons & buttons) == buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
+cna_gamepad_state_is_button_up = { get = "(state->pressed_buttons & buttons) != buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
 
 [mouse_state]
 lookup = "ValidateMouseState"
@@ -69,6 +75,11 @@ cna_touch_panel_set_touch_device_exists_ext = { call = "TouchPanel::setTouchDevi
 cna_touch_panel_update_ext = { call = "TouchPanel::Update()" }
 cna_touch_panel_reset_for_tests_ext = { call = "TouchPanel::ResetForTests()" }
 cna_keyboard_get_mod_state_ext = { get = "MapKeyModifiers(Keyboard::GetModStateEXT())" }
+cna_keyboard_get_key_from_scancode_ext = { get = "Keyboard::GetKeyFromScancodeEXT(static_cast<Keys>(scancode))", validate = "ValidateKey(scancode)" }
+cna_text_input_set_input_rectangle_ext = { call = "TextInputEXT::SetInputRectangle(rectangle)" }
+cna_touch_panel_set_finger_ext = { call = "TouchPanel::SetFinger(index, finger_id, position)", invalid_if = "index < 0 || static_cast<uint32_t>(index) >= CNA_TOUCH_MAX_TOUCHES" }
+cna_touch_panel_set_enabled_gestures = { call = "TouchPanel::setEnabledGesturesProperty(static_cast<GestureType>(gestures))", validate = "ValidateGestureType(gestures)" }
+cna_touch_panel_enqueue_gesture_ext = { call = "TouchPanel::EnqueueGesture(ToNativeGestureSample(*sample))", validate = ['ValidateVersionedStructure(sample, "The gesture-sample structure is invalid.")', "ValidateGestureType(sample->gesture_type)"] }
 cna_touch_panel_set_display_orientation = { call = "TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation))", invalid_if = "(orientation & ~DisplayOrientationAll) != 0U" }
 cna_touch_panel_raise_touch_event_ext = { call = "TouchPanel::INTERNAL_onTouchEvent(finger_id, static_cast<TouchLocationState>(state), x, y, dx, dy)", invalid_if = "!IsValidTouchLocationState(state)" }
 # An empty queue throws canonically; the firewall reports that as an invalid state rather
@@ -137,14 +148,58 @@ cna_mouse_state_init = { value = "SnapshotMouse(MouseState())" }
 cna_gesture_sample_init = { value = "MapGestureSample(GestureSample())" }
 cna_touch_location_init = { value = "MapTouchLocation(TouchLocation())" }
 cna_gamepad_exclude_axis_dead_zone = { value = "GamePad::ExcludeAxisDeadZone(value, dead_zone)", invalid_if = "!std::isfinite(value) || !std::isfinite(dead_zone)" }
+cna_touch_capabilities_init = { value = '''
+CNA_TouchCapabilities{
+    sizeof(CNA_TouchCapabilities),
+    StructureVersion,
+    ToCBool(TouchPanelCapabilities().getIsConnectedProperty()),
+    {0U, 0U, 0U},
+    static_cast<uint32_t>(TouchPanelCapabilities().getMaximumTouchCountProperty())
+}''' }
+cna_keyboard_state_equals = { value = "NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))", validate = ["ValidateKeyboardState(left)", "ValidateKeyboardState(right)"] }
+cna_keyboard_state_not_equals = { value = "!NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))", validate = ["ValidateKeyboardState(left)", "ValidateKeyboardState(right)"] }
+cna_mouse_state_equals = { value = "NativeMouseState(*left).Equals(NativeMouseState(*right))", validate = ["ValidateMouseState(left)", "ValidateMouseState(right)"] }
+cna_mouse_state_not_equals = { value = "!NativeMouseState(*left).Equals(NativeMouseState(*right))", validate = ["ValidateMouseState(left)", "ValidateMouseState(right)"] }
+cna_mouse_state_init_from_values = { validate = "ValidateMouseButtons(pressed_buttons)", value = '''
+SnapshotMouse(MouseState(
+    static_cast<int>(x),
+    static_cast<int>(y),
+    static_cast<int>(scroll_wheel),
+    MouseButton(pressed_buttons, CNA_MOUSE_BUTTON_LEFT),
+    MouseButton(pressed_buttons, CNA_MOUSE_BUTTON_MIDDLE),
+    MouseButton(pressed_buttons, CNA_MOUSE_BUTTON_RIGHT),
+    MouseButton(pressed_buttons, CNA_MOUSE_BUTTON_X1),
+    MouseButton(pressed_buttons, CNA_MOUSE_BUTTON_X2)))''' }
+cna_mouse_state_init_from_values_ext = { validate = "ValidateMouseButtons(pressed_buttons)", value = '''
+SnapshotMouse(NativeMouseState(CNA_MouseState{
+    sizeof(CNA_MouseState), StructureVersion, x, y, scroll_wheel, horizontal_scroll_wheel,
+    pressed_buttons, 0U}))''' }
+cna_gamepad_state_equals = { value = "GamePadStatesEqual(*left, *right)", validate = ["ValidateGamePadState(left)", "ValidateGamePadState(right)"] }
+cna_gamepad_state_not_equals = { value = "!GamePadStatesEqual(*left, *right)", validate = ["ValidateGamePadState(left)", "ValidateGamePadState(right)"] }
+# The C snapshot carries a single button mask, and so does every state CNA itself builds: the
+# capture path derives the button set and the directional pad from one raw mask. The pad
+# argument is therefore merged into the button set rather than kept beside it, which is what
+# makes it readable again through cna_gamepad_state_get_dpad.
+cna_gamepad_state_init_from_components = { invalid_if = ["thumb_sticks == nullptr", "triggers == nullptr"], validate = ["ValidateMask(buttons)", "ValidateMask(dpad)"], value = '''
+SnapshotState(GamePadState(
+    NativeThumbSticks(*thumb_sticks),
+    NativeTriggers(*triggers),
+    NativeButtons(buttons | dpad),
+    NativeDPad(dpad)))''' }
+cna_gamepad_thumb_sticks_init = { value = "ToCThumbSticks(GamePadThumbSticks())" }
+cna_gamepad_thumb_sticks_init_from_positions = { value = "ToCThumbSticks(GamePadThumbSticks(Vector2(left->x, left->y), Vector2(right->x, right->y)))", invalid_if = ["left == nullptr", "right == nullptr"] }
+cna_gamepad_thumb_sticks_equals = { value = "NativeThumbSticks(*left).Equals(NativeThumbSticks(*right))", invalid_if = ["left == nullptr", "right == nullptr"] }
+cna_gamepad_thumb_sticks_not_equals = { value = "NativeThumbSticks(*left) != NativeThumbSticks(*right)", invalid_if = ["left == nullptr", "right == nullptr"] }
+cna_gamepad_thumb_sticks_get_hash_code = { value = "NativeThumbSticks(*thumb_sticks).GetHashCode()", invalid_if = "thumb_sticks == nullptr" }
+cna_gamepad_triggers_init = { value = "ToCTriggers(GamePadTriggers())" }
+cna_gamepad_triggers_init_from_positions = { value = "ToCTriggers(GamePadTriggers(left, right))" }
+cna_gamepad_triggers_equals = { value = "NativeTriggers(*left).Equals(NativeTriggers(*right))", invalid_if = ["left == nullptr", "right == nullptr"] }
+cna_gamepad_triggers_not_equals = { value = "NativeTriggers(*left) != NativeTriggers(*right)", invalid_if = ["left == nullptr", "right == nullptr"] }
+cna_gamepad_triggers_get_hash_code = { value = "NativeTriggers(*triggers).GetHashCode()", invalid_if = "triggers == nullptr" }
+cna_gamepad_apply_dead_zone = { value = "ApplyDeadZone(*raw, dead_zone_mode)", invalid_if = ["raw == nullptr", "dead_zone_mode > CNA_GAMEPAD_DEAD_ZONE_CIRCULAR", "!IsFinite(*raw)"] }
+cna_touch_location_equals = { value = "TouchLocationsEqual(*left, *right)", validate = ['ValidateTouchLocationValue(left, "The first touch location is null.")', 'ValidateTouchLocationValue(right, "The second touch location is null.")'] }
+cna_touch_location_get_hash_code = { value = "ToNativeTouchLocation(*location).GetHashCode()", validate = 'ValidateTouchLocationValue(location, "The touch location is null.")' }
 cna_touch_capabilities_init_from_values_ext = { value = "CNA_TouchCapabilities{ sizeof(CNA_TouchCapabilities), StructureVersion, ToCBool(is_connected), {0U, 0U, 0U}, static_cast<uint32_t>(maximum_touch_count) }", invalid_if = "maximum_touch_count < 0" }
-
-[game_pad_state]
-lookup = "ValidateGamePadState"
-
-[game_pad_state.routes]
-cna_gamepad_state_is_button_down = { get = "(state->pressed_buttons & buttons) == buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
-cna_gamepad_state_is_button_up = { get = "(state->pressed_buttons & buttons) != buttons", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
 
 # The lookup checks the game is active and maps the player index; `object` is that PlayerIndex.
 [gamepad]
@@ -161,4 +216,18 @@ cna_gamepad_get_firmware_version_ext = { get = "GamePad::GetFirmwareVersionEXT(o
 cna_gamepad_get_steam_handle_ext = { get = "GamePad::GetSteamHandleEXT(object)" }
 cna_gamepad_get_connection_state_ext = { get = "MapConnectionState(GamePad::GetConnectionStateEXT(object))" }
 cna_gamepad_get_touchpad_count_ext = { get = "GamePad::GetTouchpadCountEXT(object)" }
+cna_gamepad_set_light_bar_ext = { call = "GamePad::SetLightBarEXT(object, color)" }
+cna_keyboard_get_state_for_player = { versioned = true, get = "SnapshotKeyboard(Keyboard::GetState(object))" }
 cna_gamepad_get_touchpad_finger_count_ext = { get = "GamePad::GetTouchpadFingerCountEXT(object, static_cast<int>(touchpad))" }
+
+# Snapshots built from their fields: the vectors are the C structures themselves.
+[touch_values]
+raw = true
+
+[touch_values.routes]
+cna_gesture_sample_init_from_values = { value = "GestureSampleOf(gesture_type, timestamp_ticks, position, position2, delta, delta2, CNA_TOUCH_NO_FINGER, CNA_TOUCH_NO_FINGER)", validate = "ValidateGestureType(gesture_type)" }
+cna_gesture_sample_init_from_values_ext = { value = "GestureSampleOf(gesture_type, timestamp_ticks, position, position2, delta, delta2, finger_id, finger_id2)", validate = "ValidateGestureType(gesture_type)" }
+cna_touch_location_init_from_values = { value = "CNA_TouchLocation{id, state, position, CNA_TOUCH_LOCATION_INVALID, CNA_Vector2{0.0F, 0.0F}, 0.0F}", invalid_if = "!IsValidTouchLocationState(state)" }
+cna_touch_location_init_with_previous = { value = "CNA_TouchLocation{id, state, position, previous_state, previous_position, 0.0F}", invalid_if = ["!IsValidTouchLocationState(state)", "!IsValidTouchLocationState(previous_state)"] }
+cna_touch_location_init_from_values_ext = { value = "CNA_TouchLocation{id, state, position, CNA_TOUCH_LOCATION_INVALID, CNA_Vector2{0.0F, 0.0F}, pressure}", invalid_if = "!IsValidTouchLocationState(state)", validate = "ValidatePressure(pressure)" }
+cna_touch_location_init_with_previous_ext = { value = "CNA_TouchLocation{id, state, position, previous_state, previous_position, pressure}", invalid_if = ["!IsValidTouchLocationState(state)", "!IsValidTouchLocationState(previous_state)"], validate = "ValidatePressure(pressure)" }

@@ -296,7 +296,7 @@ CNA_Result cna_guide_show_game_invite_for_session(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string session_id;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_session_id, "cna_guide_show_game_invite_for_session: session_id is not valid UTF-8.", &session_id);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_session_id, "cna_guide_show_game_invite_for_session: session_id is not valid text.", &session_id);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

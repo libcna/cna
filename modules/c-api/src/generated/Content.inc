@@ -128,7 +128,7 @@ CNA_Result cna_content_manager_set_root_directory(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string root_directory;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_root_directory, "cna_content_manager_set_root_directory: root_directory is not valid UTF-8.", &root_directory, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_root_directory, "cna_content_manager_set_root_directory: root_directory is not valid text.", &root_directory, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

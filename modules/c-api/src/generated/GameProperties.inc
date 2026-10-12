@@ -393,7 +393,7 @@ CNA_Result cna_game_launch_parameters_contains_key(
             return CNA::C::Detail::InvalidArgument("cna_game_launch_parameters_contains_key: out_present is null.");
         }
         std::string key;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_contains_key: key is not valid UTF-8.", &key);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_contains_key: key is not valid text.", &key);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -414,12 +414,12 @@ CNA_Result cna_game_launch_parameters_add(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string key;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_add: key is not valid UTF-8.", &key);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_game_launch_parameters_add: key is not valid text.", &key);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
         std::string value;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_game_launch_parameters_add: value is not valid UTF-8.", &value);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_value, "cna_game_launch_parameters_add: value is not valid text.", &value);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -439,7 +439,7 @@ CNA_Result cna_title_location_set_path_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string path;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_path, "cna_title_location_set_path_ext: path is not valid UTF-8.", &path);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_path, "cna_title_location_set_path_ext: path is not valid text.", &path);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

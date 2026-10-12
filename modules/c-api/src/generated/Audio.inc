@@ -125,7 +125,7 @@ CNA_Result cna_sound_effect_set_name(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_effect_set_name: name is not valid UTF-8.", &name);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_sound_effect_set_name: name is not valid text.", &name);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -490,6 +490,41 @@ CNA_Result cna_microphone_check_all_buffers_ext(
         }
         Microphone::CheckAllBuffers();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_type_name_size(
+    const CNA_Handle game,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_microphone_get_type_name_size: out_bytes is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(MicrophoneTypeName, out_bytes);
+    });
+}
+
+CNA_Result cna_microphone_copy_type_name(
+    const CNA_Handle game,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(MicrophoneTypeName, destination, capacity, out_bytes);
     });
 }
 
@@ -874,5 +909,29 @@ CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
             return routeResult;
         }
         return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_audio_emitter_init(
+    CNA_AudioEmitter* const out_emitter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_emitter == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_emitter_init: out_emitter is null.");
+        }
+        *out_emitter = ToCAudioEmitter(AudioEmitter());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_audio_listener_init(
+    CNA_AudioListener* const out_listener)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_listener == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_audio_listener_init: out_listener is null.");
+        }
+        *out_listener = ToCAudioListener(AudioListener());
+        return CNA_RESULT_SUCCESS;
     });
 }

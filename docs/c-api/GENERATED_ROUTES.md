@@ -112,18 +112,26 @@ cna_sound_effect_instance_set_pan = { call = "object->value->setPanProperty(pan)
 ```
 
 The route then answers `CNA_RESULT_INVALID_ARGUMENT`, with the condition in the message.
-`invalid_if` takes one condition or a list of them. A structure the route reads through a const
-pointer is accepted only when a condition names it, because that condition is what refuses a
-null or malformed one (`invalid_if = "!IsPresentationParameters(source)"`); the contract test
-checks that a null one is refused.
+`invalid_if` takes one condition or a list of them. A check that needs its own result code or
+message is written as a call to a hand-written validator instead; whatever it returns other than
+success is the route's answer:
+
+```toml
+cna_keyboard_state_equals = { value = "NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))", validate = ["ValidateKeyboardState(left)", "ValidateKeyboardState(right)"] }
+```
+
+A structure the route reads through a const pointer is accepted only when an `invalid_if` or a
+`validate` names it, because that check is what refuses a null or malformed one
+(`invalid_if = "!IsPresentationParameters(source)"`); the contract test checks that a null one
+is refused.
 
 Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
 null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
 `result`, every non-const `out_*` pointer, and a handle
 output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
-`invalid_if` conditions, then text inputs, then the lookup (and `other`'s), whose own result is
-returned when it refuses. So a call with two faults always reports the null output.
+`invalid_if` conditions and `validate` calls, then text inputs, then the lookup (and `other`'s),
+whose own result is returned when it refuses. So a call with two faults always reports the null output.
 
 A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
 a child handle, filling an info structure, copying an array — and the spec line only calls it:

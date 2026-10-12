@@ -933,7 +933,7 @@ CNA_Result cna_skinned_model_ext_remove_clip(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinned_model_ext_remove_clip: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinned_model_ext_remove_clip: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1172,7 +1172,7 @@ CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::string name;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinning_data_set_skeleton_root_name_ext: name is not valid UTF-8.", &name, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_name, "cna_skinning_data_set_skeleton_root_name_ext: name is not valid text.", &name, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

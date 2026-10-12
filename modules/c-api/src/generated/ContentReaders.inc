@@ -320,7 +320,7 @@ CNA_Result cna_object_dictionary_ext_contains_key(
             return CNA::C::Detail::InvalidArgument("cna_object_dictionary_ext_contains_key: out_contains is null.");
         }
         std::string key;
-        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_object_dictionary_ext_contains_key: key is not valid UTF-8.", &key, CNA::C::Detail::EmbeddedNul::Refused);
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_key, "cna_object_dictionary_ext_contains_key: key is not valid text.", &key, CNA::C::Detail::EmbeddedNul::Refused);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
