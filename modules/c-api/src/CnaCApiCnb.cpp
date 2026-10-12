@@ -2895,7 +2895,7 @@ namespace {
             "The skeleton pose arrays are null with a non-zero joint count.");
     }
     uint64_t floatCount = 0U;
-    if (const CNA_Result result = cna_cnb_checked_multiply(jointCount, 16U, &floatCount);
+    if (const CNA_Result result = CnbCheckedMultiply(jointCount, 16U, &floatCount);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }

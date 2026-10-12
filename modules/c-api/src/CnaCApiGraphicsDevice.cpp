@@ -1131,13 +1131,6 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result GraphicsDeviceSetVertexBuffer(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_VertexBufferHandle vertexBuffer)
-{
-    return cna_graphics_device_set_vertex_buffer_offset(graphicsDeviceHandle, vertexBuffer, 0);
-}
-
 [[nodiscard]] CNA_Result GraphicsDeviceSetVertexBufferOffset(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_VertexBufferHandle vertexBufferHandle,
@@ -1170,6 +1163,13 @@ namespace {
         state.vertexBindings.push_back(BoundBufferSlot{vertexBufferHandle, native});
     }
     return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GraphicsDeviceSetVertexBuffer(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_VertexBufferHandle vertexBuffer)
+{
+    return GraphicsDeviceSetVertexBufferOffset(graphicsDeviceHandle, vertexBuffer, 0);
 }
 
 [[nodiscard]] CNA_Result GraphicsDeviceSetVertexBuffers(

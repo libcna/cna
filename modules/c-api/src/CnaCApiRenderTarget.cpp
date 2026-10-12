@@ -421,7 +421,7 @@ namespace {
     const CNA_Handle renderTargetHandle)
 {
     if (renderTargetHandle == CNA_INVALID_HANDLE) {
-        return cna_graphics_device_set_render_targets(graphicsDeviceHandle, nullptr, 0U);
+        return GraphicsDeviceSetRenderTargets(graphicsDeviceHandle, nullptr, 0U);
     }
     const CNA_RenderTargetBinding binding = {
         .struct_size = sizeof(CNA_RenderTargetBinding),
@@ -429,7 +429,7 @@ namespace {
         .render_target = renderTargetHandle,
         .array_slice = 0,
         .cube_map_face = CNA_CUBE_MAP_FACE_POSITIVE_X};
-    return cna_graphics_device_set_render_targets(graphicsDeviceHandle, &binding, 1U);
+    return GraphicsDeviceSetRenderTargets(graphicsDeviceHandle, &binding, 1U);
 }
 
 [[nodiscard]] CNA_Result GraphicsDeviceSetRenderTargetCube(
@@ -438,7 +438,7 @@ namespace {
     const CNA_CubeMapFace cubeMapFace)
 {
     if (renderTargetHandle == CNA_INVALID_HANDLE) {
-        return cna_graphics_device_set_render_targets(graphicsDeviceHandle, nullptr, 0U);
+        return GraphicsDeviceSetRenderTargets(graphicsDeviceHandle, nullptr, 0U);
     }
     if (!IsCubeFace(cubeMapFace)) {
         return InvalidArgument("The cube-map face is invalid.");
@@ -449,7 +449,7 @@ namespace {
         .render_target = renderTargetHandle,
         .array_slice = 0,
         .cube_map_face = cubeMapFace};
-    return cna_graphics_device_set_render_targets(graphicsDeviceHandle, &binding, 1U);
+    return GraphicsDeviceSetRenderTargets(graphicsDeviceHandle, &binding, 1U);
 }
 
 [[nodiscard]] CNA_Result GraphicsDeviceGetRenderTargetCount(

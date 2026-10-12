@@ -125,13 +125,6 @@ using Microsoft::Xna::Framework::Rectangle;
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result RectangleOffsetPoint(
-    CNA_Rectangle* const value,
-    const CNA_Point offset)
-{
-    return cna_rectangle_offset_xy(value, offset.x, offset.y);
-}
-
 [[nodiscard]] CNA_Result RectangleOffsetXy(
     CNA_Rectangle* const value,
     const int32_t offsetX,
@@ -143,6 +136,13 @@ using Microsoft::Xna::Framework::Rectangle;
     value->x = WrapAdd(value->x, offsetX);
     value->y = WrapAdd(value->y, offsetY);
     return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result RectangleOffsetPoint(
+    CNA_Rectangle* const value,
+    const CNA_Point offset)
+{
+    return RectangleOffsetXy(value, offset.x, offset.y);
 }
 
 [[nodiscard]] CNA_Result RectangleInflate(
