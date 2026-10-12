@@ -296,206 +296,177 @@ using SensorRead = bool (*)(Microsoft::Xna::Framework::Vector3&);
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_sensor_info_equals(
+[[nodiscard]] CNA_Result SensorInfoEquals(
     const CNA_SensorInfo* const left,
     const CNA_StringView leftName,
     const CNA_SensorInfo* const right,
     const CNA_StringView rightName,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The sensor descriptor comparison output is null.");
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(left, "The first sensor descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(right, "The second sensor descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        SensorInfoEXT nativeLeft;
-        SensorInfoEXT nativeRight;
-        if (const CNA_Result result = ToSensorType(left->type, &nativeLeft.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToSensorType(right->type, &nativeRight.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                leftName, "The first sensor name is not valid UTF-8.", &nativeLeft.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                rightName, "The second sensor name is not valid UTF-8.", &nativeRight.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        nativeLeft.id = left->id;
-        nativeRight.id = right->id;
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result =
+            ValidateVersionedStructure(left, "The first sensor descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            ValidateVersionedStructure(right, "The second sensor descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    SensorInfoEXT nativeLeft;
+    SensorInfoEXT nativeRight;
+    if (const CNA_Result result = ToSensorType(left->type, &nativeLeft.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToSensorType(right->type, &nativeRight.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            leftName, "The first sensor name is not valid UTF-8.", &nativeLeft.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            rightName, "The second sensor name is not valid UTF-8.", &nativeRight.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    nativeLeft.id = left->id;
+    nativeRight.id = right->id;
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sensors_get_info_at(
+[[nodiscard]] CNA_Result SensorsGetInfoAt(
     const CNA_Handle gameHandle,
     const uint32_t index,
     CNA_SensorInfo* const outInfo)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outInfo == nullptr) {
-            return InvalidArgument("The sensor descriptor output is null.");
-        }
-        SensorInfoEXT info;
-        if (const CNA_Result result = BorrowEnumerated(
-                gameHandle,
-                index,
-                &Sensors::GetSensorsEXT,
-                "The sensor index is out of range.",
-                &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outInfo = MapSensorInfo(info);
-        return CNA_RESULT_SUCCESS;
-    });
+    SensorInfoEXT info;
+    if (const CNA_Result result = BorrowEnumerated(
+            gameHandle,
+            index,
+            &Sensors::GetSensorsEXT,
+            "The sensor index is out of range.",
+            &info);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outInfo = MapSensorInfo(info);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sensors_get_name_size_at(
+[[nodiscard]] CNA_Result SensorsGetNameSizeAt(
     const CNA_Handle gameHandle,
     const uint32_t index,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidArgument("The sensor name byte-count output is null.");
-        }
-        SensorInfoEXT info;
-        if (const CNA_Result result = BorrowEnumerated(
-                gameHandle,
-                index,
-                &Sensors::GetSensorsEXT,
-                "The sensor index is out of range.",
-                &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = info.name.size();
-        return CNA_RESULT_SUCCESS;
-    });
+    SensorInfoEXT info;
+    if (const CNA_Result result = BorrowEnumerated(
+            gameHandle,
+            index,
+            &Sensors::GetSensorsEXT,
+            "The sensor index is out of range.",
+            &info);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = info.name.size();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_sensors_copy_name_at(
+[[nodiscard]] CNA_Result SensorsCopyNameAt(
     const CNA_Handle gameHandle,
     const uint32_t index,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The sensor name output is invalid.");
-        }
-        SensorInfoEXT info;
-        if (const CNA_Result result = BorrowEnumerated(
-                gameHandle,
-                index,
-                &Sensors::GetSensorsEXT,
-                "The sensor index is out of range.",
-                &info);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CopyText(info.name, destination, capacity, outBytes);
-    });
+    if ((destination == nullptr && capacity != UINT64_C(0))) {
+        return InvalidArgument("The sensor name output is invalid.");
+    }
+    SensorInfoEXT info;
+    if (const CNA_Result result = BorrowEnumerated(
+            gameHandle,
+            index,
+            &Sensors::GetSensorsEXT,
+            "The sensor index is out of range.",
+            &info);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyText(info.name, destination, capacity, outBytes);
 }
 
-CNA_Result cna_input_device_info_equals(
+[[nodiscard]] CNA_Result InputDeviceInfoEquals(
     const CNA_InputDeviceInfo* const left,
     const CNA_StringView leftName,
     const CNA_InputDeviceInfo* const right,
     const CNA_StringView rightName,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The input-device comparison output is null.");
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(left, "The first input-device descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(right, "The second input-device descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        InputDeviceInfoEXT nativeLeft;
-        InputDeviceInfoEXT nativeRight;
-        if (const CNA_Result result = ReadText(
-                leftName, "The first input-device name is not valid UTF-8.", &nativeLeft.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                rightName, "The second input-device name is not valid UTF-8.", &nativeRight.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        nativeLeft.id = left->id;
-        nativeRight.id = right->id;
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result =
+            ValidateVersionedStructure(left, "The first input-device descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            ValidateVersionedStructure(right, "The second input-device descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    InputDeviceInfoEXT nativeLeft;
+    InputDeviceInfoEXT nativeRight;
+    if (const CNA_Result result = ReadText(
+            leftName, "The first input-device name is not valid UTF-8.", &nativeLeft.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            rightName, "The second input-device name is not valid UTF-8.", &nativeRight.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    nativeLeft.id = left->id;
+    nativeRight.id = right->id;
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_input_devices_unsubscribe_ext(
+[[nodiscard]] CNA_Result InputDevicesUnsubscribeExt(
     const CNA_InputDeviceEventRegistrationHandle registration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<DeviceRegistration> resource;
-        const CNA_Result getResult = LookupHandle(
-            registration, CNA::C::Detail::ObjectKind::InputDeviceEventRegistration, &resource);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        return ReleaseHandle(registration);
-    });
+    std::shared_ptr<DeviceRegistration> resource;
+    const CNA_Result getResult = LookupHandle(
+        registration, CNA::C::Detail::ObjectKind::InputDeviceEventRegistration, &resource);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    return ReleaseHandle(registration);
 }
 
-CNA_Result cna_power_get_info(
+[[nodiscard]] CNA_Result PowerGetInfo(
     const CNA_Handle gameHandle,
     CNA_PowerState* const outState,
     int32_t* const outSecondsLeft,
     int32_t* const outPercent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr || outSecondsLeft == nullptr || outPercent == nullptr) {
-            return InvalidArgument("The power information output is null.");
-        }
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        int secondsLeft = -1;
-        int percent = -1;
-        const PowerStateEXT state = Power::GetInfoEXT(secondsLeft, percent);
-        *outState = static_cast<CNA_PowerState>(state);
-        *outSecondsLeft = static_cast<int32_t>(secondsLeft);
-        *outPercent = static_cast<int32_t>(percent);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    int secondsLeft = -1;
+    int percent = -1;
+    const PowerStateEXT state = Power::GetInfoEXT(secondsLeft, percent);
+    *outState = static_cast<CNA_PowerState>(state);
+    *outSecondsLeft = static_cast<int32_t>(secondsLeft);
+    *outPercent = static_cast<int32_t>(percent);
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/InputDevices.toml.
 #include "generated/InputDevices.inc"

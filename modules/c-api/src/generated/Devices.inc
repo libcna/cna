@@ -1059,3 +1059,628 @@ CNA_Result cna_camera_try_acquire_frame_ext(
     return ExtensionUnavailable();
 }
 #endif
+
+CNA_Result cna_devices_ext_is_available(
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_devices_ext_is_available: out_available is null.");
+        }
+        return DevicesExtIsAvailable(out_available);
+    });
+}
+
+CNA_Result cna_vibrate_controller_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const CNA_Bool supported,
+    const CNA_StringView device_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(installed, "installed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(supported, "supported");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return VibrateControllerSetTestBackendExt(game, installed, supported, device_name);
+    });
+}
+
+CNA_Result cna_vibrate_controller_get_test_log_ext(
+    const CNA_Handle game,
+    CNA_VibrationTestLog* const out_log)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_log == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vibrate_controller_get_test_log_ext: out_log is null.");
+        }
+        return VibrateControllerGetTestLogExt(game, out_log);
+    });
+}
+
+CNA_Result cna_camera_device_info_init(
+    CNA_CameraDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_device_info_init: out_info is null.");
+        }
+        return CameraDeviceInfoInit(out_info);
+    });
+}
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_locale_get_preferred_count_ext(
+    const CNA_Handle game,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_locale_get_preferred_count_ext: out_count is null.");
+        }
+        return LocaleGetPreferredCountExt(game, out_count);
+    });
+}
+#else
+CNA_Result cna_locale_get_preferred_count_ext(
+    const CNA_Handle game,
+    uint64_t* const out_count)
+{
+    (void)game;
+    (void)out_count;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_display_info_get_safe_area_ext(
+    const CNA_Handle game,
+    CNA_Rectangle* const out_area)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_area == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_info_get_safe_area_ext: out_area is null.");
+        }
+        return DisplayInfoGetSafeAreaExt(game, out_area);
+    });
+}
+#else
+CNA_Result cna_display_info_get_safe_area_ext(
+    const CNA_Handle game,
+    CNA_Rectangle* const out_area)
+{
+    (void)game;
+    (void)out_area;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_url_launcher_open_ext(
+    const CNA_Handle game,
+    const CNA_StringView url,
+    CNA_Bool* const out_opened)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_opened == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_url_launcher_open_ext: out_opened is null.");
+        }
+        return UrlLauncherOpenExt(game, url, out_opened);
+    });
+}
+#else
+CNA_Result cna_url_launcher_open_ext(
+    const CNA_Handle game,
+    const CNA_StringView url,
+    CNA_Bool* const out_opened)
+{
+    (void)game;
+    (void)url;
+    (void)out_opened;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_message_box_show_simple_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MessageBoxShowSimpleExt(game, type, title, message);
+    });
+}
+#else
+CNA_Result cna_message_box_show_simple_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message)
+{
+    (void)game;
+    (void)type;
+    (void)title;
+    (void)message;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_message_box_show_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message,
+    const CNA_StringView* const button_labels,
+    const uint64_t button_count,
+    int32_t* const out_chosen)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_chosen == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_message_box_show_ext: out_chosen is null.");
+        }
+        return MessageBoxShowExt(game, type, title, message, button_labels, button_count, out_chosen);
+    });
+}
+#else
+CNA_Result cna_message_box_show_ext(
+    const CNA_Handle game,
+    const CNA_MessageBoxType type,
+    const CNA_StringView title,
+    const CNA_StringView message,
+    const CNA_StringView* const button_labels,
+    const uint64_t button_count,
+    int32_t* const out_chosen)
+{
+    (void)game;
+    (void)type;
+    (void)title;
+    (void)message;
+    (void)button_labels;
+    (void)button_count;
+    (void)out_chosen;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_message_box_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const int32_t chosen_button)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(installed, "installed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return MessageBoxSetTestBackendExt(game, installed, chosen_button);
+    });
+}
+#else
+CNA_Result cna_message_box_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const int32_t chosen_button)
+{
+    (void)game;
+    (void)installed;
+    (void)chosen_button;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_message_box_get_test_log_ext(
+    const CNA_Handle game,
+    CNA_MessageBoxTestLog* const out_log)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_log == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_message_box_get_test_log_ext: out_log is null.");
+        }
+        return MessageBoxGetTestLogExt(game, out_log);
+    });
+}
+#else
+CNA_Result cna_message_box_get_test_log_ext(
+    const CNA_Handle game,
+    CNA_MessageBoxTestLog* const out_log)
+{
+    (void)game;
+    (void)out_log;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_file_dialog_show_open_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filter_count,
+    const CNA_StringView default_location,
+    const CNA_Bool allow_multiple)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(allow_multiple, "allow_multiple");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return FileDialogShowOpenFileExt(game, on_result, context, filters, filter_count, default_location, allow_multiple);
+    });
+}
+#else
+CNA_Result cna_file_dialog_show_open_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filter_count,
+    const CNA_StringView default_location,
+    const CNA_Bool allow_multiple)
+{
+    (void)game;
+    (void)on_result;
+    (void)context;
+    (void)filters;
+    (void)filter_count;
+    (void)default_location;
+    (void)allow_multiple;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_file_dialog_show_save_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filter_count,
+    const CNA_StringView default_location)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return FileDialogShowSaveFileExt(game, on_result, context, filters, filter_count, default_location);
+    });
+}
+#else
+CNA_Result cna_file_dialog_show_save_file_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_FileDialogFilter* const filters,
+    const uint64_t filter_count,
+    const CNA_StringView default_location)
+{
+    (void)game;
+    (void)on_result;
+    (void)context;
+    (void)filters;
+    (void)filter_count;
+    (void)default_location;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_file_dialog_show_open_folder_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_StringView default_location,
+    const CNA_Bool allow_multiple)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(allow_multiple, "allow_multiple");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return FileDialogShowOpenFolderExt(game, on_result, context, default_location, allow_multiple);
+    });
+}
+#else
+CNA_Result cna_file_dialog_show_open_folder_ext(
+    const CNA_Handle game,
+    const CNA_FileDialogResultCallback on_result,
+    void* const context,
+    const CNA_StringView default_location,
+    const CNA_Bool allow_multiple)
+{
+    (void)game;
+    (void)on_result;
+    (void)context;
+    (void)default_location;
+    (void)allow_multiple;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_file_dialog_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const CNA_StringView* const results,
+    const uint64_t result_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(installed, "installed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return FileDialogSetTestBackendExt(game, installed, results, result_count);
+    });
+}
+#else
+CNA_Result cna_file_dialog_set_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_Bool installed,
+    const CNA_StringView* const results,
+    const uint64_t result_count)
+{
+    (void)game;
+    (void)installed;
+    (void)results;
+    (void)result_count;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_create(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const out_tray)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tray == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_create: out_tray is null.");
+        }
+        *out_tray = CNA_INVALID_HANDLE;
+        return SystemTrayCreate(game, tooltip, out_tray);
+    });
+}
+#else
+CNA_Result cna_system_tray_create(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const out_tray)
+{
+    (void)game;
+    (void)tooltip;
+    (void)out_tray;
+    if (out_tray != nullptr) {
+        *out_tray = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_create_with_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const out_tray)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_tray == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_create_with_test_backend_ext: out_tray is null.");
+        }
+        *out_tray = CNA_INVALID_HANDLE;
+        return SystemTrayCreateWithTestBackendExt(game, tooltip, out_tray);
+    });
+}
+#else
+CNA_Result cna_system_tray_create_with_test_backend_ext(
+    const CNA_Handle game,
+    const CNA_StringView tooltip,
+    CNA_SystemTrayHandle* const out_tray)
+{
+    (void)game;
+    (void)tooltip;
+    (void)out_tray;
+    if (out_tray != nullptr) {
+        *out_tray = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_add_entry(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView label,
+    const CNA_Bool checkable,
+    const CNA_Bool initially_checked,
+    const CNA_Bool initially_enabled,
+    const CNA_TrayEntryClickCallback on_click,
+    void* const context,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_system_tray_add_entry: out_index is null.");
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(checkable, "checkable");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(initially_checked, "initially_checked");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(initially_enabled, "initially_enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SystemTrayAddEntry(tray, label, checkable, initially_checked, initially_enabled, on_click, context, out_index);
+    });
+}
+#else
+CNA_Result cna_system_tray_add_entry(
+    const CNA_SystemTrayHandle tray,
+    const CNA_StringView label,
+    const CNA_Bool checkable,
+    const CNA_Bool initially_checked,
+    const CNA_Bool initially_enabled,
+    const CNA_TrayEntryClickCallback on_click,
+    void* const context,
+    uint64_t* const out_index)
+{
+    (void)tray;
+    (void)label;
+    (void)checkable;
+    (void)initially_checked;
+    (void)initially_enabled;
+    (void)on_click;
+    (void)context;
+    (void)out_index;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_system_tray_click_entry_for_tests_ext(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SystemTrayClickEntryForTestsExt(tray, index);
+    });
+}
+#else
+CNA_Result cna_system_tray_click_entry_for_tests_ext(
+    const CNA_SystemTrayHandle tray,
+    const uint64_t index)
+{
+    (void)tray;
+    (void)index;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_get_info_at_ext: out_info is null.");
+        }
+        return CameraGetInfoAtExt(game, index, out_info);
+    });
+}
+#else
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const out_info)
+{
+    (void)game;
+    (void)index;
+    (void)out_info;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle game,
+    CNA_CameraHandle* const out_camera)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_camera == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_camera_create_with_test_backend_ext: out_camera is null.");
+        }
+        *out_camera = CNA_INVALID_HANDLE;
+        return CameraCreateWithTestBackendExt(game, out_camera);
+    });
+}
+#else
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle game,
+    CNA_CameraHandle* const out_camera)
+{
+    (void)game;
+    (void)out_camera;
+    if (out_camera != nullptr) {
+        *out_camera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CameraSetTestStateExt(camera, state);
+    });
+}
+#else
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    (void)camera;
+    (void)state;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixel_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CameraSetTestFrameExt(camera, width, height, pixels, pixel_count);
+    });
+}
+#else
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixel_count)
+{
+    (void)camera;
+    (void)width;
+    (void)height;
+    (void)pixels;
+    (void)pixel_count;
+    return ExtensionUnavailable();
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_camera_destroy(
+    const CNA_CameraHandle camera)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CameraDestroy(camera);
+    });
+}
+#else
+CNA_Result cna_camera_destroy(
+    const CNA_CameraHandle camera)
+{
+    (void)camera;
+    return ExtensionUnavailable();
+}
+#endif

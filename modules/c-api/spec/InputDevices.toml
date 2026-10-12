@@ -41,3 +41,18 @@ cna_input_devices_raise_keyboard_disconnected_ext = { result = "RaiseHotplug(gam
 [values.routes]
 cna_sensor_info_init = { value = "MapSensorInfo(SensorInfoEXT())" }
 cna_input_device_info_init = { value = "MapDeviceInfo(InputDeviceInfoEXT())" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_sensor_info_equals = { result = "SensorInfoEquals(left, left_name, right, right_name, out_equal)" }
+cna_sensors_get_info_at = { result = "SensorsGetInfoAt(game, index, out_info)" }
+cna_sensors_get_name_size_at = { result = "SensorsGetNameSizeAt(game, index, out_bytes)" }
+cna_sensors_copy_name_at = { result = "SensorsCopyNameAt(game, index, destination, capacity, out_bytes)" }
+cna_input_device_info_equals = { result = "InputDeviceInfoEquals(left, left_name, right, right_name, out_equal)" }
+cna_power_get_info = { result = "PowerGetInfo(game, out_state, out_seconds_left, out_percent)" }
+cna_input_devices_unsubscribe_ext = { result = "InputDevicesUnsubscribeExt(registration)" }

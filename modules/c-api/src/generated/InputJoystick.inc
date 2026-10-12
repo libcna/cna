@@ -435,3 +435,57 @@ CNA_Result cna_joystick_state_equals(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_joystick_info_equals(
+    const CNA_JoystickInfo* const left,
+    const CNA_StringView left_name,
+    const CNA_JoystickInfo* const right,
+    const CNA_StringView right_name,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_info_equals: out_equal is null.");
+        }
+        return JoystickInfoEquals(left, left_name, right, right_name, out_equal);
+    });
+}
+
+CNA_Result cna_joystick_capabilities_equals(
+    const CNA_JoystickCapabilities* const left,
+    const CNA_StringView left_name,
+    const CNA_StringView left_guid,
+    const CNA_JoystickCapabilities* const right,
+    const CNA_StringView right_name,
+    const CNA_StringView right_guid,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joystick_capabilities_equals: out_equal is null.");
+        }
+        return JoystickCapabilitiesEquals(left, left_name, left_guid, right, right_name, right_guid, out_equal);
+    });
+}
+
+CNA_Result cna_joysticks_capture_state(
+    const CNA_Handle game,
+    const uint32_t id,
+    CNA_JoystickStateHandle* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_joysticks_capture_state: out_state is null.");
+        }
+        *out_state = CNA_INVALID_HANDLE;
+        return JoysticksCaptureState(game, id, out_state);
+    });
+}
+
+CNA_Result cna_joysticks_unsubscribe_ext(
+    const CNA_JoystickEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return JoysticksUnsubscribeExt(registration);
+    });
+}

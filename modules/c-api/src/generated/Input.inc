@@ -2487,3 +2487,565 @@ CNA_Result cna_touch_location_init_with_previous_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_keyboard_state_copy_pressed_keys(
+    const CNA_KeyboardState* const state,
+    CNA_Key* const destination,
+    const uint64_t capacity,
+    uint32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_state_copy_pressed_keys: out_count is null.");
+        }
+        return KeyboardStateCopyPressedKeys(state, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_touch_state_find_by_id(
+    const CNA_TouchState* const state,
+    const int32_t id,
+    CNA_TouchLocation* const out_location,
+    CNA_Bool* const out_found)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_location == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_find_by_id: out_location is null.");
+        }
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_find_by_id: out_found is null.");
+        }
+        return TouchStateFindById(state, id, out_location, out_found);
+    });
+}
+
+CNA_Result cna_touch_location_try_get_previous(
+    const CNA_TouchLocation* const location,
+    CNA_TouchLocation* const out_previous,
+    CNA_Bool* const out_found)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_previous == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_location_try_get_previous: out_previous is null.");
+        }
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_location_try_get_previous: out_found is null.");
+        }
+        return TouchLocationTryGetPrevious(location, out_previous, out_found);
+    });
+}
+
+CNA_Result cna_gamepad_buttons_init_from_button_array(
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadButtonFlags* const out_buttons)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_buttons == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_init_from_button_array: out_buttons is null.");
+        }
+        return GamepadButtonsInitFromButtonArray(buttons, count, out_buttons);
+    });
+}
+
+CNA_Result cna_gamepad_buttons_is_pressed(
+    const CNA_GamePadButtonFlags buttons,
+    const CNA_GamePadButtonFlags button,
+    CNA_Bool* const out_is_pressed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_pressed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_is_pressed: out_is_pressed is null.");
+        }
+        return GamepadButtonsIsPressed(buttons, button, out_is_pressed);
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init_from_states(
+    const CNA_Bool up,
+    const CNA_Bool down,
+    const CNA_Bool left,
+    const CNA_Bool right,
+    CNA_GamePadButtonFlags* const out_dpad)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dpad == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_init_from_states: out_dpad is null.");
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(up, "up");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(down, "down");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(left, "left");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(right, "right");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return GamepadDpadInitFromStates(up, down, left, right, out_dpad);
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init_from_button_array(
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadButtonFlags* const out_dpad)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_dpad == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_init_from_button_array: out_dpad is null.");
+        }
+        return GamepadDpadInitFromButtonArray(buttons, count, out_dpad);
+    });
+}
+
+CNA_Result cna_gamepad_dpad_is_pressed(
+    const CNA_GamePadButtonFlags dpad,
+    const CNA_GamePadButtonFlags button,
+    CNA_Bool* const out_is_pressed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_pressed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_is_pressed: out_is_pressed is null.");
+        }
+        return GamepadDpadIsPressed(dpad, button, out_is_pressed);
+    });
+}
+
+CNA_Result cna_gamepad_state_init_from_values(
+    const CNA_Vector2* const left_thumb_stick,
+    const CNA_Vector2* const right_thumb_stick,
+    const float left_trigger,
+    const float right_trigger,
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_state_init_from_values: out_state is null.");
+        }
+        return GamepadStateInitFromValues(left_thumb_stick, right_thumb_stick, left_trigger, right_trigger, buttons, count, out_state);
+    });
+}
+
+CNA_Result cna_gamepad_get_gyro_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_Vector3* const out_gyro,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_gyro == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_gyro_ext: out_gyro is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_gyro_ext: out_available is null.");
+        }
+        return GamepadGetGyroExt(game, player_index, out_gyro, out_available);
+    });
+}
+
+CNA_Result cna_gamepad_get_accelerometer_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_Vector3* const out_acceleration,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_acceleration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_accelerometer_ext: out_acceleration is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_accelerometer_ext: out_available is null.");
+        }
+        return GamepadGetAccelerometerExt(game, player_index, out_acceleration, out_available);
+    });
+}
+
+CNA_Result cna_gamepad_get_power_info_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_PowerState* const out_state,
+    int32_t* const out_percent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_power_info_ext: out_state is null.");
+        }
+        if (out_percent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_power_info_ext: out_percent is null.");
+        }
+        return GamepadGetPowerInfoExt(game, player_index, out_state, out_percent);
+    });
+}
+
+CNA_Result cna_gamepad_get_touchpad_finger_ext(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    const int32_t touchpad,
+    const int32_t finger,
+    CNA_GamePadTouchpadFinger* const out_finger,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_finger == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_touchpad_finger_ext: out_finger is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_touchpad_finger_ext: out_available is null.");
+        }
+        return GamepadGetTouchpadFingerExt(game, player_index, touchpad, finger, out_finger, out_available);
+    });
+}
+
+CNA_Result cna_keyboard_state_init_from_keys(
+    const CNA_Key* const keys,
+    const uint64_t count,
+    CNA_KeyboardState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_state_init_from_keys: out_state is null.");
+        }
+        return KeyboardStateInitFromKeys(keys, count, out_state);
+    });
+}
+
+CNA_Result cna_mouse_get_global_position_ext(
+    const CNA_Handle game,
+    int32_t* const out_x,
+    int32_t* const out_y)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_x == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_get_global_position_ext: out_x is null.");
+        }
+        if (out_y == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_get_global_position_ext: out_y is null.");
+        }
+        return MouseGetGlobalPositionExt(game, out_x, out_y);
+    });
+}
+
+CNA_Result cna_mouse_subscribe_clicked_ext(
+    const CNA_MouseClickedCallback callback,
+    void* const context,
+    CNA_MouseEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_subscribe_clicked_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return MouseSubscribeClickedExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_mouse_cursor_create_ext(
+    CNA_MouseCursorHandle* const out_cursor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_cursor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_cursor_create_ext: out_cursor is null.");
+        }
+        *out_cursor = CNA_INVALID_HANDLE;
+        return MouseCursorCreateExt(out_cursor);
+    });
+}
+
+CNA_Result cna_mouse_cursor_get_stock_ext(
+    const CNA_Handle game,
+    const CNA_MouseCursorStock stock,
+    CNA_MouseCursorHandle* const out_cursor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_cursor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_cursor_get_stock_ext: out_cursor is null.");
+        }
+        *out_cursor = CNA_INVALID_HANDLE;
+        return MouseCursorGetStockExt(game, stock, out_cursor);
+    });
+}
+
+CNA_Result cna_mouse_cursor_create_from_texture2d(
+    const CNA_Handle game,
+    const CNA_Handle texture,
+    const int32_t origin_x,
+    const int32_t origin_y,
+    CNA_MouseCursorHandle* const out_cursor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_cursor == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_cursor_create_from_texture2d: out_cursor is null.");
+        }
+        *out_cursor = CNA_INVALID_HANDLE;
+        return MouseCursorCreateFromTexture2d(game, texture, origin_x, origin_y, out_cursor);
+    });
+}
+
+CNA_Result cna_text_input_subscribe_text_input_ext(
+    const CNA_TextInputCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_text_input_subscribe_text_input_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return TextInputSubscribeTextInputExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_text_input_subscribe_text_editing_ext(
+    const CNA_TextEditingCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_text_input_subscribe_text_editing_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return TextInputSubscribeTextEditingExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_text_input_subscribe_text_editing_candidates_ext(
+    const CNA_TextEditingCandidatesCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_text_input_subscribe_text_editing_candidates_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return TextInputSubscribeTextEditingCandidatesExt(callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_text_input_raise_text_editing_candidates_ext(
+    const CNA_Handle game,
+    const CNA_StringView* const candidates,
+    const int32_t candidate_count,
+    const int32_t selected,
+    const CNA_Bool horizontal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(horizontal, "horizontal");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return TextInputRaiseTextEditingCandidatesExt(game, candidates, candidate_count, selected, horizontal);
+    });
+}
+
+CNA_Result cna_touch_state_init(
+    CNA_TouchState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_init: out_state is null.");
+        }
+        return TouchStateInit(out_state);
+    });
+}
+
+CNA_Result cna_touch_state_init_from_locations(
+    const CNA_TouchLocation* const locations,
+    const uint32_t count,
+    CNA_TouchState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_init_from_locations: out_state is null.");
+        }
+        return TouchStateInitFromLocations(locations, count, out_state);
+    });
+}
+
+CNA_Result cna_touch_state_contains(
+    const CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_contains == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_contains: out_contains is null.");
+        }
+        return TouchStateContains(state, item, out_contains);
+    });
+}
+
+CNA_Result cna_touch_state_index_of(
+    const CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    int32_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_index == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_index_of: out_index is null.");
+        }
+        return TouchStateIndexOf(state, item, out_index);
+    });
+}
+
+CNA_Result cna_touch_state_copy_to(
+    const CNA_TouchState* const state,
+    CNA_TouchLocation* const destination,
+    const uint64_t count,
+    const uint64_t capacity,
+    const int32_t destination_index,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_copy_to: out_count is null.");
+        }
+        return TouchStateCopyTo(state, destination, count, capacity, destination_index, out_count);
+    });
+}
+
+CNA_Result cna_touch_state_remove(
+    CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    CNA_Bool* const out_removed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_removed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_state_remove: out_removed is null.");
+        }
+        return TouchStateRemove(state, item, out_removed);
+    });
+}
+
+CNA_Result cna_keyboard_get_state(
+    const CNA_Handle game,
+    CNA_KeyboardState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_keyboard_get_state: out_state is null.");
+        }
+        return KeyboardGetState(game, out_state);
+    });
+}
+
+CNA_Result cna_mouse_get_state(
+    const CNA_Handle game,
+    CNA_MouseState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_mouse_get_state: out_state is null.");
+        }
+        return MouseGetState(game, out_state);
+    });
+}
+
+CNA_Result cna_touch_get_capabilities(
+    const CNA_Handle game,
+    CNA_TouchCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_get_capabilities: out_capabilities is null.");
+        }
+        return TouchGetCapabilities(game, out_capabilities);
+    });
+}
+
+CNA_Result cna_touch_get_state(
+    const CNA_Handle game,
+    CNA_TouchState* const out_state)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_get_state: out_state is null.");
+        }
+        return TouchGetState(game, out_state);
+    });
+}
+
+CNA_Result cna_gamepad_get_capabilities(
+    const CNA_Handle game,
+    const CNA_PlayerIndex player_index,
+    CNA_GamePadCapabilities* const out_capabilities)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_capabilities == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_capabilities: out_capabilities is null.");
+        }
+        return GamepadGetCapabilities(game, player_index, out_capabilities);
+    });
+}
+
+CNA_Result cna_mouse_unsubscribe_clicked_ext(
+    const CNA_MouseEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MouseUnsubscribeClickedExt(registration);
+    });
+}
+
+CNA_Result cna_mouse_set_cursor_ext(
+    const CNA_Handle game,
+    const CNA_MouseCursorHandle cursor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MouseSetCursorExt(game, cursor);
+    });
+}
+
+CNA_Result cna_text_input_unsubscribe_ext(
+    const CNA_TextInputRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TextInputUnsubscribeExt(registration);
+    });
+}
+
+CNA_Result cna_text_input_start_with_type_ext(
+    const CNA_Handle game,
+    const CNA_TextInputType type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TextInputStartWithTypeExt(game, type);
+    });
+}
+
+CNA_Result cna_touch_state_add(
+    CNA_TouchState* const state,
+    const CNA_TouchLocation* const item)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TouchStateAdd(state, item);
+    });
+}
+
+CNA_Result cna_touch_state_remove_at(
+    CNA_TouchState* const state,
+    const int32_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TouchStateRemoveAt(state, index);
+    });
+}
+
+CNA_Result cna_touch_state_insert(
+    CNA_TouchState* const state,
+    const int32_t index,
+    const CNA_TouchLocation* const item)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return TouchStateInsert(state, index, item);
+    });
+}

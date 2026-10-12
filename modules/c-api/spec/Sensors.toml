@@ -190,3 +190,42 @@ raw = true
 [reading_values.routes]
 cna_attitude_reading_init_from_values = { value = "MapAttitudeReading(AttitudeReading(pitch, roll, yaw, ToQuaternion(quaternion), ToMatrix(rotation_matrix), ToTimestamp(timestamp)))" }
 cna_accelerometer_reading_event_info_init_from_values = { value = "MapAccelerometerReadingEventArgs(AccelerometerReadingEventArgs(x, y, z, ToTimestamp(timestamp)))" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_accelerometer_reading_init = { result = "AccelerometerReadingInit(out_reading)" }
+cna_accelerometer_reading_init_from_values = { result = "AccelerometerReadingInitFromValues(timestamp, acceleration, out_reading)" }
+cna_gyroscope_reading_init = { result = "GyroscopeReadingInit(out_reading)" }
+cna_gyroscope_reading_init_from_values = { result = "GyroscopeReadingInitFromValues(rotation_rate, timestamp, out_reading)" }
+cna_compass_reading_init = { result = "CompassReadingInit(out_reading)" }
+cna_compass_reading_init_from_values = { result = "CompassReadingInitFromValues(heading_accuracy, magnetic_heading, magnetometer_reading, timestamp, true_heading, out_reading)" }
+cna_motion_reading_init = { result = "MotionReadingInit(out_reading)" }
+cna_motion_reading_init_from_values = { result = "MotionReadingInitFromValues(attitude, device_acceleration, device_rotation_rate, gravity, timestamp, out_reading)" }
+cna_accelerometer_reading_equals = { result = "AccelerometerReadingEquals(left, right, out_equal)" }
+cna_gyroscope_reading_equals = { result = "GyroscopeReadingEquals(left, right, out_equal)" }
+cna_attitude_reading_equals = { result = "AttitudeReadingEquals(left, right, out_equal)" }
+cna_compass_reading_equals = { result = "CompassReadingEquals(left, right, out_equal)" }
+cna_motion_reading_equals = { result = "MotionReadingEquals(left, right, out_equal)" }
+cna_sensors_get_last_error_id_ext = { result = "SensorsGetLastErrorIdExt(out_error_id, out_has_error_id)" }
+cna_accelerometer_subscribe_current_value_changed = { result = "AccelerometerSubscribeCurrentValueChanged(sensor, callback, context, out_registration)" }
+cna_gyroscope_subscribe_current_value_changed = { result = "GyroscopeSubscribeCurrentValueChanged(sensor, callback, context, out_registration)" }
+cna_accelerometer_reading_event_info_equals = { result = "AccelerometerReadingEventInfoEquals(left, right, out_equal)" }
+cna_accelerometer_subscribe_reading_changed = { result = "AccelerometerSubscribeReadingChanged(sensor, callback, context, out_registration)" }
+cna_compass_subscribe_current_value_changed = { result = "CompassSubscribeCurrentValueChanged(sensor, callback, context, out_registration)" }
+cna_compass_set_test_backend_ext = { result = "CompassSetTestBackendExt(sensor, installed, supported)" }
+cna_motion_subscribe_current_value_changed = { result = "MotionSubscribeCurrentValueChanged(sensor, callback, context, out_registration)" }
+cna_motion_set_test_backend_ext = { result = "MotionSetTestBackendExt(sensor, installed, supported, north_referenced)" }
+cna_sensor_unsubscribe_ext = { result = "SensorUnsubscribeExt(registration)" }
+cna_accelerometer_dispatch_to_instances_for_tests_ext = { result = "AccelerometerDispatchToInstancesForTestsExt(game, sensors, count, x, y, z)" }
+cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext = { result = "AccelerometerSetDisposalCleanupHookForTestsExt(sensor, callback, context)" }
+cna_gyroscope_dispatch_to_instances_for_tests_ext = { result = "GyroscopeDispatchToInstancesForTestsExt(game, sensors, count, x, y, z)" }
+cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext = { result = "GyroscopeSetDisposalCleanupHookForTestsExt(sensor, callback, context)" }
+cna_compass_inject_synthetic_update_ext = { result = "CompassInjectSyntheticUpdateExt(sensor, reading)" }
+cna_compass_inject_calibration_request_ext = { result = "CompassInjectCalibrationRequestExt(sensor)" }
+cna_motion_inject_synthetic_update_ext = { result = "MotionInjectSyntheticUpdateExt(sensor, reading)" }
+cna_motion_inject_calibration_request_ext = { result = "MotionInjectCalibrationRequestExt(sensor)" }

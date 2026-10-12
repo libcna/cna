@@ -233,3 +233,52 @@ cna_touch_location_init_from_values = { value = "CNA_TouchLocation{id, state, po
 cna_touch_location_init_with_previous = { value = "CNA_TouchLocation{id, state, position, previous_state, previous_position, 0.0F}", invalid_if = ["!IsValidTouchLocationState(state)", "!IsValidTouchLocationState(previous_state)"] }
 cna_touch_location_init_from_values_ext = { value = "CNA_TouchLocation{id, state, position, CNA_TOUCH_LOCATION_INVALID, CNA_Vector2{0.0F, 0.0F}, pressure}", invalid_if = "!IsValidTouchLocationState(state)", validate = "ValidatePressure(pressure)" }
 cna_touch_location_init_with_previous_ext = { value = "CNA_TouchLocation{id, state, position, previous_state, previous_position, pressure}", invalid_if = ["!IsValidTouchLocationState(state)", "!IsValidTouchLocationState(previous_state)"], validate = "ValidatePressure(pressure)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_keyboard_state_copy_pressed_keys = { result = "KeyboardStateCopyPressedKeys(state, destination, capacity, out_count)" }
+cna_touch_state_find_by_id = { result = "TouchStateFindById(state, id, out_location, out_found)" }
+cna_touch_location_try_get_previous = { result = "TouchLocationTryGetPrevious(location, out_previous, out_found)" }
+cna_gamepad_buttons_init_from_button_array = { result = "GamepadButtonsInitFromButtonArray(buttons, count, out_buttons)" }
+cna_gamepad_buttons_is_pressed = { result = "GamepadButtonsIsPressed(buttons, button, out_is_pressed)" }
+cna_gamepad_dpad_init_from_states = { result = "GamepadDpadInitFromStates(up, down, left, right, out_dpad)" }
+cna_gamepad_dpad_init_from_button_array = { result = "GamepadDpadInitFromButtonArray(buttons, count, out_dpad)" }
+cna_gamepad_dpad_is_pressed = { result = "GamepadDpadIsPressed(dpad, button, out_is_pressed)" }
+cna_gamepad_state_init_from_values = { result = "GamepadStateInitFromValues(left_thumb_stick, right_thumb_stick, left_trigger, right_trigger, buttons, count, out_state)" }
+cna_gamepad_get_gyro_ext = { result = "GamepadGetGyroExt(game, player_index, out_gyro, out_available)" }
+cna_gamepad_get_accelerometer_ext = { result = "GamepadGetAccelerometerExt(game, player_index, out_acceleration, out_available)" }
+cna_gamepad_get_power_info_ext = { result = "GamepadGetPowerInfoExt(game, player_index, out_state, out_percent)" }
+cna_gamepad_get_touchpad_finger_ext = { result = "GamepadGetTouchpadFingerExt(game, player_index, touchpad, finger, out_finger, out_available)" }
+cna_keyboard_state_init_from_keys = { result = "KeyboardStateInitFromKeys(keys, count, out_state)" }
+cna_mouse_get_global_position_ext = { result = "MouseGetGlobalPositionExt(game, out_x, out_y)" }
+cna_mouse_subscribe_clicked_ext = { result = "MouseSubscribeClickedExt(callback, context, out_registration)" }
+cna_mouse_cursor_create_ext = { result = "MouseCursorCreateExt(out_cursor)" }
+cna_mouse_cursor_get_stock_ext = { result = "MouseCursorGetStockExt(game, stock, out_cursor)" }
+cna_mouse_cursor_create_from_texture2d = { result = "MouseCursorCreateFromTexture2d(game, texture, origin_x, origin_y, out_cursor)" }
+cna_text_input_subscribe_text_input_ext = { result = "TextInputSubscribeTextInputExt(callback, context, out_registration)" }
+cna_text_input_subscribe_text_editing_ext = { result = "TextInputSubscribeTextEditingExt(callback, context, out_registration)" }
+cna_text_input_subscribe_text_editing_candidates_ext = { result = "TextInputSubscribeTextEditingCandidatesExt(callback, context, out_registration)" }
+cna_text_input_raise_text_editing_candidates_ext = { result = "TextInputRaiseTextEditingCandidatesExt(game, candidates, candidate_count, selected, horizontal)" }
+cna_touch_state_init = { result = "TouchStateInit(out_state)" }
+cna_touch_state_init_from_locations = { result = "TouchStateInitFromLocations(locations, count, out_state)" }
+cna_touch_state_contains = { result = "TouchStateContains(state, item, out_contains)" }
+cna_touch_state_index_of = { result = "TouchStateIndexOf(state, item, out_index)" }
+cna_touch_state_copy_to = { result = "TouchStateCopyTo(state, destination, count, capacity, destination_index, out_count)" }
+cna_touch_state_remove = { result = "TouchStateRemove(state, item, out_removed)" }
+cna_keyboard_get_state = { result = "KeyboardGetState(game, out_state)" }
+cna_mouse_get_state = { result = "MouseGetState(game, out_state)" }
+cna_touch_get_capabilities = { result = "TouchGetCapabilities(game, out_capabilities)" }
+cna_touch_get_state = { result = "TouchGetState(game, out_state)" }
+cna_gamepad_get_capabilities = { result = "GamepadGetCapabilities(game, player_index, out_capabilities)" }
+cna_mouse_unsubscribe_clicked_ext = { result = "MouseUnsubscribeClickedExt(registration)" }
+cna_mouse_set_cursor_ext = { result = "MouseSetCursorExt(game, cursor)" }
+cna_text_input_unsubscribe_ext = { result = "TextInputUnsubscribeExt(registration)" }
+cna_text_input_start_with_type_ext = { result = "TextInputStartWithTypeExt(game, type)" }
+cna_touch_state_add = { result = "TouchStateAdd(state, item)" }
+cna_touch_state_remove_at = { result = "TouchStateRemoveAt(state, index)" }
+cna_touch_state_insert = { result = "TouchStateInsert(state, index, item)" }

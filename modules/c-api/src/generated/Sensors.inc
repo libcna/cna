@@ -1829,3 +1829,402 @@ CNA_Result cna_accelerometer_reading_event_info_init_from_values(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_accelerometer_reading_init(
+    CNA_AccelerometerReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_init: out_reading is null.");
+        }
+        return AccelerometerReadingInit(out_reading);
+    });
+}
+
+CNA_Result cna_accelerometer_reading_init_from_values(
+    const CNA_DateTimeOffset timestamp,
+    const CNA_Vector3 acceleration,
+    CNA_AccelerometerReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_init_from_values: out_reading is null.");
+        }
+        return AccelerometerReadingInitFromValues(timestamp, acceleration, out_reading);
+    });
+}
+
+CNA_Result cna_gyroscope_reading_init(
+    CNA_GyroscopeReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_reading_init: out_reading is null.");
+        }
+        return GyroscopeReadingInit(out_reading);
+    });
+}
+
+CNA_Result cna_gyroscope_reading_init_from_values(
+    const CNA_Vector3 rotation_rate,
+    const CNA_DateTimeOffset timestamp,
+    CNA_GyroscopeReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_reading_init_from_values: out_reading is null.");
+        }
+        return GyroscopeReadingInitFromValues(rotation_rate, timestamp, out_reading);
+    });
+}
+
+CNA_Result cna_compass_reading_init(
+    CNA_CompassReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_reading_init: out_reading is null.");
+        }
+        return CompassReadingInit(out_reading);
+    });
+}
+
+CNA_Result cna_compass_reading_init_from_values(
+    const double heading_accuracy,
+    const double magnetic_heading,
+    const CNA_Vector3 magnetometer_reading,
+    const CNA_DateTimeOffset timestamp,
+    const double true_heading,
+    CNA_CompassReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_reading_init_from_values: out_reading is null.");
+        }
+        return CompassReadingInitFromValues(heading_accuracy, magnetic_heading, magnetometer_reading, timestamp, true_heading, out_reading);
+    });
+}
+
+CNA_Result cna_motion_reading_init(
+    CNA_MotionReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_reading_init: out_reading is null.");
+        }
+        return MotionReadingInit(out_reading);
+    });
+}
+
+CNA_Result cna_motion_reading_init_from_values(
+    const CNA_AttitudeReading* const attitude,
+    const CNA_Vector3 device_acceleration,
+    const CNA_Vector3 device_rotation_rate,
+    const CNA_Vector3 gravity,
+    const CNA_DateTimeOffset timestamp,
+    CNA_MotionReading* const out_reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_reading == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_reading_init_from_values: out_reading is null.");
+        }
+        return MotionReadingInitFromValues(attitude, device_acceleration, device_rotation_rate, gravity, timestamp, out_reading);
+    });
+}
+
+CNA_Result cna_accelerometer_reading_equals(
+    const CNA_AccelerometerReading* const left,
+    const CNA_AccelerometerReading* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_equals: out_equal is null.");
+        }
+        return AccelerometerReadingEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_gyroscope_reading_equals(
+    const CNA_GyroscopeReading* const left,
+    const CNA_GyroscopeReading* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_reading_equals: out_equal is null.");
+        }
+        return GyroscopeReadingEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_attitude_reading_equals(
+    const CNA_AttitudeReading* const left,
+    const CNA_AttitudeReading* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_attitude_reading_equals: out_equal is null.");
+        }
+        return AttitudeReadingEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_compass_reading_equals(
+    const CNA_CompassReading* const left,
+    const CNA_CompassReading* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_reading_equals: out_equal is null.");
+        }
+        return CompassReadingEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_motion_reading_equals(
+    const CNA_MotionReading* const left,
+    const CNA_MotionReading* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_reading_equals: out_equal is null.");
+        }
+        return MotionReadingEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_sensors_get_last_error_id_ext(
+    int32_t* const out_error_id,
+    CNA_Bool* const out_has_error_id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_error_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_last_error_id_ext: out_error_id is null.");
+        }
+        if (out_has_error_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_last_error_id_ext: out_has_error_id is null.");
+        }
+        return SensorsGetLastErrorIdExt(out_error_id, out_has_error_id);
+    });
+}
+
+CNA_Result cna_accelerometer_subscribe_current_value_changed(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_AccelerometerReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_subscribe_current_value_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return AccelerometerSubscribeCurrentValueChanged(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_gyroscope_subscribe_current_value_changed(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_GyroscopeReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gyroscope_subscribe_current_value_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GyroscopeSubscribeCurrentValueChanged(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_accelerometer_reading_event_info_equals(
+    const CNA_AccelerometerReadingEventInfo* const left,
+    const CNA_AccelerometerReadingEventInfo* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_reading_event_info_equals: out_equal is null.");
+        }
+        return AccelerometerReadingEventInfoEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_accelerometer_subscribe_reading_changed(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_AccelerometerReadingEventCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_subscribe_reading_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return AccelerometerSubscribeReadingChanged(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_compass_subscribe_current_value_changed(
+    const CNA_CompassHandle sensor,
+    const CNA_CompassReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_compass_subscribe_current_value_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return CompassSubscribeCurrentValueChanged(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_compass_set_test_backend_ext(
+    const CNA_CompassHandle sensor,
+    const CNA_Bool installed,
+    const CNA_Bool supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(installed, "installed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(supported, "supported");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CompassSetTestBackendExt(sensor, installed, supported);
+    });
+}
+
+CNA_Result cna_motion_subscribe_current_value_changed(
+    const CNA_MotionHandle sensor,
+    const CNA_MotionReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_motion_subscribe_current_value_changed: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return MotionSubscribeCurrentValueChanged(sensor, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_motion_set_test_backend_ext(
+    const CNA_MotionHandle sensor,
+    const CNA_Bool installed,
+    const CNA_Bool supported,
+    const CNA_Bool north_referenced)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(installed, "installed");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(supported, "supported");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(north_referenced, "north_referenced");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return MotionSetTestBackendExt(sensor, installed, supported, north_referenced);
+    });
+}
+
+CNA_Result cna_sensor_unsubscribe_ext(
+    const CNA_SensorEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return SensorUnsubscribeExt(registration);
+    });
+}
+
+CNA_Result cna_accelerometer_dispatch_to_instances_for_tests_ext(
+    const CNA_Handle game,
+    const CNA_AccelerometerHandle* const sensors,
+    const uint64_t count,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AccelerometerDispatchToInstancesForTestsExt(game, sensors, count, x, y, z);
+    });
+}
+
+CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return AccelerometerSetDisposalCleanupHookForTestsExt(sensor, callback, context);
+    });
+}
+
+CNA_Result cna_gyroscope_dispatch_to_instances_for_tests_ext(
+    const CNA_Handle game,
+    const CNA_GyroscopeHandle* const sensors,
+    const uint64_t count,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GyroscopeDispatchToInstancesForTestsExt(game, sensors, count, x, y, z);
+    });
+}
+
+CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GyroscopeSetDisposalCleanupHookForTestsExt(sensor, callback, context);
+    });
+}
+
+CNA_Result cna_compass_inject_synthetic_update_ext(
+    const CNA_CompassHandle sensor,
+    const CNA_CompassReading* const reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CompassInjectSyntheticUpdateExt(sensor, reading);
+    });
+}
+
+CNA_Result cna_compass_inject_calibration_request_ext(
+    const CNA_CompassHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CompassInjectCalibrationRequestExt(sensor);
+    });
+}
+
+CNA_Result cna_motion_inject_synthetic_update_ext(
+    const CNA_MotionHandle sensor,
+    const CNA_MotionReading* const reading)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MotionInjectSyntheticUpdateExt(sensor, reading);
+    });
+}
+
+CNA_Result cna_motion_inject_calibration_request_ext(
+    const CNA_MotionHandle sensor)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MotionInjectCalibrationRequestExt(sensor);
+    });
+}

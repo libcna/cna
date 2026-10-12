@@ -239,57 +239,50 @@ private:
         outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_joystick_info_equals(
+[[nodiscard]] CNA_Result JoystickInfoEquals(
     const CNA_JoystickInfo* const left,
     const CNA_StringView leftName,
     const CNA_JoystickInfo* const right,
     const CNA_StringView rightName,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The joystick descriptor comparison output is null.");
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(left, "The first joystick descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ValidateVersionedStructure(right, "The second joystick descriptor is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        JoystickInfoEXT nativeLeft;
-        JoystickInfoEXT nativeRight;
-        if (const CNA_Result result = ToJoystickType(left->type, &nativeLeft.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToJoystickType(right->type, &nativeRight.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        nativeLeft.id = left->id;
-        nativeRight.id = right->id;
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result =
+            ValidateVersionedStructure(left, "The first joystick descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            ValidateVersionedStructure(right, "The second joystick descriptor is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    JoystickInfoEXT nativeLeft;
+    JoystickInfoEXT nativeRight;
+    if (const CNA_Result result = ToJoystickType(left->type, &nativeLeft.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToJoystickType(right->type, &nativeRight.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    nativeLeft.id = left->id;
+    nativeRight.id = right->id;
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_joystick_capabilities_equals(
+[[nodiscard]] CNA_Result JoystickCapabilitiesEquals(
     const CNA_JoystickCapabilities* const left,
     const CNA_StringView leftName,
     const CNA_StringView leftGuid,
@@ -298,111 +291,100 @@ CNA_Result cna_joystick_capabilities_equals(
     const CNA_StringView rightGuid,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The joystick capabilities comparison output is null.");
-        }
-        if (const CNA_Result result = ValidateVersionedStructure(
-                left,
-                "The first joystick capabilities structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateVersionedStructure(
-                right,
-                "The second joystick capabilities structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        JoystickCapabilitiesEXT nativeLeft;
-        JoystickCapabilitiesEXT nativeRight;
-        if (const CNA_Result result = ToJoystickType(left->type, &nativeLeft.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToJoystickType(right->type, &nativeRight.type);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToPowerState(left->power_state, &nativeLeft.powerState);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToPowerState(right->power_state, &nativeRight.powerState);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                leftGuid, "The first joystick GUID is not valid UTF-8.", &nativeLeft.guid);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ReadText(
-                rightGuid, "The second joystick GUID is not valid UTF-8.", &nativeRight.guid);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        nativeLeft.isConnected = left->is_connected != CNA_FALSE;
-        nativeLeft.axisCount = left->axis_count;
-        nativeLeft.buttonCount = left->button_count;
-        nativeLeft.hatCount = left->hat_count;
-        nativeLeft.ballCount = left->ball_count;
-        nativeLeft.powerPercent = left->power_percent;
-        nativeRight.isConnected = right->is_connected != CNA_FALSE;
-        nativeRight.axisCount = right->axis_count;
-        nativeRight.buttonCount = right->button_count;
-        nativeRight.hatCount = right->hat_count;
-        nativeRight.ballCount = right->ball_count;
-        nativeRight.powerPercent = right->power_percent;
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            left,
+            "The first joystick capabilities structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            right,
+            "The second joystick capabilities structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    JoystickCapabilitiesEXT nativeLeft;
+    JoystickCapabilitiesEXT nativeRight;
+    if (const CNA_Result result = ToJoystickType(left->type, &nativeLeft.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToJoystickType(right->type, &nativeRight.type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToPowerState(left->power_state, &nativeLeft.powerState);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToPowerState(right->power_state, &nativeRight.powerState);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            leftName, "The first joystick name is not valid UTF-8.", &nativeLeft.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            rightName, "The second joystick name is not valid UTF-8.", &nativeRight.name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            leftGuid, "The first joystick GUID is not valid UTF-8.", &nativeLeft.guid);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ReadText(
+            rightGuid, "The second joystick GUID is not valid UTF-8.", &nativeRight.guid);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    nativeLeft.isConnected = left->is_connected != CNA_FALSE;
+    nativeLeft.axisCount = left->axis_count;
+    nativeLeft.buttonCount = left->button_count;
+    nativeLeft.hatCount = left->hat_count;
+    nativeLeft.ballCount = left->ball_count;
+    nativeLeft.powerPercent = left->power_percent;
+    nativeRight.isConnected = right->is_connected != CNA_FALSE;
+    nativeRight.axisCount = right->axis_count;
+    nativeRight.buttonCount = right->button_count;
+    nativeRight.hatCount = right->hat_count;
+    nativeRight.ballCount = right->ball_count;
+    nativeRight.powerPercent = right->power_percent;
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_joysticks_capture_state(
+[[nodiscard]] CNA_Result JoysticksCaptureState(
     const CNA_Handle gameHandle,
     const uint32_t id,
     CNA_JoystickStateHandle* const outState)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outState == nullptr) {
-            return InvalidArgument("The joystick snapshot output is null.");
-        }
-        *outState = CNA_INVALID_HANDLE;
-        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        auto resource = std::make_shared<JoystickStateEXT>(Joysticks::GetStateEXT(id));
-        return CreateHandle(CNA::C::Detail::ObjectKind::JoystickState,
-            std::move(resource),
-            outState);
-    });
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto resource = std::make_shared<JoystickStateEXT>(Joysticks::GetStateEXT(id));
+    return CreateHandle(CNA::C::Detail::ObjectKind::JoystickState,
+        std::move(resource),
+        outState);
 }
 
-CNA_Result cna_joysticks_unsubscribe_ext(
+[[nodiscard]] CNA_Result JoysticksUnsubscribeExt(
     const CNA_JoystickEventRegistrationHandle registration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<JoystickRegistration> resource;
-        const CNA_Result getResult = LookupHandle(
-            registration, CNA::C::Detail::ObjectKind::JoystickEventRegistration, &resource);
-        if (getResult != CNA_RESULT_SUCCESS) {
-            return getResult;
-        }
-        return ReleaseHandle(registration);
-    });
+    std::shared_ptr<JoystickRegistration> resource;
+    const CNA_Result getResult = LookupHandle(
+        registration, CNA::C::Detail::ObjectKind::JoystickEventRegistration, &resource);
+    if (getResult != CNA_RESULT_SUCCESS) {
+        return getResult;
+    }
+    return ReleaseHandle(registration);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/InputJoystick.toml.
 #include "generated/InputJoystick.inc"

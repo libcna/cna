@@ -488,3 +488,105 @@ CNA_Result cna_haptic_capabilities_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_haptic_direction_equals(
+    const CNA_HapticDirection* const left,
+    const CNA_HapticDirection* const right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_direction_equals: out_equal is null.");
+        }
+        return HapticDirectionEquals(left, right, out_equal);
+    });
+}
+
+CNA_Result cna_haptic_effect_init(
+    CNA_HapticEffect* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_effect_init: out_effect is null.");
+        }
+        return HapticEffectInit(out_effect);
+    });
+}
+
+CNA_Result cna_haptic_effect_equals(
+    const CNA_HapticEffect* const left,
+    const uint16_t* const left_custom_data,
+    const uint64_t left_custom_count,
+    const CNA_HapticEffect* const right,
+    const uint16_t* const right_custom_data,
+    const uint64_t right_custom_count,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_effect_equals: out_equal is null.");
+        }
+        return HapticEffectEquals(left, left_custom_data, left_custom_count, right, right_custom_data, right_custom_count, out_equal);
+    });
+}
+
+CNA_Result cna_haptic_capabilities_equals(
+    const CNA_HapticCapabilities* const left,
+    const CNA_StringView left_name,
+    const CNA_HapticCapabilities* const right,
+    const CNA_StringView right_name,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_capabilities_equals: out_equal is null.");
+        }
+        return HapticCapabilitiesEquals(left, left_name, right, right_name, out_equal);
+    });
+}
+
+CNA_Result cna_haptic_device_get_is_effect_supported(
+    const CNA_HapticDeviceHandle device,
+    const CNA_HapticEffect* const effect,
+    const uint16_t* const custom_data,
+    const uint64_t custom_sample_count,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_get_is_effect_supported: out_supported is null.");
+        }
+        return HapticDeviceGetIsEffectSupported(device, effect, custom_data, custom_sample_count, out_supported);
+    });
+}
+
+CNA_Result cna_haptic_device_create_effect(
+    const CNA_HapticDeviceHandle device,
+    const CNA_HapticEffect* const effect,
+    const uint16_t* const custom_data,
+    const uint64_t custom_sample_count,
+    int32_t* const out_effect_id)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect_id == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_create_effect: out_effect_id is null.");
+        }
+        return HapticDeviceCreateEffect(device, effect, custom_data, custom_sample_count, out_effect_id);
+    });
+}
+
+CNA_Result cna_haptic_device_update_effect(
+    const CNA_HapticDeviceHandle device,
+    const int32_t effect_id,
+    const CNA_HapticEffect* const effect,
+    const uint16_t* const custom_data,
+    const uint64_t custom_sample_count,
+    CNA_Bool* const out_applied)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_applied == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_haptic_device_update_effect: out_applied is null.");
+        }
+        return HapticDeviceUpdateEffect(device, effect_id, effect, custom_data, custom_sample_count, out_applied);
+    });
+}

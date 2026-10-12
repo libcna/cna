@@ -411,3 +411,102 @@ CNA_Result cna_input_device_info_init(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_sensor_info_equals(
+    const CNA_SensorInfo* const left,
+    const CNA_StringView left_name,
+    const CNA_SensorInfo* const right,
+    const CNA_StringView right_name,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensor_info_equals: out_equal is null.");
+        }
+        return SensorInfoEquals(left, left_name, right, right_name, out_equal);
+    });
+}
+
+CNA_Result cna_sensors_get_info_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    CNA_SensorInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_info_at: out_info is null.");
+        }
+        return SensorsGetInfoAt(game, index, out_info);
+    });
+}
+
+CNA_Result cna_sensors_get_name_size_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_get_name_size_at: out_bytes is null.");
+        }
+        return SensorsGetNameSizeAt(game, index, out_bytes);
+    });
+}
+
+CNA_Result cna_sensors_copy_name_at(
+    const CNA_Handle game,
+    const uint32_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sensors_copy_name_at: out_bytes is null.");
+        }
+        return SensorsCopyNameAt(game, index, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_input_device_info_equals(
+    const CNA_InputDeviceInfo* const left,
+    const CNA_StringView left_name,
+    const CNA_InputDeviceInfo* const right,
+    const CNA_StringView right_name,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_input_device_info_equals: out_equal is null.");
+        }
+        return InputDeviceInfoEquals(left, left_name, right, right_name, out_equal);
+    });
+}
+
+CNA_Result cna_power_get_info(
+    const CNA_Handle game,
+    CNA_PowerState* const out_state,
+    int32_t* const out_seconds_left,
+    int32_t* const out_percent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_state == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_info: out_state is null.");
+        }
+        if (out_seconds_left == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_info: out_seconds_left is null.");
+        }
+        if (out_percent == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_power_get_info: out_percent is null.");
+        }
+        return PowerGetInfo(game, out_state, out_seconds_left, out_percent);
+    });
+}
+
+CNA_Result cna_input_devices_unsubscribe_ext(
+    const CNA_InputDeviceEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return InputDevicesUnsubscribeExt(registration);
+    });
+}

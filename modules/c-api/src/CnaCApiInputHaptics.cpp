@@ -21,8 +21,6 @@
 #include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::ErrorCategoryForResult;
-using CNA::C::Detail::Fail;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ValidateActiveGameHandle;
@@ -218,75 +216,66 @@ using DeviceAction = bool (HapticDevice::*)();
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_haptic_direction_equals(
+[[nodiscard]] CNA_Result HapticDirectionEquals(
     const CNA_HapticDirection* const left,
     const CNA_HapticDirection* const right,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (left == nullptr || right == nullptr || outEqual == nullptr) {
-            return InvalidArgument("The haptic direction comparison argument is null.");
-        }
-        HapticDirectionEXT nativeLeft;
-        HapticDirectionEXT nativeRight;
-        if (const CNA_Result result = ToDirection(*left, &nativeLeft);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ToDirection(*right, &nativeRight);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (left == nullptr || right == nullptr) {
+        return InvalidArgument("The haptic direction comparison argument is null.");
+    }
+    HapticDirectionEXT nativeLeft;
+    HapticDirectionEXT nativeRight;
+    if (const CNA_Result result = ToDirection(*left, &nativeLeft);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ToDirection(*right, &nativeRight);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_effect_init(CNA_HapticEffect* const outEffect)
+[[nodiscard]] CNA_Result HapticEffectInit(CNA_HapticEffect* const outEffect)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffect == nullptr) {
-            return InvalidArgument("The haptic effect output is null.");
-        }
-        const HapticEffectEXT nativeEffect;
-        CNA_HapticEffect effect = {};
-        effect.struct_size = sizeof(CNA_HapticEffect);
-        effect.struct_version = StructureVersion;
-        effect.type = static_cast<CNA_HapticEffectType>(nativeEffect.type);
-        effect.direction = MapDirection(nativeEffect.direction);
-        effect.length = nativeEffect.length;
-        effect.delay = nativeEffect.delay;
-        effect.button = nativeEffect.button;
-        effect.interval = nativeEffect.interval;
-        effect.level = nativeEffect.level;
-        effect.period = nativeEffect.period;
-        effect.magnitude = nativeEffect.magnitude;
-        effect.offset = nativeEffect.offset;
-        effect.phase = nativeEffect.phase;
-        effect.ramp_start = nativeEffect.rampStart;
-        effect.ramp_end = nativeEffect.rampEnd;
-        CopyAxes(nativeEffect.rightSaturation, effect.right_saturation);
-        CopyAxes(nativeEffect.leftSaturation, effect.left_saturation);
-        CopyAxes(nativeEffect.rightCoefficient, effect.right_coefficient);
-        CopyAxes(nativeEffect.leftCoefficient, effect.left_coefficient);
-        CopyAxes(nativeEffect.deadband, effect.deadband);
-        CopyAxes(nativeEffect.center, effect.center);
-        effect.large_magnitude = nativeEffect.largeMagnitude;
-        effect.small_magnitude = nativeEffect.smallMagnitude;
-        effect.custom_channels = nativeEffect.customChannels;
-        effect.custom_period = nativeEffect.customPeriod;
-        effect.attack_length = nativeEffect.attackLength;
-        effect.attack_level = nativeEffect.attackLevel;
-        effect.fade_length = nativeEffect.fadeLength;
-        effect.fade_level = nativeEffect.fadeLevel;
-        *outEffect = effect;
-        return CNA_RESULT_SUCCESS;
-    });
+    const HapticEffectEXT nativeEffect;
+    CNA_HapticEffect effect = {};
+    effect.struct_size = sizeof(CNA_HapticEffect);
+    effect.struct_version = StructureVersion;
+    effect.type = static_cast<CNA_HapticEffectType>(nativeEffect.type);
+    effect.direction = MapDirection(nativeEffect.direction);
+    effect.length = nativeEffect.length;
+    effect.delay = nativeEffect.delay;
+    effect.button = nativeEffect.button;
+    effect.interval = nativeEffect.interval;
+    effect.level = nativeEffect.level;
+    effect.period = nativeEffect.period;
+    effect.magnitude = nativeEffect.magnitude;
+    effect.offset = nativeEffect.offset;
+    effect.phase = nativeEffect.phase;
+    effect.ramp_start = nativeEffect.rampStart;
+    effect.ramp_end = nativeEffect.rampEnd;
+    CopyAxes(nativeEffect.rightSaturation, effect.right_saturation);
+    CopyAxes(nativeEffect.leftSaturation, effect.left_saturation);
+    CopyAxes(nativeEffect.rightCoefficient, effect.right_coefficient);
+    CopyAxes(nativeEffect.leftCoefficient, effect.left_coefficient);
+    CopyAxes(nativeEffect.deadband, effect.deadband);
+    CopyAxes(nativeEffect.center, effect.center);
+    effect.large_magnitude = nativeEffect.largeMagnitude;
+    effect.small_magnitude = nativeEffect.smallMagnitude;
+    effect.custom_channels = nativeEffect.customChannels;
+    effect.custom_period = nativeEffect.customPeriod;
+    effect.attack_length = nativeEffect.attackLength;
+    effect.attack_level = nativeEffect.attackLevel;
+    effect.fade_length = nativeEffect.fadeLength;
+    effect.fade_level = nativeEffect.fadeLevel;
+    *outEffect = effect;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_effect_equals(
+[[nodiscard]] CNA_Result HapticEffectEquals(
     const CNA_HapticEffect* const left,
     const uint16_t* const leftCustomData,
     const uint64_t leftCustomCount,
@@ -295,138 +284,118 @@ CNA_Result cna_haptic_effect_equals(
     const uint64_t rightCustomCount,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The haptic effect comparison output is null.");
-        }
-        HapticEffectEXT nativeLeft;
-        HapticEffectEXT nativeRight;
-        if (const CNA_Result result =
-                ToEffect(left, leftCustomData, leftCustomCount, &nativeLeft);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result =
-                ToEffect(right, rightCustomData, rightCustomCount, &nativeRight);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    HapticEffectEXT nativeLeft;
+    HapticEffectEXT nativeRight;
+    if (const CNA_Result result =
+            ToEffect(left, leftCustomData, leftCustomCount, &nativeLeft);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result =
+            ToEffect(right, rightCustomData, rightCustomCount, &nativeRight);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_capabilities_equals(
+[[nodiscard]] CNA_Result HapticCapabilitiesEquals(
     const CNA_HapticCapabilities* const left,
     const CNA_StringView leftName,
     const CNA_HapticCapabilities* const right,
     const CNA_StringView rightName,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The haptic capabilities comparison output is null.");
-        }
-        if (const CNA_Result result = ValidateVersionedStructure(
-                left,
-                "The first haptic capabilities structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateVersionedStructure(
-                right,
-                "The second haptic capabilities structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string leftText;
-        std::string rightText;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                leftName, "The first haptic device name is not valid UTF-8.", &leftText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                rightName, "The second haptic device name is not valid UTF-8.", &rightText);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        HapticCapabilitiesEXT nativeLeft;
-        nativeLeft.isOpen = left->is_open != CNA_FALSE;
-        nativeLeft.name = std::move(leftText);
-        nativeLeft.features = static_cast<HapticFeatureEXT>(left->features);
-        nativeLeft.axisCount = left->axis_count;
-        nativeLeft.maxEffects = left->max_effects;
-        nativeLeft.maxEffectsPlaying = left->max_effects_playing;
-        nativeLeft.rumbleSupported = left->rumble_supported != CNA_FALSE;
-        HapticCapabilitiesEXT nativeRight;
-        nativeRight.isOpen = right->is_open != CNA_FALSE;
-        nativeRight.name = std::move(rightText);
-        nativeRight.features = static_cast<HapticFeatureEXT>(right->features);
-        nativeRight.axisCount = right->axis_count;
-        nativeRight.maxEffects = right->max_effects;
-        nativeRight.maxEffectsPlaying = right->max_effects_playing;
-        nativeRight.rumbleSupported = right->rumble_supported != CNA_FALSE;
-        *outEqual = ToCBool(nativeLeft == nativeRight);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            left,
+            "The first haptic capabilities structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateVersionedStructure(
+            right,
+            "The second haptic capabilities structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string leftText;
+    std::string rightText;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            leftName, "The first haptic device name is not valid UTF-8.", &leftText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            rightName, "The second haptic device name is not valid UTF-8.", &rightText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    HapticCapabilitiesEXT nativeLeft;
+    nativeLeft.isOpen = left->is_open != CNA_FALSE;
+    nativeLeft.name = std::move(leftText);
+    nativeLeft.features = static_cast<HapticFeatureEXT>(left->features);
+    nativeLeft.axisCount = left->axis_count;
+    nativeLeft.maxEffects = left->max_effects;
+    nativeLeft.maxEffectsPlaying = left->max_effects_playing;
+    nativeLeft.rumbleSupported = left->rumble_supported != CNA_FALSE;
+    HapticCapabilitiesEXT nativeRight;
+    nativeRight.isOpen = right->is_open != CNA_FALSE;
+    nativeRight.name = std::move(rightText);
+    nativeRight.features = static_cast<HapticFeatureEXT>(right->features);
+    nativeRight.axisCount = right->axis_count;
+    nativeRight.maxEffects = right->max_effects;
+    nativeRight.maxEffectsPlaying = right->max_effects_playing;
+    nativeRight.rumbleSupported = right->rumble_supported != CNA_FALSE;
+    *outEqual = ToCBool(nativeLeft == nativeRight);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_device_get_is_effect_supported(
+[[nodiscard]] CNA_Result HapticDeviceGetIsEffectSupported(
     const CNA_HapticDeviceHandle deviceHandle,
     const CNA_HapticEffect* const effect,
     const uint16_t* const customData,
     const uint64_t customSampleCount,
     CNA_Bool* const outSupported)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSupported == nullptr) {
-            return InvalidArgument("The effect-supported output is null.");
-        }
-        HapticEffectEXT nativeEffect;
-        if (const CNA_Result result =
-                ToEffect(effect, customData, customSampleCount, &nativeEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = ToCBool(device->IsEffectSupportedEXT(nativeEffect));
-        return CNA_RESULT_SUCCESS;
-    });
+    HapticEffectEXT nativeEffect;
+    if (const CNA_Result result =
+            ToEffect(effect, customData, customSampleCount, &nativeEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<HapticDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outSupported = ToCBool(device->IsEffectSupportedEXT(nativeEffect));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_device_create_effect(
+[[nodiscard]] CNA_Result HapticDeviceCreateEffect(
     const CNA_HapticDeviceHandle deviceHandle,
     const CNA_HapticEffect* const effect,
     const uint16_t* const customData,
     const uint64_t customSampleCount,
     int32_t* const outEffectId)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEffectId == nullptr) {
-            return InvalidArgument("The effect identifier output is null.");
-        }
-        HapticEffectEXT nativeEffect;
-        if (const CNA_Result result =
-                ToEffect(effect, customData, customSampleCount, &nativeEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outEffectId = static_cast<int32_t>(device->CreateEffectEXT(nativeEffect));
-        return CNA_RESULT_SUCCESS;
-    });
+    HapticEffectEXT nativeEffect;
+    if (const CNA_Result result =
+            ToEffect(effect, customData, customSampleCount, &nativeEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<HapticDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outEffectId = static_cast<int32_t>(device->CreateEffectEXT(nativeEffect));
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_haptic_device_update_effect(
+[[nodiscard]] CNA_Result HapticDeviceUpdateEffect(
     const CNA_HapticDeviceHandle deviceHandle,
     const int32_t effectId,
     const CNA_HapticEffect* const effect,
@@ -434,25 +403,22 @@ CNA_Result cna_haptic_device_update_effect(
     const uint64_t customSampleCount,
     CNA_Bool* const outApplied)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outApplied == nullptr) {
-            return InvalidArgument("The effect update output is null.");
-        }
-        HapticEffectEXT nativeEffect;
-        if (const CNA_Result result =
-                ToEffect(effect, customData, customSampleCount, &nativeEffect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<HapticDevice> device;
-        if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outApplied = ToCBool(device->UpdateEffectEXT(effectId, nativeEffect));
-        return CNA_RESULT_SUCCESS;
-    });
+    HapticEffectEXT nativeEffect;
+    if (const CNA_Result result =
+            ToEffect(effect, customData, customSampleCount, &nativeEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<HapticDevice> device;
+    if (const CNA_Result result = BorrowDevice(deviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outApplied = ToCBool(device->UpdateEffectEXT(effectId, nativeEffect));
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/InputHaptics.toml.
 #include "generated/InputHaptics.inc"

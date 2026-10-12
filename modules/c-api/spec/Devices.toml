@@ -104,3 +104,44 @@ unavailable = "ExtensionUnavailable()"
 
 [camera_and_texture.routes]
 cna_camera_try_acquire_frame_ext = { get = "object->value->TryAcquireFrame(*other->value)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_devices_ext_is_available = { result = "DevicesExtIsAvailable(out_available)" }
+cna_vibrate_controller_set_test_backend_ext = { result = "VibrateControllerSetTestBackendExt(game, installed, supported, device_name)" }
+cna_vibrate_controller_get_test_log_ext = { result = "VibrateControllerGetTestLogExt(game, out_log)" }
+cna_camera_device_info_init = { result = "CameraDeviceInfoInit(out_info)" }
+
+# Helper routes that exist only in builds with CNA_DEVICES; without it each answers
+# ExtensionUnavailable().
+[helpers_devices]
+raw = true
+feature = "CNA_DEVICES"
+unavailable = "ExtensionUnavailable()"
+
+[helpers_devices.routes]
+cna_locale_get_preferred_count_ext = { result = "LocaleGetPreferredCountExt(game, out_count)" }
+cna_display_info_get_safe_area_ext = { result = "DisplayInfoGetSafeAreaExt(game, out_area)" }
+cna_url_launcher_open_ext = { result = "UrlLauncherOpenExt(game, url, out_opened)" }
+cna_message_box_show_simple_ext = { result = "MessageBoxShowSimpleExt(game, type, title, message)" }
+cna_message_box_show_ext = { result = "MessageBoxShowExt(game, type, title, message, button_labels, button_count, out_chosen)" }
+cna_message_box_set_test_backend_ext = { result = "MessageBoxSetTestBackendExt(game, installed, chosen_button)" }
+cna_message_box_get_test_log_ext = { result = "MessageBoxGetTestLogExt(game, out_log)" }
+cna_file_dialog_show_open_file_ext = { result = "FileDialogShowOpenFileExt(game, on_result, context, filters, filter_count, default_location, allow_multiple)" }
+cna_file_dialog_show_save_file_ext = { result = "FileDialogShowSaveFileExt(game, on_result, context, filters, filter_count, default_location)" }
+cna_file_dialog_show_open_folder_ext = { result = "FileDialogShowOpenFolderExt(game, on_result, context, default_location, allow_multiple)" }
+cna_file_dialog_set_test_backend_ext = { result = "FileDialogSetTestBackendExt(game, installed, results, result_count)" }
+cna_system_tray_create = { result = "SystemTrayCreate(game, tooltip, out_tray)" }
+cna_system_tray_create_with_test_backend_ext = { result = "SystemTrayCreateWithTestBackendExt(game, tooltip, out_tray)" }
+cna_system_tray_add_entry = { result = "SystemTrayAddEntry(tray, label, checkable, initially_checked, initially_enabled, on_click, context, out_index)" }
+cna_system_tray_click_entry_for_tests_ext = { result = "SystemTrayClickEntryForTestsExt(tray, index)" }
+cna_camera_get_info_at_ext = { result = "CameraGetInfoAtExt(game, index, out_info)" }
+cna_camera_create_with_test_backend_ext = { result = "CameraCreateWithTestBackendExt(game, out_camera)" }
+cna_camera_set_test_state_ext = { result = "CameraSetTestStateExt(camera, state)" }
+cna_camera_set_test_frame_ext = { result = "CameraSetTestFrameExt(camera, width, height, pixels, pixel_count)" }
+cna_camera_destroy = { result = "CameraDestroy(camera)" }
