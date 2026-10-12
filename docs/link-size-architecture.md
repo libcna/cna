@@ -119,6 +119,7 @@ of a program.
 | `CNA_OPTIMIZE_FOR_SIZE` | OFF | GCC/Clang: compiles CNA with `-ffunction-sections -fdata-sections` and gives every program that links CNA `--gc-sections` (`-dead_strip` on Apple). MSVC (`/Gy`, `/OPT:REF`) and wasm-ld already collect unreferenced code in Release. |
 | `CNA_ENABLE_IPO` | OFF | LTO for CNA's Release targets. |
 | `CNA_SHARED_LIBRARY` | ON on native Linux | Links the runtime into `libcna.so` with every subsystem in it -- the development trees' choice, to stop 800 test executables each carrying a copy. A size-oriented deployment links CNA statically (`OFF`); a program that links module targets (`CNA::Runtime`, `CNA::GamerServices`) is static either way. |
+| `CNA_CXX_RUNTIME_LINKAGE` | AUTO | How the programs that link CNA link the C++ runtime; AUTO reads each program's flags. `STATIC`/`SHARED` declare a runtime they do not show ("Linker independence"). |
 | `CNA_ENABLE_DRACO`, `CNA_ENABLE_VIDEO` | ON / AUTO | Whether the decoder is built at all; a program that does not load models or video does not link it regardless. |
 
 A size-oriented Release consumer: `-DCMAKE_BUILD_TYPE=MinSizeRel` (or Release)
@@ -163,23 +164,48 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
 ## Linker independence
 
 GNU ld, lld and mold must extract the same archive members. They differ in one case that matters
-to CNA: a symbol defined both by a not-yet-extracted archive member and by a shared library. From
-C++20 on, libstdc++ no longer declares `std::string`'s members instantiated in its shared library,
-so every CNA object carries weak copies of the ones it uses, and libstdc++ exports them weakly too.
-mold gives such a symbol to whichever file comes first on the command line, and the compiler driver
-names the C++ runtime last. In a multi-renderer build, `libshaderc.so` needs
-`std::string::_M_erase`; mold gave it to `GamerServicesBackend.cpp.o`, the first member of the
-first CNA archive that defines it, and the 2D game linked the service client, the system Guide and
-the 30 MB avatar catalog (47.1 MB stripped, against 11.7 MB with GNU ld or lld).
+to CNA: a symbol that a shared library needs, defined both by a not-yet-extracted archive member
+and by another shared library. From C++20 on, libstdc++ no longer declares `std::string`'s members
+instantiated in its shared library, so every CNA object carries weak copies of the ones it uses,
+and libstdc++ exports them weakly too. mold resolves such a symbol to whichever file comes first on
+the command line, and the compiler driver names the C++ runtime last. In a multi-renderer build,
+`libshaderc.so` needs `std::string::_M_erase`; mold extracted `GamerServicesBackend.cpp.o`, the
+first member of the first CNA archive that defines it, and the 2D game linked the service client,
+the system Guide and the 30 MB avatar catalog (47.1 MB stripped, against 11.7 MB with GNU ld or
+lld).
 
-Every final link that consumes CNA therefore names the C++ runtime before CNA's archives
-(`-Wl,--push-state,--as-needed -lstdc++ -Wl,--pop-state`, through `CNA::BuildConfig`, on ELF
-targets with a shared runtime). The runtime then owns what it exports, and a member is extracted
-only for a CNA symbol: mold extracts exactly the members lld does (the multi-renderer 2D probe is
-11,740,280 bytes stripped with mold, 11,704,960 with lld and 11,709,040 with GNU ld, and every
-footprint gate passes with each). GNU ld and lld are unaffected.
-A program that links the C++ runtime statically does not get the option and should name the static
-runtime ahead of CNA itself if it links with mold.
+So a program that links CNA's targets with a shared C++ runtime on ELF names the runtime before
+CNA's archives: `CNA::BuildConfig` adds `-Wl,--push-state,--as-needed -lstdc++ -Wl,--pop-state`
+(`-lc++` for libc++) to its link. A standard-library symbol that no object already in the link
+defines is then the shared runtime's, and no archive member is extracted for it alone. A member
+extracted for a CNA symbol may still supply one, which links nothing more: in the multi-renderer
+2D probe mold resolves libshaderc's `_M_erase` to `GuideStyle.cpp.o`, which the game links anyway
+(`GuideContent.cpp.o` uses its styles). With the option mold extracts the members lld does in that
+probe (11,740,248 bytes stripped with mold, 11,704,960 with lld, 11,709,040 with GNU ld), and every
+footprint gate passes with each linker. GNU ld and lld link the same members with or without it. A
+program that names CNA's archives on a hand-written link line instead of linking its targets does
+not get it.
+
+The option is only for a shared runtime, as lld and mold would let a shared runtime named first
+replace a static one. At the end of the configure CMake reads each program's flags: its directory's
+`CMAKE_CXX_FLAGS` and `CMAKE_EXE_LINKER_FLAGS` (`_SHARED_`/`_MODULE_` for libraries) with their
+per-configuration variants, which include a toolchain file's and `LDFLAGS`' initial flags, and the
+program's `LINK_OPTIONS`, `LINK_FLAGS` and `LINK_LIBRARIES`. A program with `-static`,
+`-static-pie`, `-static-libstdc++`, `-nostdlib`, `-nostdlib++` or `-nodefaultlibs` among them --
+inside a generator expression too, which can only cost the option -- does not get it.
+`-static-libgcc` alone keeps it: libstdc++ stays shared. A runtime chosen where CMake cannot see it
+(a compiler wrapper or spec file, another library's link options) is declared with
+`-DCNA_CXX_RUNTIME_LINKAGE=STATIC`, or `SHARED`; the default is `AUTO`.
+`CnaCxxRuntimeLinkage` (`cmake/Tests/CxxRuntimeLinkageCase.cmake`) pins each of these.
+
+With a static runtime CNA adds nothing, and where the runtime archive goes is the program's
+choice. The driver names it last, so lld and mold resolve a standard-library symbol to the first
+archive member on the command line that defines it, which is CNA's: with `-static-libstdc++` the multi-renderer 2D probe linked
+glTF and Draco with lld, and the system Guide and the avatar catalog as well with mold (49.7 MB
+stripped). Naming the static runtime first,
+`target_link_options(MyGame PRIVATE "SHELL:-Wl,--push-state,-Bstatic -lstdc++ -Wl,--pop-state")`,
+gives each linker the small closure again (13.2 MB with mold or lld, 13.6 MB with GNU ld, every
+footprint gate passing).
 
 ## Built-in avatar catalog: embedded, not a separate pack
 
