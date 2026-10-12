@@ -11,7 +11,7 @@ verified in this repository, on this branch, this session.
 below present (Section 0) — it does **not** describe, and should not be read as
 implying anything about, a bare ZIP/tarball export of this source tree. A raw source
 snapshot without `git submodule update --init` having been run has empty
-`third_party/SDL` (and `SDL_image`/`SDL_mixer`, `vendor/googletest`) directories
+`third_party/SDL` (and `SDL_mixer`, `vendor/googletest`) directories
 and will not configure, let alone build or pass any test below.
 
 ## 0. Fresh clone / submodule setup
@@ -56,7 +56,7 @@ separate `vendor/googletest` submodule, handled automatically by its own build, 
 something this repo's setup needs to touch directly.
 
 **Step 2 — this repo's own git submodules.** This repository vendors SDL3 (and
-`SDL_image`/`SDL_mixer`) as git submodules under `third_party/`, plus `googletest`
+`SDL_mixer`) as git submodules under `third_party/`, plus `googletest`
 under `vendor/` — confirmed via `.gitmodules` and `cmake/ThirdPartySDL.cmake` (which
 hard-fails with `FATAL_ERROR` and prints the exact fix if a submodule is missing,
 rather than silently doing something else). A fresh clone needs:
@@ -66,10 +66,11 @@ git submodule update --init
 ```
 
 **Deliberately non-recursive** (Task `DEV-BUILD-001` corrected this from an earlier,
-misleading `--recursive` suggestion): `SDL_image`/`SDL_mixer` each carry their own
-further nested `external/*` submodules (AVIF, JXL, WebP, libpng, GME, mod_xmp, mpg123,
-FluidSynth-MIDI, Opus, Vorbis — ~19 total), none of which this project's own
-`SDLIMAGE_*`/`SDLMIXER_*` CMake args (see `cmake/ThirdPartySDL.cmake`) actually enable.
+misleading `--recursive` suggestion): `SDL_mixer` carries its own further nested
+`external/*` submodules (GME, mod_xmp, mpg123, FluidSynth-MIDI, Opus, Vorbis and more), none
+of which this project's own `SDLMIXER_*` CMake args (see `cmake/ThirdPartySDL.cmake`) actually
+enable. (The measurement below predates the removal of the `SDL_image` submodule, which carried
+more of them.)
 Measured directly: the plain, non-recursive form above took **~6.5 minutes** in this
 environment (network-bound, not CPU-bound — these are large upstream repos cloned at
 full history, no shallow-clone flag currently used); the `--recursive` form additionally
@@ -77,7 +78,7 @@ attempts all ~19 unneeded nested clones and was observed to still be running, un
 past 2 minutes into just the *extra* nested fetches on top of that.
 
 **Step 3 — first CMake configure.** `cmake/ThirdPartySDL.cmake` then builds SDL3 (and
-`SDL_image`/`SDL_mixer`) into a persistent, cache-backed `.sdl-prebuilt-<platform>/`
+`SDL_mixer`) into a persistent, cache-backed `.sdl-prebuilt-<platform>/`
 directory the *first* time any CMake configure runs (outside any `cmake-build-*`
 directory, so deleting a build directory or running `cmake --build --clean-first` does
 **not** trigger an SDL rebuild) — this step can take a few minutes the very first time,
@@ -607,7 +608,7 @@ they simply report `SKIPPED`, the same way they do in this local development con
 No separate "hardware-only" CI filter was needed for that reason.
 
 The job:
-- checks out this repo (non-recursive submodules — `third_party/SDL`/`SDL_image`/
+- checks out this repo (non-recursive submodules — `third_party/SDL`/
   `SDL_mixer`/`vendor/googletest`, matching the `DEV-BUILD-001`-corrected guidance in
   Section 0, not `--recursive`), plus the three sibling repos (`sharp-runtime`,
   `easy-gl`, `meta-gl`) into sibling directories on the runner, since `CMakeLists.txt`
@@ -618,7 +619,7 @@ The job:
   FFmpeg dev packages for the optional VideoPlayer backend. They are no longer required by a
   device-only/Game build: `CNA_ENABLE_VIDEO=AUTO` uses them when present and
   `CNA_ENABLE_VIDEO=OFF` omits the entire dependency (see `docs/video-backend.md`);
-- caches `.sdl-prebuilt-Linux-x86_64/` (the vendored SDL3/SDL_image/SDL_mixer
+- caches `.sdl-prebuilt-Linux-x86_64/` (the vendored SDL3/SDL_mixer
   from-source build tree, Section 1) keyed on the submodules' own tracked commits, so a
   submodule bump invalidates the cache automatically and every other push reuses the
   ~6-7 minute first-time SDL build (`DEV-BUILD-001`);

@@ -774,7 +774,7 @@ No code was changed for this task — audit only. Findings below feed Phase 32 t
 3. **~~`static Texture2D FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)`~~
    ADDED (Task 262).** Implements FNA3D's resize/crop-while-decoding semantics via
    `SDL_CreateSurfaceFrom` + `SDL_BlitSurfaceScaled`. Also verified (Task 262) that
-   `FromStream` correctly decodes PNG, JPEG, and BMP via the linked SDL3_image build, in
+   `FromStream` correctly decodes PNG, JPEG, and BMP (now CNA's own decoder, not SDL3_image), in
    addition to the pre-existing DDS/DXT1/3/5 support — see `docs/texture-stream-formats.md`.
 4. `SetDataPointerEXT(int level, Rectangle? rect, IntPtr data, int dataLength)` — no equivalent.
    The closest CNA method, `SetDataRGBA(const uint8_t*, int pixelCount)` (NOXNA), has a different

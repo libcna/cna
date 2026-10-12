@@ -18,7 +18,7 @@ if(CNA_BUILD_TESTS)
     # plain ZIP/tarball export of this source tree, which cannot contain
     # submodule content at all, or a clone that skipped
     # `git submodule update --init`) -- mirrors the equivalent guard for
-    # third_party/SDL/SDL_image/SDL_mixer in cmake/ThirdPartySDL.cmake.
+    # third_party/SDL/SDL_mixer in cmake/ThirdPartySDL.cmake.
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/CMakeLists.txt")
         message(FATAL_ERROR
             "Missing vendored 'googletest' in ${CMAKE_CURRENT_SOURCE_DIR}/vendor. "

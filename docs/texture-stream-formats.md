@@ -26,8 +26,8 @@ path. Once DDS magic is present, malformed headers, unsupported FourCCs, incompl
 truncated per-level payloads raise DDS-specific exceptions rather than falling through to the
 ordinary image decoder.
 
-This backend is compiled into `cna_graphics_core`; it has no host codec packages and neither SDL3
-nor SDL3_image participates in image loading. The internal decoder still understands PNG, JPEG,
+This backend is compiled into `cna_graphics_core`; it has no host codec packages and SDL3 does
+not participate in image loading. The internal decoder still understands PNG, JPEG,
 BMP, GIF, TGA, QOI, PSD, HDR, PIC and PNM for renderer-neutral internal consumers. Public
 `Texture2D::FromStream` applies the narrower classic allowlist above.
 

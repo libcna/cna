@@ -348,7 +348,7 @@ included) — not repeated here.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `CNA: Missing sibling repository 'sharp-runtime'` / `'easy-gl'` | These are sibling checkouts next to this repo, **not** git submodules — `git submodule update --init` will not fetch them | `cd ..` and `git clone` the missing repo next to this one (the error message prints the exact URL) |
-| `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_image`/`SDL_mixer` are empty | `git submodule update --init --recursive`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
+| `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_mixer` are empty | `git submodule update --init --recursive`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
 | `Could not find a package configuration file for Vulkan` (`VULKAN` renderer) | `find_package(Vulkan REQUIRED)` — no Vulkan SDK/loader installed | Install your distro's `vulkan-sdk`/`libvulkan-dev` package (or the LunarG SDK) before configuring |
 | `CNA_ENABLE_VIDEO=ON` cannot find FFmpeg | The required FFmpeg development packages are missing; this is independent of the graphics renderer | Install `libavcodec-dev libavformat-dev libavutil-dev libswresample-dev`, use the default `AUTO` fallback, or configure `-DCNA_ENABLE_VIDEO=OFF` for a game without video. See [video-backend.md](video-backend.md). |
 

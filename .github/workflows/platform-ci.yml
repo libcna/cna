@@ -68,7 +68,7 @@ jobs:
       - name: Checkout CNA (with submodules)
         uses: actions/checkout@v4
         with:
-          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
           # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
           submodules: true
@@ -261,7 +261,7 @@ jobs:
       - name: Checkout CNA (with submodules)
         uses: actions/checkout@v4
         with:
-          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
           # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
           submodules: true
@@ -330,7 +330,7 @@ jobs:
       - name: Checkout CNA (with submodules)
         uses: actions/checkout@v4
         with:
-          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
           # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
           submodules: true
@@ -471,7 +471,7 @@ jobs:
       - name: Checkout CNA (with submodules)
         uses: actions/checkout@v4
         with:
-          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
           # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
           submodules: true

@@ -232,8 +232,8 @@ then reconfigure.")
 endfunction()
 
 function(cna_configure_vendored_sdl)
-    # SDL3_image is not built: CNA decodes images itself (stb_image in ImageLoader.cpp) and no CNA
-    # target links it, so building it only cost every tree a dependency it never used.
+    # There is no SDL3_image: CNA decodes images itself (stb_image in ImageLoader.cpp). No CNA
+    # target ever linked it, so it is neither built nor vendored.
     if(TARGET SDL3::SDL3 AND TARGET SDL3_mixer::SDL3_mixer)
         return()
     endif()

@@ -28,7 +28,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 - **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
   `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
   compiles CNA into per-function sections and collects unreferenced ones in every program that
-  links it. SDL3_image is no longer built: nothing in CNA used it.
+  links it. SDL3_image is gone, its `third_party/SDL_image` submodule included: nothing in CNA
+  used it, and images are decoded by CNA's own loader as before.
 - `Effect::IsStockEffectEXT()` (CNAEXT) reports XNA's five stock effects without RTTI.
 - `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
   `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses

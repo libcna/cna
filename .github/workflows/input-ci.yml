@@ -5,7 +5,7 @@
 #   - ASan+UBSan (on OPENGLES3)                : built with -DCNA_SANITIZE=address,undefined; any UB /
 #                                             memory error fails the job (halt_on_error=1).
 # All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
-# third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules. The prebuilt
+# third_party/enet is committed here; SDL/SDL_mixer/googletest are submodules. The prebuilt
 # SDL is cached (built uninstrumented, shared by all).
 name: input-ci
 
@@ -65,7 +65,7 @@ jobs:
       - name: Checkout cna (with submodules)
         uses: actions/checkout@v4
         with:
-          # Top level only: CNA disables every codec behind SDL_image's/SDL_mixer's nested
+          # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
           # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
           submodules: true

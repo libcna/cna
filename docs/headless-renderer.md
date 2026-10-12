@@ -14,7 +14,7 @@ cmake --build cmake-build-headless -j
 ```
 
 No extra dependencies are needed — the Headless renderer never links against SDL's graphics
-functions, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_image/SDL3_mixer
+functions, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_mixer
 and `../sharp-runtime` checkout every other renderer already requires.
 
 ## What this renderer is for (and isn't)

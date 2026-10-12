@@ -16,7 +16,7 @@
 // Deliberately independent of CnaTests/gtest/CNA/SHARP_RUNTIME: AudioTagParser.cpp and
 // ContentLoadException.cpp have no SDL/FFmpeg/graphics dependency (confirmed by reading both
 // files' own #include lists), so this links only those two translation units directly -- getting
-// a full 32-bit CNA library (SDL3/SDL3_image/SDL3_mixer/FFmpeg, all 64-bit-only in this project's
+// a full 32-bit CNA library (SDL3/SDL3_mixer/FFmpeg, all 64-bit-only in this project's
 // existing vendored/system toolchain) built for `-m32` would be a much larger, slower undertaking
 // for no additional coverage of the actual thing under test.
 //

@@ -17,7 +17,7 @@ cmake --build cmake-build-stub -j
 ```
 
 No extra dependencies are needed — like `HEADLESS`/`SOFTWARE`, this renderer never touches SDL's
-video subsystem, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_image/
+video subsystem, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/
 SDL3_mixer and `../sharp-runtime` checkout every other renderer already requires.
 
 ## What this renderer is for (and isn't)

@@ -126,7 +126,7 @@ done
 # ---------------------------------------------------------------------------
 # 6. Static-only iOS means both SDL projects must receive their own build-system switch.
 #    SDL3 uses SDL_SHARED/SDL_STATIC; SDL_mixer independently defaults BUILD_SHARED_LIBS to ON
-#    on Apple platforms, so merely changing SDL3 is insufficient. (SDL_image is not built.)
+#    on Apple platforms, so merely changing SDL3 is insufficient.
 # ---------------------------------------------------------------------------
 third_party_sdl="${repo_root}/cmake/ThirdPartySDL.cmake"
 for required in \
