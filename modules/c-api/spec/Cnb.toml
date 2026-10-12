@@ -36,6 +36,7 @@ cna_cnb_document_get_external_reference_name_size = { size = "object->value->Ext
 cna_cnb_document_copy_external_reference_name = { copy = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
 cna_cnb_decode_curve = { result = "CreateHandle(ObjectKind::Curve, (std::make_shared<Microsoft::Xna::Framework::Curve>(Cnb::DecodeCurveFromCnb(*object->value))), out_curve)" }
 cna_cnb_document_destroy = { release = true, require = 'InvalidStateIf(object->activeBorrowCount != 0U, "Every reader opened from this CNB document must be destroyed before it.")' }
+cna_cnb_document_copy_chunk_data = { copy = "object->value->ChunkData(static_cast<std::size_t>(index))", require = "RequireIndex(index, object->value->ChunkCount(), \"The chunk index is outside this document's table of contents.\")" }
 
 [reader]
 lookup = "GetReader"

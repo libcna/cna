@@ -142,6 +142,26 @@ CNA_Result cna_content_manager_set_root_directory(
     });
 }
 
+CNA_Result cna_content_manager_copy_root_directory(
+    const CNA_Handle content_manager,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ContentManagerResource> object{};
+        if (const CNA_Result routeResult = GetContentManager(content_manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getRootDirectoryProperty(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_content_manager_copy_manifest_relative_path(
     const CNA_Handle content_manager,
     const uint64_t index,

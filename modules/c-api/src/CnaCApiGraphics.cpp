@@ -634,36 +634,6 @@ CNA_Result cna_graphics_device_get_renderer_info(
     });
 }
 
-CNA_Result cna_graphics_device_copy_renderer_name(
-    const CNA_Handle graphicsDeviceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The renderer-name output buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const std::string_view rendererName = graphicsDevice->value->GetGraphicsRendererName();
-        *outBytes = rendererName.size();
-        if (capacity < rendererName.size()) {
-            return BufferTooSmall("The renderer-name output buffer is too small.");
-        }
-        if (!rendererName.empty()) {
-            std::memcpy(destination, rendererName.data(), rendererName.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_supports_capability(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_GraphicsCapability capability,
@@ -759,37 +729,6 @@ CNA_Result cna_graphics_device_get_surface_format_support_ext(
                 static_cast<SurfaceFormat>(format));
         *outKnownUsages = support.knownUsages;
         *outSupportedUsages = support.supportedUsages;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_copy_capability_report_ext(
-    const CNA_Handle graphicsDeviceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The renderer-capability report output buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle,
-                &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const std::string_view report =
-            graphicsDevice->value->GetRendererCapabilityReportEXT();
-        *outBytes = report.size();
-        if (capacity < report.size()) {
-            return BufferTooSmall("The renderer-capability report output buffer is too small.");
-        }
-        if (!report.empty()) {
-            std::memcpy(destination, report.data(), report.size());
-        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1545,33 +1484,6 @@ CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
             return releaseResult;
         }
         RemoveOwnedGraphicsResourceFor(spriteBatch->parentGame);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_sprite_batch_copy_type_name(
-    const CNA_Handle spriteBatchHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The string destination or required-byte output is invalid.");
-        }
-        std::shared_ptr<SpriteBatchResource> spriteBatch;
-        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::string& text = spriteBatch->value->GetTypeName();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return BufferTooSmall("The destination cannot hold the complete type name.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
         return CNA_RESULT_SUCCESS;
     });
 }

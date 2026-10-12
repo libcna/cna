@@ -114,6 +114,7 @@ cna_morph_target_data_ext_copy_triangle_indices_ext = { result = "CopyOutputValu
 cna_morph_target_data_ext_set_recompute_flat_normals_ext = { call = "object->value->RecomputeFlatNormalsEXT = recompute" }
 cna_morph_target_data_ext_destroy = { release = true }
 cna_morph_target_data_ext_copy_base_vertex_bytes = { copy = "object->value->BaseVertexBytes" }
+cna_morph_target_data_ext_copy_type_name = { copy = "object->value->GetTypeName()" }
 
 [skinned_model]
 lookup = "GetSkinnedModel"

@@ -30,7 +30,6 @@
 namespace {
 
 using CNA::C::Detail::BorrowAnyGamer;
-using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::CreateResourceHandle;
@@ -191,34 +190,6 @@ CNA_Result cna_avatar_description_get_from_gamer(
         }
         if (callback != nullptr) {
             callback(context);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_description_copy_description(
-    const CNA_AvatarDescriptionHandle descriptionHandle,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The description output buffer is invalid.");
-        }
-        std::shared_ptr<AvatarDescriptionResource> description;
-        if (const CNA_Result result = BorrowDescription(descriptionHandle, &description);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::vector<SharpRuntime::bytecs> bytes = description->value->getDescriptionProperty();
-        *outBytes = static_cast<uint64_t>(bytes.size());
-        if (capacity < bytes.size()) {
-            return BufferTooSmall(
-                "The destination capacity is smaller than the avatar description.");
-        }
-        if (!bytes.empty()) {
-            std::memcpy(destination, bytes.data(), bytes.size());
         }
         return CNA_RESULT_SUCCESS;
     });

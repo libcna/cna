@@ -1300,6 +1300,26 @@ CNA_Result cna_shader_effect_set_uniform_int32(
     });
 }
 
+CNA_Result cna_shader_effect_copy_compile_error_ext(
+    const CNA_EffectHandle effect,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->GetCompileErrorEXT(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_directional_light_get_diffuse_color(
     const CNA_DirectionalLightHandle light,
     CNA_Vector3* const out_value)

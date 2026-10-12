@@ -9,6 +9,8 @@ object = "std::shared_ptr<BorrowedGraphicsDevice>"
 cna_graphics_device_get_renderer_name_size = { size = "object->value->GetGraphicsRendererName()" }
 cna_graphics_device_get_capability_report_size_ext = { size = "object->value->GetRendererCapabilityReportEXT()" }
 cna_graphics_device_get_shader_dialect_ext = { get = "MapShaderDialect(object->value->GetShaderDialectEXT())" }
+cna_graphics_device_copy_renderer_name = { copy = "object->value->GetGraphicsRendererName()" }
+cna_graphics_device_copy_capability_report_ext = { copy = "object->value->GetRendererCapabilityReportEXT()" }
 
 [sprite_batch]
 lookup = "GetSpriteBatch"
@@ -16,6 +18,7 @@ object = "std::shared_ptr<SpriteBatchResource>"
 
 [sprite_batch.routes]
 cna_sprite_batch_get_type_name_size = { size = "object->value->GetTypeName()" }
+cna_sprite_batch_copy_type_name = { copy = "object->value->GetTypeName()" }
 
 [texture2_d]
 lookup = "GetTexture2D"

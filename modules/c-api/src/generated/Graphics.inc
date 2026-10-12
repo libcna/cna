@@ -61,6 +61,46 @@ CNA_Result cna_graphics_device_get_shader_dialect_ext(
     });
 }
 
+CNA_Result cna_graphics_device_copy_renderer_name(
+    const CNA_Handle graphics_device,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetGraphicsRendererName(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_graphics_device_copy_capability_report_ext(
+    const CNA_Handle graphics_device,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetRendererCapabilityReportEXT(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_sprite_batch_get_type_name_size(
     const CNA_Handle sprite_batch,
     uint64_t* const out_bytes)
@@ -75,6 +115,26 @@ CNA_Result cna_sprite_batch_get_type_name_size(
             return routeResult;
         }
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_sprite_batch_copy_type_name(
+    const CNA_Handle sprite_batch,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SpriteBatchResource> object{};
+        if (const CNA_Result routeResult = GetSpriteBatch(sprite_batch, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_bytes);
     });
 }
 

@@ -3603,35 +3603,6 @@ CNA_Result cna_depth_effect_set_dither_mode(
 // They live here with the rest of the shader-effect surface rather than in the engine layer,
 // because ShaderEffect is an always-compiled graphics type and these work in every build.
 
-CNA_Result cna_shader_effect_copy_compile_error_ext(
-    const CNA_EffectHandle effectHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        ShaderEffect* shader = nullptr;
-        if (const CNA_Result result = GetStockEffect(effectHandle, nullptr, &shader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The Effect string output buffer is invalid.");
-        }
-        // The canonical accessor returns by value, unlike the other string getters here, so the
-        // text is held rather than referenced while it is measured and copied.
-        const std::string text = shader->GetCompileErrorEXT();
-        *outBytes = static_cast<uint64_t>(text.size());
-        if (capacity < text.size()) {
-            return BufferTooSmall("The destination cannot hold the complete compile error.");
-        }
-        if (!text.empty()) {
-            std::memcpy(destination, text.data(), text.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 namespace {
 
 // Both array setters take a tightly packed float array and a count. The count is refused when

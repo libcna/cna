@@ -42,3 +42,23 @@ CNA_Result cna_signed_in_gamer_destroy(
         return CNA::C::Detail::ReleaseHandle(gamer);
     });
 }
+
+CNA_Result cna_signed_in_gamer_copy_gamertag(
+    const CNA_SignedInGamerHandle gamer,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<SignedInGamerResource> object{};
+        if (const CNA_Result routeResult = GetSignedInGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->getGamertagProperty(), destination, capacity, out_bytes);
+    });
+}

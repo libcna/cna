@@ -982,6 +982,26 @@ CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
     });
 }
 
+CNA_Result cna_morph_target_data_ext_copy_type_name(
+    const CNA_MorphTargetDataEXTHandle data,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<MorphDataResource> object{};
+        if (const CNA_Result routeResult = GetMorphData(data, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_skinned_model_ext_get_bone_count(
     const CNA_SkinnedModelEXTHandle model,
     uint64_t* const out_bone_count)

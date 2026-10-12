@@ -564,6 +564,31 @@ CNA_Result cna_cnb_document_destroy(
     });
 }
 
+CNA_Result cna_cnb_document_copy_chunk_data(
+    const CNA_CnbDocumentHandle document,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->value->ChunkCount(), "The chunk index is outside this document's table of contents.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->ChunkData(static_cast<std::size_t>(index)), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_reader_copy_context(
     const CNA_CnbReaderHandle reader,
     char* const destination,

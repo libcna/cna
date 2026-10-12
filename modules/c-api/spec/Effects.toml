@@ -150,6 +150,7 @@ cna_shader_effect_set_uniform_vector3 = { call = "object->SetUniformVec3(name.c_
 cna_shader_effect_set_uniform_vector2 = { call = "object->SetUniformVec2(name.c_str(), value.X, value.Y)", refuse_nul = ["name"] }
 cna_shader_effect_set_uniform_float = { call = "object->SetUniformFloat(name.c_str(), value)", refuse_nul = ["name"] }
 cna_shader_effect_set_uniform_int32 = { call = "object->SetUniformInt(name.c_str(), value)", refuse_nul = ["name"] }
+cna_shader_effect_copy_compile_error_ext = { copy = "object->GetCompileErrorEXT()" }
 
 [directional_light]
 lookup = "GetDirectionalLight"

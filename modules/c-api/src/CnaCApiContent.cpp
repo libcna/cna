@@ -35,7 +35,6 @@ namespace {
 using CNA::C::Detail::AddOwnedContentManager;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
-using CNA::C::Detail::BufferTooSmall;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
@@ -224,37 +223,6 @@ CNA_Result cna_content_manager_create(
             return result;
         }
         AddOwnedContentManager();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_manager_copy_root_directory(
-    const CNA_Handle contentManagerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The root-directory output buffer is invalid.");
-        }
-        std::shared_ptr<ContentManagerResource> contentManager;
-        if (const CNA_Result result = GetContentManager(
-                contentManagerHandle,
-                &contentManager);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const std::string& rootDirectory =
-            contentManager->value->getRootDirectoryProperty();
-        *outBytes = rootDirectory.size();
-        if (capacity < rootDirectory.size()) {
-            return BufferTooSmall("The root-directory output buffer is too small.");
-        }
-        if (!rootDirectory.empty()) {
-            std::memcpy(destination, rootDirectory.data(), rootDirectory.size());
-        }
         return CNA_RESULT_SUCCESS;
     });
 }

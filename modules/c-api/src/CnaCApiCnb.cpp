@@ -1171,41 +1171,6 @@ CNA_Result cna_cnb_document_get_chunk(
     });
 }
 
-CNA_Result cna_cnb_document_copy_chunk_data(
-    const CNA_CnbDocumentHandle documentHandle,
-    const uint64_t index,
-    uint8_t* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The chunk-data output buffer is invalid.");
-        }
-        if (const CNA_Result result = RequireIndex(
-                index, document->value->ChunkCount(),
-                "The chunk index is outside this document's table of contents.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::span<const uint8_t> data =
-            document->value->ChunkData(static_cast<std::size_t>(index));
-        *outByteCount = static_cast<uint64_t>(data.size());
-        if (capacity < static_cast<uint64_t>(data.size())) {
-            return BufferTooSmall("The destination capacity is smaller than the chunk.");
-        }
-        if (!data.empty()) {
-            std::memcpy(destination, data.data(), data.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_cnb_document_open_chunk(
     const CNA_CnbDocumentHandle documentHandle,
     const uint64_t index,

@@ -202,33 +202,6 @@ CNA_Result cna_signed_in_gamer_create_ext(
     });
 }
 
-CNA_Result cna_signed_in_gamer_copy_gamertag(
-    const CNA_SignedInGamerHandle gamerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The gamertag output buffer is invalid.");
-        }
-        std::shared_ptr<SignedInGamerResource> gamer;
-        if (const CNA_Result result = GetSignedInGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::string& gamertag = gamer->value->getGamertagProperty();
-        *outBytes = gamertag.size();
-        if (capacity < gamertag.size()) {
-            return BufferTooSmall("The gamertag output buffer is too small.");
-        }
-        if (!gamertag.empty()) {
-            std::memcpy(destination, gamertag.data(), gamertag.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_gamer_set_signed_in_gamers_ext(
     const CNA_SignedInGamerHandle* const gamers,
     const uint64_t count)

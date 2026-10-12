@@ -49,6 +49,26 @@ CNA_Result cna_avatar_description_get_info(
     });
 }
 
+CNA_Result cna_avatar_description_copy_description(
+    const CNA_AvatarDescriptionHandle description,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<AvatarDescriptionResource> object{};
+        if (const CNA_Result routeResult = BorrowDescription(description, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->value->getDescriptionProperty(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_avatar_animation_destroy(
     const CNA_AvatarAnimationHandle animation)
 {

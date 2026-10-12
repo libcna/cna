@@ -17,6 +17,7 @@ CNA_AvatarDescriptionInfo{
     ToCBool(object->value->getIsValidProperty()),
     {0U, 0U, 0U, 0U, 0U, 0U, 0U}
 }''' }
+cna_avatar_description_copy_description = { copy = "object->value->getDescriptionProperty()" }
 
 [animation]
 lookup = "BorrowAnimation"
