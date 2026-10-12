@@ -257,108 +257,88 @@ template<typename TPackedVector>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_packed_vector_pack(
+[[nodiscard]] CNA_Result PackedVectorPack(
     const CNA_PackedVectorFormat format,
     const CNA_Vector4 vector,
     uint64_t* const outPacked)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPacked == nullptr) {
-            return InvalidArgument("The packed-value output is null.");
-        }
-        CNA_Result result = ValidateFormat(format);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!ConsumedComponentsAreFinite(format, vector)) {
-            return InvalidArgument("A consumed integer packed-vector component is not finite.");
-        }
-        const uint64_t packed = PackForFormat(format, ToNative(vector));
-        *outPacked = packed;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_Result result = ValidateFormat(format);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!ConsumedComponentsAreFinite(format, vector)) {
+        return InvalidArgument("A consumed integer packed-vector component is not finite.");
+    }
+    const uint64_t packed = PackForFormat(format, ToNative(vector));
+    *outPacked = packed;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packed_vector_unpack(
+[[nodiscard]] CNA_Result PackedVectorUnpack(
     const CNA_PackedVectorFormat format,
     const uint64_t packed,
     CNA_Vector4* const outVector)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outVector == nullptr) {
-            return InvalidArgument("The Vector4 output is null.");
-        }
-        CNA_Result result = ValidateFormat(format);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        result = ValidatePacked(format, packed);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Vector4 vector = ToC(UnpackForFormat(format, packed));
-        *outVector = vector;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_Result result = ValidateFormat(format);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = ValidatePacked(format, packed);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA_Vector4 vector = ToC(UnpackForFormat(format, packed));
+    *outVector = vector;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packed_vector_equals(
+[[nodiscard]] CNA_Result PackedVectorEquals(
     const CNA_PackedVectorFormat format,
     const uint64_t left,
     const uint64_t right,
     CNA_Bool* const outEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outEqual == nullptr) {
-            return InvalidArgument("The Boolean output is null.");
-        }
-        CNA_Result result = ValidateFormat(format);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        result = ValidatePacked(format, left);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        result = ValidatePacked(format, right);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Bool equal = ToCBool(CompareForFormat(format, left, right, false));
-        *outEqual = equal;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_Result result = ValidateFormat(format);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = ValidatePacked(format, left);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = ValidatePacked(format, right);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA_Bool equal = ToCBool(CompareForFormat(format, left, right, false));
+    *outEqual = equal;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_packed_vector_not_equals(
+[[nodiscard]] CNA_Result PackedVectorNotEquals(
     const CNA_PackedVectorFormat format,
     const uint64_t left,
     const uint64_t right,
     CNA_Bool* const outNotEqual)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outNotEqual == nullptr) {
-            return InvalidArgument("The Boolean output is null.");
-        }
-        CNA_Result result = ValidateFormat(format);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        result = ValidatePacked(format, left);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        result = ValidatePacked(format, right);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA_Bool notEqual = ToCBool(CompareForFormat(format, left, right, true));
-        *outNotEqual = notEqual;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_Result result = ValidateFormat(format);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = ValidatePacked(format, left);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    result = ValidatePacked(format, right);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA_Bool notEqual = ToCBool(CompareForFormat(format, left, right, true));
+    *outNotEqual = notEqual;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/PackedVectors.toml.
 #include "generated/PackedVectors.inc"

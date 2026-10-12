@@ -72,13 +72,11 @@ using Microsoft::Xna::Framework::Rectangle;
         right.y < RectangleBottom(left) && left.y < RectangleBottom(right);
 }
 
-} // namespace
-
-CNA_Result cna_math_closest_msaa_power(
+[[nodiscard]] CNA_Result MathClosestMsaaPower(
     const int32_t value,
     int32_t* const outValue)
 {
-    if (outValue == nullptr || value < 0) {
+    if (value < 0) {
         return InvalidArgument("The MSAA input is negative or its output is null.");
     }
     if (value <= 1) {
@@ -97,37 +95,35 @@ CNA_Result cna_math_closest_msaa_power(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_point_get_zero(CNA_Point* const outValue)
+[[nodiscard]] CNA_Result PointGetZero(CNA_Point* const outValue)
 {
     return cna_point_init(outValue);
 }
 
-CNA_Result cna_point_divide(
+[[nodiscard]] CNA_Result PointDivide(
     const CNA_Point left,
     const CNA_Point right,
     CNA_Point* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr || right.x == 0 || right.y == 0) {
-            return InvalidArgument("The point output is null or a divisor component is zero.");
-        }
-        constexpr int32_t Minimum = std::numeric_limits<int32_t>::min();
-        if ((left.x == Minimum && right.x == -1) ||
-            (left.y == Minimum && right.y == -1)) {
-            return Overflow("The point quotient cannot be represented as a signed 32-bit integer.");
-        }
-        const CNA_Point result{left.x / right.x, left.y / right.y};
-        *outValue = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (right.x == 0 || right.y == 0) {
+        return InvalidArgument("The point output is null or a divisor component is zero.");
+    }
+    constexpr int32_t Minimum = std::numeric_limits<int32_t>::min();
+    if ((left.x == Minimum && right.x == -1) ||
+        (left.y == Minimum && right.y == -1)) {
+        return Overflow("The point quotient cannot be represented as a signed 32-bit integer.");
+    }
+    const CNA_Point result{left.x / right.x, left.y / right.y};
+    *outValue = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_get_empty(CNA_Rectangle* const outValue)
+[[nodiscard]] CNA_Result RectangleGetEmpty(CNA_Rectangle* const outValue)
 {
     return cna_rectangle_init(outValue);
 }
 
-CNA_Result cna_rectangle_set_location(
+[[nodiscard]] CNA_Result RectangleSetLocation(
     CNA_Rectangle* const value,
     const CNA_Point location)
 {
@@ -139,7 +135,7 @@ CNA_Result cna_rectangle_set_location(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_contains_point(
+[[nodiscard]] CNA_Result RectangleContainsPointRoute(
     const CNA_Rectangle value,
     const CNA_Point point,
     CNA_Bool* const outContains)
@@ -147,14 +143,14 @@ CNA_Result cna_rectangle_contains_point(
     return cna_rectangle_contains_xy(value, point.x, point.y, outContains);
 }
 
-CNA_Result cna_rectangle_offset_point(
+[[nodiscard]] CNA_Result RectangleOffsetPoint(
     CNA_Rectangle* const value,
     const CNA_Point offset)
 {
     return cna_rectangle_offset_xy(value, offset.x, offset.y);
 }
 
-CNA_Result cna_rectangle_offset_xy(
+[[nodiscard]] CNA_Result RectangleOffsetXy(
     CNA_Rectangle* const value,
     const int32_t offsetX,
     const int32_t offsetY)
@@ -167,7 +163,7 @@ CNA_Result cna_rectangle_offset_xy(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_inflate(
+[[nodiscard]] CNA_Result RectangleInflate(
     CNA_Rectangle* const value,
     const int32_t horizontalValue,
     const int32_t verticalValue)
@@ -182,7 +178,7 @@ CNA_Result cna_rectangle_inflate(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_rectangle_intersect(
+[[nodiscard]] CNA_Result RectangleIntersect(
     const CNA_Rectangle left,
     const CNA_Rectangle right,
     CNA_Rectangle* const outValue)
@@ -205,7 +201,7 @@ CNA_Result cna_rectangle_intersect(
     });
 }
 
-CNA_Result cna_rectangle_union(
+[[nodiscard]] CNA_Result RectangleUnion(
     const CNA_Rectangle left,
     const CNA_Rectangle right,
     CNA_Rectangle* const outValue)
@@ -221,6 +217,8 @@ CNA_Result cna_rectangle_union(
         };
     });
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Math.toml.
 #include "generated/Math.inc"

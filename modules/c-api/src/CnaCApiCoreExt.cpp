@@ -330,99 +330,75 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
     }
 }
 
-} // namespace
-
-CNA_Result cna_logger_log(
+[[nodiscard]] CNA_Result LoggerLog(
     const CNA_LogLevel level,
     const CNA_StringView message,
     const CNA_LogCategory category,
     const CNA_Bool condition)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(condition, "condition");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::LogLevel nativeLevel = CNA::LogLevel::INFO;
-        if (const CNA_Result result = MapLogLevel(level, &nativeLevel);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::LogCategory nativeCategory = CNA::LogCategory::APPLICATION;
-        if (const CNA_Result result = MapLogCategory(category, &nativeCategory);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string text;
-        if (const CNA_Result result = CopyMessage(message, &text); result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::Logger::Log(nativeLevel, text, nativeCategory, condition != CNA_FALSE);
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA::LogLevel nativeLevel = CNA::LogLevel::INFO;
+    if (const CNA_Result result = MapLogLevel(level, &nativeLevel);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::LogCategory nativeCategory = CNA::LogCategory::APPLICATION;
+    if (const CNA_Result result = MapLogCategory(category, &nativeCategory);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string text;
+    if (const CNA_Result result = CopyMessage(message, &text); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::Logger::Log(nativeLevel, text, nativeCategory, condition != CNA_FALSE);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_platform_get_current(CNA_Platform* const outPlatform)
+[[nodiscard]] CNA_Result PlatformGetCurrent(CNA_Platform* const outPlatform)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPlatform == nullptr) {
-            return InvalidArgument("The platform output is null.");
-        }
-        switch (CNA::getCurrentPlatform()) {
-            case CNA::TargetPlatform::Desktop: *outPlatform = CNA_PLATFORM_DESKTOP; break;
-            case CNA::TargetPlatform::Android: *outPlatform = CNA_PLATFORM_ANDROID; break;
-            case CNA::TargetPlatform::iOS: *outPlatform = CNA_PLATFORM_IOS; break;
-            case CNA::TargetPlatform::Web: *outPlatform = CNA_PLATFORM_WEB; break;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    switch (CNA::getCurrentPlatform()) {
+        case CNA::TargetPlatform::Desktop: *outPlatform = CNA_PLATFORM_DESKTOP; break;
+        case CNA::TargetPlatform::Android: *outPlatform = CNA_PLATFORM_ANDROID; break;
+        case CNA::TargetPlatform::iOS: *outPlatform = CNA_PLATFORM_IOS; break;
+        case CNA::TargetPlatform::Web: *outPlatform = CNA_PLATFORM_WEB; break;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_desktop_os_get_current(CNA_DesktopOS* const outOs)
+[[nodiscard]] CNA_Result DesktopOsGetCurrent(CNA_DesktopOS* const outOs)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outOs == nullptr) {
-            return InvalidArgument("The desktop operating-system output is null.");
-        }
-        switch (CNA::getCurrentDesktopOS()) {
-            case CNA::DesktopOS::Windows: *outOs = CNA_DESKTOP_OS_WINDOWS; break;
-            case CNA::DesktopOS::Linux: *outOs = CNA_DESKTOP_OS_LINUX; break;
-            case CNA::DesktopOS::MacOSX: *outOs = CNA_DESKTOP_OS_MACOSX; break;
-            case CNA::DesktopOS::Other: *outOs = CNA_DESKTOP_OS_OTHER; break;
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    switch (CNA::getCurrentDesktopOS()) {
+        case CNA::DesktopOS::Windows: *outOs = CNA_DESKTOP_OS_WINDOWS; break;
+        case CNA::DesktopOS::Linux: *outOs = CNA_DESKTOP_OS_LINUX; break;
+        case CNA::DesktopOS::MacOSX: *outOs = CNA_DESKTOP_OS_MACOSX; break;
+        case CNA::DesktopOS::Other: *outOs = CNA_DESKTOP_OS_OTHER; break;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_backend_category_get_name_size(
+[[nodiscard]] CNA_Result GraphicsBackendCategoryGetNameSize(
     const CNA_GraphicsBackendCategory category,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsBackendCategory nativeCategory = CNA::GraphicsBackendCategory::Native;
-        if (const CNA_Result result = MapBackendCategory(category, &nativeCategory);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(CNA::toStringView(nativeCategory), outBytes);
-    });
+    CNA::GraphicsBackendCategory nativeCategory = CNA::GraphicsBackendCategory::Native;
+    if (const CNA_Result result = MapBackendCategory(category, &nativeCategory);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReportTextSize(CNA::toStringView(nativeCategory), outBytes);
 }
 
-CNA_Result cna_graphics_backend_maturity_get_name_size(
+[[nodiscard]] CNA_Result GraphicsBackendMaturityGetNameSize(
     const CNA_GraphicsBackendMaturity maturity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        CNA::GraphicsBackendMaturity nativeMaturity = CNA::GraphicsBackendMaturity::Production;
-        if (const CNA_Result result = MapBackendMaturity(maturity, &nativeMaturity);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReportTextSize(CNA::toStringView(nativeMaturity), outBytes);
-    });
+    CNA::GraphicsBackendMaturity nativeMaturity = CNA::GraphicsBackendMaturity::Production;
+    if (const CNA_Result result = MapBackendMaturity(maturity, &nativeMaturity);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReportTextSize(CNA::toStringView(nativeMaturity), outBytes);
 }
-
-namespace {
 
 // The fallback reasons, paired explicitly for the same reason the renderer identities are: neither
 // side may depend on the other's declaration order.
@@ -478,10 +454,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererFallbackReason,
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-namespace {
-
 // The installed C sink, kept beside its context so both are replaced together. A raw pointer pair
 // rather than a std::function member: the callback is a C function pointer and the context is the
 // caller's, and neither is owned here.
@@ -497,165 +469,150 @@ LogSinkState& LogSink()
     return state;
 }
 
-} // namespace
-
-CNA_Result cna_logger_set_sink_ext(const CNA_LogSinkCallback callback, void* const context)
+[[nodiscard]] CNA_Result LoggerSetSinkExt(const CNA_LogSinkCallback callback, void* const context)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LogSinkState& state = LogSink();
-        {
-            const std::lock_guard<std::mutex> lock(state.mutex);
-            state.callback = callback;
-            state.context = context;
-        }
-        if (callback == nullptr) {
-            CNA::Logger::ResetSink();
-            return CNA_RESULT_SUCCESS;
-        }
-        // The lambda reads the state rather than capturing the callback, so replacing the sink
-        // takes effect for a line already in flight on another thread rather than leaving the old
-        // pointer live inside a std::function CNA still holds.
-        CNA::Logger::SetSink([](const CNA::LogLevel level,
-                                const CNA::LogCategory category,
-                                const std::string_view formattedMessage) {
-            LogSinkState& current = LogSink();
-            CNA_LogSinkCallback installed = nullptr;
-            void* installedContext = nullptr;
-            {
-                const std::lock_guard<std::mutex> lock(current.mutex);
-                installed = current.callback;
-                installedContext = current.context;
-            }
-            if (installed == nullptr) {
-                return;
-            }
-            const CNA_StringView view{
-                formattedMessage.empty() ? nullptr : formattedMessage.data(),
-                static_cast<uint64_t>(formattedMessage.size())};
-            installed(MapLogLevelToC(level), MapLogCategoryToC(category), view, installedContext);
-        });
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_logger_reset_sink_ext(void)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        LogSinkState& state = LogSink();
-        {
-            const std::lock_guard<std::mutex> lock(state.mutex);
-            state.callback = nullptr;
-            state.context = nullptr;
-        }
+    LogSinkState& state = LogSink();
+    {
+        const std::lock_guard<std::mutex> lock(state.mutex);
+        state.callback = callback;
+        state.context = context;
+    }
+    if (callback == nullptr) {
         CNA::Logger::ResetSink();
         return CNA_RESULT_SUCCESS;
+    }
+    // The lambda reads the state rather than capturing the callback, so replacing the sink
+    // takes effect for a line already in flight on another thread rather than leaving the old
+    // pointer live inside a std::function CNA still holds.
+    CNA::Logger::SetSink([](const CNA::LogLevel level,
+                            const CNA::LogCategory category,
+                            const std::string_view formattedMessage) {
+        LogSinkState& current = LogSink();
+        CNA_LogSinkCallback installed = nullptr;
+        void* installedContext = nullptr;
+        {
+            const std::lock_guard<std::mutex> lock(current.mutex);
+            installed = current.callback;
+            installedContext = current.context;
+        }
+        if (installed == nullptr) {
+            return;
+        }
+        const CNA_StringView view{
+            formattedMessage.empty() ? nullptr : formattedMessage.data(),
+            static_cast<uint64_t>(formattedMessage.size())};
+        installed(MapLogLevelToC(level), MapLogCategoryToC(category), view, installedContext);
     });
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_renderer_copy_available_ext(
+[[nodiscard]] CNA_Result LoggerResetSinkExt(void)
+{
+    LogSinkState& state = LogSink();
+    {
+        const std::lock_guard<std::mutex> lock(state.mutex);
+        state.callback = nullptr;
+        state.context = nullptr;
+    }
+    CNA::Logger::ResetSink();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GraphicsRendererCopyAvailableExt(
     CNA_GraphicsRendererType* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The renderer identity output is invalid.");
-        }
-        const std::span<const CNA::GraphicsRendererType> available =
-            CNA::GraphicsRendererSelection::GetAvailable();
-        *outCount = static_cast<uint64_t>(available.size());
-        if (capacity < available.size()) {
-            return BufferTooSmall(
-                "The destination capacity is smaller than the available renderer set.");
-        }
-        for (std::size_t index = 0U; index < available.size(); ++index) {
-            destination[index] = MapRendererTypeToC(available[index]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != UINT64_C(0))) {
+        return InvalidArgument("The renderer identity output is invalid.");
+    }
+    const std::span<const CNA::GraphicsRendererType> available =
+        CNA::GraphicsRendererSelection::GetAvailable();
+    *outCount = static_cast<uint64_t>(available.size());
+    if (capacity < available.size()) {
+        return BufferTooSmall(
+            "The destination capacity is smaller than the available renderer set.");
+    }
+    for (std::size_t index = 0U; index < available.size(); ++index) {
+        destination[index] = MapRendererTypeToC(available[index]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_renderer_set_fallback_chain_ext(
+[[nodiscard]] CNA_Result GraphicsRendererSetFallbackChainExt(
     const CNA_GraphicsRendererType* const types,
     const uint64_t count)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::size_t ignoredByteCount = 0U;
-        if (const CNA_Result result = CNA::C::Detail::CheckedElementByteCount(
-                types, count, sizeof(CNA_GraphicsRendererType), &ignoredByteCount);
+    std::size_t ignoredByteCount = 0U;
+    if (const CNA_Result result = CNA::C::Detail::CheckedElementByteCount(
+            types, count, sizeof(CNA_GraphicsRendererType), &ignoredByteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The renderer fallback chain array is invalid.");
+    }
+    // Every identity is validated before the chain is handed over, so a chain with one bad
+    // entry changes nothing rather than being applied up to the mistake.
+    std::vector<CNA::GraphicsRendererType> chain;
+    chain.reserve(static_cast<std::size_t>(count));
+    for (uint64_t index = 0U; index < count; ++index) {
+        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
+        if (const CNA_Result result = MapRendererType(types[index], &nativeType);
             result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The renderer fallback chain array is invalid.");
+            return result;
         }
-        // Every identity is validated before the chain is handed over, so a chain with one bad
-        // entry changes nothing rather than being applied up to the mistake.
-        std::vector<CNA::GraphicsRendererType> chain;
-        chain.reserve(static_cast<std::size_t>(count));
-        for (uint64_t index = 0U; index < count; ++index) {
-            CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-            if (const CNA_Result result = MapRendererType(types[index], &nativeType);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            chain.push_back(nativeType);
-        }
-        CNA::GraphicsRendererSelection::SetFallbackChain(chain);
-        return CNA_RESULT_SUCCESS;
-    });
+        chain.push_back(nativeType);
+    }
+    CNA::GraphicsRendererSelection::SetFallbackChain(chain);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_renderer_get_fallback_at_ext(
+[[nodiscard]] CNA_Result GraphicsRendererGetFallbackAtExt(
     const uint64_t index,
     CNA_GraphicsRendererFallbackRecord* const outRecord)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result =
-                ValidateVersionedStructure(outRecord, "The fallback record structure is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA::GraphicsRendererFallbackRecord* record = nullptr;
-        if (const CNA_Result result = BorrowFallbackRecord(index, &record);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        outRecord->type = MapRendererTypeToC(record->type);
-        outRecord->reason = MapFallbackReasonToC(record->reason);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result =
+            ValidateVersionedStructure(outRecord, "The fallback record structure is invalid.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA::GraphicsRendererFallbackRecord* record = nullptr;
+    if (const CNA_Result result = BorrowFallbackRecord(index, &record);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outRecord->type = MapRendererTypeToC(record->type);
+    outRecord->reason = MapFallbackReasonToC(record->reason);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_graphics_renderer_try_parse_name_ext(
+[[nodiscard]] CNA_Result GraphicsRendererTryParseNameExt(
     const CNA_StringView name,
     CNA_GraphicsRendererType* const outType,
     CNA_Bool* const outRecognized)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outType == nullptr || outRecognized == nullptr) {
-            return InvalidArgument("The renderer parse output is invalid.");
-        }
-        *outType = CNA_GRAPHICS_RENDERER_UNKNOWN;
-        *outRecognized = CNA_FALSE;
-        std::string text;
-        if (const CNA_Result result = CNA::C::Detail::ReadText(
-                name, "The renderer name is not valid UTF-8 text.", &text,
-                CNA::C::Detail::EmbeddedNul::Refused);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
-        // An unrecognized name is an answer, not a failure, exactly as the canonical route reports
-        // it: the caller asked whether this is a renderer name and gets told.
-        if (!CNA::tryParseGraphicsRendererName(std::string_view(text), nativeType)) {
-            return CNA_RESULT_SUCCESS;
-        }
-        *outType = MapRendererTypeToC(nativeType);
-        *outRecognized = CNA_TRUE;
+    *outType = CNA_GRAPHICS_RENDERER_UNKNOWN;
+    *outRecognized = CNA_FALSE;
+    std::string text;
+    if (const CNA_Result result = CNA::C::Detail::ReadText(
+            name, "The renderer name is not valid UTF-8 text.", &text,
+            CNA::C::Detail::EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::GraphicsRendererType nativeType = CNA::GraphicsRendererType::Headless;
+    // An unrecognized name is an answer, not a failure, exactly as the canonical route reports
+    // it: the caller asked whether this is a renderer name and gets told.
+    if (!CNA::tryParseGraphicsRendererName(std::string_view(text), nativeType)) {
         return CNA_RESULT_SUCCESS;
-    });
+    }
+    *outType = MapRendererTypeToC(nativeType);
+    *outRecognized = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/CoreExt.toml.
 #include "generated/CoreExt.inc"

@@ -653,3 +653,124 @@ CNA_Result cna_graphics_renderer_fallback_reason_copy_name_ext(
         return CNA::C::Detail::CopyText(CNA::getGraphicsRendererFallbackReasonName(object), destination, capacity, out_bytes);
     });
 }
+
+CNA_Result cna_logger_log(
+    const CNA_LogLevel level,
+    const CNA_StringView message,
+    const CNA_LogCategory category,
+    const CNA_Bool condition)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(condition, "condition");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return LoggerLog(level, message, category, condition);
+    });
+}
+
+CNA_Result cna_platform_get_current(
+    CNA_Platform* const out_platform)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_platform == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_platform_get_current: out_platform is null.");
+        }
+        return PlatformGetCurrent(out_platform);
+    });
+}
+
+CNA_Result cna_desktop_os_get_current(
+    CNA_DesktopOS* const out_os)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_os == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_desktop_os_get_current: out_os is null.");
+        }
+        return DesktopOsGetCurrent(out_os);
+    });
+}
+
+CNA_Result cna_graphics_renderer_copy_available_ext(
+    CNA_GraphicsRendererType* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_copy_available_ext: out_count is null.");
+        }
+        return GraphicsRendererCopyAvailableExt(destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_graphics_renderer_try_parse_name_ext(
+    const CNA_StringView name,
+    CNA_GraphicsRendererType* const out_type,
+    CNA_Bool* const out_recognized)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_try_parse_name_ext: out_type is null.");
+        }
+        if (out_recognized == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_try_parse_name_ext: out_recognized is null.");
+        }
+        return GraphicsRendererTryParseNameExt(name, out_type, out_recognized);
+    });
+}
+
+CNA_Result cna_graphics_renderer_get_fallback_at_ext(
+    const uint64_t index,
+    CNA_GraphicsRendererFallbackRecord* const out_record)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_record == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_fallback_at_ext: out_record is null.");
+        }
+        return GraphicsRendererGetFallbackAtExt(index, out_record);
+    });
+}
+
+CNA_Result cna_graphics_backend_category_get_name_size(
+    const CNA_GraphicsBackendCategory category,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsBackendCategoryGetNameSize(category, out_bytes);
+    });
+}
+
+CNA_Result cna_graphics_backend_maturity_get_name_size(
+    const CNA_GraphicsBackendMaturity maturity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsBackendMaturityGetNameSize(maturity, out_bytes);
+    });
+}
+
+CNA_Result cna_logger_set_sink_ext(
+    const CNA_LogSinkCallback callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LoggerSetSinkExt(callback, context);
+    });
+}
+
+CNA_Result cna_logger_reset_sink_ext(void)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LoggerResetSinkExt();
+    });
+}
+
+CNA_Result cna_graphics_renderer_set_fallback_chain_ext(
+    const CNA_GraphicsRendererType* const types,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsRendererSetFallbackChainExt(types, count);
+    });
+}

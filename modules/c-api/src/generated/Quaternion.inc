@@ -395,3 +395,19 @@ CNA_Result cna_quaternion_create_from_rotation_matrix(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_quaternion_conjugate_in_place(
+    CNA_Quaternion* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return QuaternionConjugateInPlace(value);
+    });
+}
+
+CNA_Result cna_quaternion_normalize_in_place(
+    CNA_Quaternion* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return QuaternionNormalizeInPlace(value);
+    });
+}

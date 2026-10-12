@@ -47,3 +47,57 @@ CNA_Result cna_half_to_single(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_packed_vector_pack(
+    const CNA_PackedVectorFormat format,
+    const CNA_Vector4 vector,
+    uint64_t* const out_packed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_packed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_pack: out_packed is null.");
+        }
+        return PackedVectorPack(format, vector, out_packed);
+    });
+}
+
+CNA_Result cna_packed_vector_unpack(
+    const CNA_PackedVectorFormat format,
+    const uint64_t packed,
+    CNA_Vector4* const out_vector)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_vector == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_unpack: out_vector is null.");
+        }
+        return PackedVectorUnpack(format, packed, out_vector);
+    });
+}
+
+CNA_Result cna_packed_vector_equals(
+    const CNA_PackedVectorFormat format,
+    const uint64_t left,
+    const uint64_t right,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_equals: out_equal is null.");
+        }
+        return PackedVectorEquals(format, left, right, out_equal);
+    });
+}
+
+CNA_Result cna_packed_vector_not_equals(
+    const CNA_PackedVectorFormat format,
+    const uint64_t left,
+    const uint64_t right,
+    CNA_Bool* const out_not_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_not_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_not_equals: out_not_equal is null.");
+        }
+        return PackedVectorNotEquals(format, left, right, out_not_equal);
+    });
+}

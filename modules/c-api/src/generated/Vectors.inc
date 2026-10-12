@@ -1911,3 +1911,147 @@ CNA_Result cna_vector4_transform_quaternion(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_vector2_normalize_in_place(
+    CNA_Vector2* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector2NormalizeInPlace(value);
+    });
+}
+
+CNA_Result cna_vector2_transform_matrix_array(
+    const CNA_Vector2* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Matrix matrix,
+    CNA_Vector2* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector2TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector2_transform_quaternion_array(
+    const CNA_Vector2* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Quaternion rotation,
+    CNA_Vector2* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector2TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector2_transform_normal_array(
+    const CNA_Vector2* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Matrix matrix,
+    CNA_Vector2* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector2TransformNormalArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector3_normalize_in_place(
+    CNA_Vector3* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector3NormalizeInPlace(value);
+    });
+}
+
+CNA_Result cna_vector3_transform_matrix_array(
+    const CNA_Vector3* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Matrix matrix,
+    CNA_Vector3* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector3TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector3_transform_quaternion_array(
+    const CNA_Vector3* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Quaternion rotation,
+    CNA_Vector3* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector3TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector3_transform_normal_array(
+    const CNA_Vector3* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Matrix matrix,
+    CNA_Vector3* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector3TransformNormalArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector4_normalize_in_place(
+    CNA_Vector4* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector4NormalizeInPlace(value);
+    });
+}
+
+CNA_Result cna_vector4_transform_matrix_array(
+    const CNA_Vector4* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Matrix matrix,
+    CNA_Vector4* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector4TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length);
+    });
+}
+
+CNA_Result cna_vector4_transform_quaternion_array(
+    const CNA_Vector4* const source,
+    const uint64_t source_count,
+    const uint64_t source_index,
+    const CNA_Quaternion rotation,
+    CNA_Vector4* const destination,
+    const uint64_t destination_count,
+    const uint64_t destination_index,
+    const uint64_t length)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Vector4TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length);
+    });
+}

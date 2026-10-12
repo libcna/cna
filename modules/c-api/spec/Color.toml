@@ -31,3 +31,13 @@ cna_color_copy_string = { copy = "color.ToString()" }
 cna_color_lerp = { value = "Color::Lerp(value1, value2, amount)" }
 cna_color_from_non_premultiplied_int = { value = "Color(PremultiplyUnchecked(r, a), PremultiplyUnchecked(g, a), PremultiplyUnchecked(b, a), a)" }
 cna_color_multiply = { value = "Color::Multiply(color, scale)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_color_set_packed_value = { result = "ColorSetPackedValue(color, packed_value)" }
+cna_color_pack_from_vector4 = { result = "ColorPackFromVector4(color, vector)" }

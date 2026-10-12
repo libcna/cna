@@ -62,3 +62,22 @@ cna_rectangle_get_is_empty = { value = "value.x == 0 && value.y == 0 && value.wi
 cna_rectangle_contains_xy = { value = "RectangleContainsPoint(value, x, y)" }
 cna_rectangle_contains_rectangle = { value = "value.x <= candidate.x && RectangleRight(candidate) <= RectangleRight(value) && value.y <= candidate.y && RectangleBottom(candidate) <= RectangleBottom(value)" }
 cna_rectangle_intersects = { value = "RectanglesIntersect(left, right)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_point_divide = { result = "PointDivide(left, right, out_value)" }
+cna_math_closest_msaa_power = { result = "MathClosestMsaaPower(value, out_value)" }
+cna_point_get_zero = { result = "PointGetZero(out_value)", optional = ["out_value"] }
+cna_rectangle_get_empty = { result = "RectangleGetEmpty(out_value)", optional = ["out_value"] }
+cna_rectangle_set_location = { result = "RectangleSetLocation(value, location)" }
+cna_rectangle_offset_point = { result = "RectangleOffsetPoint(value, offset)" }
+cna_rectangle_offset_xy = { result = "RectangleOffsetXy(value, offset_x, offset_y)" }
+cna_rectangle_inflate = { result = "RectangleInflate(value, horizontal_value, vertical_value)" }
+cna_rectangle_intersect = { result = "RectangleIntersect(left, right, out_value)", optional = ["out_value"] }
+cna_rectangle_union = { result = "RectangleUnion(left, right, out_value)", optional = ["out_value"] }
+cna_rectangle_contains_point = { result = "RectangleContainsPointRoute(value, point, out_contains)", optional = ["out_contains"] }

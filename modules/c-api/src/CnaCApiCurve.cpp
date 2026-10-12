@@ -117,32 +117,28 @@ template<typename TCallable>
     return LookupHandle(handle, ObjectKind::Curve, outCurve);
 }
 
-} // namespace
-
-CNA_Result cna_curve_key_set_continuity(
+[[nodiscard]] CNA_Result CurveKeySetContinuity(
     CNA_CurveKey* const key,
     const CNA_CurveContinuity continuity)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (key == nullptr) {
-            return InvalidArgument("The CurveKey pointer is null.");
-        }
-        CNA_Result validation = ValidateKey(*key);
-        if (validation == CNA_RESULT_SUCCESS) {
-            validation = ValidateContinuity(continuity);
-        }
-        if (validation != CNA_RESULT_SUCCESS) {
-            return validation;
-        }
-        CurveKey native = ToNative(*key);
-        native.setContinuityProperty(static_cast<CurveContinuity>(continuity));
-        const CNA_CurveKey result = ToC(native);
-        *key = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (key == nullptr) {
+        return InvalidArgument("The CurveKey pointer is null.");
+    }
+    CNA_Result validation = ValidateKey(*key);
+    if (validation == CNA_RESULT_SUCCESS) {
+        validation = ValidateContinuity(continuity);
+    }
+    if (validation != CNA_RESULT_SUCCESS) {
+        return validation;
+    }
+    CurveKey native = ToNative(*key);
+    native.setContinuityProperty(static_cast<CurveContinuity>(continuity));
+    const CNA_CurveKey result = ToC(native);
+    *key = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_curve_key_set_tangent_in(
+[[nodiscard]] CNA_Result CurveKeySetTangentIn(
     CNA_CurveKey* const key,
     const float tangent)
 {
@@ -151,7 +147,7 @@ CNA_Result cna_curve_key_set_tangent_in(
     });
 }
 
-CNA_Result cna_curve_key_set_tangent_out(
+[[nodiscard]] CNA_Result CurveKeySetTangentOut(
     CNA_CurveKey* const key,
     const float tangent)
 {
@@ -160,7 +156,7 @@ CNA_Result cna_curve_key_set_tangent_out(
     });
 }
 
-CNA_Result cna_curve_key_set_value(
+[[nodiscard]] CNA_Result CurveKeySetValue(
     CNA_CurveKey* const key,
     const float value)
 {
@@ -169,60 +165,55 @@ CNA_Result cna_curve_key_set_value(
     });
 }
 
-CNA_Result cna_curve_key_compare_to(
+[[nodiscard]] CNA_Result CurveKeyCompareTo(
     const CNA_CurveKey value,
     const CNA_CurveKey other,
     int32_t* const outComparison)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outComparison == nullptr) {
-            return InvalidArgument("The comparison output is null.");
-        }
-        CNA_Result validation = ValidateKey(value);
-        if (validation == CNA_RESULT_SUCCESS) {
-            validation = ValidateKey(other);
-        }
-        if (validation != CNA_RESULT_SUCCESS) {
-            return validation;
-        }
-        const int32_t result = static_cast<int32_t>(ToNative(value).CompareTo(ToNative(other)));
-        *outComparison = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_Result validation = ValidateKey(value);
+    if (validation == CNA_RESULT_SUCCESS) {
+        validation = ValidateKey(other);
+    }
+    if (validation != CNA_RESULT_SUCCESS) {
+        return validation;
+    }
+    const int32_t result = static_cast<int32_t>(ToNative(value).CompareTo(ToNative(other)));
+    *outComparison = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_curve_key_collection_copy_to(
+[[nodiscard]] CNA_Result CurveKeyCollectionCopyTo(
     const CNA_CurveKeyCollectionHandle collectionHandle,
     CNA_CurveKey* const destination,
     const uint64_t capacity,
     const int32_t destinationIndex,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The key destination or count output is invalid.");
-        }
-        if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > capacity) {
-            return OutOfRange("The destination index is out of range.");
-        }
-        std::shared_ptr<CurveKeyCollection> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const uint64_t count = static_cast<uint64_t>(collection->getCountProperty());
-        *outCount = count;
-        const uint64_t start = static_cast<uint64_t>(destinationIndex);
-        if (count > capacity - start) {
-            return BufferTooSmall("The destination cannot hold all CurveKeyCollection items.");
-        }
-        for (uint64_t index = 0U; index < count; ++index) {
-            destination[start + index] = ToC(
-                collection->getItemProperty(static_cast<int32_t>(index)));
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The key destination or count output is invalid.");
+    }
+    if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > capacity) {
+        return OutOfRange("The destination index is out of range.");
+    }
+    std::shared_ptr<CurveKeyCollection> collection;
+    if (const CNA_Result result = GetCollection(collectionHandle, &collection);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const uint64_t count = static_cast<uint64_t>(collection->getCountProperty());
+    *outCount = count;
+    const uint64_t start = static_cast<uint64_t>(destinationIndex);
+    if (count > capacity - start) {
+        return BufferTooSmall("The destination cannot hold all CurveKeyCollection items.");
+    }
+    for (uint64_t index = 0U; index < count; ++index) {
+        destination[start + index] = ToC(
+            collection->getItemProperty(static_cast<int32_t>(index)));
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Curve.toml.
 #include "generated/Curve.inc"

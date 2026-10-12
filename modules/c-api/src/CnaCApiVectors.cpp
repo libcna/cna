@@ -85,22 +85,18 @@ template<typename TElement, typename TTransform>
     });
 }
 
-} // namespace
-
-CNA_Result cna_vector2_normalize_in_place(CNA_Vector2* const value)
+[[nodiscard]] CNA_Result Vector2NormalizeInPlace(CNA_Vector2* const value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Vector2 is null.");
-        }
-        Vector2 native = ToNative(*value);
-        native.Normalize();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value == nullptr) {
+        return InvalidArgument("The Vector2 is null.");
+    }
+    Vector2 native = ToNative(*value);
+    native.Normalize();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vector2_transform_matrix_array(
+[[nodiscard]] CNA_Result Vector2TransformMatrixArray(
     const CNA_Vector2* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -124,7 +120,7 @@ CNA_Result cna_vector2_transform_matrix_array(
         });
 }
 
-CNA_Result cna_vector2_transform_quaternion_array(
+[[nodiscard]] CNA_Result Vector2TransformQuaternionArray(
     const CNA_Vector2* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -148,7 +144,7 @@ CNA_Result cna_vector2_transform_quaternion_array(
         });
 }
 
-CNA_Result cna_vector2_transform_normal_array(
+[[nodiscard]] CNA_Result Vector2TransformNormalArray(
     const CNA_Vector2* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -172,20 +168,18 @@ CNA_Result cna_vector2_transform_normal_array(
         });
 }
 
-CNA_Result cna_vector3_normalize_in_place(CNA_Vector3* const value)
+[[nodiscard]] CNA_Result Vector3NormalizeInPlace(CNA_Vector3* const value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Vector3 is null.");
-        }
-        Vector3 native = ToNative(*value);
-        native.Normalize();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value == nullptr) {
+        return InvalidArgument("The Vector3 is null.");
+    }
+    Vector3 native = ToNative(*value);
+    native.Normalize();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vector3_transform_matrix_array(
+[[nodiscard]] CNA_Result Vector3TransformMatrixArray(
     const CNA_Vector3* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -209,7 +203,7 @@ CNA_Result cna_vector3_transform_matrix_array(
         });
 }
 
-CNA_Result cna_vector3_transform_quaternion_array(
+[[nodiscard]] CNA_Result Vector3TransformQuaternionArray(
     const CNA_Vector3* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -233,7 +227,7 @@ CNA_Result cna_vector3_transform_quaternion_array(
         });
 }
 
-CNA_Result cna_vector3_transform_normal_array(
+[[nodiscard]] CNA_Result Vector3TransformNormalArray(
     const CNA_Vector3* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -257,20 +251,18 @@ CNA_Result cna_vector3_transform_normal_array(
         });
 }
 
-CNA_Result cna_vector4_normalize_in_place(CNA_Vector4* const value)
+[[nodiscard]] CNA_Result Vector4NormalizeInPlace(CNA_Vector4* const value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Vector4 is null.");
-        }
-        Vector4 native = ToNative(*value);
-        native.Normalize();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value == nullptr) {
+        return InvalidArgument("The Vector4 is null.");
+    }
+    Vector4 native = ToNative(*value);
+    native.Normalize();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_vector4_transform_matrix_array(
+[[nodiscard]] CNA_Result Vector4TransformMatrixArray(
     const CNA_Vector4* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -294,7 +286,7 @@ CNA_Result cna_vector4_transform_matrix_array(
         });
 }
 
-CNA_Result cna_vector4_transform_quaternion_array(
+[[nodiscard]] CNA_Result Vector4TransformQuaternionArray(
     const CNA_Vector4* const source,
     const uint64_t sourceCount,
     const uint64_t sourceIndex,
@@ -317,6 +309,8 @@ CNA_Result cna_vector4_transform_quaternion_array(
             return Vector4::Transform(value, nativeRotation);
         });
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Vectors.toml.
 #include "generated/Vectors.inc"

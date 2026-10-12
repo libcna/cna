@@ -35,3 +35,13 @@ cna_quaternion_create_from_axis_angle = { value = "Quaternion::CreateFromAxisAng
 [matrix]
 [matrix.routes]
 cna_quaternion_create_from_rotation_matrix = { value = "Quaternion::CreateFromRotationMatrix(matrix)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_quaternion_conjugate_in_place = { result = "QuaternionConjugateInPlace(value)" }
+cna_quaternion_normalize_in_place = { result = "QuaternionNormalizeInPlace(value)" }

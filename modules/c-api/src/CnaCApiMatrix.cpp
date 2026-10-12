@@ -52,9 +52,7 @@ template<typename TCallable>
     });
 }
 
-} // namespace
-
-CNA_Result cna_matrix_set_backward(
+[[nodiscard]] CNA_Result MatrixSetBackward(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -63,7 +61,7 @@ CNA_Result cna_matrix_set_backward(
     });
 }
 
-CNA_Result cna_matrix_set_down(
+[[nodiscard]] CNA_Result MatrixSetDown(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -72,7 +70,7 @@ CNA_Result cna_matrix_set_down(
     });
 }
 
-CNA_Result cna_matrix_set_forward(
+[[nodiscard]] CNA_Result MatrixSetForward(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -81,7 +79,7 @@ CNA_Result cna_matrix_set_forward(
     });
 }
 
-CNA_Result cna_matrix_set_left(
+[[nodiscard]] CNA_Result MatrixSetLeft(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -90,7 +88,7 @@ CNA_Result cna_matrix_set_left(
     });
 }
 
-CNA_Result cna_matrix_set_right(
+[[nodiscard]] CNA_Result MatrixSetRight(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -99,7 +97,7 @@ CNA_Result cna_matrix_set_right(
     });
 }
 
-CNA_Result cna_matrix_set_translation(
+[[nodiscard]] CNA_Result MatrixSetTranslation(
     CNA_Matrix* const value,
     const CNA_Vector3 translation)
 {
@@ -108,7 +106,7 @@ CNA_Result cna_matrix_set_translation(
     });
 }
 
-CNA_Result cna_matrix_set_up(
+[[nodiscard]] CNA_Result MatrixSetUp(
     CNA_Matrix* const value,
     const CNA_Vector3 direction)
 {
@@ -117,31 +115,25 @@ CNA_Result cna_matrix_set_up(
     });
 }
 
-CNA_Result cna_matrix_decompose(
+[[nodiscard]] CNA_Result MatrixDecompose(
     const CNA_Matrix value,
     CNA_Vector3* const outScale,
     CNA_Quaternion* const outRotation,
     CNA_Vector3* const outTranslation,
     CNA_Bool* const outDecomposed)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outScale == nullptr || outRotation == nullptr ||
-            outTranslation == nullptr || outDecomposed == nullptr) {
-            return InvalidArgument("A Matrix decomposition output is null.");
-        }
-        Vector3 scale;
-        Quaternion rotation = Quaternion::Identity;
-        Vector3 translation;
-        const bool decomposed = ToNative(value).Decompose(scale, rotation, translation);
-        *outScale = ToC(scale);
-        *outRotation = ToC(rotation);
-        *outTranslation = ToC(translation);
-        *outDecomposed = ToCBool(decomposed);
-        return CNA_RESULT_SUCCESS;
-    });
+    Vector3 scale;
+    Quaternion rotation = Quaternion::Identity;
+    Vector3 translation;
+    const bool decomposed = ToNative(value).Decompose(scale, rotation, translation);
+    *outScale = ToC(scale);
+    *outRotation = ToC(rotation);
+    *outTranslation = ToC(translation);
+    *outDecomposed = ToCBool(decomposed);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_matrix_create_billboard(
+[[nodiscard]] CNA_Result MatrixCreateBillboard(
     const CNA_Vector3 objectPosition,
     const CNA_Vector3 cameraPosition,
     const CNA_Vector3 cameraUp,
@@ -157,7 +149,7 @@ CNA_Result cna_matrix_create_billboard(
     });
 }
 
-CNA_Result cna_matrix_create_constrained_billboard(
+[[nodiscard]] CNA_Result MatrixCreateConstrainedBillboard(
     const CNA_Vector3 objectPosition,
     const CNA_Vector3 cameraPosition,
     const CNA_Vector3 rotateAxis,
@@ -174,6 +166,8 @@ CNA_Result cna_matrix_create_constrained_billboard(
             ToNativeOptional(objectForward)));
     });
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Matrix.toml.
 #include "generated/Matrix.inc"

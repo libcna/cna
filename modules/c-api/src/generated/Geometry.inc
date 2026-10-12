@@ -1219,3 +1219,152 @@ CNA_Result cna_bounding_frustum_init_matrix(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_bounding_box_copy_corners(
+    const CNA_BoundingBox value,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_box_copy_corners: out_count is null.");
+        }
+        return BoundingBoxCopyCorners(value, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_bounding_box_create_from_points(
+    const CNA_Vector3* const points,
+    const uint64_t count,
+    CNA_BoundingBox* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_box_create_from_points: out_value is null.");
+        }
+        return BoundingBoxCreateFromPoints(points, count, out_value);
+    });
+}
+
+CNA_Result cna_bounding_sphere_create_from_points(
+    const CNA_Vector3* const points,
+    const uint64_t count,
+    CNA_BoundingSphere* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_sphere_create_from_points: out_value is null.");
+        }
+        return BoundingSphereCreateFromPoints(points, count, out_value);
+    });
+}
+
+CNA_Result cna_bounding_frustum_copy_corners(
+    const CNA_BoundingFrustum value,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_frustum_copy_corners: out_count is null.");
+        }
+        return BoundingFrustumCopyCorners(value, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_plane_normalize_in_place(
+    CNA_Plane* const value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PlaneNormalizeInPlace(value);
+    });
+}
+
+CNA_Result cna_ray_intersects_box(
+    const CNA_Ray ray,
+    const CNA_BoundingBox box,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RayIntersectsBox(ray, box, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_ray_intersects_sphere(
+    const CNA_Ray ray,
+    const CNA_BoundingSphere sphere,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RayIntersectsSphere(ray, sphere, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_ray_intersects_plane(
+    const CNA_Ray ray,
+    const CNA_Plane plane,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RayIntersectsPlane(ray, plane, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_ray_intersects_frustum(
+    const CNA_Ray ray,
+    const CNA_BoundingFrustum frustum,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RayIntersectsFrustum(ray, frustum, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_bounding_box_intersects_ray(
+    const CNA_BoundingBox value,
+    const CNA_Ray ray,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BoundingBoxIntersectsRay(value, ray, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_ray(
+    const CNA_BoundingSphere value,
+    const CNA_Ray ray,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BoundingSphereIntersectsRay(value, ray, out_hit, out_distance);
+    });
+}
+
+CNA_Result cna_bounding_frustum_contains_frustum(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* const out_containment)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BoundingFrustumContainsFrustum(value, frustum, out_containment);
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_ray(
+    const CNA_BoundingFrustum value,
+    const CNA_Ray ray,
+    CNA_Bool* const out_hit,
+    float* const out_distance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BoundingFrustumIntersectsRay(value, ray, out_hit, out_distance);
+    });
+}

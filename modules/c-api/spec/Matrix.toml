@@ -59,3 +59,21 @@ cna_matrix_create_from_quaternion = { value = "Matrix::CreateFromQuaternion(quat
 [plane]
 [plane.routes]
 cna_matrix_create_reflection = { value = "Matrix::CreateReflection(plane)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_matrix_decompose = { result = "MatrixDecompose(value, out_scale, out_rotation, out_translation, out_decomposed)" }
+cna_matrix_set_backward = { result = "MatrixSetBackward(value, direction)" }
+cna_matrix_set_down = { result = "MatrixSetDown(value, direction)" }
+cna_matrix_set_forward = { result = "MatrixSetForward(value, direction)" }
+cna_matrix_set_left = { result = "MatrixSetLeft(value, direction)" }
+cna_matrix_set_right = { result = "MatrixSetRight(value, direction)" }
+cna_matrix_set_translation = { result = "MatrixSetTranslation(value, translation)" }
+cna_matrix_set_up = { result = "MatrixSetUp(value, direction)" }
+cna_matrix_create_billboard = { result = "MatrixCreateBillboard(object_position, camera_position, camera_up, camera_forward, out_value)", optional = ["out_value"] }
+cna_matrix_create_constrained_billboard = { result = "MatrixCreateConstrainedBillboard(object_position, camera_position, rotate_axis, camera_forward, object_forward, out_value)", optional = ["out_value"] }

@@ -171,68 +171,60 @@ void ResetGameEventRegistrationState() noexcept
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_game_subscribe(
+namespace {
+
+[[nodiscard]] CNA_Result GameSubscribe(
     const CNA_Handle gameHandle,
     const CNA_GameEvent event,
     const CNA_GameEventCallback callback,
     void* const context,
     CNA_GameEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The game registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The game event callback is null.");
-        }
-        if (event > CNA_GAME_EVENT_MAXIMUM) {
-            return InvalidArgument("The game event is not a defined identity.");
-        }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::EventHandler<System::EventArgs>* source = nullptr;
-        switch (event) {
-        case CNA_GAME_EVENT_ACTIVATED:
-            source = &game->Activated;
-            break;
-        case CNA_GAME_EVENT_DEACTIVATED:
-            source = &game->Deactivated;
-            break;
-        case CNA_GAME_EVENT_DISPOSED:
-            source = &game->Disposed;
-            break;
-        default:
-            // The canonical exiting event carries an argument type of its own, but the handler
-            // collection is the plain one, so every game event registers the same way.
-            source = &game->Exiting;
-            break;
-        }
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return CreateHandle(ObjectKind::GameEventRegistration,
-            TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The game event callback is null.");
+    }
+    if (event > CNA_GAME_EVENT_MAXIMUM) {
+        return InvalidArgument("The game event is not a defined identity.");
+    }
+    Game* game = nullptr;
+    if (const CNA_Result result = BorrowGame(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::EventHandler<System::EventArgs>* source = nullptr;
+    switch (event) {
+    case CNA_GAME_EVENT_ACTIVATED:
+        source = &game->Activated;
+        break;
+    case CNA_GAME_EVENT_DEACTIVATED:
+        source = &game->Deactivated;
+        break;
+    case CNA_GAME_EVENT_DISPOSED:
+        source = &game->Disposed;
+        break;
+    default:
+        // The canonical exiting event carries an argument type of its own, but the handler
+        // collection is the plain one, so every game event registers the same way.
+        source = &game->Exiting;
+        break;
+    }
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return CreateHandle(ObjectKind::GameEventRegistration,
+        TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
+        outRegistration);
 }
 
-CNA_Result cna_game_unsubscribe(const CNA_GameEventRegistrationHandle registration)
+[[nodiscard]] CNA_Result GameUnsubscribe(const CNA_GameEventRegistrationHandle registration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<GameRegistrationBase> value;
-        if (const CNA_Result result =
-                LookupHandle(registration, ObjectKind::GameEventRegistration, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(registration);
-    });
+    std::shared_ptr<GameRegistrationBase> value;
+    if (const CNA_Result result =
+            LookupHandle(registration, ObjectKind::GameEventRegistration, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReleaseHandle(registration);
 }
-
-namespace {
 
 [[nodiscard]] CNA_Result FindLaunchParameter(
     const CNA_Handle gameHandle,
@@ -257,10 +249,6 @@ namespace {
     *outValue = found->second;
     return CNA_RESULT_SUCCESS;
 }
-
-} // namespace
-
-namespace {
 
 /// The parameter names in the order the ABI publishes: by name, ordinal, ascending.
 ///
@@ -303,92 +291,84 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_game_launch_parameters_parse_ext(
+[[nodiscard]] CNA_Result GameLaunchParametersParseExt(
     const CNA_Handle gameHandle,
     const CNA_StringView* const arguments,
     const uint64_t argumentCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (argumentCount != UINT64_C(0) && arguments == nullptr) {
-            return InvalidArgument("The launch argument array is null.");
-        }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
+    if (argumentCount != UINT64_C(0) && arguments == nullptr) {
+        return InvalidArgument("The launch argument array is null.");
+    }
+    Game* game = nullptr;
+    if (const CNA_Result result = BorrowGame(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::vector<std::string> parsed;
+    parsed.reserve(static_cast<std::size_t>(argumentCount));
+    for (uint64_t index = UINT64_C(0); index < argumentCount; ++index) {
+        std::string argument;
+        if (const CNA_Result result =
+                ReadText(arguments[index], "A launch argument is not valid UTF-8.", &argument);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::vector<std::string> parsed;
-        parsed.reserve(static_cast<std::size_t>(argumentCount));
-        for (uint64_t index = UINT64_C(0); index < argumentCount; ++index) {
-            std::string argument;
-            if (const CNA_Result result =
-                    ReadText(arguments[index], "A launch argument is not valid UTF-8.", &argument);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            parsed.push_back(std::move(argument));
-        }
-        game->getLaunchParametersProperty() = LaunchParameters(parsed);
-        return CNA_RESULT_SUCCESS;
-    });
+        parsed.push_back(std::move(argument));
+    }
+    game->getLaunchParametersProperty() = LaunchParameters(parsed);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_title_container_read_ext(
+[[nodiscard]] CNA_Result TitleContainerReadExt(
     const CNA_Handle gameHandle,
     const CNA_StringView name,
     uint8_t* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidArgument("The title read output is invalid.");
+    if ((destination == nullptr && capacity != UINT64_C(0))) {
+        return InvalidArgument("The title read output is invalid.");
+    }
+    Game* game = nullptr;
+    if (const CNA_Result result = BorrowGame(gameHandle, &game);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string path;
+    if (const CNA_Result result =
+            ReadText(name, "The title file name is not valid UTF-8.", &path);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // A missing or unreadable title file is a plain runtime error naming the file, which the
+    // exception firewall would otherwise report as an internal failure. It is I/O, and the
+    // route says so.
+    std::unique_ptr<System::IO::Stream> stream;
+    try {
+        stream = TitleContainer::OpenStream(path);
+    } catch (const std::runtime_error& exception) {
+        return IoError(exception.what());
+    }
+    if (!stream) {
+        return IoError("The title file could not be opened.");
+    }
+    const int64_t length = static_cast<int64_t>(stream->getLengthProperty());
+    if (length < 0) {
+        return IoError("The title file has no length.");
+    }
+    *outBytes = static_cast<uint64_t>(length);
+    if (capacity < *outBytes) {
+        return BufferTooSmall("The destination capacity is smaller than the title file.");
+    }
+    if (*outBytes != UINT64_C(0)) {
+        const auto read = static_cast<uint64_t>(
+            stream->Read(destination, 0, static_cast<SharpRuntime::intcs>(*outBytes)));
+        if (read != *outBytes) {
+            return IoError("The title file could not be read completely.");
         }
-        Game* game = nullptr;
-        if (const CNA_Result result = BorrowGame(gameHandle, &game);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string path;
-        if (const CNA_Result result =
-                ReadText(name, "The title file name is not valid UTF-8.", &path);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // A missing or unreadable title file is a plain runtime error naming the file, which the
-        // exception firewall would otherwise report as an internal failure. It is I/O, and the
-        // route says so.
-        std::unique_ptr<System::IO::Stream> stream;
-        try {
-            stream = TitleContainer::OpenStream(path);
-        } catch (const std::runtime_error& exception) {
-            return IoError(exception.what());
-        }
-        if (!stream) {
-            return IoError("The title file could not be opened.");
-        }
-        const int64_t length = static_cast<int64_t>(stream->getLengthProperty());
-        if (length < 0) {
-            return IoError("The title file has no length.");
-        }
-        *outBytes = static_cast<uint64_t>(length);
-        if (capacity < *outBytes) {
-            return BufferTooSmall("The destination capacity is smaller than the title file.");
-        }
-        if (*outBytes != UINT64_C(0)) {
-            const auto read = static_cast<uint64_t>(
-                stream->Read(destination, 0, static_cast<SharpRuntime::intcs>(*outBytes)));
-            if (read != *outBytes) {
-                return IoError("The title file could not be read completely.");
-            }
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 // Every canonical window state change reports an SDL failure as a plain runtime error naming the
 // call. That is the platform refusing, not an internal fault, and the route says so: a headless
@@ -404,146 +384,129 @@ template<typename TAction>
     return CNA_RESULT_SUCCESS;
 }
 
-} // namespace
-
-CNA_Result cna_game_window_get_client_bounds(
+[[nodiscard]] CNA_Result GameWindowGetClientBounds(
     const CNA_Handle gameHandle,
     CNA_Rectangle* const outBounds)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBounds == nullptr) {
-            return InvalidArgument("The client bounds output is null.");
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const Microsoft::Xna::Framework::Rectangle bounds = window->getClientBoundsProperty();
-        CNA_Rectangle mapped = {};
-        mapped.x = bounds.X;
-        mapped.y = bounds.Y;
-        mapped.width = bounds.Width;
-        mapped.height = bounds.Height;
-        *outBounds = mapped;
-        return CNA_RESULT_SUCCESS;
-    });
+    Microsoft::Xna::Framework::GameWindow* window = nullptr;
+    if (const CNA_Result result = GetGameWindow(gameHandle, &window);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Microsoft::Xna::Framework::Rectangle bounds = window->getClientBoundsProperty();
+    CNA_Rectangle mapped = {};
+    mapped.x = bounds.X;
+    mapped.y = bounds.Y;
+    mapped.width = bounds.Width;
+    mapped.height = bounds.Height;
+    *outBounds = mapped;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_native_window_handle_init(CNA_NativeWindowHandle* const handle)
+[[nodiscard]] CNA_Result NativeWindowHandleInit(CNA_NativeWindowHandle* const handle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (handle == nullptr) {
-            return InvalidArgument("The native-window-handle structure is null.");
-        }
-        *handle = CNA_NativeWindowHandle{};
-        handle->struct_size = static_cast<uint32_t>(sizeof(CNA_NativeWindowHandle));
-        handle->struct_version = NativeWindowHandleVersion;
-        handle->system = CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (handle == nullptr) {
+        return InvalidArgument("The native-window-handle structure is null.");
+    }
+    *handle = CNA_NativeWindowHandle{};
+    handle->struct_size = static_cast<uint32_t>(sizeof(CNA_NativeWindowHandle));
+    handle->struct_version = NativeWindowHandleVersion;
+    handle->system = CNA_NATIVE_WINDOW_SYSTEM_UNKNOWN;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_window_get_native_window_ext(
+[[nodiscard]] CNA_Result GameWindowGetNativeWindowExt(
     const CNA_Handle gameHandle,
     CNA_NativeWindowHandle* const handle)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateVersionedStructure(
-                handle, "The native-window-handle structure is invalid.",
-                NativeWindowHandleVersion);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const CNA::Platform::NativeWindowHandle native = window->GetNativeWindowHandleEXT();
-        handle->system = MapNativeWindowSystem(native.system);
-        handle->display = native.display;
-        handle->window = native.window;
-        handle->surface = native.surface;
-        handle->window_id = native.windowId;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (const CNA_Result result = ValidateVersionedStructure(
+            handle, "The native-window-handle structure is invalid.",
+            NativeWindowHandleVersion);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::GameWindow* window = nullptr;
+    if (const CNA_Result result = GetGameWindow(gameHandle, &window);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const CNA::Platform::NativeWindowHandle native = window->GetNativeWindowHandleEXT();
+    handle->system = MapNativeWindowSystem(native.system);
+    handle->display = native.display;
+    handle->window = native.window;
+    handle->surface = native.surface;
+    handle->window_id = native.windowId;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_window_end_screen_device_change(
+[[nodiscard]] CNA_Result GameWindowEndScreenDeviceChange(
     const CNA_Handle gameHandle,
     const CNA_StringView screenDeviceName,
     const int32_t clientWidth,
     const int32_t clientHeight)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::string name;
-        if (const CNA_Result result =
-                ReadText(screenDeviceName, "The display name is not valid UTF-8.", &name);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // The canonical name-only overload is this one with the current client size, so a caller
-        // asks for that by passing a size this ABI reads as "keep it".
-        if (clientWidth < 1 || clientHeight < 1) {
-            return RequestWindowChange([&]() { window->EndScreenDeviceChange(name); });
-        }
-        return RequestWindowChange([&]() {
-            window->EndScreenDeviceChange(
-                name,
-                static_cast<SharpRuntime::intcs>(clientWidth),
-                static_cast<SharpRuntime::intcs>(clientHeight));
-        });
+    Microsoft::Xna::Framework::GameWindow* window = nullptr;
+    if (const CNA_Result result = GetGameWindow(gameHandle, &window);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string name;
+    if (const CNA_Result result =
+            ReadText(screenDeviceName, "The display name is not valid UTF-8.", &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // The canonical name-only overload is this one with the current client size, so a caller
+    // asks for that by passing a size this ABI reads as "keep it".
+    if (clientWidth < 1 || clientHeight < 1) {
+        return RequestWindowChange([&]() { window->EndScreenDeviceChange(name); });
+    }
+    return RequestWindowChange([&]() {
+        window->EndScreenDeviceChange(
+            name,
+            static_cast<SharpRuntime::intcs>(clientWidth),
+            static_cast<SharpRuntime::intcs>(clientHeight));
     });
 }
 
-CNA_Result cna_game_window_subscribe(
+[[nodiscard]] CNA_Result GameWindowSubscribe(
     const CNA_Handle gameHandle,
     const CNA_GameWindowEvent event,
     const CNA_GameEventCallback callback,
     void* const context,
     CNA_GameEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The window registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The window event callback is null.");
-        }
-        if (event > CNA_GAME_WINDOW_EVENT_MAXIMUM) {
-            return InvalidArgument("The window event is not a defined identity.");
-        }
-        Microsoft::Xna::Framework::GameWindow* window = nullptr;
-        if (const CNA_Result result = GetGameWindow(gameHandle, &window);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        System::EventHandler<System::EventArgs>* source = nullptr;
-        switch (event) {
-        case CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED:
-            source = &window->ClientSizeChanged;
-            break;
-        case CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED:
-            source = &window->OrientationChanged;
-            break;
-        default:
-            source = &window->ScreenDeviceNameChanged;
-            break;
-        }
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return CreateHandle(ObjectKind::GameEventRegistration,
-            TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The window event callback is null.");
+    }
+    if (event > CNA_GAME_WINDOW_EVENT_MAXIMUM) {
+        return InvalidArgument("The window event is not a defined identity.");
+    }
+    Microsoft::Xna::Framework::GameWindow* window = nullptr;
+    if (const CNA_Result result = GetGameWindow(gameHandle, &window);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    System::EventHandler<System::EventArgs>* source = nullptr;
+    switch (event) {
+    case CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED:
+        source = &window->ClientSizeChanged;
+        break;
+    case CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED:
+        source = &window->OrientationChanged;
+        break;
+    default:
+        source = &window->ScreenDeviceNameChanged;
+        break;
+    }
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return CreateHandle(ObjectKind::GameEventRegistration,
+        TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
+        outRegistration);
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/GameProperties.toml.
 #include "generated/GameProperties.inc"

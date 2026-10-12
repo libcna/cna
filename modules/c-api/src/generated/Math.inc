@@ -586,3 +586,112 @@ CNA_Result cna_rectangle_intersects(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_point_divide(
+    const CNA_Point left,
+    const CNA_Point right,
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_point_divide: out_value is null.");
+        }
+        return PointDivide(left, right, out_value);
+    });
+}
+
+CNA_Result cna_math_closest_msaa_power(
+    const int32_t value,
+    int32_t* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_math_closest_msaa_power: out_value is null.");
+        }
+        return MathClosestMsaaPower(value, out_value);
+    });
+}
+
+CNA_Result cna_point_get_zero(
+    CNA_Point* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PointGetZero(out_value);
+    });
+}
+
+CNA_Result cna_rectangle_get_empty(
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleGetEmpty(out_value);
+    });
+}
+
+CNA_Result cna_rectangle_set_location(
+    CNA_Rectangle* const value,
+    const CNA_Point location)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleSetLocation(value, location);
+    });
+}
+
+CNA_Result cna_rectangle_offset_point(
+    CNA_Rectangle* const value,
+    const CNA_Point offset)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleOffsetPoint(value, offset);
+    });
+}
+
+CNA_Result cna_rectangle_offset_xy(
+    CNA_Rectangle* const value,
+    const int32_t offset_x,
+    const int32_t offset_y)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleOffsetXy(value, offset_x, offset_y);
+    });
+}
+
+CNA_Result cna_rectangle_inflate(
+    CNA_Rectangle* const value,
+    const int32_t horizontal_value,
+    const int32_t vertical_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleInflate(value, horizontal_value, vertical_value);
+    });
+}
+
+CNA_Result cna_rectangle_intersect(
+    const CNA_Rectangle left,
+    const CNA_Rectangle right,
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleIntersect(left, right, out_value);
+    });
+}
+
+CNA_Result cna_rectangle_union(
+    const CNA_Rectangle left,
+    const CNA_Rectangle right,
+    CNA_Rectangle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleUnion(left, right, out_value);
+    });
+}
+
+CNA_Result cna_rectangle_contains_point(
+    const CNA_Rectangle value,
+    const CNA_Point point,
+    CNA_Bool* const out_contains)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return RectangleContainsPointRoute(value, point, out_contains);
+    });
+}

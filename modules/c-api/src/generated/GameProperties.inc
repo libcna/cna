@@ -810,3 +810,108 @@ CNA_Result cna_game_fps_to_milliseconds_per_frame_ext(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_game_subscribe(
+    const CNA_Handle game,
+    const CNA_GameEvent event,
+    const CNA_GameEventCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_subscribe: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GameSubscribe(game, event, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_title_container_read_ext(
+    const CNA_Handle game,
+    const CNA_StringView name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_title_container_read_ext: out_bytes is null.");
+        }
+        return TitleContainerReadExt(game, name, destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_game_window_get_client_bounds(
+    const CNA_Handle game,
+    CNA_Rectangle* const out_bounds)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bounds == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_window_get_client_bounds: out_bounds is null.");
+        }
+        return GameWindowGetClientBounds(game, out_bounds);
+    });
+}
+
+CNA_Result cna_game_window_subscribe(
+    const CNA_Handle game,
+    const CNA_GameWindowEvent event,
+    const CNA_GameEventCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_window_subscribe: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GameWindowSubscribe(game, event, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_game_unsubscribe(
+    const CNA_GameEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameUnsubscribe(registration);
+    });
+}
+
+CNA_Result cna_game_launch_parameters_parse_ext(
+    const CNA_Handle game,
+    const CNA_StringView* const arguments,
+    const uint64_t argument_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameLaunchParametersParseExt(game, arguments, argument_count);
+    });
+}
+
+CNA_Result cna_native_window_handle_init(
+    CNA_NativeWindowHandle* const handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return NativeWindowHandleInit(handle);
+    });
+}
+
+CNA_Result cna_game_window_get_native_window_ext(
+    const CNA_Handle game,
+    CNA_NativeWindowHandle* const handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameWindowGetNativeWindowExt(game, handle);
+    });
+}
+
+CNA_Result cna_game_window_end_screen_device_change(
+    const CNA_Handle game,
+    const CNA_StringView screen_device_name,
+    const int32_t client_width,
+    const int32_t client_height)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameWindowEndScreenDeviceChange(game, screen_device_name, client_width, client_height);
+    });
+}

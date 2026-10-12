@@ -23,33 +23,29 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector3;
 
+[[nodiscard]] CNA_Result QuaternionConjugateInPlace(CNA_Quaternion* const value)
+{
+    if (value == nullptr) {
+        return InvalidArgument("The Quaternion is null.");
+    }
+    Quaternion native = ToNative(*value);
+    native.Conjugate();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result QuaternionNormalizeInPlace(CNA_Quaternion* const value)
+{
+    if (value == nullptr) {
+        return InvalidArgument("The Quaternion is null.");
+    }
+    Quaternion native = ToNative(*value);
+    native.Normalize();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
+}
+
 } // namespace
-
-CNA_Result cna_quaternion_conjugate_in_place(CNA_Quaternion* const value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Quaternion is null.");
-        }
-        Quaternion native = ToNative(*value);
-        native.Conjugate();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_quaternion_normalize_in_place(CNA_Quaternion* const value)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Quaternion is null.");
-        }
-        Quaternion native = ToNative(*value);
-        native.Normalize();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
 
 // The routes generated from modules/c-api/spec/Quaternion.toml.
 #include "generated/Quaternion.inc"

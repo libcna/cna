@@ -96,3 +96,22 @@ object = "CNA::GraphicsRendererFallbackReason"
 [fallback_reason.routes]
 cna_graphics_renderer_fallback_reason_get_name_size_ext = { size = "std::string_view(CNA::getGraphicsRendererFallbackReasonName(object))" }
 cna_graphics_renderer_fallback_reason_copy_name_ext = { copy = "CNA::getGraphicsRendererFallbackReasonName(object)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_logger_log = { result = "LoggerLog(level, message, category, condition)" }
+cna_platform_get_current = { result = "PlatformGetCurrent(out_platform)" }
+cna_desktop_os_get_current = { result = "DesktopOsGetCurrent(out_os)" }
+cna_graphics_renderer_copy_available_ext = { result = "GraphicsRendererCopyAvailableExt(destination, capacity, out_count)" }
+cna_graphics_renderer_try_parse_name_ext = { result = "GraphicsRendererTryParseNameExt(name, out_type, out_recognized)" }
+cna_graphics_renderer_get_fallback_at_ext = { result = "GraphicsRendererGetFallbackAtExt(index, out_record)" }
+cna_graphics_backend_category_get_name_size = { result = "GraphicsBackendCategoryGetNameSize(category, out_bytes)", optional = ["out_bytes"] }
+cna_graphics_backend_maturity_get_name_size = { result = "GraphicsBackendMaturityGetNameSize(maturity, out_bytes)", optional = ["out_bytes"] }
+cna_logger_set_sink_ext = { result = "LoggerSetSinkExt(callback, context)" }
+cna_logger_reset_sink_ext = { result = "LoggerResetSinkExt()" }
+cna_graphics_renderer_set_fallback_chain_ext = { result = "GraphicsRendererSetFallbackChainExt(types, count)" }

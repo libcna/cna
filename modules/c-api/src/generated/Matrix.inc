@@ -716,3 +716,115 @@ CNA_Result cna_matrix_create_reflection(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_matrix_decompose(
+    const CNA_Matrix value,
+    CNA_Vector3* const out_scale,
+    CNA_Quaternion* const out_rotation,
+    CNA_Vector3* const out_translation,
+    CNA_Bool* const out_decomposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_scale == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_matrix_decompose: out_scale is null.");
+        }
+        if (out_rotation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_matrix_decompose: out_rotation is null.");
+        }
+        if (out_translation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_matrix_decompose: out_translation is null.");
+        }
+        if (out_decomposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_matrix_decompose: out_decomposed is null.");
+        }
+        return MatrixDecompose(value, out_scale, out_rotation, out_translation, out_decomposed);
+    });
+}
+
+CNA_Result cna_matrix_set_backward(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetBackward(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_set_down(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetDown(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_set_forward(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetForward(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_set_left(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetLeft(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_set_right(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetRight(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_set_translation(
+    CNA_Matrix* const value,
+    const CNA_Vector3 translation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetTranslation(value, translation);
+    });
+}
+
+CNA_Result cna_matrix_set_up(
+    CNA_Matrix* const value,
+    const CNA_Vector3 direction)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixSetUp(value, direction);
+    });
+}
+
+CNA_Result cna_matrix_create_billboard(
+    const CNA_Vector3 object_position,
+    const CNA_Vector3 camera_position,
+    const CNA_Vector3 camera_up,
+    const CNA_Vector3* const camera_forward,
+    CNA_Matrix* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixCreateBillboard(object_position, camera_position, camera_up, camera_forward, out_value);
+    });
+}
+
+CNA_Result cna_matrix_create_constrained_billboard(
+    const CNA_Vector3 object_position,
+    const CNA_Vector3 camera_position,
+    const CNA_Vector3 rotate_axis,
+    const CNA_Vector3* const camera_forward,
+    const CNA_Vector3* const object_forward,
+    CNA_Matrix* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return MatrixCreateConstrainedBillboard(object_position, camera_position, rotate_axis, camera_forward, object_forward, out_value);
+    });
+}

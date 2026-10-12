@@ -135,3 +135,22 @@ cna_vector4_smooth_step = { value = "Vector4::SmoothStep(value1, value2, amount)
 cna_vector4_subtract = { value = "Vector4::Subtract(left, right)" }
 cna_vector4_transform_matrix = { value = "Vector4::Transform(value, matrix)" }
 cna_vector4_transform_quaternion = { value = "Vector4::Transform(value, rotation)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_vector2_normalize_in_place = { result = "Vector2NormalizeInPlace(value)" }
+cna_vector2_transform_matrix_array = { result = "Vector2TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length)" }
+cna_vector2_transform_quaternion_array = { result = "Vector2TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length)" }
+cna_vector2_transform_normal_array = { result = "Vector2TransformNormalArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length)" }
+cna_vector3_normalize_in_place = { result = "Vector3NormalizeInPlace(value)" }
+cna_vector3_transform_matrix_array = { result = "Vector3TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length)" }
+cna_vector3_transform_quaternion_array = { result = "Vector3TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length)" }
+cna_vector3_transform_normal_array = { result = "Vector3TransformNormalArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length)" }
+cna_vector4_normalize_in_place = { result = "Vector4NormalizeInPlace(value)" }
+cna_vector4_transform_matrix_array = { result = "Vector4TransformMatrixArray(source, source_count, source_index, matrix, destination, destination_count, destination_index, length)" }
+cna_vector4_transform_quaternion_array = { result = "Vector4TransformQuaternionArray(source, source_count, source_index, rotation, destination, destination_count, destination_index, length)" }

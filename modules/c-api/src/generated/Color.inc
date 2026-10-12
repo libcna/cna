@@ -331,3 +331,21 @@ CNA_Result cna_color_multiply(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_color_set_packed_value(
+    CNA_Color* const color,
+    const uint32_t packed_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ColorSetPackedValue(color, packed_value);
+    });
+}
+
+CNA_Result cna_color_pack_from_vector4(
+    CNA_Color* const color,
+    const CNA_Vector4 vector)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ColorPackFromVector4(color, vector);
+    });
+}

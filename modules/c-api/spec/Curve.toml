@@ -61,3 +61,17 @@ cna_curve_key_get_tangent_out = { get = "ToNative(key).getTangentOutProperty()" 
 cna_curve_key_get_value = { get = "ToNative(key).getValueProperty()" }
 cna_curve_key_clone = { get = "ToNative(key).Clone()" }
 cna_curve_key_get_hash_code = { get = "ToNative(key).GetHashCode()" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_curve_key_collection_copy_to = { result = "CurveKeyCollectionCopyTo(collection, destination, capacity, destination_index, out_count)" }
+cna_curve_key_set_continuity = { result = "CurveKeySetContinuity(key, continuity)" }
+cna_curve_key_set_tangent_in = { result = "CurveKeySetTangentIn(key, tangent)" }
+cna_curve_key_set_tangent_out = { result = "CurveKeySetTangentOut(key, tangent)" }
+cna_curve_key_set_value = { result = "CurveKeySetValue(key, value)" }
+cna_curve_key_compare_to = { result = "CurveKeyCompareTo(value, other, out_comparison)" }

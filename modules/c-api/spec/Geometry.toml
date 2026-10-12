@@ -105,3 +105,24 @@ cna_bounding_frustum_copy_string = { copy = "value.ToString()" }
 [matrix]
 [matrix.routes]
 cna_bounding_frustum_init_matrix = { value = "BoundingFrustum(matrix)" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_bounding_box_copy_corners = { result = "BoundingBoxCopyCorners(value, destination, capacity, out_count)" }
+cna_bounding_box_create_from_points = { result = "BoundingBoxCreateFromPoints(points, count, out_value)" }
+cna_bounding_sphere_create_from_points = { result = "BoundingSphereCreateFromPoints(points, count, out_value)" }
+cna_bounding_frustum_copy_corners = { result = "BoundingFrustumCopyCorners(value, destination, capacity, out_count)" }
+cna_plane_normalize_in_place = { result = "PlaneNormalizeInPlace(value)" }
+cna_ray_intersects_box = { result = "RayIntersectsBox(ray, box, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_ray_intersects_sphere = { result = "RayIntersectsSphere(ray, sphere, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_ray_intersects_plane = { result = "RayIntersectsPlane(ray, plane, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_ray_intersects_frustum = { result = "RayIntersectsFrustum(ray, frustum, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_bounding_box_intersects_ray = { result = "BoundingBoxIntersectsRay(value, ray, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_bounding_sphere_intersects_ray = { result = "BoundingSphereIntersectsRay(value, ray, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }
+cna_bounding_frustum_contains_frustum = { result = "BoundingFrustumContainsFrustum(value, frustum, out_containment)", optional = ["out_containment"] }
+cna_bounding_frustum_intersects_ray = { result = "BoundingFrustumIntersectsRay(value, ray, out_hit, out_distance)", optional = ["out_hit", "out_distance"] }

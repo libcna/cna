@@ -108,3 +108,70 @@ CNA_Result cna_game_tick(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_game_create(
+    const CNA_GameCreateInfo* const create_info,
+    CNA_Handle* const out_game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_game == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_create: out_game is null.");
+        }
+        *out_game = CNA_INVALID_HANDLE;
+        return GameCreate(create_info, out_game);
+    });
+}
+
+CNA_Result cna_game_run_frame_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_running)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_running == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_run_frame_ext: out_running is null.");
+        }
+        return GameRunFrameExt(game, out_running);
+    });
+}
+
+CNA_Result cna_game_run_one_frame(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameRunOneFrame(game);
+    });
+}
+
+CNA_Result cna_game_run(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameRun(game);
+    });
+}
+
+CNA_Result cna_game_clear(
+    const CNA_Handle game,
+    const CNA_Color color)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameClear(game, color);
+    });
+}
+
+CNA_Result cna_game_set_frame_hooks_ext(
+    const CNA_Handle game,
+    const CNA_GameFrameHooks* const hooks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameSetFrameHooksExt(game, hooks);
+    });
+}
+
+CNA_Result cna_game_destroy(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameDestroy(game);
+    });
+}

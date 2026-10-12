@@ -34,39 +34,35 @@ using Microsoft::Xna::Framework::Vector4;
     return std::bit_cast<int32_t>(product) / 255;
 }
 
-} // namespace
-
-CNA_Result cna_color_set_packed_value(
+[[nodiscard]] CNA_Result ColorSetPackedValue(
     CNA_Color* const color,
     const uint32_t packedValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (color == nullptr) {
-            return InvalidArgument("The Color pointer is null.");
-        }
-        Color native(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
-        native.setPackedValueProperty(packedValue);
-        const CNA_Color result = ToC(native);
-        *color = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (color == nullptr) {
+        return InvalidArgument("The Color pointer is null.");
+    }
+    Color native(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+    native.setPackedValueProperty(packedValue);
+    const CNA_Color result = ToC(native);
+    *color = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_color_pack_from_vector4(
+[[nodiscard]] CNA_Result ColorPackFromVector4(
     CNA_Color* const color,
     const CNA_Vector4 vector)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (color == nullptr) {
-            return InvalidArgument("The Color pointer is null.");
-        }
-        Color native = ToNative(*color);
-        native.PackFromVector4(ToNative(vector));
-        const CNA_Color result = ToC(native);
-        *color = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    if (color == nullptr) {
+        return InvalidArgument("The Color pointer is null.");
+    }
+    Color native = ToNative(*color);
+    native.PackFromVector4(ToNative(vector));
+    const CNA_Color result = ToC(native);
+    *color = result;
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Color.toml.
 #include "generated/Color.inc"

@@ -60,22 +60,18 @@ template<typename TCallable>
     });
 }
 
-} // namespace
-
-CNA_Result cna_plane_normalize_in_place(CNA_Plane* const value)
+[[nodiscard]] CNA_Result PlaneNormalizeInPlace(CNA_Plane* const value)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (value == nullptr) {
-            return InvalidArgument("The Plane is null.");
-        }
-        Plane native = ToNative(*value);
-        native.Normalize();
-        *value = ToC(native);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (value == nullptr) {
+        return InvalidArgument("The Plane is null.");
+    }
+    Plane native = ToNative(*value);
+    native.Normalize();
+    *value = ToC(native);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_ray_intersects_box(
+[[nodiscard]] CNA_Result RayIntersectsBox(
     const CNA_Ray ray,
     const CNA_BoundingBox box,
     CNA_Bool* const outHit,
@@ -86,7 +82,7 @@ CNA_Result cna_ray_intersects_box(
     });
 }
 
-CNA_Result cna_ray_intersects_sphere(
+[[nodiscard]] CNA_Result RayIntersectsSphere(
     const CNA_Ray ray,
     const CNA_BoundingSphere sphere,
     CNA_Bool* const outHit,
@@ -97,7 +93,7 @@ CNA_Result cna_ray_intersects_sphere(
     });
 }
 
-CNA_Result cna_ray_intersects_plane(
+[[nodiscard]] CNA_Result RayIntersectsPlane(
     const CNA_Ray ray,
     const CNA_Plane plane,
     CNA_Bool* const outHit,
@@ -108,7 +104,7 @@ CNA_Result cna_ray_intersects_plane(
     });
 }
 
-CNA_Result cna_ray_intersects_frustum(
+[[nodiscard]] CNA_Result RayIntersectsFrustum(
     const CNA_Ray ray,
     const CNA_BoundingFrustum frustum,
     CNA_Bool* const outHit,
@@ -119,30 +115,28 @@ CNA_Result cna_ray_intersects_frustum(
     });
 }
 
-CNA_Result cna_bounding_box_copy_corners(
+[[nodiscard]] CNA_Result BoundingBoxCopyCorners(
     const CNA_BoundingBox value,
     CNA_Vector3* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The corner destination or required-count output is invalid.");
-        }
-        constexpr uint64_t RequiredCount = CNA_BOUNDING_BOX_CORNER_COUNT;
-        *outCount = RequiredCount;
-        if (capacity < RequiredCount) {
-            return BufferTooSmall("The destination cannot hold all BoundingBox corners.");
-        }
-        const std::vector<Vector3> corners = ToNative(value).GetCorners();
-        for (uint64_t index = 0U; index < RequiredCount; ++index) {
-            destination[index] = ToC(corners[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The corner destination or required-count output is invalid.");
+    }
+    constexpr uint64_t RequiredCount = CNA_BOUNDING_BOX_CORNER_COUNT;
+    *outCount = RequiredCount;
+    if (capacity < RequiredCount) {
+        return BufferTooSmall("The destination cannot hold all BoundingBox corners.");
+    }
+    const std::vector<Vector3> corners = ToNative(value).GetCorners();
+    for (uint64_t index = 0U; index < RequiredCount; ++index) {
+        destination[index] = ToC(corners[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_bounding_box_intersects_ray(
+[[nodiscard]] CNA_Result BoundingBoxIntersectsRay(
     const CNA_BoundingBox value,
     const CNA_Ray ray,
     CNA_Bool* const outHit,
@@ -153,71 +147,61 @@ CNA_Result cna_bounding_box_intersects_ray(
     });
 }
 
-CNA_Result cna_bounding_box_create_from_points(
+[[nodiscard]] CNA_Result BoundingBoxCreateFromPoints(
     const CNA_Vector3* const points,
     const uint64_t count,
     CNA_BoundingBox* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BoundingBox output is null.");
-        }
-        std::size_t byteCount = 0U;
-        const CNA_Result validation = CheckedElementByteCount(
-            points, count, sizeof(CNA_Vector3), &byteCount);
-        if (validation != CNA_RESULT_SUCCESS) {
-            return Fail(
-                validation,
-                ErrorCategoryForResult(validation),
-                "The point array or count is invalid.");
-        }
-        if (count == 0U) {
-            return InvalidArgument("The point array is empty.");
-        }
-        std::vector<Vector3> nativePoints;
-        nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
-        for (uint64_t index = 0U; index < count; ++index) {
-            nativePoints.push_back(ToNative(points[index]));
-        }
-        const CNA_BoundingBox result = ToC(BoundingBox::CreateFromPoints(nativePoints));
-        *outValue = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    const CNA_Result validation = CheckedElementByteCount(
+        points, count, sizeof(CNA_Vector3), &byteCount);
+    if (validation != CNA_RESULT_SUCCESS) {
+        return Fail(
+            validation,
+            ErrorCategoryForResult(validation),
+            "The point array or count is invalid.");
+    }
+    if (count == 0U) {
+        return InvalidArgument("The point array is empty.");
+    }
+    std::vector<Vector3> nativePoints;
+    nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
+    for (uint64_t index = 0U; index < count; ++index) {
+        nativePoints.push_back(ToNative(points[index]));
+    }
+    const CNA_BoundingBox result = ToC(BoundingBox::CreateFromPoints(nativePoints));
+    *outValue = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_bounding_sphere_create_from_points(
+[[nodiscard]] CNA_Result BoundingSphereCreateFromPoints(
     const CNA_Vector3* const points,
     const uint64_t count,
     CNA_BoundingSphere* const outValue)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outValue == nullptr) {
-            return InvalidArgument("The BoundingSphere output is null.");
-        }
-        std::size_t byteCount = 0U;
-        const CNA_Result validation = CheckedElementByteCount(
-            points, count, sizeof(CNA_Vector3), &byteCount);
-        if (validation != CNA_RESULT_SUCCESS) {
-            return Fail(
-                validation,
-                ErrorCategoryForResult(validation),
-                "The point array or count is invalid.");
-        }
-        if (count == 0U) {
-            return InvalidArgument("The point array is empty.");
-        }
-        std::vector<Vector3> nativePoints;
-        nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
-        for (uint64_t index = 0U; index < count; ++index) {
-            nativePoints.push_back(ToNative(points[index]));
-        }
-        const CNA_BoundingSphere result = ToC(BoundingSphere::CreateFromPoints(nativePoints));
-        *outValue = result;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::size_t byteCount = 0U;
+    const CNA_Result validation = CheckedElementByteCount(
+        points, count, sizeof(CNA_Vector3), &byteCount);
+    if (validation != CNA_RESULT_SUCCESS) {
+        return Fail(
+            validation,
+            ErrorCategoryForResult(validation),
+            "The point array or count is invalid.");
+    }
+    if (count == 0U) {
+        return InvalidArgument("The point array is empty.");
+    }
+    std::vector<Vector3> nativePoints;
+    nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
+    for (uint64_t index = 0U; index < count; ++index) {
+        nativePoints.push_back(ToNative(points[index]));
+    }
+    const CNA_BoundingSphere result = ToC(BoundingSphere::CreateFromPoints(nativePoints));
+    *outValue = result;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_bounding_sphere_intersects_ray(
+[[nodiscard]] CNA_Result BoundingSphereIntersectsRay(
     const CNA_BoundingSphere value,
     const CNA_Ray ray,
     CNA_Bool* const outHit,
@@ -228,7 +212,7 @@ CNA_Result cna_bounding_sphere_intersects_ray(
     });
 }
 
-CNA_Result cna_bounding_frustum_contains_frustum(
+[[nodiscard]] CNA_Result BoundingFrustumContainsFrustum(
     const CNA_BoundingFrustum value,
     const CNA_BoundingFrustum frustum,
     CNA_ContainmentType* const outContainment)
@@ -244,30 +228,28 @@ CNA_Result cna_bounding_frustum_contains_frustum(
     });
 }
 
-CNA_Result cna_bounding_frustum_copy_corners(
+[[nodiscard]] CNA_Result BoundingFrustumCopyCorners(
     const CNA_BoundingFrustum value,
     CNA_Vector3* const destination,
     const uint64_t capacity,
     uint64_t* const outCount)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
-            return InvalidArgument("The corner destination or required-count output is invalid.");
-        }
-        constexpr uint64_t RequiredCount = CNA_BOUNDING_FRUSTUM_CORNER_COUNT;
-        *outCount = RequiredCount;
-        if (capacity < RequiredCount) {
-            return BufferTooSmall("The destination cannot hold all BoundingFrustum corners.");
-        }
-        const std::vector<Vector3> corners = ToNative(value).GetCorners();
-        for (uint64_t index = 0U; index < RequiredCount; ++index) {
-            destination[index] = ToC(corners[static_cast<std::size_t>(index)]);
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if ((destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The corner destination or required-count output is invalid.");
+    }
+    constexpr uint64_t RequiredCount = CNA_BOUNDING_FRUSTUM_CORNER_COUNT;
+    *outCount = RequiredCount;
+    if (capacity < RequiredCount) {
+        return BufferTooSmall("The destination cannot hold all BoundingFrustum corners.");
+    }
+    const std::vector<Vector3> corners = ToNative(value).GetCorners();
+    for (uint64_t index = 0U; index < RequiredCount; ++index) {
+        destination[index] = ToC(corners[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_bounding_frustum_intersects_ray(
+[[nodiscard]] CNA_Result BoundingFrustumIntersectsRay(
     const CNA_BoundingFrustum value,
     const CNA_Ray ray,
     CNA_Bool* const outHit,
@@ -277,6 +259,8 @@ CNA_Result cna_bounding_frustum_intersects_ray(
         return ToNative(value).Intersects(ToNative(ray));
     });
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/Geometry.toml.
 #include "generated/Geometry.inc"

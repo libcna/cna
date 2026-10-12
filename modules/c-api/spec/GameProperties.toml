@@ -77,3 +77,20 @@ cna_game_launch_parameters_copy_key = { copy = "object" }
 [values]
 [values.routes]
 cna_game_fps_to_milliseconds_per_frame_ext = { value = "Game::fpsToMillisecondsPerFrame(static_cast<SharpRuntime::intcs>(frames_per_second))" }
+
+# The routes whose logic is a hand-written helper of the same name, in CamelCase. The
+# generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
+# inputs first; C structures and text reach the helper as the caller passed them.
+[helpers]
+raw = true
+
+[helpers.routes]
+cna_game_subscribe = { result = "GameSubscribe(game, event, callback, context, out_registration)" }
+cna_title_container_read_ext = { result = "TitleContainerReadExt(game, name, destination, capacity, out_bytes)" }
+cna_game_window_get_client_bounds = { result = "GameWindowGetClientBounds(game, out_bounds)" }
+cna_game_window_subscribe = { result = "GameWindowSubscribe(game, event, callback, context, out_registration)" }
+cna_game_unsubscribe = { result = "GameUnsubscribe(registration)" }
+cna_game_launch_parameters_parse_ext = { result = "GameLaunchParametersParseExt(game, arguments, argument_count)" }
+cna_native_window_handle_init = { result = "NativeWindowHandleInit(handle)" }
+cna_game_window_get_native_window_ext = { result = "GameWindowGetNativeWindowExt(game, handle)" }
+cna_game_window_end_screen_device_change = { result = "GameWindowEndScreenDeviceChange(game, screen_device_name, client_width, client_height)" }

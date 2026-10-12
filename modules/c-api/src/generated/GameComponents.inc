@@ -495,3 +495,136 @@ CNA_Result cna_game_component_compare_to(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_game_component_callbacks_init(
+    CNA_GameComponentCallbacks* const out_callbacks)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_callbacks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_callbacks_init: out_callbacks is null.");
+        }
+        return GameComponentCallbacksInit(out_callbacks);
+    });
+}
+
+CNA_Result cna_game_component_get_game(
+    const CNA_GameComponentHandle component,
+    CNA_Handle* const out_game)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_game == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_get_game: out_game is null.");
+        }
+        *out_game = CNA_INVALID_HANDLE;
+        return GameComponentGetGame(component, out_game);
+    });
+}
+
+CNA_Result cna_drawable_game_component_get_graphics_device(
+    const CNA_GameComponentHandle component,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_drawable_game_component_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        return DrawableGameComponentGetGraphicsDevice(component, out_graphics_device);
+    });
+}
+
+CNA_Result cna_game_component_subscribe(
+    const CNA_GameComponentHandle component,
+    const CNA_GameComponentEvent event,
+    const CNA_GameComponentEventCallback callback,
+    void* const context,
+    CNA_GameComponentEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_subscribe: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return GameComponentSubscribe(component, event, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_game_components_get_at(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_GameComponentHandle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_get_at: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        return GameComponentsGetAt(game, index, out_component);
+    });
+}
+
+CNA_Result cna_game_services_contains_ext(
+    const CNA_Handle game,
+    const CNA_GameServiceType service,
+    CNA_Bool* const out_present)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_present == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_services_contains_ext: out_present is null.");
+        }
+        return GameServicesContainsExt(game, service, out_present);
+    });
+}
+
+CNA_Result cna_game_component_update(
+    const CNA_GameComponentHandle component,
+    const CNA_GameTime* const game_time)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameComponentUpdate(component, game_time);
+    });
+}
+
+CNA_Result cna_drawable_game_component_draw(
+    const CNA_GameComponentHandle component,
+    const CNA_GameTime* const game_time)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DrawableGameComponentDraw(component, game_time);
+    });
+}
+
+CNA_Result cna_game_component_unsubscribe(
+    const CNA_GameComponentEventRegistrationHandle registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameComponentUnsubscribe(registration);
+    });
+}
+
+CNA_Result cna_game_component_destroy(
+    const CNA_GameComponentHandle component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameComponentDestroy(component);
+    });
+}
+
+CNA_Result cna_game_components_insert(
+    const CNA_Handle game,
+    const uint64_t index,
+    const CNA_GameComponentHandle component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameComponentsInsert(game, index, component);
+    });
+}
+
+CNA_Result cna_game_services_remove_ext(
+    const CNA_Handle game,
+    const CNA_GameServiceType service)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameServicesRemoveExt(game, service);
+    });
+}

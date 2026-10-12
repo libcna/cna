@@ -408,247 +408,209 @@ CNA_Result CreateOwnedCanonicalGameComponent(
 
 } // namespace CNA::C::Detail
 
-CNA_Result cna_game_component_callbacks_init(CNA_GameComponentCallbacks* const outCallbacks)
+namespace {
+
+[[nodiscard]] CNA_Result GameComponentCallbacksInit(CNA_GameComponentCallbacks* const outCallbacks)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outCallbacks == nullptr) {
-            return InvalidArgument("The component callback output is null.");
-        }
-        CNA_GameComponentCallbacks callbacks = {};
-        callbacks.struct_size = sizeof(CNA_GameComponentCallbacks);
-        callbacks.struct_version = StructureVersion;
-        *outCallbacks = callbacks;
-        return CNA_RESULT_SUCCESS;
-    });
+    CNA_GameComponentCallbacks callbacks = {};
+    callbacks.struct_size = sizeof(CNA_GameComponentCallbacks);
+    callbacks.struct_version = StructureVersion;
+    *outCallbacks = callbacks;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_component_get_game(
+[[nodiscard]] CNA_Result GameComponentGetGame(
     const CNA_GameComponentHandle component,
     CNA_Handle* const outGame)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGame == nullptr) {
-            return InvalidArgument("The game output is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Reading the canonical property proves the component still points at the same game the
-        // handle records; the handle is what a C caller can use.
-        (void)&resource->value->getGameProperty();
-        *outGame = resource->game;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowComponent(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Reading the canonical property proves the component still points at the same game the
+    // handle records; the handle is what a C caller can use.
+    (void)&resource->value->getGameProperty();
+    *outGame = resource->game;
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_drawable_game_component_get_graphics_device(
+[[nodiscard]] CNA_Result DrawableGameComponentGetGraphicsDevice(
     const CNA_GameComponentHandle component,
     CNA_Handle* const outGraphicsDevice)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The graphics device output is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        // Reading the canonical property first keeps the failure the canonical one when the game has
-        // no device; the handle a caller gets is the game's own borrowed device.
-        (void)&resource->drawable->getGraphicsDeviceProperty();
-        return CNA::C::Detail::BorrowGameGraphicsDevice(resource->game, outGraphicsDevice);
-    });
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowDrawable(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Reading the canonical property first keeps the failure the canonical one when the game has
+    // no device; the handle a caller gets is the game's own borrowed device.
+    (void)&resource->drawable->getGraphicsDeviceProperty();
+    return CNA::C::Detail::BorrowGameGraphicsDevice(resource->game, outGraphicsDevice);
 }
 
-CNA_Result cna_game_component_update(
+[[nodiscard]] CNA_Result GameComponentUpdate(
     const CNA_GameComponentHandle component,
     const CNA_GameTime* const gameTime)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (gameTime == nullptr) {
-            return InvalidArgument("The game time is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameTime value = ToGameTime(*gameTime);
-        resource->value->Update(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (gameTime == nullptr) {
+        return InvalidArgument("The game time is null.");
+    }
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowComponent(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    GameTime value = ToGameTime(*gameTime);
+    resource->value->Update(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_drawable_game_component_draw(
+[[nodiscard]] CNA_Result DrawableGameComponentDraw(
     const CNA_GameComponentHandle component,
     const CNA_GameTime* const gameTime)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (gameTime == nullptr) {
-            return InvalidArgument("The game time is null.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowDrawable(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const GameTime value = ToGameTime(*gameTime);
-        resource->drawable->Draw(value);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (gameTime == nullptr) {
+        return InvalidArgument("The game time is null.");
+    }
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowDrawable(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const GameTime value = ToGameTime(*gameTime);
+    resource->drawable->Draw(value);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_component_subscribe(
+[[nodiscard]] CNA_Result GameComponentSubscribe(
     const CNA_GameComponentHandle component,
     const CNA_GameComponentEvent event,
     const CNA_GameComponentEventCallback callback,
     void* const context,
     CNA_GameComponentEventRegistrationHandle* const outRegistration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outRegistration == nullptr) {
-            return InvalidArgument("The component registration output is null.");
-        }
-        *outRegistration = CNA_INVALID_HANDLE;
-        if (callback == nullptr) {
-            return InvalidArgument("The component event callback is null.");
-        }
-        if (event > CNA_GAME_COMPONENT_EVENT_MAXIMUM) {
-            return InvalidArgument("The component event is not a defined identity.");
-        }
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if ((event == CNA_GAME_COMPONENT_EVENT_DRAW_ORDER_CHANGED ||
-             event == CNA_GAME_COMPONENT_EVENT_VISIBLE_CHANGED) &&
-            resource->drawable == nullptr) {
-            return NotDrawable();
-        }
-        System::EventHandler<System::EventArgs>* source = nullptr;
-        switch (event) {
-        case CNA_GAME_COMPONENT_EVENT_ENABLED_CHANGED:
-            source = &resource->value->getEnabledChangedEvent();
-            break;
-        case CNA_GAME_COMPONENT_EVENT_UPDATE_ORDER_CHANGED:
-            source = &resource->value->getUpdateOrderChangedEvent();
-            break;
-        case CNA_GAME_COMPONENT_EVENT_DRAW_ORDER_CHANGED:
-            source = &resource->drawable->getDrawOrderChangedEvent();
-            break;
-        case CNA_GAME_COMPONENT_EVENT_VISIBLE_CHANGED:
-            source = &resource->drawable->getVisibleChangedEvent();
-            break;
-        default:
-            source = &resource->value->Disposed;
-            break;
-        }
-        const auto token = source->Add(
-            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
-        return PublishRegistration(
-            std::make_shared<ComponentRegistration<System::EventArgs>>(resource, source, token),
-            outRegistration);
-    });
+    if (callback == nullptr) {
+        return InvalidArgument("The component event callback is null.");
+    }
+    if (event > CNA_GAME_COMPONENT_EVENT_MAXIMUM) {
+        return InvalidArgument("The component event is not a defined identity.");
+    }
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowComponent(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((event == CNA_GAME_COMPONENT_EVENT_DRAW_ORDER_CHANGED ||
+         event == CNA_GAME_COMPONENT_EVENT_VISIBLE_CHANGED) &&
+        resource->drawable == nullptr) {
+        return NotDrawable();
+    }
+    System::EventHandler<System::EventArgs>* source = nullptr;
+    switch (event) {
+    case CNA_GAME_COMPONENT_EVENT_ENABLED_CHANGED:
+        source = &resource->value->getEnabledChangedEvent();
+        break;
+    case CNA_GAME_COMPONENT_EVENT_UPDATE_ORDER_CHANGED:
+        source = &resource->value->getUpdateOrderChangedEvent();
+        break;
+    case CNA_GAME_COMPONENT_EVENT_DRAW_ORDER_CHANGED:
+        source = &resource->drawable->getDrawOrderChangedEvent();
+        break;
+    case CNA_GAME_COMPONENT_EVENT_VISIBLE_CHANGED:
+        source = &resource->drawable->getVisibleChangedEvent();
+        break;
+    default:
+        source = &resource->value->Disposed;
+        break;
+    }
+    const auto token = source->Add(
+        [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+    return PublishRegistration(
+        std::make_shared<ComponentRegistration<System::EventArgs>>(resource, source, token),
+        outRegistration);
 }
 
-CNA_Result cna_game_component_unsubscribe(
+[[nodiscard]] CNA_Result GameComponentUnsubscribe(
     const CNA_GameComponentEventRegistrationHandle registration)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentRegistrationBase> value;
-        if (const CNA_Result result =
-                LookupHandle(registration, ObjectKind::GameComponentEventRegistration, &value);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return ReleaseHandle(registration);
-    });
+    std::shared_ptr<ComponentRegistrationBase> value;
+    if (const CNA_Result result =
+            LookupHandle(registration, ObjectKind::GameComponentEventRegistration, &value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return ReleaseHandle(registration);
 }
 
-CNA_Result cna_game_component_destroy(const CNA_GameComponentHandle component)
+[[nodiscard]] CNA_Result GameComponentDestroy(const CNA_GameComponentHandle component)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowComponent(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // A handle-based ABI must not leave the runtime holding a pointer to something it has
+    // released, so membership ends here even though the canonical destructor leaves it alone.
+    GameComponentCollection* components = nullptr;
+    if (BorrowComponents(resource->game, &components) == CNA_RESULT_SUCCESS) {
+        while (components->Remove(resource->value.get())) {
         }
-        // A handle-based ABI must not leave the runtime holding a pointer to something it has
-        // released, so membership ends here even though the canonical destructor leaves it alone.
-        GameComponentCollection* components = nullptr;
-        if (BorrowComponents(resource->game, &components) == CNA_RESULT_SUCCESS) {
-            while (components->Remove(resource->value.get())) {
-            }
-        }
-        {
-            const std::lock_guard<std::mutex> lock(ComponentRegistryMutex());
-            ComponentRegistry().erase(resource->value.get());
-        }
-        if (const CNA_Result result = ReleaseHandle(component);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        CNA::C::Detail::RemoveOwnedGameComponent();
-        return CNA_RESULT_SUCCESS;
-    });
+    }
+    {
+        const std::lock_guard<std::mutex> lock(ComponentRegistryMutex());
+        ComponentRegistry().erase(resource->value.get());
+    }
+    if (const CNA_Result result = ReleaseHandle(component);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::C::Detail::RemoveOwnedGameComponent();
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_components_get_at(
+[[nodiscard]] CNA_Result GameComponentsGetAt(
     const CNA_Handle gameHandle,
     const uint64_t index,
     CNA_GameComponentHandle* const outComponent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outComponent == nullptr) {
-            return InvalidArgument("The component output is null.");
-        }
-        *outComponent = CNA_INVALID_HANDLE;
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(components->getCountProperty())) {
-            return OutOfRange("The component index is at or past the collection count.");
-        }
-        *outComponent = HandleForComponent(
-            (*components)[static_cast<GameComponentCollection::size_type>(index)]);
-        return CNA_RESULT_SUCCESS;
-    });
+    GameComponentCollection* components = nullptr;
+    if (const CNA_Result result = BorrowComponents(gameHandle, &components);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index >= static_cast<uint64_t>(components->getCountProperty())) {
+        return OutOfRange("The component index is at or past the collection count.");
+    }
+    *outComponent = HandleForComponent(
+        (*components)[static_cast<GameComponentCollection::size_type>(index)]);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_components_insert(
+[[nodiscard]] CNA_Result GameComponentsInsert(
     const CNA_Handle gameHandle,
     const uint64_t index,
     const CNA_GameComponentHandle component)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ComponentResource> resource;
-        if (const CNA_Result result = BorrowComponent(component, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index > static_cast<uint64_t>(components->getCountProperty())) {
-            return OutOfRange("The insert index is past the collection count.");
-        }
-        components->Insert(
-            static_cast<GameComponentCollection::size_type>(index),
-            resource->value.get());
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<ComponentResource> resource;
+    if (const CNA_Result result = BorrowComponent(component, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    GameComponentCollection* components = nullptr;
+    if (const CNA_Result result = BorrowComponents(gameHandle, &components);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (index > static_cast<uint64_t>(components->getCountProperty())) {
+        return OutOfRange("The insert index is past the collection count.");
+    }
+    components->Insert(
+        static_cast<GameComponentCollection::size_type>(index),
+        resource->value.get());
+    return CNA_RESULT_SUCCESS;
 }
-
-namespace {
 
 [[nodiscard]] CNA_Result SubscribeCollection(
     const CNA_Handle gameHandle,
@@ -683,57 +645,50 @@ namespace {
         outRegistration);
 }
 
-} // namespace
-
-CNA_Result cna_game_services_contains_ext(
+[[nodiscard]] CNA_Result GameServicesContainsExt(
     const CNA_Handle gameHandle,
     const CNA_GameServiceType service,
     CNA_Bool* const outPresent)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPresent == nullptr) {
-            return InvalidArgument("The service presence output is null.");
-        }
-        if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
-            return InvalidArgument("The game service is not a defined identity.");
-        }
-        GameServiceContainer* services = nullptr;
-        if (const CNA_Result result = BorrowServices(gameHandle, &services);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const void* found =
-            service == CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER
-            ? static_cast<const void*>(
-                  services->GetService<Microsoft::Xna::Framework::IGraphicsDeviceManager>())
-            : static_cast<const void*>(
-                  services->GetService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>());
-        *outPresent = ToCBool(found != nullptr);
-        return CNA_RESULT_SUCCESS;
-    });
+    if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
+        return InvalidArgument("The game service is not a defined identity.");
+    }
+    GameServiceContainer* services = nullptr;
+    if (const CNA_Result result = BorrowServices(gameHandle, &services);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const void* found =
+        service == CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER
+        ? static_cast<const void*>(
+              services->GetService<Microsoft::Xna::Framework::IGraphicsDeviceManager>())
+        : static_cast<const void*>(
+              services->GetService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>());
+    *outPresent = ToCBool(found != nullptr);
+    return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result cna_game_services_remove_ext(
+[[nodiscard]] CNA_Result GameServicesRemoveExt(
     const CNA_Handle gameHandle,
     const CNA_GameServiceType service)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
-            return InvalidArgument("The game service is not a defined identity.");
-        }
-        GameServiceContainer* services = nullptr;
-        if (const CNA_Result result = BorrowServices(gameHandle, &services);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (service == CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER) {
-            services->RemoveService<Microsoft::Xna::Framework::IGraphicsDeviceManager>();
-        } else {
-            services->RemoveService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>();
-        }
-        return CNA_RESULT_SUCCESS;
-    });
+    if (service > CNA_GAME_SERVICE_TYPE_MAXIMUM) {
+        return InvalidArgument("The game service is not a defined identity.");
+    }
+    GameServiceContainer* services = nullptr;
+    if (const CNA_Result result = BorrowServices(gameHandle, &services);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (service == CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER) {
+        services->RemoveService<Microsoft::Xna::Framework::IGraphicsDeviceManager>();
+    } else {
+        services->RemoveService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>();
+    }
+    return CNA_RESULT_SUCCESS;
 }
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/GameComponents.toml.
 #include "generated/GameComponents.inc"

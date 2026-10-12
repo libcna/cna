@@ -726,3 +726,67 @@ CNA_Result cna_curve_key_get_hash_code(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_curve_key_collection_copy_to(
+    const CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey* const destination,
+    const uint64_t capacity,
+    const int32_t destination_index,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_collection_copy_to: out_count is null.");
+        }
+        return CurveKeyCollectionCopyTo(collection, destination, capacity, destination_index, out_count);
+    });
+}
+
+CNA_Result cna_curve_key_set_continuity(
+    CNA_CurveKey* const key,
+    const CNA_CurveContinuity continuity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CurveKeySetContinuity(key, continuity);
+    });
+}
+
+CNA_Result cna_curve_key_set_tangent_in(
+    CNA_CurveKey* const key,
+    const float tangent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CurveKeySetTangentIn(key, tangent);
+    });
+}
+
+CNA_Result cna_curve_key_set_tangent_out(
+    CNA_CurveKey* const key,
+    const float tangent)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CurveKeySetTangentOut(key, tangent);
+    });
+}
+
+CNA_Result cna_curve_key_set_value(
+    CNA_CurveKey* const key,
+    const float value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CurveKeySetValue(key, value);
+    });
+}
+
+CNA_Result cna_curve_key_compare_to(
+    const CNA_CurveKey value,
+    const CNA_CurveKey other,
+    int32_t* const out_comparison)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_comparison == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_curve_key_compare_to: out_comparison is null.");
+        }
+        return CurveKeyCompareTo(value, other, out_comparison);
+    });
+}
