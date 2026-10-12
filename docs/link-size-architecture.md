@@ -186,11 +186,10 @@ contains none of them either.
 ## What a 2D game still contains, and why
 
 The largest members of the 2D consumer are the renderer, image decoding, the device, `Game`,
-sharp-runtime's strings and the Guide UI that `ShowMarketplace` and the message box draw. Three
-items are reachable without being used, and each needs a change beyond CNA's module structure:
+sharp-runtime's strings and the Guide UI that `ShowMarketplace` and the message box draw. Two more
+items can be linked without being used; removing either takes more than a module boundary:
 
-| Linked | Size (EasyGL) | Through |
+| Linked | Size | Through |
 |---|---|---|
-| MojoShader and the renderer's compiled-effect support | ~330 KB | every renderer can draw XNA compiled effects, and SpriteBatch's custom-effect path applies XNA's SpriteEffect through them; separating them means installing each renderer's compiled-effect factory on the first `Effect` |
-| MojoShader's SPIR-V profile in a GL-only build | ~87 KB | MojoShader's own profile table names every profile it is compiled with; trimming it is a per-build MojoShader configuration |
-| sharp-runtime's `Decimal` | ~30 KB | `System::IO::BinaryReader::ReadDecimal` sits in `BinaryReader.cpp`, which every `.xnb` load uses |
+| sharp-runtime's `Decimal` | ~30 KB | `System::IO::BinaryReader::ReadDecimal` is virtual, as in .NET, and every content read goes through a `BinaryReader`-derived `ContentReader`, so its vtable names it; dropping it would mean making `ReadDecimal` non-virtual |
+| MojoShader, the renderer's compiled-effect support and MojoShader's SPIR-V profile | ~420 KB (EasyGL) | **only in a build that opts into compiled XNA effects** (`CNA_<RENDERER>_COMPILED_EFFECTS`, all OFF by default; Mobile Eggbert's default build contains none of it). Such a build gives every renderer that support, and EasyGL's sprite renderer prepares XNA's SpriteEffect for custom-effect batches. Keeping it out of such a build's 2D games would mean installing each renderer's compiled-effect factory on the first `Effect`, and configuring MojoShader's profiles per build |
