@@ -12,6 +12,7 @@ cna_content_reader_initialize_type_readers = { call = "object->value->Initialize
 cna_content_reader_read_shared_resources = { call = "object->value->ReadSharedResources()" }
 cna_content_reader_get_version = { get = "object->value->getVersionProperty()" }
 cna_content_reader_get_platform = { get = "object->value->getPlatformProperty()" }
+cna_content_reader_destroy = { release = true, require = 'InvalidStateIf(object->isBorrowed, "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is released when the callback that received it returns.")' }
 
 [copy_reader_name]
 lookup = "CopyReaderName"

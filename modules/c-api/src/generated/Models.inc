@@ -546,6 +546,24 @@ CNA_Result cna_model_mesh_destroy(
     });
 }
 
+CNA_Result cna_model_mesh_draw(
+    const CNA_ModelMeshHandle mesh)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> object{};
+        if (const CNA_Result routeResult = GetMesh(mesh, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = NotSupportedIf(!object->supportsThreeD, "ModelMesh drawing requires a renderer with 3D support.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Draw();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_model_mesh_collection_get_count(
     const CNA_ModelMeshCollectionHandle collection,
     uint64_t* const out_count)
@@ -756,6 +774,30 @@ CNA_Result cna_model_get_tag(
             return routeResult;
         }
         *out_tag = static_cast<CNA_ModelTag>(object->tag);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_draw(
+    const CNA_ModelHandle model,
+    const CNA_Matrix c_world,
+    const CNA_Matrix c_view,
+    const CNA_Matrix c_projection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto world = CNA::C::Detail::ToNative(c_world);
+        const auto view = CNA::C::Detail::ToNative(c_view);
+        const auto projection = CNA::C::Detail::ToNative(c_projection);
+        if (const CNA_Result routeResult = NotSupportedIf(!object->meshes.empty() && !object->supportsThreeD, "Model drawing requires a renderer with 3D support.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Draw(world, view, projection);
         return CNA_RESULT_SUCCESS;
     });
 }

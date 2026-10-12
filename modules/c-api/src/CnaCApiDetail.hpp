@@ -280,6 +280,22 @@ void SetLastError(
     return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, message);
 }
 
+/** @brief InvalidState(message) when `refused`, success otherwise: a check of an object's state. */
+[[nodiscard]] inline CNA_Result InvalidStateIf(
+    const bool refused,
+    const std::string_view message) noexcept
+{
+    return refused ? InvalidState(message) : CNA_RESULT_SUCCESS;
+}
+
+/** @brief NotSupported(message) when `refused`, success otherwise. */
+[[nodiscard]] inline CNA_Result NotSupportedIf(
+    const bool refused,
+    const std::string_view message) noexcept
+{
+    return refused ? NotSupported(message) : CNA_RESULT_SUCCESS;
+}
+
 /** @brief Records and returns the refusal of an argument outside its range. */
 [[nodiscard]] inline CNA_Result OutOfRange(const std::string_view message) noexcept
 {

@@ -360,6 +360,23 @@ CNA_Result cna_network_machine_remove_from_session(
     });
 }
 
+CNA_Result cna_network_machine_destroy(
+    const CNA_NetworkMachineHandle machine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkMachineResource> object{};
+        if (const CNA_Result routeResult = GetMachine(machine, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeGamerViews != 0U, "Every gamer view taken from this machine must be released first.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(machine);
+    });
+}
+
 CNA_Result cna_network_gamer_set_machine(
     const CNA_NetworkGamerHandle gamer,
     const CNA_NetworkMachineHandle machine)

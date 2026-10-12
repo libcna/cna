@@ -35,6 +35,7 @@ cna_cnb_loader_registry_resolve_for_document = { result = "CreateLoader(CNA::Con
 cna_cnb_document_get_external_reference_name_size = { size = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
 cna_cnb_document_copy_external_reference_name = { copy = "object->value->ExternalReferences()[static_cast<std::size_t>(index)].logicalName", require = 'RequireIndex(index, object->value->ExternalReferences().size(), "The external-reference index is outside the table.")' }
 cna_cnb_decode_curve = { result = "CreateHandle(ObjectKind::Curve, (std::make_shared<Microsoft::Xna::Framework::Curve>(Cnb::DecodeCurveFromCnb(*object->value))), out_curve)" }
+cna_cnb_document_destroy = { release = true, require = 'InvalidStateIf(object->activeBorrowCount != 0U, "Every reader opened from this CNB document must be destroyed before it.")' }
 
 [reader]
 lookup = "GetReader"
@@ -60,6 +61,7 @@ cna_cnb_reader_read_f32 = { get = "object->value->ReadF32()" }
 cna_cnb_reader_read_f64 = { get = "object->value->ReadF64()" }
 cna_cnb_reader_read_count = { get = "object->value->ReadCount(element_size, what_is_being_counted.c_str())" }
 cna_cnb_reader_read_seconds = { get = "Cnb::ReadCnbSeconds(*object->value, what.c_str())" }
+cna_cnb_reader_copy_string = { copy = "*object->lastString", require = 'InvalidStateIf(!object->lastString.has_value(), "This CNB reader has not read a string yet.")' }
 
 [model]
 lookup = "GetModel"

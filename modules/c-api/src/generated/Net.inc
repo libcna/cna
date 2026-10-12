@@ -74,6 +74,23 @@ CNA_Result cna_network_session_properties_clear(
     });
 }
 
+CNA_Result cna_network_session_properties_destroy(
+    const CNA_NetworkSessionPropertiesHandle properties)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionPropertiesResource> object{};
+        if (const CNA_Result routeResult = GetProperties(properties, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeEnumerators != 0U, "Every enumerator over this property list must be destroyed first.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(properties);
+    });
+}
+
 CNA_Result cna_packet_reader_set_position(
     const CNA_PacketReaderHandle reader,
     const int32_t position)

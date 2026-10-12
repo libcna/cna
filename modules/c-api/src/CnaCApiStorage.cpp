@@ -41,6 +41,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::NotSupported;
@@ -568,22 +569,6 @@ CNA_Result cna_storage_device_unsubscribe_device_changed(const CNA_Handle regist
         }
         registration->Unsubscribe();
         return ReleaseHandle(registrationHandle);
-    });
-}
-
-CNA_Result cna_storage_device_destroy(const CNA_StorageDeviceHandle deviceHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<StorageDeviceResource> device;
-        if (const CNA_Result result = GetDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (device->openContainers != 0U) {
-            return InvalidState(
-                "Every container opened from this StorageDevice must be destroyed first.");
-        }
-        return ReleaseHandle(deviceHandle);
     });
 }
 

@@ -23,6 +23,7 @@
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IsPresentationParameters;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -34,7 +35,6 @@ using CNA::C::Detail::ApplyPresentationParameters;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::IsDepthFormat;
 using CNA::C::Detail::IsGraphicsProfile;
 using CNA::C::Detail::IsSurfaceFormat;
@@ -250,27 +250,6 @@ CNA_Result cna_graphics_device_manager_create(
         }
         CNA::C::Detail::AddOwnedGameComponent();
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_manager_get_graphics_device(
-    const CNA_GraphicsDeviceManagerHandle manager,
-    CNA_Handle* const outGraphicsDevice)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outGraphicsDevice == nullptr) {
-            return InvalidArgument("The graphics device output is null.");
-        }
-        *outGraphicsDevice = CNA_INVALID_HANDLE;
-        std::shared_ptr<ManagerResource> resource;
-        if (const CNA_Result result = BorrowManager(manager, &resource);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (resource->value->getGraphicsDeviceProperty() == nullptr) {
-            return InvalidState("The manager has no graphics device yet.");
-        }
-        return CNA::C::Detail::BorrowGameGraphicsDevice(resource->game, outGraphicsDevice);
     });
 }
 

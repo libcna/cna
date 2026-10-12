@@ -65,6 +65,7 @@ cna_model_mesh_set_tag = { call = "object->tag = tag" }
 cna_model_mesh_get_tag = { get = "object->tag" }
 cna_model_mesh_get_effects = { result = "CreateEffectCollectionHandle(std::move(object), out_effects)" }
 cna_model_mesh_destroy = { release = true }
+cna_model_mesh_draw = { call = "object->value->Draw()", require = 'NotSupportedIf(!object->supportsThreeD, "ModelMesh drawing requires a renderer with 3D support.")' }
 
 [mesh_collection]
 lookup = "GetMeshCollection"
@@ -96,6 +97,7 @@ cna_model_get_material_variant_count_ext = { get = "object->value->getMaterialVa
 cna_model_get_material_variant_ext = { get = "object->value->getMaterialVariantEXTProperty()" }
 cna_model_set_material_variant_ext = { call = "object->value->setMaterialVariantEXTProperty(static_cast<int>(value))" }
 cna_model_get_tag = { get = "object->tag" }
+cna_model_draw = { call = "object->value->Draw(world, view, projection)", require = 'NotSupportedIf(!object->meshes.empty() && !object->supportsThreeD, "Model drawing requires a renderer with 3D support.")' }
 
 [morph_data]
 lookup = "GetMorphData"

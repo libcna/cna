@@ -1015,6 +1015,45 @@ CNA_Result cna_effect_get_techniques(
     });
 }
 
+CNA_Result cna_effect_destroy(
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> object{};
+        if (const CNA_Result routeResult = GetEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeModelReferenceCount != 0U, "The Effect is retained by a ModelMeshPart.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(effect);
+    });
+}
+
+CNA_Result cna_effect_dispose(
+    const CNA_EffectHandle effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> object{};
+        if (const CNA_Result routeResult = GetEffect(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeModelReferenceCount != 0U, "The Effect is retained by a ModelMeshPart.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(!object->disposeAllowed, "The Effect is a borrowed factory-owned view and cannot be disposed.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_shader_effect_is_valid(
     const CNA_EffectHandle effect,
     CNA_Bool* const out_is_valid)

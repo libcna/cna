@@ -65,7 +65,7 @@ using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
-using CNA::C::Detail::NotSupported;
+using CNA::C::Detail::NotSupportedIf;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
@@ -2023,22 +2023,6 @@ CNA_Result cna_model_mesh_set_parent_bone(
     });
 }
 
-CNA_Result cna_model_mesh_draw(const CNA_ModelMeshHandle meshHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<MeshResource> mesh;
-        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!mesh->supportsThreeD) {
-            return NotSupported("ModelMesh drawing requires a renderer with 3D support.");
-        }
-        mesh->value->Draw();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_model_mesh_collection_create(
     const CNA_ModelMeshHandle* const meshHandles,
     const uint64_t meshCount,
@@ -2432,27 +2416,6 @@ CNA_Result cna_model_copy_bone_transforms(
         for (std::size_t index = 0U; index < transforms.size(); ++index) {
             destination[index] = ToC(transforms[index]);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_model_draw(
-    const CNA_ModelHandle modelHandle,
-    const CNA_Matrix world,
-    const CNA_Matrix view,
-    const CNA_Matrix projection)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ModelResource> model;
-        if (const CNA_Result result = GetModel(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!model->meshes.empty() && !model->supportsThreeD) {
-            return NotSupported("Model drawing requires a renderer with 3D support.");
-        }
-        model->value->Draw(
-            ToNative(world), ToNative(view), ToNative(projection));
         return CNA_RESULT_SUCCESS;
     });
 }

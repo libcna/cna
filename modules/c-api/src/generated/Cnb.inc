@@ -547,6 +547,23 @@ CNA_Result cna_cnb_decode_curve(
     });
 }
 
+CNA_Result cna_cnb_document_destroy(
+    const CNA_CnbDocumentHandle document)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> object{};
+        if (const CNA_Result routeResult = GetDocument(document, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeBorrowCount != 0U, "Every reader opened from this CNB document must be destroyed before it.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(document);
+    });
+}
+
 CNA_Result cna_cnb_reader_copy_context(
     const CNA_CnbReaderHandle reader,
     char* const destination,
@@ -852,6 +869,30 @@ CNA_Result cna_cnb_reader_read_seconds(
         }
         *out_seconds = static_cast<double>(Cnb::ReadCnbSeconds(*object->value, what.c_str()));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_copy_string(
+    const CNA_CnbReaderHandle reader,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(!object->lastString.has_value(), "This CNB reader has not read a string yet.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(*object->lastString, destination, capacity, out_byte_count);
     });
 }
 

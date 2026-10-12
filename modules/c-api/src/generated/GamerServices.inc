@@ -25,3 +25,20 @@ CNA_Result cna_signed_in_gamer_get_gamertag_size(
         return CNA::C::Detail::ReportTextSize(object->value->getGamertagProperty(), out_bytes);
     });
 }
+
+CNA_Result cna_signed_in_gamer_destroy(
+    const CNA_SignedInGamerHandle gamer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SignedInGamerResource> object{};
+        if (const CNA_Result routeResult = GetSignedInGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->published, "The process-wide signed-in collection still references this gamer.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(gamer);
+    });
+}

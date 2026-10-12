@@ -34,6 +34,7 @@ cna_graphics_device_manager_set_graphics_profile = { call = "object->value->setG
 cna_graphics_device_manager_set_preferred_back_buffer_format = { call = "object->value->setPreferredBackBufferFormatProperty(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_graphics_device_manager_set_preferred_depth_stencil_format = { call = "object->value->setPreferredDepthStencilFormatProperty(static_cast<DepthFormat>(format))", invalid_if = "!IsDepthFormat(format)" }
 cna_graphics_device_manager_set_preferred_presentation_mode_ext = { call = "object->value->setPreferredPresentationModeProperty(static_cast<PresentationMode>(mode))", invalid_if = "mode > CNA_PRESENTATION_MODE_MAXIMUM" }
+cna_graphics_device_manager_get_graphics_device = { result = "CNA::C::Detail::BorrowGameGraphicsDevice(object->game, out_graphics_device)", require = 'InvalidStateIf(object->value->getGraphicsDeviceProperty() == nullptr, "The manager has no graphics device yet.")' }
 
 [values]
 [values.routes]

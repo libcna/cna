@@ -51,6 +51,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
@@ -472,23 +473,6 @@ CNA_Result cna_content_reader_read_bytes_exact(
             std::memcpy(destination, data.data(), data.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_content_reader_destroy(const CNA_ContentReaderHandle readerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<ContentReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (reader->isBorrowed) {
-            return InvalidState(
-                "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is "
-                "released when the callback that received it returns.");
-        }
-        return ReleaseHandle(readerHandle);
     });
 }
 

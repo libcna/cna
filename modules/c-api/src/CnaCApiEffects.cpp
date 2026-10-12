@@ -78,6 +78,7 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsCanonicalBool;
 using CNA::C::Detail::IsVersionedStructure;
@@ -2219,21 +2220,6 @@ CNA_Result cna_shader_effect_create(
     });
 }
 
-CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (effect->activeModelReferenceCount != 0U) {
-            return InvalidState("The Effect is retained by a ModelMeshPart.");
-        }
-        return ReleaseHandle(effectHandle);
-    });
-}
-
 CNA_Result cna_effect_clone(
     const CNA_EffectHandle effectHandle,
     CNA_EffectHandle* const outClone)
@@ -2285,26 +2271,6 @@ CNA_Result cna_effect_clone(
                 sourceLifetime->pbrTextures[index],
                 cloneLifetime->pbrTextures[index]);
         }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<EffectResource> effect;
-        if (const CNA_Result result = GetEffect(effectHandle, &effect);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (effect->activeModelReferenceCount != 0U) {
-            return InvalidState("The Effect is retained by a ModelMeshPart.");
-        }
-        if (!effect->disposeAllowed) {
-            return InvalidState(
-                "The Effect is a borrowed factory-owned view and cannot be disposed.");
-        }
-        effect->value->Dispose();
         return CNA_RESULT_SUCCESS;
     });
 }

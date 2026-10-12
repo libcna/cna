@@ -129,6 +129,8 @@ cna_effect_is_exact_stock_sprite_effect = { get = "object->value->IsExactStockSp
 cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect)" }
 cna_effect_get_parameters = { result = "CreateParameterCollectionHandle(GetEffectState(object)->parameters, out_collection)" }
 cna_effect_get_techniques = { result = "CreateTechniqueCollectionHandle(GetEffectState(object)->techniques, out_collection)" }
+cna_effect_destroy = { release = true, require = 'InvalidStateIf(object->activeModelReferenceCount != 0U, "The Effect is retained by a ModelMeshPart.")' }
+cna_effect_dispose = { call = "object->value->Dispose()", require = ['InvalidStateIf(object->activeModelReferenceCount != 0U, "The Effect is retained by a ModelMeshPart.")', 'InvalidStateIf(!object->disposeAllowed, "The Effect is a borrowed factory-owned view and cannot be disposed.")'] }
 
 [shader_effect]
 lookup = "GetStockEffect<ShaderEffect>"

@@ -487,6 +487,28 @@ CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode_ext(
     });
 }
 
+CNA_Result cna_graphics_device_manager_get_graphics_device(
+    const CNA_GraphicsDeviceManagerHandle manager,
+    CNA_Handle* const out_graphics_device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_graphics_device == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_manager_get_graphics_device: out_graphics_device is null.");
+        }
+        *out_graphics_device = CNA_INVALID_HANDLE;
+        std::shared_ptr<ManagerResource> object{};
+        if (const CNA_Result routeResult = BorrowManager(manager, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->value->getGraphicsDeviceProperty() == nullptr, "The manager has no graphics device yet.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::BorrowGameGraphicsDevice(object->game, out_graphics_device);
+    });
+}
+
 CNA_Result cna_graphics_device_information_init(
     CNA_GraphicsDeviceInformation* const out_information)
 {

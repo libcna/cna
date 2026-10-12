@@ -54,7 +54,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -731,22 +731,6 @@ CNA_Result cna_network_session_remove_gamer_ext(
             }
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_destroy(const CNA_NetworkSessionHandle sessionHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionResource> session;
-        if (const CNA_Result result = GetSessionResource(sessionHandle, &session);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (session->activeGamerViews != 0U) {
-            return InvalidState(
-                "Every gamer view taken from this session must be released first.");
-        }
-        return ReleaseHandle(sessionHandle);
     });
 }
 

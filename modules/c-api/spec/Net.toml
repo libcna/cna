@@ -10,6 +10,7 @@ cna_network_session_properties_get_count = { get = "object->value->getCountPrope
 cna_network_session_properties_get_is_read_only = { get = "object->value->getIsReadOnlyProperty()" }
 cna_network_session_properties_remove_at = { call = "object->value->RemoveAt(static_cast<int>(index))" }
 cna_network_session_properties_clear = { call = "object->value->Clear()" }
+cna_network_session_properties_destroy = { release = true, require = 'InvalidStateIf(object->activeEnumerators != 0U, "Every enumerator over this property list must be destroyed first.")' }
 
 [reader]
 lookup = "GetReader"

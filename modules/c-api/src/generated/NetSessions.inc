@@ -786,6 +786,23 @@ CNA_Result cna_network_session_copy_session_properties(
     });
 }
 
+CNA_Result cna_network_session_destroy(
+    const CNA_NetworkSessionHandle session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkSessionResource> object{};
+        if (const CNA_Result routeResult = GetSessionResource(session, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeGamerViews != 0U, "Every gamer view taken from this session must be released first.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(session);
+    });
+}
+
 CNA_Result cna_local_network_gamer_get_is_data_available(
     const CNA_NetworkGamerHandle gamer,
     CNA_Bool* const out_value)

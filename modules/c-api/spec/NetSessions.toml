@@ -63,6 +63,7 @@ cna_network_session_end_game = { call = "object->value->EndGame()" }
 cna_network_session_get_owned_gamer_count_ext = { get = "object->value->GetOwnedGamerCountForTesting()" }
 cna_network_session_dispose = { call = "object->value->Dispose()" }
 cna_network_session_copy_session_properties = { result = "CreateOwnedNetworkSessionProperties(object->value->getSessionPropertiesProperty(), out_properties)" }
+cna_network_session_destroy = { release = true, require = 'InvalidStateIf(object->activeGamerViews != 0U, "Every gamer view taken from this session must be released first.")' }
 
 [local_gamer]
 lookup = "BorrowLocalGamer"

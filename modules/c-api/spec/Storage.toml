@@ -9,6 +9,7 @@ object = "std::shared_ptr<StorageDeviceResource>"
 cna_storage_device_get_free_space = { get = "object->value->getFreeSpaceProperty()" }
 cna_storage_device_get_is_connected = { get = "object->value->getIsConnectedProperty()" }
 cna_storage_device_get_total_space = { get = "object->value->getTotalSpaceProperty()" }
+cna_storage_device_destroy = { release = true, require = 'InvalidStateIf(object->openContainers != 0U, "Every container opened from this StorageDevice must be destroyed first.")' }
 
 [container]
 lookup = "GetContainer"

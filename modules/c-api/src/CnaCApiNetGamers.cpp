@@ -33,7 +33,7 @@ using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OutOfRange;
@@ -297,22 +297,6 @@ CNA_Result cna_network_machine_get_gamer(
         resource->viewCounter = &machine->activeGamerViews;
         machine->activeGamerViews += 1U;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_machine_destroy(const CNA_NetworkMachineHandle machineHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkMachineResource> machine;
-        if (const CNA_Result result = GetMachine(machineHandle, &machine);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (machine->activeGamerViews != 0U) {
-            return InvalidState(
-                "Every gamer view taken from this machine must be released first.");
-        }
-        return ReleaseHandle(machineHandle);
     });
 }
 

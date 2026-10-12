@@ -32,6 +32,7 @@ object = "std::shared_ptr<NetworkMachineResource>"
 [machine.routes]
 cna_network_machine_get_gamer_count = { get = "object->value->getGamersProperty().getCountProperty()" }
 cna_network_machine_remove_from_session = { call = "object->value->RemoveFromSession()" }
+cna_network_machine_destroy = { release = true, require = 'InvalidStateIf(object->activeGamerViews != 0U, "Every gamer view taken from this machine must be released first.")' }
 
 [gamer_and_machine]
 lookup = "GetGamer"

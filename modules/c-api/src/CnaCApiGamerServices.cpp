@@ -29,7 +29,7 @@ using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
@@ -226,22 +226,6 @@ CNA_Result cna_signed_in_gamer_copy_gamertag(
             std::memcpy(destination, gamertag.data(), gamertag.size());
         }
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_signed_in_gamer_destroy(const CNA_SignedInGamerHandle gamerHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<SignedInGamerResource> gamer;
-        if (const CNA_Result result = GetSignedInGamer(gamerHandle, &gamer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (gamer->published) {
-            return InvalidState(
-                "The process-wide signed-in collection still references this gamer.");
-        }
-        return ReleaseHandle(gamerHandle);
     });
 }
 

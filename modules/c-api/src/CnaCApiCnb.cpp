@@ -50,6 +50,7 @@ using CNA::C::Detail::CreateResourceHandle;
 using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::IoError;
 using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
@@ -70,7 +71,6 @@ using CNA::C::Detail::CopyElements;
 using CNA::C::Detail::CopyText;
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
-using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::ReportTextSize;
@@ -1133,22 +1133,6 @@ CNA_Result cna_cnb_document_parse_file(
     });
 }
 
-CNA_Result cna_cnb_document_destroy(const CNA_CnbDocumentHandle documentHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbDocumentResource> document;
-        if (const CNA_Result result = GetDocument(documentHandle, &document);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (document->activeBorrowCount != 0U) {
-            return InvalidState(
-                "Every reader opened from this CNB document must be destroyed before it.");
-        }
-        return ReleaseHandle(documentHandle);
-    });
-}
-
 CNA_Result cna_cnb_document_get_chunk(
     const CNA_CnbDocumentHandle documentHandle,
     const uint64_t index,
@@ -1491,25 +1475,6 @@ CNA_Result cna_cnb_reader_read_string(
         *outByteCount = static_cast<uint64_t>(value.size());
         reader->lastString = std::move(value);
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_cnb_reader_copy_string(
-    const CNA_CnbReaderHandle readerHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outByteCount)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CnbReaderResource> reader;
-        if (const CNA_Result result = GetReader(readerHandle, &reader);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (!reader->lastString.has_value()) {
-            return InvalidState("This CNB reader has not read a string yet.");
-        }
-        return CopyText(*reader->lastString, destination, capacity, outByteCount);
     });
 }
 

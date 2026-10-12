@@ -45,6 +45,7 @@ using CNA::C::Detail::GetLastError;
 using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
+using CNA::C::Detail::InvalidStateIf;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NativeOrdinal;
 using CNA::C::Detail::ObjectKind;
@@ -573,23 +574,6 @@ CNA_Result cna_network_session_property_enumerator_reset(
         enumerator->value->Reset();
         enumerator->hasCurrent = false;
         return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_network_session_properties_destroy(
-    const CNA_NetworkSessionPropertiesHandle propertiesHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<NetworkSessionPropertiesResource> properties;
-        if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (properties->activeEnumerators != 0U) {
-            return InvalidState(
-                "Every enumerator over this property list must be destroyed first.");
-        }
-        return ReleaseHandle(propertiesHandle);
     });
 }
 

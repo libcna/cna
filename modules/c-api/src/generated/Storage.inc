@@ -63,6 +63,23 @@ CNA_Result cna_storage_device_get_total_space(
     });
 }
 
+CNA_Result cna_storage_device_destroy(
+    const CNA_StorageDeviceHandle device)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<StorageDeviceResource> object{};
+        if (const CNA_Result routeResult = GetDevice(device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->openContainers != 0U, "Every container opened from this StorageDevice must be destroyed first.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(device);
+    });
+}
+
 CNA_Result cna_storage_container_get_display_name_size(
     const CNA_StorageContainerHandle container,
     uint64_t* const out_bytes)

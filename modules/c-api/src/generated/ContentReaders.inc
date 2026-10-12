@@ -110,6 +110,23 @@ CNA_Result cna_content_reader_get_platform(
     });
 }
 
+CNA_Result cna_content_reader_destroy(
+    const CNA_ContentReaderHandle reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ContentReaderResource> object{};
+        if (const CNA_Result routeResult = GetReader(reader, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(object->isBorrowed, "A callback-scoped borrowed ContentReader handle cannot be destroyed; it is released when the callback that received it returns.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(reader);
+    });
+}
+
 CNA_Result cna_content_type_reader_manager_get_is_registered(
     const CNA_StringView canonical_name,
     CNA_Bool* const out_is_registered)
