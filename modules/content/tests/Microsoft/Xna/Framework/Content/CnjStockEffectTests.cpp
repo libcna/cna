@@ -106,7 +106,7 @@ namespace
     /// the effect valid -- this test used to demand invalid there, and Software failed it.
     [[nodiscard]] GlslEffectValidity ExpectedGlslEffectValidity(const GraphicsDevice& gd)
     {
-        using CNA::Internal::Renderers::ShaderDialectEXT;
+        using CNA::ShaderDialectEXT;
         const ShaderDialectEXT dialect = gd.GetShaderDialectEXT();
         // plans/plan_apple_m4.md AM4-177: any declared non-GLSL dialect refuses this GLSL payload
         // at compile time -- HLSL (DirectX11), and WGSL too: WebGPU executes its source, so the

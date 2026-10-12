@@ -11,6 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
+- **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
+  (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
+  `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their
+  values (0-7) are unchanged, and the C API's `CNA_SHADER_DIALECT_*` identities still match them.
+  Code that spelled the internal name -- and included `IGraphicsRenderer.hpp` to get its values --
+  includes the public header and writes `CNA::ShaderDialectEXT` instead.
+
 - **The C API's route boundaries are generated.** 3,202 of the 3,210 `cna_*` routes are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
   `tools/c-api/generate_routes.py`. 2,252 of them -- property reads and writes, commands, text

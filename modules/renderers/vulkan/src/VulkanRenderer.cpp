@@ -3280,11 +3280,11 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
-    CNA::Internal::Renderers::ShaderDialectEXT VulkanRenderer::GetShaderDialectEXT() const
+    CNA::ShaderDialectEXT VulkanRenderer::GetShaderDialectEXT() const
     {
         // VULKAN-250. Not device-dependent and not build-dependent: this renderer has exactly one
         // custom-effect intake, and CompileProgram rejects anything that is not SPIR-V words.
-        return CNA::Internal::Renderers::ShaderDialectEXT::SpirV;
+        return CNA::ShaderDialectEXT::SpirV;
     }
 
     bool VulkanRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const

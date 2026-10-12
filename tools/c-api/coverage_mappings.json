@@ -14326,12 +14326,35 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_graphics_device_get_shader_dialect_ext`, answering one `CNA_SHADER_DIALECT_*` identity. The canonical return is a renderer-internal enumeration, so the C identities are their own closed range with a published `CNA_SHADER_DIALECT_MAXIMUM` and an exhaustive no-`default` switch, which is what makes a dialect appended to the canonical enumeration a compile error here rather than a silent `UNKNOWN`",
+      "mapping": "`cna_graphics_device_get_shader_dialect_ext`, answering one `CNA_SHADER_DIALECT_*` identity. The canonical return is the public `CNA::ShaderDialectEXT` (mapped by `shader-dialect-identities`); the C identities are their own closed range with a published `CNA_SHADER_DIALECT_MAXIMUM` and an exhaustive no-`default` switch, which is what makes a dialect appended to the canonical enumeration a compile error here rather than a silent `UNKNOWN`",
       "tests": "`EffectSmoke.c` asserts the active renderer answers inside the closed identity range, that a null output is refused, and that an invalid device handle is refused",
       "status": "implemented",
       "task": "CBIND-058",
       "approved_symbols": [
         "CPP-39044E370C4E"
+      ]
+    },
+    {
+      "id": "shader-dialect-identities",
+      "qualified_name_regex": "^CNA::ShaderDialectEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_ShaderDialect` and `CNA_SHADER_DIALECT_*` in `graphics.h`, with the same values (0-7); `cna_graphics_device_get_shader_dialect_ext` maps each through an exhaustive switch",
+      "tests": "`EffectSmoke.c` asserts the answered dialect lies in the closed identity range; the ABI header tests pin the constants",
+      "status": "implemented",
+      "task": "CBIND-058",
+      "approved_symbols": [
+        "CPP-1849216C8CE8",
+        "CPP-29E367BF43BD",
+        "CPP-2B3672AE3472",
+        "CPP-356DEB6AB3B5",
+        "CPP-3E5538D50DC4",
+        "CPP-42E7334F51A9",
+        "CPP-B2E9BF3CA917",
+        "CPP-D02886B7E0A5",
+        "CPP-DA709BE1AC36"
       ]
     },
     {
