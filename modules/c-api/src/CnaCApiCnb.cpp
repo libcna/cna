@@ -54,9 +54,9 @@ using CNA::C::Detail::IsValidTimeSpanSeconds;
 using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
+using CNA::C::Detail::RequireIndex;
 using CNA::C::Detail::ValidateBuffer;
 using CNA::C::Detail::ValidateCanonicalBool;
 
@@ -274,17 +274,6 @@ void WriteLimits(const Cnb::CnbReadLimits& limits, CNA_CnbReadLimits* const out)
  * would report as CNA_RESULT_IO -- the answer for a bad file. A caller fixes an index; it does not
  * re-download the asset. The distinction is therefore decided here.
  */
-[[nodiscard]] CNA_Result RequireIndex(
-    const uint64_t index,
-    const std::size_t count,
-    const char* const what)
-{
-    if (index >= static_cast<uint64_t>(count)) {
-        return OutOfRange(what);
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 /// The file path the DDS and WAV import routes take, read as their spec group's lookup.
 [[nodiscard]] CNA_Result ReadImportPath(const CNA_StringView value, std::string* const out)
 {

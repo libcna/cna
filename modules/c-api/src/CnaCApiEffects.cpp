@@ -83,11 +83,11 @@ using CNA::C::Detail::IsVersionedStructure;
 using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
-using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::RequireIndex;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::TextureCubeResourceView;
 using CNA::C::Detail::TextureResourceView;
@@ -1120,34 +1120,6 @@ CNA_Result cna_effect_annotation_collection_create(
     });
 }
 
-CNA_Result cna_effect_annotation_collection_get_at(
-    const CNA_EffectAnnotationCollectionHandle collectionHandle,
-    const uint64_t index,
-    CNA_EffectAnnotationHandle* const outAnnotation)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAnnotation == nullptr) {
-            return InvalidArgument("The EffectAnnotation output handle is null.");
-        }
-        *outAnnotation = CNA_INVALID_HANDLE;
-        std::shared_ptr<AnnotationCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(collection->value->getCountProperty()) ||
-            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return OutOfRange("The EffectAnnotationCollection index is outside the collection.");
-        }
-        // The index overloads of the effect collections return a pointer and answer null for an
-        // index they do not hold, which is XNA's own semantics. The range check above is what makes
-        // this one non-null, so the dereference is safe and the C caller still gets the specific
-        // CNA_ERROR_CATEGORY_RANGE failure rather than a generic one.
-        return CreateAnnotationHandle(
-            *(*collection->value)[static_cast<int>(index)], outAnnotation);
-    });
-}
-
 CNA_Result cna_effect_annotation_collection_find(
     const CNA_EffectAnnotationCollectionHandle collectionHandle,
     const CNA_StringView name,
@@ -1851,32 +1823,6 @@ CNA_Result cna_effect_parameter_collection_add_create(
     });
 }
 
-CNA_Result cna_effect_parameter_collection_get_at(
-    const CNA_EffectParameterCollectionHandle collectionHandle,
-    const uint64_t index,
-    CNA_EffectParameterHandle* const outParameter)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outParameter == nullptr) {
-            return InvalidArgument("The EffectParameter element output handle is null.");
-        }
-        *outParameter = CNA_INVALID_HANDLE;
-        std::shared_ptr<ParameterCollectionResource> collection;
-        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
-            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return OutOfRange("The EffectParameterCollection index is outside the collection.");
-        }
-        EffectParameter* const parameter =
-            (*collection->state->value)[static_cast<int>(index)];
-        return CreateCollectionElementHandle(
-            collection->state, parameter, outParameter);
-    });
-}
-
 CNA_Result cna_effect_parameter_collection_find_name(
     const CNA_EffectParameterCollectionHandle collectionHandle,
     const CNA_StringView name,
@@ -2041,33 +1987,6 @@ CNA_Result cna_effect_pass_collection_add_create(
         // Non-null by construction: Add() above left the collection holding at least this element.
         EffectPass* const pass = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
-        return CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass),
-            collection->state->effectOwnership,
-            outPass);
-    });
-}
-
-CNA_Result cna_effect_pass_collection_get_at(
-    const CNA_EffectPassCollectionHandle collectionHandle,
-    const uint64_t index,
-    CNA_EffectPassHandle* const outPass)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outPass == nullptr) {
-            return InvalidArgument("The EffectPass element output handle is null.");
-        }
-        *outPass = CNA_INVALID_HANDLE;
-        std::shared_ptr<PassCollectionResource> collection;
-        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
-            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return OutOfRange("The EffectPassCollection index is outside the collection.");
-        }
-        EffectPass* const pass = (*collection->state->value)[static_cast<int>(index)];
         return CreatePassHandle(
             std::shared_ptr<EffectPass>(collection->state->value, pass),
             collection->state->effectOwnership,
@@ -2255,32 +2174,6 @@ CNA_Result cna_effect_technique_collection_add_named(
         // Non-null by construction: Add() above left the collection holding at least this element.
         EffectTechnique* const technique = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
-        return CreateTechniqueElementHandle(
-            collection->state, technique, outTechnique);
-    });
-}
-
-CNA_Result cna_effect_technique_collection_get_at(
-    const CNA_EffectTechniqueCollectionHandle collectionHandle,
-    const uint64_t index,
-    CNA_EffectTechniqueHandle* const outTechnique)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outTechnique == nullptr) {
-            return InvalidArgument("The EffectTechnique element output handle is null.");
-        }
-        *outTechnique = CNA_INVALID_HANDLE;
-        std::shared_ptr<TechniqueCollectionResource> collection;
-        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
-            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
-            return OutOfRange("The EffectTechniqueCollection index is outside the collection.");
-        }
-        EffectTechnique* const technique =
-            (*collection->state->value)[static_cast<int>(index)];
         return CreateTechniqueElementHandle(
             collection->state, technique, outTechnique);
     });

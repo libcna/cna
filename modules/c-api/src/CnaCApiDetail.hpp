@@ -49,6 +49,7 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <string_view>
 #include <thread>
 #include <type_traits>
@@ -295,6 +296,25 @@ void SetLastError(
 [[nodiscard]] inline CNA_Result Overflow(const std::string_view message) noexcept
 {
     return Fail(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE, message);
+}
+
+/**
+ * @brief Refuses an index that names no element of a sequence `count` long.
+ *
+ * @param index The caller's index, of any integer type; a negative one is refused.
+ * @param count The number of elements.
+ * @param message The diagnostic recorded with the refusal.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` in the range category.
+ */
+template<typename TIndex, typename TCount>
+[[nodiscard]] CNA_Result RequireIndex(
+    const TIndex index,
+    const TCount count,
+    const std::string_view message) noexcept
+{
+    return std::cmp_greater_equal(index, 0) && std::cmp_less(index, count)
+        ? CNA_RESULT_SUCCESS
+        : OutOfRange(message);
 }
 
 /** @brief Records and returns a failure to read or write a file, stream or device. */

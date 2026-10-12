@@ -35,6 +35,7 @@ cna_game_components_get_count = { get = "object->getCountProperty()" }
 cna_game_components_clear = { call = "object->Clear()" }
 cna_game_components_get_type_name_size = { size = "object->GetTypeName()" }
 cna_game_components_copy_type_name = { copy = "object->GetTypeName()" }
+cna_game_components_remove_at = { call = "object->RemoveAt(static_cast<GameComponentCollection::size_type>(index))", require = 'RequireIndex(index, object->getCountProperty(), "The component index is at or past the collection count.")' }
 
 [components_and_component]
 lookup = "BorrowComponents"

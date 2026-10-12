@@ -303,6 +303,25 @@ CNA_Result cna_game_components_copy_type_name(
     });
 }
 
+CNA_Result cna_game_components_remove_at(
+    const CNA_Handle game,
+    const uint64_t index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->getCountProperty(), "The component index is at or past the collection count.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->RemoveAt(static_cast<GameComponentCollection::size_type>(index));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_components_add(
     const CNA_Handle game,
     const CNA_GameComponentHandle component)

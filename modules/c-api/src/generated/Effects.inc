@@ -316,6 +316,29 @@ CNA_Result cna_effect_annotation_collection_destroy(
     });
 }
 
+CNA_Result cna_effect_annotation_collection_get_at(
+    const CNA_EffectAnnotationCollectionHandle collection,
+    const uint64_t index,
+    CNA_EffectAnnotationHandle* const out_annotation)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_annotation == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_annotation_collection_get_at: out_annotation is null.");
+        }
+        *out_annotation = CNA_INVALID_HANDLE;
+        std::shared_ptr<AnnotationCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->value->getCountProperty(), "The EffectAnnotationCollection index is outside the collection.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateAnnotationHandle(*(*object->value)[static_cast<int>(index)], out_annotation);
+    });
+}
+
 CNA_Result cna_effect_parameter_copy_name(
     const CNA_EffectParameterHandle parameter,
     char* const destination,
@@ -517,6 +540,29 @@ CNA_Result cna_effect_parameter_collection_destroy(
     });
 }
 
+CNA_Result cna_effect_parameter_collection_get_at(
+    const CNA_EffectParameterCollectionHandle collection,
+    const uint64_t index,
+    CNA_EffectParameterHandle* const out_parameter)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_parameter == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_parameter_collection_get_at: out_parameter is null.");
+        }
+        *out_parameter = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterCollectionResource> object{};
+        if (const CNA_Result routeResult = GetParameterCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->state->value->getCountProperty(), "The EffectParameterCollection index is outside the collection.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateCollectionElementHandle(object->state, (*object->state->value)[static_cast<int>(index)], out_parameter);
+    });
+}
+
 CNA_Result cna_effect_pass_get_index_ext(
     const CNA_EffectPassHandle pass,
     uint32_t* const out_index)
@@ -645,6 +691,29 @@ CNA_Result cna_effect_pass_collection_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(collection);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_get_at(
+    const CNA_EffectPassCollectionHandle collection,
+    const uint64_t index,
+    CNA_EffectPassHandle* const out_pass)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_pass == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_pass_collection_get_at: out_pass is null.");
+        }
+        *out_pass = CNA_INVALID_HANDLE;
+        std::shared_ptr<PassCollectionResource> object{};
+        if (const CNA_Result routeResult = GetPassCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->state->value->getCountProperty(), "The EffectPassCollection index is outside the collection.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreatePassHandle(std::shared_ptr<EffectPass>(object->state->value, (*object->state->value)[static_cast<int>(index)]), object->state->effectOwnership, out_pass);
     });
 }
 
@@ -780,6 +849,29 @@ CNA_Result cna_effect_technique_collection_destroy(
             return routeResult;
         }
         return CNA::C::Detail::ReleaseHandle(collection);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_get_at(
+    const CNA_EffectTechniqueCollectionHandle collection,
+    const uint64_t index,
+    CNA_EffectTechniqueHandle* const out_technique)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_technique == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_effect_technique_collection_get_at: out_technique is null.");
+        }
+        *out_technique = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueCollectionResource> object{};
+        if (const CNA_Result routeResult = GetTechniqueCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->state->value->getCountProperty(), "The EffectTechniqueCollection index is outside the collection.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateTechniqueElementHandle(object->state, (*object->state->value)[static_cast<int>(index)], out_technique);
     });
 }
 

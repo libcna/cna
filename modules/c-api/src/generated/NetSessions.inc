@@ -286,6 +286,29 @@ CNA_Result cna_available_network_session_collection_destroy(
     });
 }
 
+CNA_Result cna_available_network_session_collection_copy_session(
+    const CNA_AvailableNetworkSessionCollectionHandle collection,
+    const int32_t index,
+    CNA_AvailableNetworkSessionHandle* const out_session)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_session == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_available_network_session_collection_copy_session: out_session is null.");
+        }
+        *out_session = CNA_INVALID_HANDLE;
+        std::shared_ptr<AvailableSessionCollectionResource> object{};
+        if (const CNA_Result routeResult = GetCollection(collection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->value->getCountProperty(), "The discovered-session index is outside the collection.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateSessionHandle(object->value->getItem(index), out_session);
+    });
+}
+
 CNA_Result cna_network_session_copy_type_name(
     const CNA_NetworkSessionHandle session,
     char* const destination,

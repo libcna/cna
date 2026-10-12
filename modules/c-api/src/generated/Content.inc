@@ -164,6 +164,60 @@ CNA_Result cna_content_manager_copy_manifest_relative_path(
     });
 }
 
+CNA_Result cna_content_manager_copy_manifest_native_extension(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    const uint64_t extension_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ContentManagerResource> owner{};
+        const ContentManifestEntry* object{};
+        if (const CNA_Result routeResult = GetManifestEntry(content_manager, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(extension_index, object->nativeExtensions.size(), "The native-extension index is outside this manifest entry.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->nativeExtensions[static_cast<std::size_t>(extension_index)], destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_content_manager_copy_manifest_xnb_reader_name(
+    const CNA_Handle content_manager,
+    const uint64_t index,
+    const uint64_t name_index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ContentManagerResource> owner{};
+        const ContentManifestEntry* object{};
+        if (const CNA_Result routeResult = GetManifestEntry(content_manager, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(name_index, object->xnbReaderNames.size(), "The reader-name index is outside this manifest entry.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->xnbReaderNames[static_cast<std::size_t>(name_index)], destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_game_set_content_manager_ext(
     const CNA_Handle game,
     const CNA_Handle content_manager)

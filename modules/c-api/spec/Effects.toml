@@ -37,6 +37,9 @@ object = "std::shared_ptr<AnnotationCollectionResource>"
 [collection.routes]
 cna_effect_annotation_collection_get_count = { get = "object->value->getCountProperty()" }
 cna_effect_annotation_collection_destroy = { release = true }
+# The index overloads answer null for an index they do not hold, which is XNA's own semantics;
+# the range check is what makes the element non-null.
+cna_effect_annotation_collection_get_at = { result = "CreateAnnotationHandle(*(*object->value)[static_cast<int>(index)], out_annotation)", require = 'RequireIndex(index, object->value->getCountProperty(), "The EffectAnnotationCollection index is outside the collection.")' }
 
 [parameter]
 lookup = "GetParameter"
@@ -68,6 +71,7 @@ object = "std::shared_ptr<ParameterCollectionResource>"
 [parameter_collection.routes]
 cna_effect_parameter_collection_get_count = { get = "object->state->value->getCountProperty()" }
 cna_effect_parameter_collection_destroy = { release = true }
+cna_effect_parameter_collection_get_at = { result = "CreateCollectionElementHandle(object->state, (*object->state->value)[static_cast<int>(index)], out_parameter)", require = 'RequireIndex(index, object->state->value->getCountProperty(), "The EffectParameterCollection index is outside the collection.")' }
 
 [pass]
 lookup = "GetPass"
@@ -88,6 +92,7 @@ object = "std::shared_ptr<PassCollectionResource>"
 [pass_collection.routes]
 cna_effect_pass_collection_get_count = { get = "object->state->value->getCountProperty()" }
 cna_effect_pass_collection_destroy = { release = true }
+cna_effect_pass_collection_get_at = { result = "CreatePassHandle(std::shared_ptr<EffectPass>(object->state->value, (*object->state->value)[static_cast<int>(index)]), object->state->effectOwnership, out_pass)", require = 'RequireIndex(index, object->state->value->getCountProperty(), "The EffectPassCollection index is outside the collection.")' }
 
 [technique]
 lookup = "GetTechnique"
@@ -108,6 +113,7 @@ object = "std::shared_ptr<TechniqueCollectionResource>"
 [technique_collection.routes]
 cna_effect_technique_collection_get_count = { get = "object->state->value->getCountProperty()" }
 cna_effect_technique_collection_destroy = { release = true }
+cna_effect_technique_collection_get_at = { result = "CreateTechniqueElementHandle(object->state, (*object->state->value)[static_cast<int>(index)], out_technique)", require = 'RequireIndex(index, object->state->value->getCountProperty(), "The EffectTechniqueCollection index is outside the collection.")' }
 
 [effect]
 lookup = "GetEffect"

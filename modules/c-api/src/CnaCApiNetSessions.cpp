@@ -61,6 +61,7 @@ using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::Overflow;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::RequireIndex;
 using CNA::C::Detail::ToCBool;
 using CNA::C::Detail::ValidateCanonicalBool;
 using CNA::C::Detail::ValidateVersionedStructure;
@@ -304,28 +305,6 @@ CNA_Result cna_available_network_session_collection_create_ext(
             result,
             ErrorCategoryForResult(result),
             "The owned AvailableNetworkSessionCollection handle could not be created.");
-    });
-}
-
-CNA_Result cna_available_network_session_collection_copy_session(
-    const CNA_AvailableNetworkSessionCollectionHandle collectionHandle,
-    const int32_t index,
-    CNA_AvailableNetworkSessionHandle* const outSession)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outSession == nullptr) {
-            return InvalidArgument("The AvailableNetworkSession output handle is null.");
-        }
-        *outSession = CNA_INVALID_HANDLE;
-        std::shared_ptr<AvailableSessionCollectionResource> collection;
-        if (const CNA_Result result = GetCollection(collectionHandle, &collection);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index < 0 || index >= static_cast<int32_t>(collection->value->getCountProperty())) {
-            return OutOfRange("The discovered-session index is outside the collection.");
-        }
-        return CreateSessionHandle(collection->value->getItem(index), outSession);
     });
 }
 

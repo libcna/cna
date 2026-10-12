@@ -37,6 +37,7 @@ using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::InvalidState;
 using CNA::C::Detail::OutOfRange;
 using CNA::C::Detail::ReleaseHandle;
+using CNA::C::Detail::RequireIndex;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 
@@ -643,22 +644,6 @@ CNA_Result cna_game_components_insert(
         components->Insert(
             static_cast<GameComponentCollection::size_type>(index),
             resource->value.get());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_components_remove_at(const CNA_Handle gameHandle, const uint64_t index)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        GameComponentCollection* components = nullptr;
-        if (const CNA_Result result = BorrowComponents(gameHandle, &components);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (index >= static_cast<uint64_t>(components->getCountProperty())) {
-            return OutOfRange("The component index is at or past the collection count.");
-        }
-        components->RemoveAt(static_cast<GameComponentCollection::size_type>(index));
         return CNA_RESULT_SUCCESS;
     });
 }

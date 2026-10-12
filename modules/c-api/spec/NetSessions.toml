@@ -28,6 +28,7 @@ cna_available_network_session_collection_get_count = { get = "object->value->get
 cna_available_network_session_collection_get_is_disposed = { get = "object->value->getIsDisposedProperty()" }
 cna_available_network_session_collection_dispose = { call = "object->value->Dispose()" }
 cna_available_network_session_collection_destroy = { release = "object->value->Dispose()" }
+cna_available_network_session_collection_copy_session = { result = "CreateSessionHandle(object->value->getItem(index), out_session)", require = 'RequireIndex(index, object->value->getCountProperty(), "The discovered-session index is outside the collection.")' }
 
 [session_network_session]
 lookup = "GetSessionResource"

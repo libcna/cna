@@ -23,6 +23,8 @@ arguments = 2
 
 [manifest_entry.routes]
 cna_content_manager_copy_manifest_relative_path = { copy = "object->relativePath" }
+cna_content_manager_copy_manifest_native_extension = { copy = "object->nativeExtensions[static_cast<std::size_t>(extension_index)]", require = 'RequireIndex(extension_index, object->nativeExtensions.size(), "The native-extension index is outside this manifest entry.")' }
+cna_content_manager_copy_manifest_xnb_reader_name = { copy = "object->xnbReaderNames[static_cast<std::size_t>(name_index)]", require = 'RequireIndex(name_index, object->xnbReaderNames.size(), "The reader-name index is outside this manifest entry.")' }
 
 [game_and_content_manager]
 lookup = "CNA::C::Detail::GetGameObject"

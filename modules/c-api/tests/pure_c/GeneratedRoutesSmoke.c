@@ -25,6 +25,7 @@ static CNA_AlbumHandle o_CNA_AlbumHandle;
 static CNA_AlphaModeEXT o_CNA_AlphaModeEXT;
 static CNA_ArtistHandle o_CNA_ArtistHandle;
 static CNA_AsciiQuantizeMode o_CNA_AsciiQuantizeMode;
+static CNA_AvailableNetworkSessionHandle o_CNA_AvailableNetworkSessionHandle;
 static CNA_AvatarAnimationInfo o_CNA_AvatarAnimationInfo;
 static CNA_AvatarDescriptionInfo o_CNA_AvatarDescriptionInfo;
 static CNA_AvatarExpression o_CNA_AvatarExpression;
@@ -54,11 +55,15 @@ static CNA_DisplayMode o_CNA_DisplayMode;
 static CNA_DisplayOrientation o_CNA_DisplayOrientation;
 static CNA_DitherMode o_CNA_DitherMode;
 static CNA_EffectAnnotationCollectionHandle o_CNA_EffectAnnotationCollectionHandle;
+static CNA_EffectAnnotationHandle o_CNA_EffectAnnotationHandle;
 static CNA_EffectAnnotationInfo o_CNA_EffectAnnotationInfo;
 static CNA_EffectHandle o_CNA_EffectHandle;
 static CNA_EffectParameterCollectionHandle o_CNA_EffectParameterCollectionHandle;
+static CNA_EffectParameterHandle o_CNA_EffectParameterHandle;
 static CNA_EffectParameterInfo o_CNA_EffectParameterInfo;
+static CNA_EffectPassHandle o_CNA_EffectPassHandle;
 static CNA_EffectTechniqueCollectionHandle o_CNA_EffectTechniqueCollectionHandle;
+static CNA_EffectTechniqueHandle o_CNA_EffectTechniqueHandle;
 static CNA_FriendGamerInfo o_CNA_FriendGamerInfo;
 static CNA_GameDefaults o_CNA_GameDefaults;
 static CNA_GamePadAnalogState o_CNA_GamePadAnalogState;
@@ -604,6 +609,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_content_manager_get_xnb_reader_usage_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_get_xnb_reader_usage_count", "a null out_count");
     failures += expect(cna_content_manager_copy_manifest_relative_path(v_CNA_Handle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_relative_path", "a null destination with a capacity");
     failures += expect(cna_content_manager_copy_manifest_relative_path(v_CNA_Handle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_relative_path", "a null out_bytes");
+    failures += expect(cna_content_manager_copy_manifest_native_extension(v_CNA_Handle, v_uint64_t, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_native_extension", "a null destination with a capacity");
+    failures += expect(cna_content_manager_copy_manifest_native_extension(v_CNA_Handle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_native_extension", "a null out_bytes");
+    failures += expect(cna_content_manager_copy_manifest_xnb_reader_name(v_CNA_Handle, v_uint64_t, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_xnb_reader_name", "a null destination with a capacity");
+    failures += expect(cna_content_manager_copy_manifest_xnb_reader_name(v_CNA_Handle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_copy_manifest_xnb_reader_name", "a null out_bytes");
     failures += expect(cna_content_reader_get_asset_name_size(v_CNA_ContentReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_get_asset_name_size", "a null out_bytes");
     failures += expect(cna_content_reader_copy_asset_name(v_CNA_ContentReaderHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_copy_asset_name", "a null destination with a capacity");
     failures += expect(cna_content_reader_copy_asset_name(v_CNA_ContentReaderHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_copy_asset_name", "a null out_bytes");
@@ -753,6 +762,7 @@ static int null_outputs_are_refused(void)
     o_CNA_EffectAnnotationInfo.struct_version = 0U;
     failures += expect(cna_effect_annotation_get_info(v_CNA_EffectAnnotationHandle, &o_CNA_EffectAnnotationInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_annotation_get_info", "a out_info of version 0");
     failures += expect(cna_effect_annotation_collection_get_count(v_CNA_EffectAnnotationCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_annotation_collection_get_count", "a null out_count");
+    failures += expect(cna_effect_annotation_collection_get_at(v_CNA_EffectAnnotationCollectionHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_annotation_collection_get_at", "a null out_annotation");
     failures += expect(cna_effect_parameter_copy_name(v_CNA_EffectParameterHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_copy_name", "a null destination with a capacity");
     failures += expect(cna_effect_parameter_copy_name(v_CNA_EffectParameterHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_copy_name", "a null out_bytes");
     failures += expect(cna_effect_parameter_copy_semantic(v_CNA_EffectParameterHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_copy_semantic", "a null destination with a capacity");
@@ -767,12 +777,14 @@ static int null_outputs_are_refused(void)
     o_CNA_EffectParameterInfo.struct_version = 0U;
     failures += expect(cna_effect_parameter_get_info(v_CNA_EffectParameterHandle, &o_CNA_EffectParameterInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_get_info", "a out_info of version 0");
     failures += expect(cna_effect_parameter_collection_get_count(v_CNA_EffectParameterCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_collection_get_count", "a null out_count");
+    failures += expect(cna_effect_parameter_collection_get_at(v_CNA_EffectParameterCollectionHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_parameter_collection_get_at", "a null out_parameter");
     failures += expect(cna_effect_pass_get_index_ext(v_CNA_EffectPassHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_get_index_ext", "a null out_index");
     failures += expect(cna_effect_pass_copy_name(v_CNA_EffectPassHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_copy_name", "a null destination with a capacity");
     failures += expect(cna_effect_pass_copy_name(v_CNA_EffectPassHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_copy_name", "a null out_bytes");
     failures += expect(cna_effect_pass_get_name_byte_count(v_CNA_EffectPassHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_get_name_byte_count", "a null out_byte_count");
     failures += expect(cna_effect_pass_get_annotations(v_CNA_EffectPassHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_get_annotations", "a null out_collection");
     failures += expect(cna_effect_pass_collection_get_count(v_CNA_EffectPassCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_collection_get_count", "a null out_count");
+    failures += expect(cna_effect_pass_collection_get_at(v_CNA_EffectPassCollectionHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_pass_collection_get_at", "a null out_pass");
     failures += expect(cna_effect_technique_get_index_ext(v_CNA_EffectTechniqueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_get_index_ext", "a null out_index");
     failures += expect(cna_effect_technique_copy_name(v_CNA_EffectTechniqueHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_copy_name", "a null destination with a capacity");
     failures += expect(cna_effect_technique_copy_name(v_CNA_EffectTechniqueHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_copy_name", "a null out_bytes");
@@ -780,6 +792,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_effect_technique_get_name_byte_count(v_CNA_EffectTechniqueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_get_name_byte_count", "a null out_byte_count");
     failures += expect(cna_effect_technique_get_annotations(v_CNA_EffectTechniqueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_get_annotations", "a null out_collection");
     failures += expect(cna_effect_technique_collection_get_count(v_CNA_EffectTechniqueCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_collection_get_count", "a null out_count");
+    failures += expect(cna_effect_technique_collection_get_at(v_CNA_EffectTechniqueCollectionHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_technique_collection_get_at", "a null out_technique");
     failures += expect(cna_effect_get_is_compiled_ext(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_get_is_compiled_ext", "a null out_is_compiled");
     failures += expect(cna_effect_has_renderer(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_has_renderer", "a null out_has_renderer");
     failures += expect(cna_effect_is_exact_stock_sprite_effect(v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_effect_is_exact_stock_sprite_effect", "a null out_is_exact");
@@ -1849,6 +1862,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_network_session_join(v_CNA_AvailableNetworkSessionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_session_join", "a null out_session");
     failures += expect(cna_available_network_session_collection_get_count(v_CNA_AvailableNetworkSessionCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_collection_get_count", "a null out_count");
     failures += expect(cna_available_network_session_collection_get_is_disposed(v_CNA_AvailableNetworkSessionCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_collection_get_is_disposed", "a null out_is_disposed");
+    failures += expect(cna_available_network_session_collection_copy_session(v_CNA_AvailableNetworkSessionCollectionHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_collection_copy_session", "a null out_session");
     failures += expect(cna_network_session_copy_type_name(v_CNA_NetworkSessionHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_network_session_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_network_session_copy_type_name(v_CNA_NetworkSessionHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_session_copy_type_name", "a null out_bytes");
     failures += expect(cna_network_session_get_is_disposed(v_CNA_NetworkSessionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_session_get_is_disposed", "a null out_is_disposed");
@@ -2499,6 +2513,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_content_manager_get_xnb_reader_usage_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_get_xnb_reader_usage_count", what);
     failures += expect(cna_content_manager_set_root_directory(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_set_root_directory", what);
     failures += expect(cna_content_manager_copy_manifest_relative_path(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_copy_manifest_relative_path", what);
+    failures += expect(cna_content_manager_copy_manifest_native_extension(handle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_copy_manifest_native_extension", what);
+    failures += expect(cna_content_manager_copy_manifest_xnb_reader_name(handle, v_uint64_t, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_manager_copy_manifest_xnb_reader_name", what);
     failures += expect(cna_game_set_content_manager_ext(handle, v_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_game_set_content_manager_ext", what);
     failures += expect(cna_content_reader_get_asset_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_reader_get_asset_name_size", what);
     failures += expect(cna_content_reader_copy_asset_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_content_reader_copy_asset_name", what);
@@ -2609,6 +2625,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_effect_annotation_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_annotation_destroy", what);
     failures += expect(cna_effect_annotation_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_annotation_collection_get_count", what);
     failures += expect(cna_effect_annotation_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_annotation_collection_destroy", what);
+    o_CNA_EffectAnnotationHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_effect_annotation_collection_get_at(handle, v_uint64_t, &o_CNA_EffectAnnotationHandle), CNA_RESULT_INVALID_HANDLE, "cna_effect_annotation_collection_get_at", what);
+    failures += expect_cleared(o_CNA_EffectAnnotationHandle, "cna_effect_annotation_collection_get_at");
     failures += expect(cna_effect_parameter_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_copy_name", what);
     failures += expect(cna_effect_parameter_copy_semantic(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_copy_semantic", what);
     failures += expect(cna_effect_parameter_copy_value_string(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_copy_value_string", what);
@@ -2622,6 +2641,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_effect_parameter_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_destroy", what);
     failures += expect(cna_effect_parameter_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_collection_get_count", what);
     failures += expect(cna_effect_parameter_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_collection_destroy", what);
+    o_CNA_EffectParameterHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_effect_parameter_collection_get_at(handle, v_uint64_t, &o_CNA_EffectParameterHandle), CNA_RESULT_INVALID_HANDLE, "cna_effect_parameter_collection_get_at", what);
+    failures += expect_cleared(o_CNA_EffectParameterHandle, "cna_effect_parameter_collection_get_at");
     failures += expect(cna_effect_pass_get_index_ext(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_get_index_ext", what);
     failures += expect(cna_effect_pass_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_copy_name", what);
     failures += expect(cna_effect_pass_apply(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_apply", what);
@@ -2632,6 +2654,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_effect_pass_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_destroy", what);
     failures += expect(cna_effect_pass_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_collection_get_count", what);
     failures += expect(cna_effect_pass_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_collection_destroy", what);
+    o_CNA_EffectPassHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_effect_pass_collection_get_at(handle, v_uint64_t, &o_CNA_EffectPassHandle), CNA_RESULT_INVALID_HANDLE, "cna_effect_pass_collection_get_at", what);
+    failures += expect_cleared(o_CNA_EffectPassHandle, "cna_effect_pass_collection_get_at");
     failures += expect(cna_effect_technique_get_index_ext(handle, &o_uint32_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_get_index_ext", what);
     failures += expect(cna_effect_technique_copy_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_copy_name", what);
     failures += expect(cna_effect_technique_get_identity(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_get_identity", what);
@@ -2642,6 +2667,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_effect_technique_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_destroy", what);
     failures += expect(cna_effect_technique_collection_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_collection_get_count", what);
     failures += expect(cna_effect_technique_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_collection_destroy", what);
+    o_CNA_EffectTechniqueHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_effect_technique_collection_get_at(handle, v_uint64_t, &o_CNA_EffectTechniqueHandle), CNA_RESULT_INVALID_HANDLE, "cna_effect_technique_collection_get_at", what);
+    failures += expect_cleared(o_CNA_EffectTechniqueHandle, "cna_effect_technique_collection_get_at");
     failures += expect(cna_effect_apply(handle), CNA_RESULT_INVALID_HANDLE, "cna_effect_apply", what);
     failures += expect(cna_effect_get_is_compiled_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_effect_get_is_compiled_ext", what);
     failures += expect(cna_effect_has_renderer(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_effect_has_renderer", what);
@@ -2869,6 +2897,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_game_components_clear(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_clear", what);
     failures += expect(cna_game_components_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_get_type_name_size", what);
     failures += expect(cna_game_components_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_copy_type_name", what);
+    failures += expect(cna_game_components_remove_at(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove_at", what);
     failures += expect(cna_game_components_add(handle, v_CNA_GameComponentHandle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_add", what);
     failures += expect(cna_game_components_remove(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove", what);
     failures += expect(cna_game_components_contains(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_contains", what);
@@ -3553,6 +3582,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_available_network_session_collection_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_collection_get_is_disposed", what);
     failures += expect(cna_available_network_session_collection_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_collection_dispose", what);
     failures += expect(cna_available_network_session_collection_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_collection_destroy", what);
+    o_CNA_AvailableNetworkSessionHandle = UINT64_C(0xDEAD);
+    failures += expect(cna_available_network_session_collection_copy_session(handle, v_int32_t, &o_CNA_AvailableNetworkSessionHandle), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_collection_copy_session", what);
+    failures += expect_cleared(o_CNA_AvailableNetworkSessionHandle, "cna_available_network_session_collection_copy_session");
     failures += expect(cna_network_session_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_network_session_copy_type_name", what);
     failures += expect(cna_network_session_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_session_get_is_disposed", what);
     failures += expect(cna_network_session_get_allow_host_migration(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_session_get_allow_host_migration", what);
@@ -4277,6 +4309,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 2122 generated routes\n", failures);
+    printf("%d failed checks across 2130 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }
