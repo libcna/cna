@@ -141,6 +141,25 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   either service (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
   (`ModuleLinkClosure_*`) pin which archives each module's consumer links.
 
+## Linker independence
+
+GNU ld, lld and mold must extract the same archive members. They differ in one case that matters
+to CNA: a symbol defined both by a not-yet-extracted archive member and by a shared library. From
+C++20 on, libstdc++ no longer declares `std::string`'s members instantiated in its shared library,
+so every CNA object carries weak copies of the ones it uses, and libstdc++ exports them weakly too.
+mold gives such a symbol to whichever file comes first on the command line, and the compiler driver
+names the C++ runtime last. In a multi-renderer build, `libshaderc.so` needs
+`std::string::_M_erase`; mold gave it to `GamerServicesBackend.cpp.o`, the first member of the
+first CNA archive that defines it, and the 2D game linked the service client, the system Guide and
+the 30 MB avatar catalog (47.1 MB stripped, against 11.7 MB with GNU ld or lld).
+
+Every final link that consumes CNA therefore names the C++ runtime before CNA's archives
+(`-Wl,--push-state,--as-needed -lstdc++ -Wl,--pop-state`, through `CNA::BuildConfig`, on ELF
+targets with a shared runtime). The runtime then owns what it exports, and a member is extracted
+only for a CNA symbol: mold extracts exactly the members lld does. GNU ld and lld are unaffected.
+A program that links the C++ runtime statically does not get the option and should name the static
+runtime ahead of CNA itself if it links with mold.
+
 ## Built-in avatar catalog: embedded, not a separate pack
 
 An external `avatar_catalog` pack was considered and not adopted. The catalog is now its own

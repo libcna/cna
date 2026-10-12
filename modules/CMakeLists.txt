@@ -262,6 +262,11 @@ target_compile_definitions(cna_build_config INTERFACE
         CNA_DIAGNOSTICS_LEVEL=${CNA_DIAGNOSTICS_LEVEL}
 )
 
+if(CNA_CXX_RUNTIME_FIRST_LINK_OPTION)
+    # Every linker extracts the same archive members (cmake/BuildPerformance.cmake).
+    target_link_options(cna_build_config INTERFACE "${CNA_CXX_RUNTIME_FIRST_LINK_OPTION}")
+endif()
+
 if(CNA_SIZE_GC_LINK_OPTION)
     # CNA_OPTIMIZE_FOR_SIZE (cmake/BuildPerformance.cmake): every final link that consumes CNA
     # collects the unreferenced sections of CNA's per-function objects.

@@ -358,6 +358,31 @@ if(CNA_OPTIMIZE_FOR_SIZE AND NOT MSVC AND NOT EMSCRIPTEN
     set(CNA_SIZE_GC_LINK_OPTION "$<IF:$<PLATFORM_ID:Darwin,iOS>,-Wl$<COMMA>-dead_strip,-Wl$<COMMA>--gc-sections>")
 endif()
 
+# The C++ runtime named ahead of CNA's archives in every final link that consumes CNA
+# (docs/link-size-architecture.md, "Linker independence"). From C++20 on, libstdc++ no longer
+# declares std::string's members instantiated in its shared library, so each CNA object carries
+# weak copies of the ones it uses. mold resolves a symbol that a not-yet-extracted archive member
+# and a shared library both define weakly to whichever comes first on the command line, and the
+# compiler driver names the runtime last. A std::string member that a C++ shared library needs
+# (libshaderc, in a build with Vulkan) then extracts the first CNA archive member that defines it:
+# in a multi-renderer 2D game, the gamer-services backend, the system Guide and the 30 MB avatar
+# catalog. Named first, the runtime owns the symbols it exports, and a member is extracted only for
+# a CNA symbol. As-needed, so it adds no dependency; GNU ld and lld link the same members with or
+# without it. Skipped for a static runtime, which this would replace with the shared one.
+set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION "")
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
+   AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"
+   AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-static")
+    foreach(_cna_cxx_runtime IN ITEMS stdc++ c++)
+        if(_cna_cxx_runtime IN_LIST CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
+            set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION
+                "SHELL:-Wl,--push-state,--as-needed -l${_cna_cxx_runtime} -Wl,--pop-state")
+            break()
+        endif()
+    endforeach()
+    unset(_cna_cxx_runtime)
+endif()
+
 option(CNA_ENABLE_UNITY_BUILD
     "Enable the measured clean-CI unity-build pilot for the core and math modules" OFF)
 
