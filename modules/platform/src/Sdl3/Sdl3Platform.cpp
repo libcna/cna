@@ -29,9 +29,9 @@ namespace CNA::Platform::Sdl3 {
 
     namespace {
 
-        // The optional services' factories, set by Install*() (Sdl3OptionalServices.cpp, which
-        // EnableCameraService()/EnableTrayService() link). Support is reported without them
-        // (Sdl3ServiceSupport.cpp).
+        // The optional services' factories, set by Install*() (Sdl3CameraService.cpp and
+        // Sdl3TrayService.cpp, which EnableCameraService() and EnableTrayService() link). Support
+        // is reported without them (Sdl3ServiceSupport.cpp).
         std::atomic<std::unique_ptr<IPlatformTray> (*)()> createTray{nullptr};
         std::atomic<std::unique_ptr<IPlatformCameraProvider> (*)()> createCamera{nullptr};
 

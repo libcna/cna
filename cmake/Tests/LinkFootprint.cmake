@@ -29,6 +29,14 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         target_link_libraries(cna_link_footprint_capability_query PRIVATE CNA::DevicesExt)
     endif()
 
+    # The camera and the tray are separate services: only SDL3 has both.
+    if(CNA_PLATFORM STREQUAL "SDL3")
+        add_executable(cna_link_footprint_camera_only tests/link_footprint/footprint_camera_only.cpp)
+        target_link_libraries(cna_link_footprint_camera_only PRIVATE CNA::Runtime)
+        add_executable(cna_link_footprint_tray_only tests/link_footprint/footprint_tray_only.cpp)
+        target_link_libraries(cna_link_footprint_tray_only PRIVATE CNA::Runtime)
+    endif()
+
     if(Python3_Interpreter_FOUND)
         # What a game that loads textures, fonts and sounds, plays them and asks the Guide about
         # its license must not contain. Each family is one subsystem that used to ride along.
@@ -184,6 +192,23 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 ${_cna_footprint_args})
         set_tests_properties(LinkFootprint_CapabilityQuery PROPERTIES
             LABELS "configuration;link-footprint")
+        # A program that uses one of the two services links that one alone.
+        if(CNA_PLATFORM STREQUAL "SDL3")
+            add_test(NAME LinkFootprint_CameraOnly
+                COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
+                    --binary $<TARGET_FILE:cna_link_footprint_camera_only>
+                    --require "CNA::Platform::Sdl3::Sdl3CameraProvider::"
+                    --forbid "CNA::Platform::Sdl3::Sdl3Tray::"
+                    --forbid "CNA::Platform::EnableTrayService")
+            add_test(NAME LinkFootprint_TrayOnly
+                COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
+                    --binary $<TARGET_FILE:cna_link_footprint_tray_only>
+                    --require "CNA::Platform::Sdl3::Sdl3Tray::"
+                    --forbid "CNA::Platform::Sdl3::Sdl3CameraProvider::"
+                    --forbid "CNA::Platform::EnableCameraService")
+            set_tests_properties(LinkFootprint_CameraOnly LinkFootprint_TrayOnly PROPERTIES
+                LABELS "configuration;link-footprint")
+        endif()
         unset(_cna_footprint_absent)
         unset(_cna_footprint_present)
         unset(_cna_footprint_args)

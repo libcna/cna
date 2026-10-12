@@ -146,12 +146,12 @@ namespace CNA::Platform::Sdl3 {
             IPlatformWindow& window) override;
 
         /**
-         * @brief Installs the tray service (EnableTrayService(), Sdl3OptionalServices.cpp).
+         * @brief Installs the tray service (EnableTrayService(), Sdl3TrayService.cpp).
          * @param create Creates the service on the first GetTray().
          */
         static void InstallTray(std::unique_ptr<IPlatformTray> (*create)());
         /**
-         * @brief Installs the camera service (EnableCameraService(), Sdl3OptionalServices.cpp).
+         * @brief Installs the camera service (EnableCameraService(), Sdl3CameraService.cpp).
          * @param create Creates the provider on the first GetCamera().
          */
         static void InstallCamera(std::unique_ptr<IPlatformCameraProvider> (*create)());

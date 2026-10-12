@@ -54,7 +54,7 @@ dependency is not real.
 | `.cnb` encoders and `CnbWriter` | `Cnb*Encode.cpp`, `CnbModelCodec.cpp`, `CnbModelV2Codec.cpp` (decoders: `Cnb*Codec.cpp`, `CnbModel*Decode.cpp`) | content tools; loading never encodes |
 | `TextureCube`, `RenderTargetCube`, `Texture3D` | their own translation units; the device binds through `IRenderTargetBindingSource`, renderers ask `Texture::AsTextureCubeEXT`/`AsTexture3DEXT` | a program that creates, loads or binds one |
 | Streaming audio, capture, media updates | slots of `FrameworkDispatcher` (`FrameworkUpdates.hpp`) | the subsystem installs its slot on first use |
-| Camera and tray | `Sdl3OptionalServices.cpp` (`CNA/Platform/OptionalServices.hpp`); their support probes are `Sdl3ServiceSupport.cpp` | `CNA::Devices::Camera` and `SystemTray`, which enable them; `PlatformCapabilities::camera`/`tray` and `Supports()` report support without either service, and only the camera question starts SDL's camera subsystem |
+| Camera, tray | `Sdl3CameraService.cpp`, `Sdl3TrayService.cpp` (`CNA/Platform/OptionalServices.hpp`), one each; their support probes are `Sdl3ServiceSupport.cpp` | `CNA::Devices::Camera` and `SystemTray`, which enable them; `PlatformCapabilities::camera`/`tray` and `Supports()` report support without either service, and only the camera question starts SDL's camera subsystem |
 | Audio capture backend | `AudioRecordingDeviceFactory.cpp` | `Microphone` |
 | Other platforms | `PlatformFactory.cpp` (by name) | the platform conformance suite; games use `PlatformFactoryDefault.cpp` |
 | Renderers | the generated registry lists only the renderers this build compiles | single renderer by default; a multi-renderer build is requested with `CNA_GRAPHICS_RENDERERS` |
@@ -138,7 +138,8 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   `GamerServicesComponent` contains (the system Guide and avatars, nothing else);
   `LinkFootprint_FullFeatures` fails if a game that uses everything lacks any of it;
   `LinkFootprint_CapabilityQuery` fails if asking whether a camera or a tray is supported links
-  either service (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
+  either service, and `LinkFootprint_CameraOnly`/`_TrayOnly` if using one links the other
+  (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
   (`ModuleLinkClosure_*`) pin which archives each module's consumer links.
 
 ## Linker independence
