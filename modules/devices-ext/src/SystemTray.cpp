@@ -12,15 +12,9 @@
 
 namespace CNA::Devices
 {
-    // Each entry enables the platform's tray service first: it is installed on first use, so
-    // that a program without a tray never links it (CNA/Platform/OptionalServices.hpp).
-    bool SystemTray::getIsSupportedProperty()
-    {
-        CNA::Platform::EnableTrayService();
-        const CNA::Platform::PlatformCapabilities capabilities =
-            CNA::Platform::GetCurrentPlatform().GetCapabilities();
-        return capabilities.tray;
-    }
+    // The platform's tray service is installed on first use, so that a program without a tray
+    // never links it (CNA/Platform/OptionalServices.hpp): creating an icon enables it first.
+    // Whether a tray is supported is SystemTraySupport.cpp.
 
     SystemTray::SystemTray(const std::string& tooltip)
     {

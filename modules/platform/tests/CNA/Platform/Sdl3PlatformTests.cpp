@@ -9,8 +9,8 @@
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/OptionalServices.hpp"
-#include "../../../src/Sdl3/Sdl3Camera.hpp"
-#include "../../../src/Sdl3/Sdl3Tray.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
+#include "../../../src/Sdl3/Sdl3ServiceSupport.hpp"
 
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
@@ -168,8 +168,10 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.inputDeviceEnumeration);
     EXPECT_TRUE(capabilities.messageBox);
     EXPECT_TRUE(capabilities.nativeFileDialog);
-    EXPECT_EQ(platform_->GetTray() != nullptr, capabilities.tray);
-    EXPECT_EQ(platform_->GetCamera() != nullptr, capabilities.camera);
+    // Optional services: the capability is the platform's support; the service exists once
+    // enabled (CNA/Platform/OptionalServices.hpp).
+    EXPECT_EQ(capabilities.tray, Sdl3::TraySupported());
+    EXPECT_EQ(capabilities.camera, Sdl3::CameraSupported());
 
     // Still unwired, so still false -- the pairing the conformance suite enforces.
     EXPECT_TRUE(capabilities.gamepadSensors);
@@ -183,20 +185,47 @@ TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
 }
 
-TEST_F(Sdl3PlatformTest, EnabledCameraAndTrayReportWhatThePlatformSupports)
+TEST_F(Sdl3PlatformTest, CameraAndTrayCapabilitiesReportSupportWhetherOrNotTheServicesAreEnabled)
 {
-    // The camera and the tray are installed on first use (CNA/Platform/OptionalServices.hpp), so
-    // a program that never uses them neither links them nor starts SDL's camera subsystem. Once
-    // enabled they answer as they always did: the platform's own support, and a service exactly
-    // when the capability is true.
+    // The contract the two capabilities always had: what the platform supports, so that an
+    // application can ask before it uses the service. The services themselves are installed on
+    // first use (CNA/Platform/OptionalServices.hpp), so that a program that uses neither links
+    // neither; enabling one changes whether its service exists, never its capability.
+    const PlatformCapabilities before = platform_->GetCapabilities();
+    EXPECT_EQ(before.tray, Sdl3::TraySupported());
+    EXPECT_EQ(before.camera, Sdl3::CameraSupported());
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Tray), before.tray);
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Camera), before.camera);
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
+    EXPECT_TRUE(before.tray);
+#endif
+
     EnableCameraService();
     EnableTrayService();
-    const PlatformCapabilities capabilities = platform_->GetCapabilities();
-    EXPECT_EQ(capabilities.tray, Sdl3::Sdl3Tray::IsSupported());
-    EXPECT_EQ(capabilities.camera, Sdl3::Sdl3CameraProvider::IsSupported());
-    EXPECT_EQ(platform_->GetTray() != nullptr, capabilities.tray);
-    EXPECT_EQ(platform_->GetCamera() != nullptr, capabilities.camera);
+    const PlatformCapabilities after = platform_->GetCapabilities();
+    EXPECT_EQ(after.tray, before.tray);
+    EXPECT_EQ(after.camera, before.camera);
+    EXPECT_EQ(platform_->GetTray() != nullptr, after.tray);
+    EXPECT_EQ(platform_->GetCamera() != nullptr, after.camera);
     EXPECT_EQ(platform_->GetCamera(), platform_->GetCamera()) << "created once, then reused";
+}
+
+TEST_F(Sdl3PlatformTest, AskingAboutAnythingButTheCameraDoesNotStartTheCameraSubsystem)
+{
+    // Whether cameras are supported starts SDL's camera subsystem (Sdl3ServiceSupport.cpp); a
+    // program that asks only about its window, as GraphicsDevice does, must not start it.
+    if (Sdl3::CameraSubsystemRunning())
+    {
+        GTEST_SKIP() << "an earlier test in this process asked about the camera";
+    }
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        if (capability != PlatformCapability::Camera)
+        {
+            (void)platform_->Supports(capability);
+        }
+    }
+    EXPECT_FALSE(Sdl3::CameraSubsystemRunning());
 }
 
 TEST_F(Sdl3PlatformTest, VulkanCapabilityProbePreservesTheHostsVideoSubsystemState)

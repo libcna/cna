@@ -3943,8 +3943,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (!descriptor.needsSurfacePresenter || platform_ == nullptr)
                 return false;
-            const auto capabilities = platform_->GetCapabilities();
-            return capabilities.surfacePresentation && !capabilities.nativeWindowHandle;
+            // One capability at a time: the whole set would also probe the camera.
+            return platform_->Supports(CNA::Platform::PlatformCapability::SurfacePresentation) &&
+                   !platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle);
         }();
 
         if (!descriptor.needsWindow && !presenterIsTheOnlyDisplay)
@@ -4063,7 +4064,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Strict XNA exposes a native window handle. Headless/terminal windows still have a
         // platform token for routing input and GameWindow identity, but must not masquerade as a
         // native handle in PresentationParameters.
-        if (platform_->GetCapabilities().nativeWindowHandle)
+        if (platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle))
             presentationParameters_.setDeviceWindowHandleProperty(windowHandle);
 
         // Publish the window to the text-input subsystem (mirrors FNA, which sets

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -273,11 +274,15 @@ namespace Microsoft::Xna::Framework
         CNAEXT [[nodiscard]] CNA::Platform::IPlatform& GetPlatformEXT() const;
 
         /**
-         * @brief Gets the capabilities captured from this game's platform during construction.
+         * @brief Gets the capabilities of this game's platform, read on the first call and cached.
          *
          * Games use this to select optional UI/input paths once at startup.  It deliberately
          * returns a cached value: platform capability discovery may probe a host terminal, so it
-         * must never become a per-frame virtual query.
+         * must never become a per-frame virtual query.  It is not read during construction,
+         * because asking whether cameras are supported starts the platform's camera subsystem,
+         * which a game that never asks should not pay for.
+         *
+         * @return The platform's capability set, the same on every call.
          */
         CNAEXT [[nodiscard]] const CNA::Platform::PlatformCapabilities&
         GetPlatformCapabilitiesEXT() const;
@@ -390,7 +395,7 @@ namespace Microsoft::Xna::Framework
         // failed-construction path is covered and the normal path still uninstalls from ~Game.
         std::unique_ptr<PlatformInstallation> platformInstallation_;
 
-        CNA::Platform::PlatformCapabilities platformCapabilities_;
+        mutable std::optional<CNA::Platform::PlatformCapabilities> platformCapabilities_;
         std::unique_ptr<PlatformEventBatch> eventBatch_;
 
         GameComponentCollection Components_;

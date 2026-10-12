@@ -33,11 +33,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 - `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
   `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses
   them, so a program that never makes a cube map or a volume links neither.
-- The platform's camera and tray are optional services: `PlatformCapabilities::camera`/`tray` are
-  false, and `IPlatform::GetCamera()`/`GetTray()` null, until `CNA::Platform::EnableCameraService()`
-  / `EnableTrayService()` runs. `CNA::Devices::Camera` and `SystemTray` enable them first, so
-  nothing an application sees through them changes; an SDL3 game that uses no camera no longer
-  starts SDL's camera subsystem when its graphics device is created.
+- The platform's camera and tray are optional services: `IPlatform::GetCamera()`/`GetTray()` are
+  null until `CNA::Platform::EnableCameraService()`/`EnableTrayService()` runs, which
+  `CNA::Devices::Camera` and `SystemTray` do first. `PlatformCapabilities::camera`/`tray` still
+  report what the platform supports. The new `IPlatform::Supports(PlatformCapability)` answers one
+  capability; the runtime asks it instead of reading the whole set, and
+  `Game::GetPlatformCapabilitiesEXT()` reads the set on its first call rather than during
+  construction, so an SDL3 game that never asks about cameras no longer starts SDL's camera
+  subsystem.
 - **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
   (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
   `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their

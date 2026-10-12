@@ -54,7 +54,7 @@ dependency is not real.
 | `.cnb` encoders and `CnbWriter` | `Cnb*Encode.cpp`, `CnbModelCodec.cpp`, `CnbModelV2Codec.cpp` (decoders: `Cnb*Codec.cpp`, `CnbModel*Decode.cpp`) | content tools; loading never encodes |
 | `TextureCube`, `RenderTargetCube`, `Texture3D` | their own translation units; the device binds through `IRenderTargetBindingSource`, renderers ask `Texture::AsTextureCubeEXT`/`AsTexture3DEXT` | a program that creates, loads or binds one |
 | Streaming audio, capture, media updates | slots of `FrameworkDispatcher` (`FrameworkUpdates.hpp`) | the subsystem installs its slot on first use |
-| Camera and tray | `Sdl3OptionalServices.cpp` (`CNA/Platform/OptionalServices.hpp`) | `CNA::Devices::Camera` and `SystemTray`, which enable them; until then the platform neither links them nor starts its camera subsystem |
+| Camera and tray | `Sdl3OptionalServices.cpp` (`CNA/Platform/OptionalServices.hpp`); their support probes are `Sdl3ServiceSupport.cpp` | `CNA::Devices::Camera` and `SystemTray`, which enable them; `PlatformCapabilities::camera`/`tray` and `Supports()` report support without either service, and only the camera question starts SDL's camera subsystem |
 | Audio capture backend | `AudioRecordingDeviceFactory.cpp` | `Microphone` |
 | Other platforms | `PlatformFactory.cpp` (by name) | the platform conformance suite; games use `PlatformFactoryDefault.cpp` |
 | Renderers | the generated registry lists only the renderers this build compiles | single renderer by default; a multi-renderer build is requested with `CNA_GRAPHICS_RENDERERS` |
@@ -85,8 +85,10 @@ Each file at a boundary says so in a short `Link boundary:` comment, so that nob
   `Texture::AsTextureCubeEXT`) or an interface the concrete classes implement
   (`IRenderTargetBindingSource`), whose typeinfo every user emits for itself.
 - **An optional platform service is enabled by its consumer.** A virtual service accessor links its
-  implementation; one installed by `EnableCameraService()` is linked, and started, only by the
-  program that uses it.
+  implementation; one installed by `EnableCameraService()` is linked only by the program that uses
+  it. Whether it is supported is a separate small probe, so the capability keeps its meaning
+  without linking the service. Where a question has a cost (the camera's starts SDL's camera
+  subsystem), ask `IPlatform::Supports()` for the capability needed rather than reading the set.
 - **Large data is its own library**, referenced by the one function that serves it.
 - **Test doubles are their own translation unit**, referenced only by tests.
 - **Pass capabilities instead of looking them up.** The service client does not ask the avatar
@@ -134,8 +136,9 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
 - **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of 31 subsystem
   families it does not use; `LinkFootprint_GamerServicesGame` pins what the same game with a
   `GamerServicesComponent` contains (the system Guide and avatars, nothing else);
-  `LinkFootprint_FullFeatures` fails if a game that uses everything lacks any of it
-  (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
+  `LinkFootprint_FullFeatures` fails if a game that uses everything lacks any of it;
+  `LinkFootprint_CapabilityQuery` fails if asking whether a camera or a tray is supported links
+  either service (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
   (`ModuleLinkClosure_*`) pin which archives each module's consumer links.
 
 ## Built-in avatar catalog: embedded, not a separate pack

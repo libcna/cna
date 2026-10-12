@@ -22,6 +22,13 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
     target_link_libraries(cna_link_footprint_gamer_services PRIVATE
         CNA::Runtime CNA::GamerServices)
 
+    add_executable(cna_link_footprint_capability_query
+        tests/link_footprint/footprint_capability_query.cpp)
+    target_link_libraries(cna_link_footprint_capability_query PRIVATE CNA::Runtime)
+    if(TARGET CNA::DevicesExt)
+        target_link_libraries(cna_link_footprint_capability_query PRIVATE CNA::DevicesExt)
+    endif()
+
     if(Python3_Interpreter_FOUND)
         # What a game that loads textures, fonts and sounds, plays them and asks the Guide about
         # its license must not contain. Each family is one subsystem that used to ride along.
@@ -152,6 +159,30 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 --require "CNA::Internal::GamerServices::Avatars::embeddedCatalogFiles"
                 --require "GamerServices::Guide::getIsTrialModeProperty")
         set_tests_properties(LinkFootprint_GamerServicesGame PROPERTIES
+            LABELS "configuration;link-footprint")
+        # A program that asks whether a camera and a tray are supported and uses neither: support
+        # is reported without the services, which only enabling one links.
+        set(_cna_footprint_args
+            --forbid "CNA::Platform::Sdl3::Sdl3CameraProvider::"
+            --forbid "CNA::Platform::Sdl3::Sdl3Tray::"
+            --forbid "CNA::Platform::EnableCameraService"
+            --forbid "CNA::Platform::EnableTrayService"
+            --require "CNA::Platform::IPlatform::Supports|Platform::.*Platform::Supports")
+        if(CNA_PLATFORM STREQUAL "SDL3")
+            list(APPEND _cna_footprint_args
+                --require "CNA::Platform::Sdl3::CameraSupported"
+                --require "CNA::Platform::Sdl3::TraySupported")
+        endif()
+        if(TARGET CNA::DevicesExt)
+            list(APPEND _cna_footprint_args
+                --require "CNA::Devices::Camera::getIsSupportedProperty"
+                --require "CNA::Devices::SystemTray::getIsSupportedProperty")
+        endif()
+        add_test(NAME LinkFootprint_CapabilityQuery
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_link_footprint.py"
+                --binary $<TARGET_FILE:cna_link_footprint_capability_query>
+                ${_cna_footprint_args})
+        set_tests_properties(LinkFootprint_CapabilityQuery PROPERTIES
             LABELS "configuration;link-footprint")
         unset(_cna_footprint_absent)
         unset(_cna_footprint_present)

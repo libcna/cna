@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -151,6 +152,20 @@ TEST(IPlatformTests, IsImplementableWithNoWindowingSystem)
     const std::unique_ptr<IPlatform> platform = std::make_unique<FakePlatform>();
     EXPECT_EQ(platform->GetName(), "Fake");
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatform>);
+}
+
+TEST(IPlatformTests, SupportsAnswersFromTheCapabilitySetByDefault)
+{
+    // An implementation that does not override Supports() answers exactly as its capability set.
+    const FakePlatform platform;
+    const PlatformCapabilities capabilities = platform.GetCapabilities();
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        EXPECT_EQ(platform.Supports(capability), Supports(capabilities, capability))
+            << ToString(capability);
+    }
+    EXPECT_TRUE(platform.Supports(PlatformCapability::MultipleWindows));
+    EXPECT_FALSE(platform.Supports(PlatformCapability::Camera));
 }
 
 TEST(IPlatformTests, HasNoInitializeOrShutdownPair)

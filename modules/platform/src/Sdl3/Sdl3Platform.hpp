@@ -47,6 +47,12 @@ namespace CNA::Platform::Sdl3 {
 
         /** @brief Gets what SDL3 can do on this host. @return The capability set. */
         [[nodiscard]] PlatformCapabilities GetCapabilities() const override;
+        /**
+         * @brief Whether one capability is supported, computing only that one.
+         * @param capability The capability.
+         * @return Whether it is supported.
+         */
+        [[nodiscard]] bool Supports(PlatformCapability capability) const override;
 
         /** @brief Acquires a subsystem. @param subsystem The subsystem to acquire. */
         void AcquireSubsystem(PlatformSubsystem subsystem) override;
@@ -141,19 +147,18 @@ namespace CNA::Platform::Sdl3 {
 
         /**
          * @brief Installs the tray service (EnableTrayService(), Sdl3OptionalServices.cpp).
-         * @param isSupported Whether this build and host have a tray.
          * @param create Creates the service on the first GetTray().
          */
-        static void InstallTray(bool (*isSupported)(), std::unique_ptr<IPlatformTray> (*create)());
+        static void InstallTray(std::unique_ptr<IPlatformTray> (*create)());
         /**
          * @brief Installs the camera service (EnableCameraService(), Sdl3OptionalServices.cpp).
-         * @param isSupported Whether this build and host can enumerate cameras.
          * @param create Creates the provider on the first GetCamera().
          */
-        static void InstallCamera(bool (*isSupported)(),
-                                  std::unique_ptr<IPlatformCameraProvider> (*create)());
+        static void InstallCamera(std::unique_ptr<IPlatformCameraProvider> (*create)());
 
     private:
+        /// Every capability but `camera`, whose probe starts SDL's camera subsystem.
+        [[nodiscard]] PlatformCapabilities CapabilitiesExceptCamera() const;
         [[nodiscard]] bool HasVulkanSupport() const;
 
         /// SDL3 hands the application lifecycle events -- entering the background or the

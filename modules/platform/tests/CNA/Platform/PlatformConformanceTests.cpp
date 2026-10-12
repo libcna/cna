@@ -10,6 +10,7 @@
 // A test that needs a specific implementation belongs in that implementation's own file. Anything
 // here must be true of any platform CNA will ever have.
 
+#include "CNA/Platform/OptionalServices.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -63,6 +64,11 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     // fields describe quality, not presence: a terminal offers timed key releases while
     // ExactKeyboardState is false, and cell-quantised mouse input while PixelAccurateMouse is
     // false. Those are usable services whose approximation callers can inspect explicitly.
+    //
+    // The camera and the tray are optional services (CNA/Platform/OptionalServices.hpp): their
+    // capability is the platform's support, and the service exists once enabled.
+    EnableCameraService();
+    EnableTrayService();
     EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities_.gamepad) << "gamepad";
     EXPECT_EQ(platform_->GetJoystick() != nullptr, capabilities_.joystick) << "joystick";
     EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities_.textInput) << "textInput";
@@ -84,6 +90,17 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     EXPECT_EQ(platform_->GetDialogs() != nullptr,
               capabilities_.messageBox || capabilities_.nativeFileDialog)
         << "dialogs";
+}
+
+TEST_P(PlatformConformance, SupportsAgreesWithTheCapabilitySet)
+{
+    // Supports() is GetCapabilities() one capability at a time; an implementation may compute it
+    // more cheaply, never differently.
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        EXPECT_EQ(platform_->Supports(capability), Supports(capabilities_, capability))
+            << ToString(capability);
+    }
 }
 
 TEST_P(PlatformConformance, ServicesEveryPlatformMustHaveAreNeverNull)

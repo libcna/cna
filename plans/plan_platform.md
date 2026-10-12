@@ -95,8 +95,8 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1047** |
-| Files referencing SDL (all) | **216** |
-| Production files (`src/` + `include/`) referencing SDL | **54** |
+| Files referencing SDL (all) | **217** |
+| Production files (`src/` + `include/`) referencing SDL | **55** |
 | …of which are renderer production files | **18** |
 | Test/example files referencing SDL | **162** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
@@ -106,7 +106,7 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 30 | - |
+| `modules/platform` | 31 | - |
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 18 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (3 families) |
 

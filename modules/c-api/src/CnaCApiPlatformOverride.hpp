@@ -106,6 +106,11 @@ public:
         return inner_->GetCapabilities();
     }
 
+    [[nodiscard]] bool Supports(CNA::Platform::PlatformCapability capability) const override
+    {
+        return inner_->Supports(capability);
+    }
+
     [[nodiscard]] std::uint64_t GetPerformanceCounter() const override
     {
         return inner_->GetPerformanceCounter();
