@@ -52,6 +52,8 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
             # The platform's camera and tray, installed only by CNA::Devices::Camera/SystemTray.
             "CNA::Platform::Sdl3::Sdl3CameraProvider::"
             "CNA::Platform::Sdl3::Sdl3Tray::"
+            # The Decimal/DateTime .xnb readers, which no font or plain value holds.
+            "CNA::Internal::Xnb::RegisterDecimalDateTimeXnbReaders"
             # The .cnb writer, which only content tools need.
             "CNA::Content::Cnb::CnbWriter::"
             # Volume and cube textures, which a 2D game binds nowhere.
