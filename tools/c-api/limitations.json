@@ -135,9 +135,10 @@
         "no second name to move from",
         "`std::function` alias",
         "an alias naming the platform's",
-        "a second name for the same resource"
+        "a second name for the same resource",
+        "stands in for `dynamic_cast`"
       ],
-      "note": "Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface."
+      "note": "Aliases, markers, move semantics, destructors and virtual type queries that exist for the C++ type system. C holds every object by handle, never deletes through an interface, and knows the type of everything it created, so it needs no query that stands in for `dynamic_cast`."
     },
     {
       "id": "async-result",

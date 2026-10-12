@@ -14363,7 +14363,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "No separate C route: a C program creates each stock effect through its own typed create route and can read `cna_effect_get_type_name_*`, and C cannot derive from an effect, so the type it created answers what this virtual answers for C++ subclasses. SpriteBatch's own use needs no C surface",
+      "mapping": "No separate C route: a virtual query that stands in for `dynamic_cast` in C++. A C program creates each stock effect through its own typed create route and can read `cna_effect_get_type_name_*`, and C cannot derive from an effect, so the type it created answers what this virtual answers for C++ subclasses. SpriteBatch's own use needs no C surface",
       "tests": "Doxygen declaration inventory; `EffectSmoke.c` covers the type-name routes",
       "status": "not-applicable",
       "task": "CBIND-080",
