@@ -25,7 +25,7 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
     add_executable(cna_link_footprint_capability_query
         tests/link_footprint/footprint_capability_query.cpp)
     target_link_libraries(cna_link_footprint_capability_query PRIVATE CNA::Runtime)
-    if(TARGET CNA::DevicesExt)
+    if(CNA_DEVICES)
         target_link_libraries(cna_link_footprint_capability_query PRIVATE CNA::DevicesExt)
     endif()
 
@@ -173,7 +173,7 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
                 --require "CNA::Platform::Sdl3::CameraSupported"
                 --require "CNA::Platform::Sdl3::TraySupported")
         endif()
-        if(TARGET CNA::DevicesExt)
+        if(CNA_DEVICES)
             list(APPEND _cna_footprint_args
                 --require "CNA::Devices::Camera::getIsSupportedProperty"
                 --require "CNA::Devices::SystemTray::getIsSupportedProperty")
