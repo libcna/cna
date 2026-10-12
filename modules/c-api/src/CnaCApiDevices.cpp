@@ -507,11 +507,7 @@ struct SystemTrayResource final {
     const CNA_Handle handle,
     std::shared_ptr<SystemTrayResource>* const outTray)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::SystemTray, outTray);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::SystemTray, outTray);
 }
 
 [[nodiscard]] CNA_Result ToMessageBoxType(const CNA_MessageBoxType value, MessageBoxType* const out)
@@ -707,11 +703,7 @@ struct CameraResource final {
     const CNA_Handle handle,
     std::shared_ptr<CameraResource>* const outCamera)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::Camera, outCamera);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::Camera, outCamera);
 }
 
 [[nodiscard]] CNA_Result BorrowEnumeratedCamera(

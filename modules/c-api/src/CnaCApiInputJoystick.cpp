@@ -105,11 +105,7 @@ using CNA::Input::PowerStateEXT;
     const CNA_JoystickStateHandle handle,
     std::shared_ptr<JoystickStateEXT>* const outState)
 {
-    const CNA_Result result = LookupHandle(handle, CNA::C::Detail::ObjectKind::JoystickState, outState);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, CNA::C::Detail::ObjectKind::JoystickState, outState);
 }
 
 template<typename TSource, typename TDestination, typename TMap>

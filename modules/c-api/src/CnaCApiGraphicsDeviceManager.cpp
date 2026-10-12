@@ -150,11 +150,7 @@ std::vector<std::shared_ptr<void>>& RetiredManagers()
     const CNA_Handle handle,
     std::shared_ptr<ManagerResource>* const outManager)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::GraphicsDeviceManager, outManager);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::GraphicsDeviceManager, outManager);
 }
 
 // Every device reconfiguration ends in the window and the renderer, and both report a refusal as a

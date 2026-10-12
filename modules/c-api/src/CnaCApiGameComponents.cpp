@@ -281,11 +281,7 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<ComponentResource>* const outComponent)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::GameComponent, outComponent);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::GameComponent, outComponent);
 }
 
 [[nodiscard]] CNA_Result BorrowComponents(

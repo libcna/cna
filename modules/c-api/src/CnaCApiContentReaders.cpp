@@ -53,7 +53,6 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ReleaseStorageStream;
-using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Color;
@@ -1034,11 +1033,7 @@ struct ReflectiveBuilderResource final {
     const CNA_ReflectiveTypeReaderBuilderHandle handle,
     std::shared_ptr<ReflectiveBuilderResource>* const outBuilder)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::ReflectiveTypeReaderBuilder, outBuilder);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::ReflectiveTypeReaderBuilder, outBuilder);
 }
 
 [[nodiscard]] std::string ReflectiveCanonicalName(const std::string& targetTypeName)

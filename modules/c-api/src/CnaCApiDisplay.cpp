@@ -88,11 +88,7 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     using CNA::C::Detail::ObjectKind;
     ObjectKind kind = ObjectKind::Unknown;
     if (GetRuntimeHandles().GetKind(handle, &kind) == CNA_RESULT_SUCCESS && kind == ObjectKind::Game) {
-        const CNA_Result result = LookupHandle(handle, ObjectKind::Game, outContext);
-        if (result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return CNA_RESULT_SUCCESS;
+        return LookupHandle(handle, ObjectKind::Game, outContext);
     }
     std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
     const CNA_Result result = GetBorrowedGraphicsDevice(handle, &graphicsDevice);

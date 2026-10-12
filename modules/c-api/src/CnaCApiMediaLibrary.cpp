@@ -153,11 +153,7 @@ template<typename TValue>
     const CNA_MediaLibraryHandle handle,
     std::shared_ptr<MediaLibraryResource>* const outLibrary)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::MediaLibrary, outLibrary);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::MediaLibrary, outLibrary);
 }
 
 [[nodiscard]] CNA_Result BorrowLibraryResource(

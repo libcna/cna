@@ -168,11 +168,7 @@ void CopyAxesToNative(const TC* const source, std::array<TNative, TCount>* const
     const CNA_HapticDeviceHandle handle,
     std::shared_ptr<HapticDevice>* const outDevice)
 {
-    const CNA_Result result = LookupHandle(handle, CNA::C::Detail::ObjectKind::HapticDevice, outDevice);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, CNA::C::Detail::ObjectKind::HapticDevice, outDevice);
 }
 
 [[nodiscard]] CNA_Result PublishDevice(

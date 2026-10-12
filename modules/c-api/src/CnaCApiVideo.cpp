@@ -60,22 +60,14 @@ struct VideoPlayerResource final {
     const CNA_VideoHandle handle,
     std::shared_ptr<VideoResource>* const outVideo)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::Video, outVideo);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::Video, outVideo);
 }
 
 [[nodiscard]] CNA_Result BorrowPlayer(
     const CNA_VideoPlayerHandle handle,
     std::shared_ptr<VideoPlayerResource>* const outPlayer)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::VideoPlayer, outPlayer);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::VideoPlayer, outPlayer);
 }
 
 void InvalidateFrameTexture(VideoPlayerResource& player) noexcept

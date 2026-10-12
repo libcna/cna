@@ -208,44 +208,28 @@ struct CnbWriterResource final {
     const CNA_CnbDocumentHandle handle,
     std::shared_ptr<CnbDocumentResource>* const outDocument)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbDocument, outDocument);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbDocument, outDocument);
 }
 
 [[nodiscard]] CNA_Result GetReader(
     const CNA_CnbReaderHandle handle,
     std::shared_ptr<CnbReaderResource>* const outReader)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbReader, outReader);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbReader, outReader);
 }
 
 [[nodiscard]] CNA_Result GetByteWriter(
     const CNA_CnbByteWriterHandle handle,
     std::shared_ptr<CnbByteWriterResource>* const outWriter)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbByteWriter, outWriter);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbByteWriter, outWriter);
 }
 
 [[nodiscard]] CNA_Result GetWriter(
     const CNA_CnbWriterHandle handle,
     std::shared_ptr<CnbWriterResource>* const outWriter)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbWriter, outWriter);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbWriter, outWriter);
 }
 
 /// Resolves the caller's optional limits pointer, applying the prefix rule when one is supplied.
@@ -314,11 +298,7 @@ struct CnbTextureDataResource final {
     const CNA_CnbTextureDataHandle handle,
     std::shared_ptr<CnbTextureDataResource>* const outTexture)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbTextureData, outTexture);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbTextureData, outTexture);
 }
 
 [[nodiscard]] Cnb::CnbTextureFormat ToTextureFormat(const CNA_CnbTextureFormat format) noexcept
@@ -350,22 +330,14 @@ struct CnbModelFromCnjResource final {
     const CNA_CnbModelDataHandle handle,
     std::shared_ptr<CnbModelResource>* const outModel)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbModelData, outModel);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbModelData, outModel);
 }
 
 [[nodiscard]] CNA_Result GetCompileResult(
     const CNA_CnbModelFromCnjHandle handle,
     std::shared_ptr<CnbModelFromCnjResource>* const outResult)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbModelFromCnj, outResult);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbModelFromCnj, outResult);
 }
 
 [[nodiscard]] CNA_Result CreateModel(
@@ -579,33 +551,21 @@ struct CnbAnimationClipResource final {
     const CNA_CnbSpriteFontDataHandle handle,
     std::shared_ptr<CnbSpriteFontResource>* const outFont)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbSpriteFontData, outFont);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbSpriteFontData, outFont);
 }
 
 [[nodiscard]] CNA_Result GetSoundEffect(
     const CNA_CnbSoundEffectDataHandle handle,
     std::shared_ptr<CnbSoundEffectResource>* const outSound)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbSoundEffectData, outSound);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbSoundEffectData, outSound);
 }
 
 [[nodiscard]] CNA_Result GetAnimationClip(
     const CNA_CnbAnimationClipHandle handle,
     std::shared_ptr<CnbAnimationClipResource>* const outClip)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbAnimationClip, outClip);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbAnimationClip, outClip);
 }
 
 [[nodiscard]] CNA_Result CreateSpriteFont(
@@ -757,22 +717,14 @@ struct CnjToCnbResultResource final {
     const CNA_CnbLoaderHandle handle,
     std::shared_ptr<CnbLoaderResource>* const outLoader)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnbLoader, outLoader);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnbLoader, outLoader);
 }
 
 [[nodiscard]] CNA_Result GetCompiledCnj(
     const CNA_CnjToCnbResultHandle handle,
     std::shared_ptr<CnjToCnbResultResource>* const outResult)
 {
-    const CNA_Result result = LookupHandle(handle, ObjectKind::CnjToCnbResult, outResult);
-    if (result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    return CNA_RESULT_SUCCESS;
+    return LookupHandle(handle, ObjectKind::CnjToCnbResult, outResult);
 }
 
 [[nodiscard]] CNA_Result CreateLoader(
