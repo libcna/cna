@@ -177,7 +177,18 @@ message(STATUS "CNA: diagnostics ${CNA_DIAGNOSTICS}")
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
 option(CNA_CNAEXT "Enable standalone ASCII, CRT, colour-depth and DebugDraw graphics extensions" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
-option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
+option(CNA_ENABLE_NET "Build CNA networking (Microsoft.Xna.Framework.Net over ENet; needs GamerServices)" ON)
+# GamerServices (Guide, profiles, achievements, leaderboards, avatars) is its own option: a game can
+# use the Guide without networking, and so without ENet. It defaults to CNA_ENABLE_NET's value so
+# every configuration that predates the split builds exactly what it built before.
+option(CNA_ENABLE_GAMER_SERVICES
+    "Build CNA GamerServices (Guide, profiles, achievements, leaderboards, avatars)" ${CNA_ENABLE_NET})
+if(CNA_ENABLE_NET AND NOT CNA_ENABLE_GAMER_SERVICES)
+    message(FATAL_ERROR
+        "CNA: CNA_ENABLE_NET=ON requires CNA_ENABLE_GAMER_SERVICES=ON.\n"
+        "  Microsoft.Xna.Framework.Net sessions are made of signed-in gamers (CNA_Net links "
+        "CNA_GamerServices). Enable GamerServices, or turn networking off.")
+endif()
 # The C API adapts the whole canonical aggregate, GamerServices included: it links CNA_GamerServices
 # unconditionally and modules/c-api/src/CnaCApiDetail.hpp includes a GamerServices header, so with
 # networking off every C API translation unit fails on a missing include rather than on anything a

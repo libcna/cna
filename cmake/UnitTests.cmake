@@ -191,23 +191,27 @@ if(CNA_BUILD_TESTS)
     # against a from-scratch full CnaTests build before. Excluded the same way the WIN32/
     # EMSCRIPTEN/ANDROID-specific files just below already are.
     if(NOT CNA_ENABLE_NET)
-        # REMED-BUILD-019: NET=OFF omits both CNA_Net and CNA_GamerServices, so every test whose
-        # implementation lives in either disabled optional module must also leave CnaTests. This
-        # exact root-based boundary includes direct and transitive ENet-header consumers without
-        # suppressing any test outside the two disabled modules.
+        # REMED-BUILD-019: NET=OFF omits CNA_Net, so every test whose implementation lives there
+        # must also leave CnaTests. This exact root-based boundary includes direct and transitive
+        # ENet-header consumers without suppressing any test outside the disabled module.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/.*\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Net/.*\\.cpp$")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/GamerServices/.*\\.cpp$")
-
-        # Keep the source-list contract executable: future glob/filter changes must fail at
-        # configure time rather than compiling a disabled-module test into an un-linkable target.
-        foreach(_cna_disabled_net_test IN LISTS CNA_TEST_SOURCES)
-            if(_cna_disabled_net_test MATCHES "/(CNA/Internal/Net|Microsoft/Xna/Framework/(Net|GamerServices))/")
-                message(FATAL_ERROR "NET=OFF left disabled-module test selected: ${_cna_disabled_net_test}")
-            endif()
-        endforeach()
-        unset(_cna_disabled_net_test)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/net/tests/.*\\.cpp$")
     endif()
+    if(NOT CNA_ENABLE_GAMER_SERVICES)
+        # GamerServices is its own option (CNA_ENABLE_GAMER_SERVICES, implied by Net).
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/GamerServices/.*\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/gamer-services/tests/.*\\.cpp$")
+    endif()
+    # Keep the source-list contract executable: future glob/filter changes must fail at configure
+    # time rather than compiling a disabled-module test into an un-linkable target.
+    foreach(_cna_disabled_net_test IN LISTS CNA_TEST_SOURCES)
+        if((NOT CNA_ENABLE_NET AND _cna_disabled_net_test MATCHES "/(CNA/Internal/Net|Microsoft/Xna/Framework/Net)/")
+           OR (NOT CNA_ENABLE_GAMER_SERVICES AND _cna_disabled_net_test MATCHES "/Microsoft/Xna/Framework/GamerServices/"))
+            message(FATAL_ERROR "A disabled optional module's test is still selected: ${_cna_disabled_net_test}")
+        endif()
+    endforeach()
+    unset(_cna_disabled_net_test)
 
     if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
@@ -726,8 +730,11 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE WebGPU::WebGPU)
     endif()
 
+    if(CNA_ENABLE_GAMER_SERVICES)
+        target_link_libraries(CnaTests PRIVATE CNA_GamerServices)
+    endif()
     if(CNA_ENABLE_NET)
-        target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
+        target_link_libraries(CnaTests PRIVATE CNA_Net)
     endif()
 
     # Microsoft::Phone is a Windows Phone API surface, so cna_phone is deliberately outside the
