@@ -175,7 +175,9 @@ the 30 MB avatar catalog (47.1 MB stripped, against 11.7 MB with GNU ld or lld).
 Every final link that consumes CNA therefore names the C++ runtime before CNA's archives
 (`-Wl,--push-state,--as-needed -lstdc++ -Wl,--pop-state`, through `CNA::BuildConfig`, on ELF
 targets with a shared runtime). The runtime then owns what it exports, and a member is extracted
-only for a CNA symbol: mold extracts exactly the members lld does. GNU ld and lld are unaffected.
+only for a CNA symbol: mold extracts exactly the members lld does (the multi-renderer 2D probe is
+11,740,280 bytes stripped with mold, 11,704,960 with lld and 11,709,040 with GNU ld, and every
+footprint gate passes with each). GNU ld and lld are unaffected.
 A program that links the C++ runtime statically does not get the option and should name the static
 runtime ahead of CNA itself if it links with mold.
 
@@ -196,23 +198,23 @@ this work; the game's source is the same in both.
 
 | Debug executable | Before | After |
 |---|---:|---:|
-| Unstripped | 208,287,328 | 62,386,528 |
-| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,867,168 |
-| Fully stripped | 44,607,184 | 6,190,840 |
-| `.text` | 9,363,703 | 4,066,138 |
+| Unstripped | 208,287,328 | 62,383,864 |
+| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,867,976 |
+| Fully stripped | 44,607,184 | 6,191,520 |
+| `.text` | 9,363,703 | 4,066,408 |
 | `.rodata` | 30,863,125 | 325,973 |
 | ... of which the avatar catalog | 29,999,928 | 0 |
-| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,128 / 23,536 |
-| `.eh_frame` | 2,786,336 | 1,111,376 |
+| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,128 / 23,600 |
+| `.eh_frame` | 2,786,336 | 1,111,392 |
 
 Debug information is most of a Debug executable (143 MB before, 48.5 MB after) and shrinks with the
 code it describes; the stripped size is what ships.
 
 | Release executable, static CNA (after) | `CNA_OPTIMIZE_FOR_SIZE=OFF` | `ON` |
 |---|---:|---:|
-| Unstripped | 6,466,616 | 4,258,248 |
-| Fully stripped | 4,693,440 | 3,040,136 |
-| `.text` | 3,556,954 | 2,249,594 |
+| Unstripped | 6,469,312 | 4,259,112 |
+| Fully stripped | 4,695,176 | 3,040,712 |
+| `.text` | 3,558,042 | 2,249,978 |
 | `.rodata` | 93,635 | 74,595 |
 | `.data` | 8,144 | 3,504 |
 
