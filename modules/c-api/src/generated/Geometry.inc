@@ -1289,6 +1289,12 @@ CNA_Result cna_ray_intersects_box(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_box: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_box: out_distance is null.");
+        }
         return RayIntersectsBox(ray, box, out_hit, out_distance);
     });
 }
@@ -1300,6 +1306,12 @@ CNA_Result cna_ray_intersects_sphere(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_sphere: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_sphere: out_distance is null.");
+        }
         return RayIntersectsSphere(ray, sphere, out_hit, out_distance);
     });
 }
@@ -1311,6 +1323,12 @@ CNA_Result cna_ray_intersects_plane(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_plane: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_plane: out_distance is null.");
+        }
         return RayIntersectsPlane(ray, plane, out_hit, out_distance);
     });
 }
@@ -1322,6 +1340,12 @@ CNA_Result cna_ray_intersects_frustum(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_frustum: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_ray_intersects_frustum: out_distance is null.");
+        }
         return RayIntersectsFrustum(ray, frustum, out_hit, out_distance);
     });
 }
@@ -1333,6 +1357,12 @@ CNA_Result cna_bounding_box_intersects_ray(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_box_intersects_ray: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_box_intersects_ray: out_distance is null.");
+        }
         return BoundingBoxIntersectsRay(value, ray, out_hit, out_distance);
     });
 }
@@ -1344,6 +1374,12 @@ CNA_Result cna_bounding_sphere_intersects_ray(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_sphere_intersects_ray: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_sphere_intersects_ray: out_distance is null.");
+        }
         return BoundingSphereIntersectsRay(value, ray, out_hit, out_distance);
     });
 }
@@ -1365,6 +1401,12 @@ CNA_Result cna_bounding_frustum_intersects_ray(
     float* const out_distance)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hit == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_frustum_intersects_ray: out_hit is null.");
+        }
+        if (out_distance == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_bounding_frustum_intersects_ray: out_distance is null.");
+        }
         return BoundingFrustumIntersectsRay(value, ray, out_hit, out_distance);
     });
 }

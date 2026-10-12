@@ -105,6 +105,8 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         "LINKER:--exclude-libs,ALL"
         "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map"
     )
+    set_property(TARGET cna_c_api APPEND PROPERTY
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map")
 elseif(APPLE)
     # plans/plan_apple_m4.md AM4-209: Mach-O has no version scripts, so without this the dylib
     # exported every default-visibility symbol of the private archives it links -- 21,904 names on
@@ -176,7 +178,9 @@ if(EMSCRIPTEN)
         # "filesystem/title content" in the fixcnats.md Phase 7 contract had no implementation
         # on the consumer's side either.
         "-sALLOW_TABLE_GROWTH=1"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue','addFunction','removeFunction','FS']"
+        # SDL installs its fullscreen callback on Module; do not let assertion builds install
+        # Emscripten's read-only "unexported runtime method" trap at the same property.
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue','addFunction','removeFunction','FS','requestFullscreen']"
         "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
     )
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
@@ -2455,13 +2459,17 @@ if(CNA_BUILD_TESTS)
         if(NOT _cna_c_api_test_environment)
             set(_cna_c_api_test_environment "")
         endif()
+        # Linux display isolation must not force an unavailable SDL driver on other targets.
+        if(WIN32 OR APPLE OR EMSCRIPTEN)
+            list(REMOVE_ITEM _cna_c_api_test_environment "SDL_VIDEODRIVER=x11")
+        endif()
         string(FIND "${_cna_c_api_test_environment}" "SDL_VIDEODRIVER=" _cna_c_api_driver_named)
-        if(_cna_c_api_driver_named EQUAL -1)
+        if(_cna_c_api_driver_named EQUAL -1 AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
             list(APPEND _cna_c_api_test_environment
                 "SDL_VIDEODRIVER=x11" "DISPLAY=${CNA_TEST_DISPLAY}")
-            set_tests_properties(${_cna_c_api_test} PROPERTIES
-                ENVIRONMENT "${_cna_c_api_test_environment}")
         endif()
+        set_tests_properties(${_cna_c_api_test} PROPERTIES
+            ENVIRONMENT "${_cna_c_api_test_environment}")
     endforeach()
     unset(_cna_c_api_registered_tests)
     unset(_cna_c_api_test)

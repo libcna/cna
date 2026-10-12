@@ -280,6 +280,11 @@ class Route:
         self.has_lookup = "lookup" in group
         self.other: Param | None = None
         self._check_shape()
+        readable_text = {p.name for p in self.inputs
+                         if p.type == "CNA_StringView" and self._converted(p)}
+        if not set(self.refuse_nul) <= readable_text:
+            raise SpecError(f"{name}: refuse_nul must name text inputs read by this route; "
+                            "a lookup or result helper validates its own text")
         if self.requirements and not self.has_lookup:
             raise SpecError(f"{name}: require reads the looked-up object; without a lookup, "
                             "write validate")
@@ -486,6 +491,7 @@ class Route:
         reads_text = any(self.types.kind_of(p.type) == "text" for p in self.inputs)
         if (self.kind == "copy" and not self.has_lookup and not reads_text
                 and not self.refusals and not self.validations
+                and not any(p.type == "CNA_Bool" for p in self.inputs)
                 and self.outputs[0].type == "char"):
             destination, capacity, out_bytes = (p.name for p in self.outputs)
             return ([f"    return {DETAIL}CopyFormattedText({destination}, {capacity}, "
@@ -577,19 +583,30 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
+        if not isinstance(group["routes"], dict):
+            raise SpecError(f"{spec.name}: [{group_name}.routes] must be a table")
+        for key in ("lookup", "object", "owner", "feature", "unavailable"):
+            if key in group and (not isinstance(group[key], str) or not group[key].strip()):
+                raise SpecError(f"{spec.name}: [{group_name}] {key} must be non-empty text")
+        if ("accepts_null_handle" in group
+                and (type(group["accepts_null_handle"]) is not bool or "lookup" not in group)):
+            raise SpecError(f"{spec.name}: [{group_name}] accepts_null_handle needs a lookup "
+                            "and a boolean")
         if ("object" in group or "arguments" in group) and "lookup" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] names an object or arguments but no lookup")
         if ("owner" in group or "other" in group) and "object" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] names an owner or other but no object")
         if "other" in group and (not isinstance(group["other"], dict)
-                                 or set(group["other"]) != {"lookup", "object"}):
+                                 or set(group["other"]) != {"lookup", "object"}
+                                 or not all(isinstance(v, str) and v.strip()
+                                            for v in group["other"].values())):
             raise SpecError(f"{spec.name}: [{group_name}] other must be "
                             "{ lookup = \"...\", object = \"...\" }")
         if "raw" in group and group["raw"] is not True:
             raise SpecError(f"{spec.name}: [{group_name}] raw is either true or left out")
         if ("feature" in group) != ("unavailable" in group):
             raise SpecError(f"{spec.name}: [{group_name}] needs both feature and unavailable")
-        if "arguments" in group and (not isinstance(group["arguments"], int) or group["arguments"] < 1):
+        if "arguments" in group and (type(group["arguments"]) is not int or group["arguments"] < 1):
             raise SpecError(f"{spec.name}: [{group_name}] arguments must be a positive number")
         for name, entry in group["routes"].items():
             try:

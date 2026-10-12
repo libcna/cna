@@ -49,9 +49,10 @@ static int validate_unavailable(CNA_Handle graphics_device) {
   int32_t width = 0;
   int32_t height = 0;
 
-  CNA_DebugDrawHandle debug = CNA_INVALID_HANDLE;
+  CNA_DebugDrawHandle debug = UINT64_C(7);
   return cna_debug_draw_create(graphics_device, &debug) ==
              CNA_RESULT_NOT_SUPPORTED &&
+         debug == CNA_INVALID_HANDLE &&
          cna_crt_effect_create(graphics_device, &effect) ==
              CNA_RESULT_NOT_SUPPORTED &&
          effect == CNA_INVALID_HANDLE &&
@@ -141,6 +142,10 @@ static int validate_debug_draw(CNA_Handle graphics_device) {
       cna_debug_draw_is_depth_tested(debug, &depth_tested) ==
           CNA_RESULT_SUCCESS &&
       depth_tested == CNA_TRUE &&
+      cna_debug_draw_set_depth_tested(debug, CNA_FALSE) == CNA_RESULT_SUCCESS &&
+      cna_debug_draw_is_depth_tested(debug, &depth_tested) == CNA_RESULT_SUCCESS &&
+      depth_tested == CNA_FALSE &&
+      cna_debug_draw_set_depth_tested(debug, CNA_TRUE) == CNA_RESULT_SUCCESS &&
       cna_debug_draw_end(debug) == CNA_RESULT_SUCCESS &&
       cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS &&
       cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&

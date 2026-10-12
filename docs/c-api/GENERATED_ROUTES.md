@@ -8,7 +8,20 @@ and counts, an event subscription, a bulk transfer — is a generated boundary a
 **hand-written helper** named after it, so the boundary rules are written once and the helper holds
 only the logic. Only the error-record queries (`cna_error_*`), which must read the record without
 touching it, and `cna_get_abi_version`, which returns a number rather than a `CNA_Result`, are
-written whole by hand (`CnaCApiRuntime.cpp`).
+written whole by hand (`CnaCApi.cpp`).
+
+TOML and Python are **development/generation-time tooling only**. Python 3.11+ reads the specs
+and writes ordinary C++ definitions. The compiler consumes the committed `.inc` files through
+their owning `.cpp` files; neither startup nor a route reads a spec, parses TOML, embeds Python,
+or interprets expression strings. Generation adds no runtime interpreter or dispatch overhead.
+The existing exception barrier, validation, handle lookup and native calls are compiled normally.
+
+A normal native shared-library build does not run the route generator. The `CNACApi` install
+component ships the compiled library, C headers and CMake package files (and configured native
+dependencies), not route specs or Python scripts. Separately, building the optional consolidated
+static archive uses Python packaging tooling, and Emscripten uses Python for its toolchain and
+export-list generation. These build-time requirements are unrelated to route generation and do
+not become application runtime dependencies.
 
 ## Where things live
 
@@ -222,6 +235,10 @@ helper's parameter list is exactly the header's. An output the caller may leave 
 if you do not need it" in the header, or an output that is only required with a capacity — is
 listed in `optional`; the generated half then does not refuse it, clears it only when it is a
 handle output the caller gave, and leaves the rest to the helper.
+Some existing entries use `optional` to delegate mandatory-output checks to a shared helper;
+the public header and helper still determine whether null is actually accepted. For new routes,
+leave unconditional required-output checks in the generated shell. If removing a helper's check,
+first remove the corresponding `optional` exemption and regenerate in the same change.
 
 A helper reads its own text: `ReadText` under the UTF-8 rule, or `RelativePath`/`ReadImportPath`
 when the text is a path, which has rules of its own. A helper that exists only with an optional module goes in a `[helpers_<module>]` group with
@@ -244,6 +261,12 @@ python3 tools/c-api/generate_routes.py --list   # every generated route and its 
 
 `--check` runs as the CTest test `CApiGeneratedRoutesCurrent` and in the
 `c-api-generated-routes` workflow. Generation is deterministic and needs only Python 3.11+.
+The generator regression tests run with `python3 tools/c-api/test_generate_routes.py`
+(`CApiRouteGeneratorTests` in CTest). They recover missing outputs in an isolated source tree,
+compare repeated generation, reject deliberate drift and orphan outputs, and check schema errors.
+After editing a spec or helper, regenerate, inspect the diff, build and test, then commit the
+editable sources and their generated outputs together. Recovery never needs AI: the same command
+recreates all route outputs from the checked-in headers, specs, marshal header and owning files.
 
 The same run writes `GeneratedRoutesSmoke.c` (CTest `CApi_GeneratedRoutesSmoke`), which holds every
 generated route to the contracts above: a null output is refused, a null, wrong-kind or destroyed
@@ -260,3 +283,20 @@ kind must not touch the others. Then build the C API and run its tests.
 
 The public headers are deliberately not generated: they are the ABI and its documentation, the
 part a reviewer and a binding author read, and the generator takes its signatures from them.
+
+`refuse_nul` must name a text input actually read by the generated route; text passed to a lookup
+or a `result` helper is validated there instead. Unknown or ineffective names are rejected.
+Keep expressions declarative: a readable field-by-field aggregate is fine, while control flow,
+ownership changes and complicated constructions belong in a named C++ helper.
+
+For a genuinely exceptional fully manual entry point, first explain why neither an ordinary
+route nor a `result` helper can preserve its contract. Declare it in the public header, implement
+it in the appropriate `.cpp` without a spec entry, and add semantic, error and ABI/export tests.
+Any fallible manual boundary must still prevent exceptions escaping; error-record queries must
+preserve the record even on failure. Update the documented manual exception list and ABI baseline
+when the public surface changes. Do not add a second definition beside a generated one.
+
+The generated contract test supplements the hand-written semantic tests. Its invalid-handle
+probes sometimes accept an earlier argument refusal or a compiled-out feature; such a result
+does not prove handle lookup ran. `CApiRouteTestCoverage` measures name references in tests,
+including generated tests, not behavioral coverage. Review the family's semantic tests as well.

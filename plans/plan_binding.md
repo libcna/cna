@@ -1,5 +1,16 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
+## Maintenance audit, 2026-10-12 — CBIND-AUDIT-001
+
+Completed the post-generation architecture audit against `2fda5389d`; verdict **YES WITH MINOR
+FIXES**. Runtime-neutral committed C++ generation is retained. Concrete boundary, ownership,
+generator-validation, build/test integration and documentation fixes are recorded with measured
+counts and validation results in [`GENERATION_AUDIT.md`](../docs/c-api/GENERATION_AUDIT.md).
+Public headers and ABI remain unchanged. The audit used Linux GCC/Clang, MinGW/Wine, WASM and
+existing managed consumer tests; unresolved Wine/DXVK timeouts are recorded in `handoff.md` §5.
+Native Apple/MSVC validation remains the separate platform campaign. Subsequent compiles use
+shared ccache and at most six parallel compile jobs, without concurrent builds.
+
 > **Status (2026-08-31, after `CBIND-124`):
 > B0–B11, B13 and B18 complete; B12, B14 and B15 are explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge

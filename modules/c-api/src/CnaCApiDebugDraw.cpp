@@ -43,13 +43,11 @@ CNA_Result GetEngineResource(CNA_Handle h, ObjectKind k, const char *name,
 }
 template <class T, class F>
 CNA_Result WithMap(CNA_Handle h, ObjectKind k, const char *name, F &&body) {
-  return CallWithExceptionBarrier([&]() -> CNA_Result {
-    std::shared_ptr<T> resource;
-    if (const auto r = GetEngineResource(h, k, name, &resource);
-        r != CNA_RESULT_SUCCESS)
-      return r;
-    return std::forward<F>(body)(resource);
-  });
+  std::shared_ptr<T> resource;
+  if (const auto r = GetEngineResource(h, k, name, &resource);
+      r != CNA_RESULT_SUCCESS)
+    return r;
+  return std::forward<F>(body)(resource);
 }
 CNA_Result BorrowDebugDraw(CNA_DebugDrawHandle h,
                            std::shared_ptr<DebugDrawResource> *out) {
@@ -60,9 +58,6 @@ template <class F> CNA_Result WithDebugDraw(CNA_DebugDrawHandle h, F &&body) {
                                     std::forward<F>(body));
 }
 CNA_Vector3 Vec3(float x, float y, float z) { return {x, y, z}; }
-Microsoft::Xna::Framework::Color ToNativeColour(CNA_Color v) {
-  return {v.r, v.g, v.b, v.a};
-}
 CNA_Result RequireVector3Argument(const CNA_Vector3 *v, const char *msg) {
   return v ? CNA_RESULT_SUCCESS
            : InvalidArgument(msg);
@@ -143,7 +138,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
           return InvalidArgument("An endpoint is null.");
         }
         d->value->addLine(ToNative(*from), ToNative(*to),
-                          ToNativeColour(colour));
+                          ToNative(colour));
         return CNA_RESULT_SUCCESS;
       });
 }
@@ -158,7 +153,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
             result != CNA_RESULT_SUCCESS) {
           return result;
         }
-        d->value->addBox(native, ToNativeColour(colour));
+        d->value->addBox(native, ToNative(colour));
         return CNA_RESULT_SUCCESS;
       });
 }
@@ -177,7 +172,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
         // Clamped by the canonical body, not refused here: a debug shape drawn
         // with too few or absurdly many segments is still a debug shape.
         d->value->addSphere(ToNative(*centre), radius,
-                            ToNativeColour(colour), static_cast<int>(segments));
+                            ToNative(colour), static_cast<int>(segments));
         return CNA_RESULT_SUCCESS;
       });
 }
@@ -192,7 +187,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
         }
         const BoundingSphere native(ToNative(sphere->center),
                                     sphere->radius);
-        d->value->addSphere(native, ToNativeColour(colour),
+        d->value->addSphere(native, ToNative(colour),
                             static_cast<int>(segments));
         return CNA_RESULT_SUCCESS;
       });
@@ -205,7 +200,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
       debug, [&](const std::shared_ptr<DebugDrawResource> &d) -> CNA_Result {
         d->value->addFrustum(Microsoft::Xna::Framework::BoundingFrustum(
                                  ToNative(frustum.matrix)),
-                             ToNativeColour(colour));
+                             ToNative(colour));
         return CNA_RESULT_SUCCESS;
       });
 }
@@ -221,7 +216,7 @@ CNA_Result CopyValueRange(const std::vector<T> &src, T *dst, uint64_t cap,
           return result;
         }
         d->value->addCross(ToNative(*position), size,
-                           ToNativeColour(colour));
+                           ToNative(colour));
         return CNA_RESULT_SUCCESS;
       });
 }

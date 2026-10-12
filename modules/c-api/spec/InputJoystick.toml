@@ -19,7 +19,7 @@ cna_joystick_state_destroy = { release = true }
 cna_joystick_state_copy_axes = { result = "CopyElements(object->axes, destination, capacity, out_count, [](const std::int16_t value) { return static_cast<int16_t>(value); })" }
 cna_joystick_state_copy_buttons = { result = "CopyElements(object->buttons, destination, capacity, out_count, [](const bool value) { return ToCBool(value); })" }
 cna_joystick_state_copy_hats = { result = "CopyElements(object->hats, destination, capacity, out_count, [](const JoystickHatPositionEXT value) { return static_cast<CNA_JoystickHatPosition>(value); })" }
-cna_joystick_state_copy_balls = { result = "CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { CNA_Point point = {}; point.x = static_cast<int32_t>(value.X); point.y = static_cast<int32_t>(value.Y); return point; })" }
+cna_joystick_state_copy_balls = { result = "CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { return CNA::C::Detail::ToC(value); })" }
 
 [enumerated_joystick]
 lookup = "BorrowEnumeratedJoystick"

@@ -9,6 +9,10 @@
 # covered by their own configurations' full builds).
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(TARGET Python3::Interpreter)
+        # This is a host tool, even when the compiled probes need Wine or another emulator.
+        set_property(TARGET Python3::Interpreter PROPERTY CROSSCOMPILING_EMULATOR "")
+    endif()
 
     add_test(NAME CnaHostPkgConfigPolicy
         COMMAND ${CMAKE_COMMAND}
@@ -364,6 +368,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME CApiGeneratedRoutesCurrent
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_routes.py" --check)
+        add_test(NAME CApiRouteGeneratorTests
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_generate_routes.py")
 
         # plans/plan_binding.md CBIND-042B: the experimental release gate.
         #
@@ -409,10 +416,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # changes are made in -- never notices a struct field moved. Verified to catch both arms:
         # swapping CNA_Point's two fields reports them as moved, and an added constant is classified
         # as an addition rather than a break.
-        add_test(NAME CApiAbiHeaderBaseline
-            COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_abi_baseline.py" --check
-                --compiler "${CMAKE_C_COMPILER}")
+        # The measuring script executes its temporary probe directly, without a target emulator.
+        # Cross builds still compile the C/C++ layout assertions and run CApi_AbiSmoke.
+        if(NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME CApiAbiHeaderBaseline
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_abi_baseline.py" --check
+                    --compiler "${CMAKE_C_COMPILER}")
+        endif()
 
         # The other half: the library that was actually built, asked for its own ABI version and its
         # dynamic export list, wherever its exports can be read -- ELF, and Mach-O since

@@ -61,10 +61,7 @@ object = "std::shared_ptr<MediaQueueResource>"
 other = { lookup = "BorrowSong", object = "std::shared_ptr<SongResource>" }
 
 [queue_and_song.routes]
-# The canonical Add adopts the pointer it is given. A handle's object cannot be handed
-# away without leaving the caller a stale handle, so C appends a copy -- which is exactly
-# what the canonical player does when it enqueues a song.
-cna_media_queue_add = { call = "object->value->Add(new Song(other->value->getHandle(), other->value->getNameProperty()))" }
+cna_media_queue_add = { result = "MediaQueueAdd(*object->value, *other->value)" }
 
 # The routes whose logic is a hand-written helper of the same name, in CamelCase. The
 # generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool

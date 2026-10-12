@@ -31,6 +31,8 @@ C++ object.
 
 The registry must increment a generation before a released slot can be reused. A double release or
 stale use therefore cannot become a reference to a newly created unrelated object.
+After the last nonzero 32-bit generation is released, the slot is permanently retired rather
+than wrapping back to generation 1. Its index is not reused; a later creation uses another slot.
 
 `CNA_INVALID_HANDLE` answers `CNA_RESULT_INVALID_HANDLE` rather than an argument failure, because
 zero is a handle *value* — the one that names nothing — not a missing argument. The argument

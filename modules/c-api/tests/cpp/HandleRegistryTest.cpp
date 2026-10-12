@@ -3,10 +3,19 @@
 #include "CnaCApiDetail.hpp"
 
 #include <memory>
+#include <limits>
 #include <thread>
 
 int main()
 {
+    using CNA::C::Detail::NextHandleGeneration;
+    const uint32_t lastGeneration = std::numeric_limits<uint32_t>::max();
+    if (NextHandleGeneration(1U) != 2U ||
+        NextHandleGeneration(lastGeneration - 1U) != lastGeneration ||
+        NextHandleGeneration(lastGeneration) != 0U || NextHandleGeneration(0U) != 0U) {
+        return 7;
+    }
+
     CNA::C::Detail::HandleRegistry registry;
     CNA_Handle firstHandle = CNA_INVALID_HANDLE;
     if (registry.Create(

@@ -77,6 +77,7 @@ checkout; the other workflows are subsystem- or platform-specific.
 | Compiled XNA effects per renderer | `docs/fx-compiled-effects.md` §10 |
 | Platform contract | `docs/platform-abstraction.md` |
 | API-surface coverage | `docs/xna-4-runtime-member-coverage.md` (generated) |
+| C API generation maintenance model and 2026-10-12 audit | `docs/c-api/GENERATED_ROUTES.md`, `docs/c-api/GENERATION_AUDIT.md` |
 | Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `plans/plan_bindings_upstream.md` |
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
@@ -144,6 +145,10 @@ The single authoritative list. Every entry below was checked against the code on
 - `DIRECTX9`/`DIRECTX11` are validated under Wine (+DXVK) only; real-Windows hardware validation is
   not current. The C API's pure-C suites run under Wine from the MinGW-w64 build; `MediaLibrarySmoke`
   reports a skip on Windows, whose known folders cannot be pointed at its fixture. iOS has simulator smoke evidence only; `METAL` is validated by the macOS CI contract.
+- The 2026-10-12 C API audit observed Wine/DXVK DirectX11 timeouts in Draw3DSmoke, ContentSmoke
+  and TeardownLifetime children-alive/partial/cycles. Partial teardown also times out serially;
+  all five pass with HEADLESS in the same binary. Root cause is not established. See the audit's
+  validation record; this is not a green full DirectX lifetime run.
 - `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
 - `SDL_RENDERER` is 2D-only (3D calls throw), `SOFTWARE` is a bounded CPU renderer, and `HEADLESS`
   and `STUB` make no pixel claim (`docs/renderer-registry.md`, "Capability classes").

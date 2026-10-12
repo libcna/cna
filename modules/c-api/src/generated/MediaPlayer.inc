@@ -529,8 +529,7 @@ CNA_Result cna_media_queue_add(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->Add(new Song(other->value->getHandle(), other->value->getNameProperty()));
-        return CNA_RESULT_SUCCESS;
+        return MediaQueueAdd(*object->value, *other->value);
     });
 }
 

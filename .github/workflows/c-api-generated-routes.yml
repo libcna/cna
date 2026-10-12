@@ -13,6 +13,7 @@ on:
       - 'modules/c-api/src/CnaCApiMarshal.hpp'
       - 'modules/c-api/include/**'
       - 'tools/c-api/generate_routes.py'
+      - 'tools/c-api/test_generate_routes.py'
       - 'modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c'
       - '.github/workflows/c-api-generated-routes.yml'
   pull_request:
@@ -24,6 +25,7 @@ on:
       - 'modules/c-api/src/CnaCApiMarshal.hpp'
       - 'modules/c-api/include/**'
       - 'tools/c-api/generate_routes.py'
+      - 'tools/c-api/test_generate_routes.py'
       - 'modules/c-api/tests/pure_c/GeneratedRoutesSmoke.c'
   workflow_dispatch:
 
@@ -50,6 +52,9 @@ jobs:
 
       - name: Check the generated files are current
         run: python3 tools/c-api/generate_routes.py --check
+
+      - name: Test schema validation, recovery and drift detection
+        run: python3 tools/c-api/test_generate_routes.py
 
       # A gate that cannot fail is not a gate: change one spec line and require the check to
       # reject the now-stale output.

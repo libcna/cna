@@ -51,6 +51,16 @@ using Microsoft::Xna::Framework::Media::VisualizationData;
 // resource points at the singleton and owns nothing.
 using MediaQueueResource = MediaChildResource<MediaQueue>;
 
+[[nodiscard]] CNA_Result MediaQueueAdd(MediaQueue& queue, const Song& song)
+{
+    // Add adopts the pointer only after its vector insertion succeeds. Keep ownership if that
+    // insertion throws, and copy the song so the caller's original handle remains valid.
+    auto copy = std::make_unique<Song>(song.getHandle(), song.getNameProperty());
+    queue.Add(copy.get());
+    (void)copy.release();
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result BorrowQueue(
     const CNA_MediaQueueHandle handle,
     std::shared_ptr<MediaQueueResource>* const outQueue)

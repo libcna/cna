@@ -662,6 +662,13 @@ enum class EmbeddedNul { Allowed, Refused };
     uint64_t elementByteSize,
     std::size_t* outByteCount) noexcept;
 
+/**
+ * @brief Advances a handle generation, retiring exhausted slots with zero instead of wrapping.
+ * @param current The slot's current generation; zero denotes a retired slot.
+ * @return The next generation, or zero when no unused generation remains.
+ */
+[[nodiscard]] uint32_t NextHandleGeneration(uint32_t current) noexcept;
+
 class HandleRegistry final {
 public:
     /// The process-wide registry is destroyed with the process's static objects, on whichever

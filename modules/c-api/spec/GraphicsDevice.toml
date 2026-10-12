@@ -106,9 +106,9 @@ cna_graphics_device_get_backbuffer_data_window = { result = "GraphicsDeviceGetBa
 cna_graphics_device_set_vertex_buffer = { result = "GraphicsDeviceSetVertexBuffer(graphics_device, vertex_buffer)" }
 cna_graphics_device_set_vertex_buffer_offset = { result = "GraphicsDeviceSetVertexBufferOffset(graphics_device, vertex_buffer, vertex_offset)" }
 cna_graphics_device_set_vertex_buffers = { result = "GraphicsDeviceSetVertexBuffers(graphics_device, bindings, binding_count)" }
-cna_graphics_device_get_vertex_buffer = { result = "GraphicsDeviceGetVertexBuffer(graphics_device, out_vertex_buffer)", optional = ["out_vertex_buffer"] }
+cna_graphics_device_get_vertex_buffer = { result = "GraphicsDeviceGetVertexBuffer(graphics_device, out_vertex_buffer)" }
 cna_graphics_device_set_index_buffer = { result = "GraphicsDeviceSetIndexBuffer(graphics_device, index_buffer)" }
-cna_graphics_device_get_index_buffer = { result = "GraphicsDeviceGetIndexBuffer(graphics_device, out_index_buffer)", optional = ["out_index_buffer"] }
+cna_graphics_device_get_index_buffer = { result = "GraphicsDeviceGetIndexBuffer(graphics_device, out_index_buffer)" }
 cna_graphics_device_draw_user_primitives = { result = "GraphicsDeviceDrawUserPrimitives(graphics_device, primitives)" }
 cna_graphics_device_draw_user_indexed_primitives = { result = "GraphicsDeviceDrawUserIndexedPrimitives(graphics_device, primitives, indices)" }
 cna_graphics_device_set_current_effect = { result = "GraphicsDeviceSetCurrentEffect(graphics_device, effect)" }

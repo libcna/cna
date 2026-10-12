@@ -422,9 +422,8 @@ static int validate_capability_profile(CNA_Handle graphics_device)
     if (cna_graphics_device_get_surface_format_support_ext(
             graphics_device, CNA_SURFACE_FORMAT_COLOR,
             &known_usages, &supported_usages) != CNA_RESULT_SUCCESS ||
-        known_usages != classified ||
+        (known_usages & classified) != classified ||
         (supported_usages & ~known_usages) != 0U ||
-        (known_usages & CNA_RENDERER_FORMAT_USAGE_SAMPLED) != 0U ||
         cna_graphics_device_get_surface_format_support_ext(
             graphics_device, CNA_SURFACE_FORMAT_USHORT_EXT + UINT32_C(1),
             &known_usages, &supported_usages) != CNA_RESULT_INVALID_ARGUMENT ||

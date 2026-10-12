@@ -89,11 +89,6 @@ struct ForeignThreadCallQueue final {
     return name;
 }
 
-[[nodiscard]] uint32_t NextGeneration(const uint32_t current) noexcept
-{
-    return current == std::numeric_limits<uint32_t>::max() ? 1U : current + 1U;
-}
-
 [[nodiscard]] CNA_Handle MakeHandle(const uint32_t slotIndex, const uint32_t generation) noexcept
 {
     return (static_cast<uint64_t>(generation) << 32U) |
@@ -506,10 +501,14 @@ CNA_Result ValidateCanonicalBool(const CNA_Bool value, const std::string_view na
     }
     // The name is in the message because a route may take more than one flag, and "a flag is not a
     // Boolean" is not something a caller can act on without knowing which.
-    std::string message;
-    message.reserve(name.size() + 48U);
-    message.append("The '").append(name).append("' flag must be CNA_FALSE or CNA_TRUE.");
-    return InvalidArgument(message);
+    SetLastError(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, {});
+    try {
+        lastError.message.append("The '").append(name).append(
+            "' flag must be CNA_FALSE or CNA_TRUE.");
+    } catch (...) {
+        lastError.message.clear();
+    }
+    return CNA_RESULT_INVALID_ARGUMENT;
 }
 
 CNA_Result ValidateStringView(
@@ -635,6 +634,11 @@ CNA_Result CheckedElementByteCount(
     return CNA_RESULT_SUCCESS;
 }
 
+uint32_t NextHandleGeneration(const uint32_t current) noexcept
+{
+    return current == 0U || current == std::numeric_limits<uint32_t>::max() ? 0U : current + 1U;
+}
+
 HandleRegistry::~HandleRegistry()
 {
     // Held rather than dropped, so the objects stay reachable and a leak checker does not report
@@ -660,7 +664,7 @@ CNA_Result HandleRegistry::Create(
     std::lock_guard lock(mutex_);
     for (uint32_t index = 0; index < slots_.size(); ++index) {
         Slot& slot = slots_[index];
-        if (slot.object) {
+        if (slot.object || slot.generation == 0U) {
             continue;
         }
 
@@ -764,7 +768,7 @@ CNA_Result HandleRegistry::Release(const CNA_Handle handle)
         slot->kind = ObjectKind::Unknown;
         slot->creationThread = {};
         slot->userTag = 0U;
-        slot->generation = NextGeneration(slot->generation);
+        slot->generation = NextHandleGeneration(slot->generation);
     }
     return CNA_RESULT_SUCCESS;
 }

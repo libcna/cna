@@ -152,7 +152,7 @@ CNA_Result cna_joystick_state_copy_balls(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { CNA_Point point = {}; point.x = static_cast<int32_t>(value.X); point.y = static_cast<int32_t>(value.Y); return point; });
+        return CopyElements(object->balls, destination, capacity, out_count, [](const Microsoft::Xna::Framework::Point& value) { return CNA::C::Detail::ToC(value); });
     });
 }
 

@@ -134,40 +134,33 @@ template<typename TValue, typename TCallable>
 [[nodiscard]] CNA_Result DeviceQuery(
     const CNA_Handle graphicsDeviceHandle,
     TValue* const output,
-    TCallable&& callable) noexcept
+    TCallable&& callable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (output == nullptr) {
-            return InvalidArgument("The graphics-device query output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const TValue value = static_cast<TValue>(
-            std::forward<TCallable>(callable)(*graphicsDevice->value));
-        *output = value;
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const TValue value = static_cast<TValue>(
+        std::forward<TCallable>(callable)(*graphicsDevice->value));
+    *output = value;
+    return CNA_RESULT_SUCCESS;
 }
 
 template<typename TCallable>
 [[nodiscard]] CNA_Result DeviceCommand(
     const CNA_Handle graphicsDeviceHandle,
-    TCallable&& callable) noexcept
+    TCallable&& callable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result =
-                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::forward<TCallable>(callable)(*graphicsDevice->value);
-        return CNA_RESULT_SUCCESS;
-    });
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::forward<TCallable>(callable)(*graphicsDevice->value);
+    return CNA_RESULT_SUCCESS;
 }
 
 // A draw route that a 2D-only backend cannot serve is reported as an explicit capability refusal

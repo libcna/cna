@@ -13,11 +13,29 @@
 #include "System/InvalidCastException.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <system_error>
+
+namespace {
+thread_local bool refuseAllocation = false;
+}
+
+void* operator new(const std::size_t size)
+{
+    if (!refuseAllocation) {
+        if (void* memory = std::malloc(size == 0U ? 1U : size)) {
+            return memory;
+        }
+    }
+    throw std::bad_alloc();
+}
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 
 namespace {
 
@@ -35,6 +53,17 @@ namespace {
 int main()
 {
     using namespace CNA::C::Detail;
+
+    // A diagnostic allocation must not terminate inside the noexcept bool validator.
+    const std::string longName(4096U, 'x');
+    (void)GetLastError();
+    refuseAllocation = true;
+    const CNA_Result refusedBool = ValidateCanonicalBool(static_cast<CNA_Bool>(2), longName);
+    refuseAllocation = false;
+    if (refusedBool != CNA_RESULT_INVALID_ARGUMENT ||
+        !HasLastError(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, {})) {
+        return 30;
+    }
 
     if (CallWithExceptionBarrier([]() -> CNA_Result {
             throw std::invalid_argument("argument failure");

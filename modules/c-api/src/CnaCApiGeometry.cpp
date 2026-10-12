@@ -47,17 +47,12 @@ template<typename TCallable>
 [[nodiscard]] CNA_Result StoreOptionalDistance(
     CNA_Bool* const outHit,
     float* const outDistance,
-    TCallable&& callable) noexcept
+    TCallable&& callable)
 {
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outHit == nullptr || outDistance == nullptr) {
-            return InvalidArgument("A ray-intersection output is null.");
-        }
-        const std::optional<float> distance = std::forward<TCallable>(callable)();
-        *outHit = ToCBool(distance.has_value());
-        *outDistance = distance.value_or(0.0F);
-        return CNA_RESULT_SUCCESS;
-    });
+    const std::optional<float> distance = std::forward<TCallable>(callable)();
+    *outHit = ToCBool(distance.has_value());
+    *outDistance = distance.value_or(0.0F);
+    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result PlaneNormalizeInPlace(CNA_Plane* const value)

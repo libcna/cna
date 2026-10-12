@@ -1282,9 +1282,10 @@ CNA_Result cna_graphics_device_get_vertex_buffer(
     CNA_VertexBufferHandle* const out_vertex_buffer)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_vertex_buffer != nullptr) {
-            *out_vertex_buffer = CNA_INVALID_HANDLE;
+        if (out_vertex_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_vertex_buffer: out_vertex_buffer is null.");
         }
+        *out_vertex_buffer = CNA_INVALID_HANDLE;
         return GraphicsDeviceGetVertexBuffer(graphics_device, out_vertex_buffer);
     });
 }
@@ -1303,9 +1304,10 @@ CNA_Result cna_graphics_device_get_index_buffer(
     CNA_IndexBufferHandle* const out_index_buffer)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_index_buffer != nullptr) {
-            *out_index_buffer = CNA_INVALID_HANDLE;
+        if (out_index_buffer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_index_buffer: out_index_buffer is null.");
         }
+        *out_index_buffer = CNA_INVALID_HANDLE;
         return GraphicsDeviceGetIndexBuffer(graphics_device, out_index_buffer);
     });
 }
