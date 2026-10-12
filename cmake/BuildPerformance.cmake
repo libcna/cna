@@ -366,24 +366,118 @@ endif()
 # compiler driver names the runtime last. A std::string member that a C++ shared library needs
 # (libshaderc, in a build with Vulkan) then extracts the first CNA archive member that defines it:
 # in a multi-renderer 2D game, the gamer-services backend, the system Guide and the 30 MB avatar
-# catalog. Named first, the runtime owns the symbols it exports, and a member is extracted only for
-# a CNA symbol. As-needed, so it adds no dependency; GNU ld and lld link the same members with or
-# without it. Skipped for a static runtime, which this would replace with the shared one: a flag
-# that links the whole program or the C++ runtime statically. -static-libgcc does neither.
-set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION "")
-if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
-   AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"
-   AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES
-       "(^|[^A-Za-z0-9_+-])-(static|static-pie|static-libstdc\\+\\+)($|[^A-Za-z0-9_+-])")
-    foreach(_cna_cxx_runtime IN ITEMS stdc++ c++)
-        if(_cna_cxx_runtime IN_LIST CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
-            set(CNA_CXX_RUNTIME_FIRST_LINK_OPTION
-                "SHELL:-Wl,--push-state,--as-needed -l${_cna_cxx_runtime} -Wl,--pop-state")
+# catalog. Named first, the shared runtime satisfies such a reference, and no member is extracted
+# for a standard-library symbol alone. As-needed, so it adds no dependency; GNU ld and lld link the
+# same members with or without it.
+#
+# Only for a shared runtime: named first, a shared runtime would replace a static one with lld and
+# mold. AUTO reads each program's own flags at the end of the configure
+# (_cna_note_static_cxx_runtimes). SHARED and STATIC decide for every program, for a runtime chosen
+# where CNA cannot see it: a compiler wrapper or spec file, a library's link options.
+set(CNA_CXX_RUNTIME_LINKAGE "AUTO" CACHE STRING
+    "C++ runtime linkage of the programs that link CNA (AUTO, SHARED or STATIC)")
+set_property(CACHE CNA_CXX_RUNTIME_LINKAGE PROPERTY STRINGS AUTO SHARED STATIC)
+
+function(cna_add_cxx_runtime_first_link_option target)
+    string(TOUPPER "${CNA_CXX_RUNTIME_LINKAGE}" _cna_linkage)
+    if(NOT _cna_linkage MATCHES "^(AUTO|SHARED|STATIC)$")
+        message(FATAL_ERROR "CNA_CXX_RUNTIME_LINKAGE must be AUTO, SHARED or STATIC "
+            "(received '${CNA_CXX_RUNTIME_LINKAGE}').")
+    endif()
+    if(_cna_linkage STREQUAL "STATIC" OR NOT CMAKE_EXECUTABLE_FORMAT STREQUAL "ELF" OR ANDROID
+       OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        return()
+    endif()
+    set(_cna_runtime_option "")
+    foreach(_cna_runtime IN ITEMS stdc++ c++)
+        if(_cna_runtime IN_LIST CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
+            set(_cna_runtime_option
+                "SHELL:-Wl,--push-state,--as-needed -l${_cna_runtime} -Wl,--pop-state")
             break()
         endif()
     endforeach()
-    unset(_cna_cxx_runtime)
-endif()
+    if(NOT _cna_runtime_option)
+        return()
+    endif()
+    if(_cna_linkage STREQUAL "AUTO")
+        # Not for a program whose runtime is static in every configuration or in this one. An
+        # empty $<CONFIG> is "in" an empty list, hence the $<BOOL>.
+        set(_cna_static "$<TARGET_PROPERTY:CNA_CXX_STATIC_RUNTIME>")
+        set(_cna_config "$<UPPER_CASE:$<CONFIG>>")
+        set(_cna_runtime_option "$<$<NOT:$<OR:$<IN_LIST:ALL,${_cna_static}>,$<AND:$<BOOL:${_cna_config}>,$<IN_LIST:${_cna_config},${_cna_static}>>>>:${_cna_runtime_option}>")
+        get_property(_cna_scheduled GLOBAL PROPERTY CNA_CXX_RUNTIME_DETECTION_SCHEDULED)
+        if(NOT _cna_scheduled)
+            set_property(GLOBAL PROPERTY CNA_CXX_RUNTIME_DETECTION_SCHEDULED TRUE)
+            cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}"
+                CALL _cna_note_static_cxx_runtimes)
+        endif()
+    endif()
+    target_link_options(${target} INTERFACE "${_cna_runtime_option}")
+endfunction()
+
+# Sets CNA_CXX_STATIC_RUNTIME on every program whose flags link the C++ runtime statically or not
+# at all: ALL, or the configurations in which they do. The flags are those its link uses: its
+# directory's CMAKE_CXX_FLAGS and CMAKE_<EXE|SHARED|MODULE>_LINKER_FLAGS with their configuration
+# variants, toolchain and LDFLAGS initial values included, and its own LINK_OPTIONS, LINK_FLAGS and
+# LINK_LIBRARIES. Matched as text, generator expressions included: a runtime wrongly taken for
+# static only loses the option, never changes the program's runtime. -static-libgcc does not count.
+function(_cna_note_static_cxx_runtimes)
+    set(_cna_static_flag "(^|[^A-Za-z0-9_+-])-(static|static-pie|static-libstdc\\+\\+|nostdlib|nostdlib\\+\\+|nodefaultlibs)($|[^A-Za-z0-9_+-])")
+    get_property(_cna_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_cna_multi_config)
+        set(_cna_configs ${CMAKE_CONFIGURATION_TYPES})
+    else()
+        set(_cna_configs ${CMAKE_BUILD_TYPE})
+    endif()
+    cna_collect_buildsystem_targets("${CMAKE_SOURCE_DIR}" _cna_targets)
+    foreach(_cna_target IN LISTS _cna_targets)
+        get_target_property(_cna_type ${_cna_target} TYPE)
+        if(_cna_type STREQUAL "EXECUTABLE")
+            set(_cna_kind EXE)
+        elseif(_cna_type STREQUAL "SHARED_LIBRARY")
+            set(_cna_kind SHARED)
+        elseif(_cna_type STREQUAL "MODULE_LIBRARY")
+            set(_cna_kind MODULE)
+        else()
+            continue()
+        endif()
+        get_target_property(_cna_directory ${_cna_target} SOURCE_DIR)
+        set(_cna_static_configs "")
+        foreach(_cna_config IN ITEMS "" ${_cna_configs})
+            string(TOUPPER "${_cna_config}" _cna_config)
+            set(_cna_suffix "")
+            if(_cna_config)
+                set(_cna_suffix "_${_cna_config}")
+            endif()
+            set(_cna_flags "")
+            foreach(_cna_variable IN ITEMS CMAKE_CXX_FLAGS CMAKE_${_cna_kind}_LINKER_FLAGS)
+                get_directory_property(_cna_value DIRECTORY "${_cna_directory}"
+                    DEFINITION ${_cna_variable}${_cna_suffix})
+                string(APPEND _cna_flags " ${_cna_value}")
+            endforeach()
+            set(_cna_properties LINK_FLAGS${_cna_suffix})
+            if(NOT _cna_config)
+                list(APPEND _cna_properties LINK_OPTIONS LINK_LIBRARIES)
+            endif()
+            foreach(_cna_property IN LISTS _cna_properties)
+                get_target_property(_cna_value ${_cna_target} ${_cna_property})
+                if(_cna_value)
+                    string(APPEND _cna_flags " ${_cna_value}")
+                endif()
+            endforeach()
+            if(_cna_flags MATCHES "${_cna_static_flag}")
+                if(NOT _cna_config)
+                    set(_cna_static_configs ALL)
+                    break()
+                endif()
+                list(APPEND _cna_static_configs ${_cna_config})
+            endif()
+        endforeach()
+        if(_cna_static_configs)
+            set_property(TARGET ${_cna_target} PROPERTY CNA_CXX_STATIC_RUNTIME ${_cna_static_configs})
+        endif()
+    endforeach()
+endfunction()
 
 option(CNA_ENABLE_UNITY_BUILD
     "Enable the measured clean-CI unity-build pilot for the core and math modules" OFF)
