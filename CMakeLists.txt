@@ -411,6 +411,9 @@ include(cmake/AppleSmoke.cmake)
 
 # Minimal-link module probes + renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §4).
 include(cmake/Tests/ModuleProbes.cmake)
+# Symbol-level link-footprint gates: what a 2D game's executable must not contain, and what a
+# full-featured one must (docs/link-size-architecture.md).
+include(cmake/Tests/LinkFootprint.cmake)
 
 # Apple bundle sweep (plans/plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
 # tools, tests -- is registered by now, so this is the one place that can hand each of them the
