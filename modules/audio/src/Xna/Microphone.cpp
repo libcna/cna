@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
 #include "CNA/Internal/Audio/RecordingProvider.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
@@ -55,6 +56,9 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (micList == nullptr)
         {
+            // Microphones exist from here on; FrameworkDispatcher::Update() checks their buffers.
+            CNA::Internal::FrameworkUpdates::Install(CNA::Internal::FrameworkUpdates::Slot::Microphones,
+                                                     &Microphone::CheckAllBuffers);
             microphoneStorage_.clear();
 
             if (auto* provider = GetRecordingProvider())

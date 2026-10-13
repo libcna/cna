@@ -136,7 +136,7 @@ namespace CNA::Platform::Testing {
         }
 
         /** @brief Gets the scripted provider. @return The provider; never null. */
-        [[nodiscard]] IPlatformCameraProvider* GetCamera() override { return &camera_; }
+        [[nodiscard]] IPlatformCameraProvider* GetCameraService() override { return &camera_; }
 
         /** @brief Gets the provider for scripting and inspection. @return The provider. */
         [[nodiscard]] CannedCameraProvider& Canned() { return camera_; }

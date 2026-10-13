@@ -8,6 +8,9 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class Texture3D;
+    class TextureCube;
+
     /** @brief Abstract base class for all texture types. */
     class Texture : public GraphicsResource
     {
@@ -131,6 +134,33 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] static bool IsRenderTargetFormatAllowedByProfileEXT(
             GraphicsProfile profile, SurfaceFormat fmt) noexcept;
+
+        /**
+         * @brief CNAEXT: this texture as a TextureCube, when it is one.
+         *
+         * What `dynamic_cast<const TextureCube*>` answers, asked without naming the class: code
+         * every program links (the renderers' effect binding) uses this, so that a program which
+         * never makes a cube map does not link TextureCube (docs/link-size-architecture.md).
+         *
+         * @return This texture, or nullptr when it is not a TextureCube.
+         */
+        CNAEXT [[nodiscard]] virtual const TextureCube* AsTextureCubeEXT() const noexcept
+        {
+            return nullptr;
+        }
+
+        /**
+         * @brief CNAEXT: this texture as a Texture3D, when it is one.
+         *
+         * What `dynamic_cast<const Texture3D*>` answers, without naming the class; see
+         * AsTextureCubeEXT().
+         *
+         * @return This texture, or nullptr when it is not a Texture3D.
+         */
+        CNAEXT [[nodiscard]] virtual const Texture3D* AsTexture3DEXT() const noexcept
+        {
+            return nullptr;
+        }
 
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);

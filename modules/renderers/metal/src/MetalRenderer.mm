@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
@@ -6061,14 +6062,14 @@ namespace
         switch (kind)
         {
             case MetalCompiledTextureKind::TextureCube:
-                if (auto* cube = dynamic_cast<TextureCube*>(texture)) return nativeCubeTextureFor(&cube->GetRenderer());
+                if (auto* cube = CNA::Internal::Graphics::AsTextureCube(texture)) return nativeCubeTextureFor(&cube->GetRenderer());
                 return nil;
             case MetalCompiledTextureKind::Texture3D:
-                if (auto* volume = dynamic_cast<Texture3D*>(texture))
+                if (auto* volume = CNA::Internal::Graphics::AsTexture3D(texture))
                     if (auto* metal = dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())) return metal->samplingTexture();   // AM4-147
                 return nil;
             case MetalCompiledTextureKind::Texture2D:
-                if (dynamic_cast<TextureCube*>(texture) || dynamic_cast<Texture3D*>(texture)) return nil;
+                if (CNA::Internal::Graphics::AsTextureCube(texture) || CNA::Internal::Graphics::AsTexture3D(texture)) return nil;
                 if (auto* flat = dynamic_cast<Texture2D*>(texture)) return nativeTextureFor(&flat->GetRenderer());
                 return nil;
         }
@@ -6382,8 +6383,8 @@ bool MetalRenderer::OwnsSampleableTextureEXT(Microsoft::Xna::Framework::Graphics
 {
     using namespace Microsoft::Xna::Framework::Graphics;
     if (texture==nullptr) return false;
-    if (auto* cube=dynamic_cast<TextureCube*>(texture)) return nativeCubeTextureFor(&cube->GetRenderer())!=nil;
-    if (auto* volume=dynamic_cast<Texture3D*>(texture)) return dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())!=nullptr;
+    if (auto* cube=CNA::Internal::Graphics::AsTextureCube(texture)) return nativeCubeTextureFor(&cube->GetRenderer())!=nil;
+    if (auto* volume=CNA::Internal::Graphics::AsTexture3D(texture)) return dynamic_cast<const MetalTexture3D*>(&volume->GetRenderer())!=nullptr;
     if (auto* flat=dynamic_cast<Texture2D*>(texture)) return nativeTextureFor(&flat->GetRenderer())!=nil;
     return false;
 }

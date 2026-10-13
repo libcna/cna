@@ -94,7 +94,7 @@ std::map<std::string,std::vector<unsigned char>> readAvatars(IGamerServicesBacke
     for(std::size_t start=0;start<ids.size();start+=16) {
         std::vector<std::string> batch(ids.begin()+static_cast<std::ptrdiff_t>(start),ids.begin()+static_cast<std::ptrdiff_t>(std::min(ids.size(),start+16)));
         try {
-            const auto records=service.avatars(batch);
+            const auto records=service.avatars(batch,Avatars::clientCatalogs());
             for(std::size_t i=0;i<batch.size()&&i<records.size();++i)out[batch[i]]=records[i].description;
         } catch(...) {}
     }
@@ -463,7 +463,7 @@ public:
         struct Result {ServiceIdentity person;std::vector<unsigned char> avatar;std::optional<ServiceFriend> friendship;};
         load<Result>(self,[user=userOf(player),tag=tag_](IGamerServicesBackend& s) {
             Result result{s.profile(tag),{},{}};
-            try{result.avatar=s.avatars({result.person.userId}).at(0).description;}catch(...){}
+            try{result.avatar=s.avatars({result.person.userId},Avatars::clientCatalogs()).at(0).description;}catch(...){}
             for(auto& entry:s.friends(user))if(lower(entry.gamertag)==lower(result.person.gamertag))result.friendship=entry;
             return result;
         },[user=userOf(player)](GamerCardScreen& screen,Result result) {
@@ -1034,112 +1034,6 @@ private:
     int status_=0,zone_=-1;
 };
 
-// ---- Party and game content ---------------------------------------------------------------------
-
-// XNA's own emulation of a purchase for a game simulating trial mode (its resources' "Test
-// Purchase" prompt): Yes turns SimulateTrialMode off, and IsTrialMode follows at the next update.
-class TestPurchaseScreen final : public Screen {
-public:
-    std::string name() const override {return "testPurchase";}
-    std::string title() const override {return "Test Purchase";}
-    float dialogWidth() const override {return 640;}
-    float dialogHeight() const override {return 400;}
-    void input(InputContext& ui) override {
-        const int chosen=list_.input(ui,2);
-        if(chosen>=0)activate(chosen);
-    }
-    void activate(int index) override {
-        if(index<0||index>1)return;
-        if(index==0)GS::Guide::setSimulateTrialModeProperty(false);
-        pop(this);
-    }
-    void draw(Ui& ui,const Box& area) override {
-        float y=area.y;
-        for(const auto& line:ui.style.wrap(Font::Body,text(),area.w)) {
-            ui.style.text(ui.batch,Font::Body,line,Xna::Vector2(area.x,y),Palette::text());
-            y+=ui.style.measure(Font::Body,"Ag").Y;
-        }
-        drawActions(ui,list_,Box{area.x,y+ui.px(18),area.w,area.bottom()-y-ui.px(18)},{{Icon::Check,"Yes"},{Icon::Cross,"No"}});
-    }
-    std::vector<Hint> hints() const override {return {{Command::Accept,"Select"},{Command::Back,"No"}};}
-    std::vector<std::string> labels() const override {return {"Yes","No"};}
-    int focus() const override {return list_.focus;}
-private:
-    static std::string text() {
-        return "Would you like to simulate purchasing the full version of this game? This screen is an emulation provided "
-               "for testing; CNA Gamer Services sells nothing itself.";
-    }
-    List list_;
-};
-
-// What this game has: its license, and the avatar catalogs as one product -- the ones this CNA
-// release carries and the updates installed since, with the update setting.
-class ContentScreen final : public Screen {
-public:
-    std::string name() const override {return "content";}
-    std::string title() const override {return "Game content";}
-    std::string subtitle() const override {return "This game and what it has installed";}
-    Category category() const override {return Category::Content;}
-    void input(InputContext& ui) override {
-        const int chosen=list_.input(ui,static_cast<int>(rows().size()));
-        if(chosen>=0)activate(chosen);
-    }
-    void activate(int index) override {
-        if(index==0&&GS::Guide::getSimulateTrialModeProperty())push(testPurchaseScreen());
-    }
-    void draw(Ui& ui,const Box& area) override {
-        const auto list=rows();
-        list_.draw(ui,area,static_cast<int>(list.size()),84,[&](int index,const Box& row,bool focused) {
-            const auto& entry=list[static_cast<std::size_t>(index)];
-            rowBackground(ui,row,focused);
-            const Box tile{row.x+ui.px(12),row.y+ui.px(12),row.h-ui.px(24),row.h-ui.px(24)};
-            ui.style.rounded(ui.batch,tile,ui.px(12),Palette::rail());
-            ui.style.icon(ui.batch,entry.icon,tile.inset(ui.px(12)),entry.attention?Palette::away():Palette::accent());
-            const float tx=tile.right()+ui.px(16);
-            ui.style.text(ui.batch,Font::BodyBold,entry.title,Xna::Vector2(tx,row.y+ui.px(10)),Palette::text());
-            ui.style.text(ui.batch,Font::Caption,ui.style.fit(Font::Caption,entry.detail,row.right()-tx-ui.px(16)),Xna::Vector2(tx,row.y+ui.px(38)),Palette::muted());
-            if(!entry.more.empty())
-                ui.style.text(ui.batch,Font::Caption,ui.style.fit(Font::Caption,entry.more,row.right()-tx-ui.px(16)),Xna::Vector2(tx,row.y+ui.px(58)),Palette::faint());
-        });
-    }
-    std::vector<Hint> hints() const override {
-        if(GS::Guide::getSimulateTrialModeProperty()&&list_.focus==0)return {{Command::Accept,"Buy (test)"},{Command::Back,"Back"}};
-        return {{Command::Back,"Back"}};
-    }
-    std::vector<std::string> labels() const override {std::vector<std::string> out;for(const auto& row:rows())out.push_back(row.title);return out;}
-    int focus() const override {return list_.focus;}
-
-private:
-    struct Row {Icon icon;std::string title,detail,more;bool attention=false;};
-    std::vector<Row> rows() const {
-        std::vector<Row> out;
-        if(GS::Guide::getIsTrialModeProperty()||GS::Guide::getSimulateTrialModeProperty())
-            out.push_back({Icon::Lock,"Trial version",GS::Guide::getSimulateTrialModeProperty()?"Trial mode is simulated for testing (Guide.SimulateTrialMode)":
-                "Waiting for gamer services to confirm the license","Online sessions are unavailable in a trial.",true});
-        else
-            out.push_back({Icon::Check,"Full version","This game is fully licensed",""});
-        // The avatar catalogs, one product: built in, then installed updates.
-        std::vector<std::uint16_t> builtIn,installed;
-        for(auto version:Avatars::availableCatalogVersions())(Avatars::embeddedManifest(version)?builtIn:installed).push_back(version);
-        auto listed=[](const std::vector<std::uint16_t>& versions) {
-            std::string text;
-            for(auto version:versions)text+=(text.empty()?"":", ")+std::to_string(version);
-            return text;
-        };
-        std::string detail=builtIn.empty()?"":(builtIn.size()==1?"Catalog ":"Catalogs ")+listed(builtIn)+" with this CNA release";
-        if(!installed.empty())detail+=(detail.empty()?"":" \xe2\x80\xa2 ")+std::string(installed.size()==1?"catalog ":"catalogs ")+listed(installed)+" installed as updates";
-        std::string updates="Catalog updates are off: avatars from newer catalogs are shown as the service adapts them";
-        try {
-            const auto policy=backend()->avatarCatalogPolicy();
-            if(policy.updates)updates="Newer catalogs install when an avatar needs one, up to "+std::to_string(policy.maximumBytes>>20)+" MB each";
-        } catch(...) {}
-        out.push_back({Icon::Person,"CNA avatars",detail,updates});
-        return out;
-    }
-    static std::shared_ptr<Screen> testPurchaseScreen() {return std::make_shared<TestPurchaseScreen>();}
-    List list_;
-};
-
 // ---- A received invitation (dialog) -------------------------------------------------------------
 class InvitationScreen final : public Screen {
 public:
@@ -1180,7 +1074,7 @@ public:
     int focus() const override {return list_.focus;}
     void start(const std::shared_ptr<InvitationScreen>& self) {
         if(senderId_.empty())return;
-        load<std::vector<unsigned char>>(self,[id=senderId_](IGamerServicesBackend& s){return s.avatars({id}).at(0).description;},
+        load<std::vector<unsigned char>>(self,[id=senderId_](IGamerServicesBackend& s){return s.avatars({id},Avatars::clientCatalogs()).at(0).description;},
             [](InvitationScreen& screen,std::vector<unsigned char> avatar){screen.avatar_=std::move(avatar);});
     }
 private:
@@ -1193,6 +1087,7 @@ private:
 template<typename S,typename... A>
 std::shared_ptr<S> make(Xna::PlayerIndex player,A&&... arguments)
 {
+    installSystemGuide();
     auto screen=std::make_shared<S>(std::forward<A>(arguments)...);
     screen->player=player;
     return screen;
@@ -1208,8 +1103,6 @@ std::shared_ptr<Screen> playersScreen(Xna::PlayerIndex player){auto s=make<Playe
 std::shared_ptr<Screen> reviewScreen(Xna::PlayerIndex player,std::string tag){return make<ReviewScreen>(player,std::move(tag));}
 std::shared_ptr<Screen> inviteScreen(Xna::PlayerIndex player,std::vector<std::string> chosen){auto s=make<InviteScreen>(player,std::move(chosen));s->start(s);return s;}
 std::shared_ptr<Screen> settingsScreen(Xna::PlayerIndex player){auto s=make<SettingsScreen>(player);s->start();return s;}
-std::shared_ptr<Screen> contentScreen(Xna::PlayerIndex player){return make<ContentScreen>(player);}
-std::shared_ptr<Screen> testPurchaseScreen(Xna::PlayerIndex player){return make<TestPurchaseScreen>(player);}
 std::shared_ptr<Screen> invitationScreen(Xna::PlayerIndex player,std::string sender,std::string senderId,std::string detail,std::function<void(std::optional<bool>)> answer)
 {
     auto s=make<InvitationScreen>(player,std::move(sender),std::move(senderId),std::move(detail),std::move(answer));
@@ -1217,40 +1110,4 @@ std::shared_ptr<Screen> invitationScreen(Xna::PlayerIndex player,std::string sen
     return s;
 }
 
-void refreshIdentity(Xna::PlayerIndex player)
-{
-    auto& who=identity(player);
-    auto* gamer=signedIn(player);
-    who=Identity{};
-    if(!gamer)return;
-    who.gamertag=gamer->getGamertagProperty();
-    who.guest=gamer->getIsGuestProperty();
-    who.online=gamer->getIsSignedInToLiveProperty()&&!who.guest&&backend()->serviceEnabled();
-    who.userId=GamerAccess::userId(*gamer);
-    if(!who.online) {
-        if(!who.guest)who.avatar=localProfileAvatar(who.gamertag);
-        return;
-    }
-    struct Result {std::vector<unsigned char> avatar;int score=0;int unread=0;};
-    auto service=backend();
-    auto result=std::make_shared<std::optional<Result>>();
-    const std::weak_ptr<IGamerServicesBackend> origin=service;
-    service->submit([result,origin,user=who.userId,tag=who.gamertag] {
-        try {
-            auto executor=origin.lock();
-            if(!executor)return;
-            Result value;
-            try{value.avatar=executor->avatars({user}).at(0).description;}catch(...){}
-            try{value.score=executor->profile(tag).gamerScore;}catch(...){}
-            try{value.unread=executor->messages(user,0,1).unread;}catch(...){}
-            *result=std::move(value);
-        } catch(...) {}
-    },[result,player,tag=who.gamertag] {
-        auto& current=identity(player);
-        if(!*result||current.gamertag!=tag)return;
-        current.avatar=std::move((*result)->avatar);
-        current.gamerScore=(*result)->score;
-        current.unread=(*result)->unread;
-    });
-}
 }

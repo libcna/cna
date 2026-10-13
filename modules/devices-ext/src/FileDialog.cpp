@@ -28,7 +28,9 @@ namespace
     CNA::Platform::IPlatformDialogs* Dialogs()
     {
         CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
-        return platform.GetCapabilities().nativeFileDialog ? platform.GetDialogs() : nullptr;
+        return platform.Supports(CNA::Platform::PlatformCapability::NativeFileDialog)
+                   ? platform.GetDialogs()
+                   : nullptr;
     }
 
     /// Delivers "the user chose nothing" to a caller waiting on a dialog that will never appear.
@@ -62,7 +64,8 @@ namespace CNA::Devices
         case CNA::TargetPlatform::Desktop:
         case CNA::TargetPlatform::Android:
         default:
-            return Platform::GetCurrentPlatform().GetCapabilities().nativeFileDialog;
+            return Platform::GetCurrentPlatform().Supports(
+                Platform::PlatformCapability::NativeFileDialog);
         }
     }
 

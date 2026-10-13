@@ -10,15 +10,11 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
-#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
-#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -310,12 +306,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // shader replaces the sprite projection: World*View*Projection place each sprite at
         // (x, y, layerDepth) and the transform matrix goes unused. That is how XNA 4.0 draws
         // sprites in a 3D world (3D text, DPSF's billboard particles).
-        stockEffect_ = graphicsDevice_ != nullptr &&
-                       (dynamic_cast<const BasicEffect*>(effect) != nullptr ||
-                        dynamic_cast<const AlphaTestEffect*>(effect) != nullptr ||
-                        dynamic_cast<const DualTextureEffect*>(effect) != nullptr ||
-                        dynamic_cast<const EnvironmentMapEffect*>(effect) != nullptr ||
-                        dynamic_cast<const SkinnedEffect*>(effect) != nullptr);
+        stockEffect_ = graphicsDevice_ != nullptr && effect != nullptr && effect->IsStockEffectEXT();
         transformMatrix_ = transformMatrix;
         sortMode_ = sortMode;
         spriteQueue_.clear();

@@ -151,7 +151,7 @@ namespace CNA::Platform::Testing {
         }
 
         /** @brief Gets the recording tray service. @return The service; never null. */
-        [[nodiscard]] IPlatformTray* GetTray() override { return &tray_; }
+        [[nodiscard]] IPlatformTray* GetTrayService() override { return &tray_; }
 
         /** @brief Gets the recording service for inspection. @return The recorded icons. */
         [[nodiscard]] CannedTray& Canned() { return tray_; }

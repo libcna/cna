@@ -93,7 +93,7 @@ jobs:
         with:
           path: cna_devices
           submodules: true # non-recursive on purpose (DEV-BUILD-001) — avoids
-                            # ~19 unneeded nested SDL_image/SDL_mixer codec
+                            # unneeded nested SDL_mixer codec
                             # submodules this project's own CMake args disable
 
       - name: Choose the sharp-runtime branch
@@ -135,7 +135,7 @@ jobs:
             libthai-dev libwayland-dev libdecor-0-dev xvfb xauth \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 
-      # Vendored SDL3/SDL_image/SDL_mixer are built from source on first
+      # Vendored SDL3/SDL_mixer are built from source on first
       # configure (~6-7 minutes, DEV-BUILD-001) into .sdl-prebuilt-Linux-x86_64/;
       # every later configure/build reuses that cache. Key it off the exact
       # submodule commits so a submodule bump invalidates it automatically.
@@ -143,7 +143,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: cna_devices/.sdl-prebuilt-Linux-x86_64
-          key: sdl-prebuilt-linux-x86_64-${{ hashFiles('cna_devices/third_party/SDL/**', 'cna_devices/third_party/SDL_image/**', 'cna_devices/third_party/SDL_mixer/**') }}
+          key: sdl-prebuilt-linux-x86_64-${{ hashFiles('cna_devices/third_party/SDL/**', 'cna_devices/third_party/SDL_mixer/**') }}
 
       - name: Cache the compiler cache
         uses: actions/cache@v4

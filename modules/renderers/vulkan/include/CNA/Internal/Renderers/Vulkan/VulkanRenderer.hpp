@@ -2897,7 +2897,7 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @return `ShaderDialectEXT::SpirV`.
          */
-        [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT
+        [[nodiscard]] CNA::ShaderDialectEXT
             GetShaderDialectEXT() const override;
 
         /**

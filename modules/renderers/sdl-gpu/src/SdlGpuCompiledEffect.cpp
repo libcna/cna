@@ -7,6 +7,7 @@
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
@@ -122,14 +123,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             if (texture == nullptr) return false;
             using namespace Microsoft::Xna::Framework::Graphics;
-            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+            if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
             {
                 return dynamic_cast<const SdlGpuTextureCubeRenderer*>(
                            &textureCube->GetRenderer()) != nullptr ||
                        dynamic_cast<const SdlGpuRenderTargetCubeRenderer*>(
                            &textureCube->GetRenderer()) != nullptr;
             }
-            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+            if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
             {
                 return dynamic_cast<const SdlGpuTexture3DRenderer*>(
                            &texture3D->GetRenderer()) != nullptr;

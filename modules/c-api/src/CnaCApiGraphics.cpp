@@ -9,18 +9,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
-// The renderer contract is an internal header written for the graphics module's own warning
-// settings, not for this library's `-Wall -Wextra -Werror` (CBIND-052A). It is included only for
-// the ShaderDialectEXT enumerators the dialect route names, so the one diagnostic its defaulted
-// interface methods trip is suppressed for the include alone rather than for this file.
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
+#include "CNA/ShaderDialectEXT.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -153,9 +142,9 @@ struct ResolvedSpriteCommand final {
 /// canonical enumeration that nothing here answers -- the failure mode CBIND-052A found in the
 /// renderer identity table and fixed the same way.
 [[nodiscard]] CNA_ShaderDialect MapShaderDialect(
-    const CNA::Internal::Renderers::ShaderDialectEXT dialect) noexcept
+    const CNA::ShaderDialectEXT dialect) noexcept
 {
-    using CNA::Internal::Renderers::ShaderDialectEXT;
+    using CNA::ShaderDialectEXT;
     switch (dialect) {
         case ShaderDialectEXT::Unknown:     return CNA_SHADER_DIALECT_UNKNOWN;
         case ShaderDialectEXT::GlslDesktop: return CNA_SHADER_DIALECT_GLSL_DESKTOP;

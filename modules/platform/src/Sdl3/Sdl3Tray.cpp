@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3Tray.hpp"
+#include "Sdl3ServiceSupport.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 
@@ -135,11 +136,7 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Tray::IsSupported()
     {
-#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_MACOS)
-        return true;
-#else
-        return false;
-#endif
+        return TraySupported();
     }
 
     std::unique_ptr<IPlatformTrayIcon> Sdl3Tray::CreateTray(const std::string& tooltip)

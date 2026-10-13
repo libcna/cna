@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Software/SoftwareCompiledEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -2459,7 +2460,7 @@ namespace CNA::Internal::Renderers::Software
                 }
                 if (request.samplerType == SoftwareShaderSamplerTypeEXT::Cube)
                 {
-                    const auto* cube = dynamic_cast<const TextureCube*>(texture);
+                    const auto* cube = CNA::Internal::Graphics::AsTextureCube(texture);
                     const auto* surface = cube != nullptr
                         ? dynamic_cast<const SoftwareCubeSurface*>(&cube->GetRenderer())
                         : nullptr;
@@ -2476,7 +2477,7 @@ namespace CNA::Internal::Renderers::Software
                 }
                 if (request.samplerType == SoftwareShaderSamplerTypeEXT::Volume)
                 {
-                    const auto* volume = dynamic_cast<const Texture3D*>(texture);
+                    const auto* volume = CNA::Internal::Graphics::AsTexture3D(texture);
                     const auto* surface = volume != nullptr
                         ? dynamic_cast<const SoftwareTexture3DRenderer*>(&volume->GetRenderer())
                         : nullptr;
@@ -2572,7 +2573,7 @@ namespace CNA::Internal::Renderers::Software
                 }
                 if (request.samplerType == SoftwareShaderSamplerTypeEXT::Cube)
                 {
-                    const auto* cube = dynamic_cast<const TextureCube*>(texture);
+                    const auto* cube = CNA::Internal::Graphics::AsTextureCube(texture);
                     const auto* surface = cube != nullptr
                         ? dynamic_cast<const SoftwareCubeSurface*>(&cube->GetRenderer())
                         : nullptr;
@@ -2596,7 +2597,7 @@ namespace CNA::Internal::Renderers::Software
                 }
                 if (request.samplerType == SoftwareShaderSamplerTypeEXT::Volume)
                 {
-                    const auto* volume = dynamic_cast<const Texture3D*>(texture);
+                    const auto* volume = CNA::Internal::Graphics::AsTexture3D(texture);
                     const auto* surface = volume != nullptr
                         ? dynamic_cast<const SoftwareTexture3DRenderer*>(&volume->GetRenderer())
                         : nullptr;

@@ -37,8 +37,7 @@
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
 
-namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
-namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; class TextureCube; }
+#include "Microsoft/Xna/Framework/Content/detail/BuiltinContent.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -48,7 +47,8 @@ namespace Microsoft::Xna::Framework::Content
      * @brief Content manager with extensible type reader support and asset caching.
      *
      * Supports loading assets by type. Custom types are registered via RegisterTypeReader<T>().
-     * Built-in loaders (Texture2D, SoundEffect, Effect) are registered in the constructor.
+     * The built-in readers of a type are registered by the first Load<T>() of it
+     * (detail::BuiltinContent), so a program links only the readers of the types it loads.
      */
     class ContentManager : public System::IDisposable
     {
@@ -125,9 +125,41 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& xnbPath,
             const std::string& assetName);
 
-        void RegisterBuiltinLoaders();
+    private:
+        template <typename T>
+        friend struct detail::BuiltinContent;
+        /// The route by which a built-in content family installs its `.cnb` loader:
+        /// CnbLoaderRegistry::RegisterBuiltIn() is private to ContentManager (CNBF-122).
+        static void RegisterBuiltinCnbLoader(std::uint32_t assetTypeId,
+                                             const std::string& canonicalTypeName,
+                                             CNA::Content::CnbLoaderRegistry::LoaderFn loader);
+        /// Installs a built-in loose-file reader for T unless one -- built in, or the game's own
+        /// RegisterTypeReader() -- is already there; the game's reader keeps precedence.
+        template <typename T, typename Reader>
+        void RegisterBuiltinTypeReader()
+        {
+            const auto key = std::type_index(typeid(T));
+            if (typeReaders_.find(key) == typeReaders_.end())
+            {
+                typeReaders_[key] = std::shared_ptr<LooseFileContentTypeReader<T>>(
+                    std::make_shared<Reader>());
+            }
+        }
 
     public:
+        /**
+         * @brief CNAEXT: installs the readers of every built-in asset type on this manager, every
+         *        built-in `.cnb` loader (one removed since included) and, once a Game has declared
+         *        them, every built-in `.xnb` reader -- as if each type had been loaded once.
+         *
+         * A game never needs this: every manager declares the built-in loaders registered, and
+         * Load<T>() installs those of T on first use. Calling it links every reader, importer and
+         * codec CNA has (the glTF importer and Draco among them). It is for hosts that must expose
+         * every type without naming them, such as the C API, and for tests that clear the
+         * registries.
+         */
+        CNAEXT void RegisterBuiltinLoaders();
+
         /**
          * @brief Constructs a ContentManager with the given service provider.
          *
@@ -229,6 +261,7 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             std::vector<std::uint8_t> bytes = ReadStreamToEnd(*stream, assetName);
+            detail::BuiltinContent<T>::Register(*this);
             return LoadXnbAsset<T>(bytes, assetName, assetName, std::move(recordDisposableObject));
         }
 
@@ -353,6 +386,11 @@ namespace Microsoft::Xna::Framework::Content
                     "ContentManager::RegisterCnjLoader<T>(): factory must not be empty.");
             }
 
+            // A built-in type's reader is there whether or not it has been loaded yet.
+            if constexpr (detail::BuiltinContent<T>::IsBuiltin)
+            {
+                detail::BuiltinContent<T>::Register(*this);
+            }
             const auto ti = std::type_index(typeid(T));
             const bool alreadyOwnedByAnotherReader =
                 typeReaders_.find(ti) != typeReaders_.end() &&
@@ -490,6 +528,9 @@ namespace Microsoft::Xna::Framework::Content
             // this after the lookup avoids per-frame console traffic in faithful XNA code that
             // calls Content.Load from Draw and relies on ContentManager's cache (SAMPLE-014).
             log::Debug(std::string("Loading asset: ") + assetName);
+
+            // The readers of T, registered by the first load that needs them (BuiltinContent).
+            detail::BuiltinContent<T>::Register(*this);
 
             // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision): checked even
             // ahead of a literal caller-given path or a registered LooseFileContentTypeReader<T>
@@ -675,14 +716,14 @@ namespace Microsoft::Xna::Framework::Content
             const CNA::Content::Cnb::CnbDocument document =
                 CNA::Content::Cnb::CnbDocument::Parse(std::move(bytes), cnbPath);
 
-            // Through ResolveForDocument rather than a bare numeric lookup: for a CUSTOM asset
-            // type the identifier is only a 31-bit hash, so a numeric match does not prove the
-            // file is that type. The resolver additionally requires the file's own canonical type
+            // Through ResolveForDocument's checks rather than a bare numeric lookup: for a CUSTOM
+            // asset type the identifier is only a 31-bit hash, so a numeric match does not prove
+            // the file is that type. The resolver additionally requires the file's own canonical type
             // name to equal the registered one (plans/plan_cnb.md CNBF-H002). It hands back a COPY of
             // the loader, so nothing that registers or withdraws a loader on another thread can
             // pull it out from under the call below (CNBF-H003).
             const CNA::Content::CnbLoaderRegistry::LoaderFn loader =
-                CNA::Content::CnbLoaderRegistry::ResolveForDocument(document);
+                CNA::Content::CnbLoaderRegistry::ResolveRegisteredForDocument(document);
 
             std::any produced = loader(document, *this, assetName);
             try
@@ -873,4 +914,26 @@ namespace Microsoft::Xna::Framework::Content
     template<>
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
 
+    // ContentReader::ReadExternalReference<T>() lives here, not in ContentReader.cpp: it loads
+    // through ContentManager::Load<T>(), so each reader that follows a reference instantiates it
+    // for its own T. The core reader then names no asset type's loader -- explicit instantiations
+    // for Texture2D, TextureCube and Effect there made every .xnb load link the Effect family
+    // (docs/link-size-architecture.md).
+    template <typename T>
+    std::optional<T> ContentReader::ReadExternalReference()
+    {
+        const std::string externalReference = ReadString();
+        if (externalReference.empty())
+        {
+            return std::nullopt;
+        }
+        if (!contentManager_)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' references external asset '" + externalReference +
+                "', but this ContentReader has no owning ContentManager to load it through.");
+        }
+        const std::string resolved = detail::ResolveExternalReferencePath(assetName_, externalReference);
+        return contentManager_->Load<T>(resolved);
+    }
 }

@@ -26,7 +26,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # GS-009: the standard XNA avatar demos. They use only AvatarDescription/AvatarAnimation/
     # AvatarRenderer, whose original CNA catalog is compiled into CNA_GamerServices, so no content
     # is copied. Emscripten isn't wired up for these demos yet.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar
             demo_avatar/src/Main.cpp
             demo_avatar/src/AvatarDemo.cpp
@@ -57,7 +57,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # registration, Gamer::SignedInGamers population, SignedInGamer::SignedIn/SignedOut, and
     # GamerPresence. Needs CNA_GamerServices (SignedInGamer/GamerServicesComponent) and windowing
     # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_gamerservices_signin_presence
             demo_gamerservices_signin_presence/src/Main.cpp
             demo_gamerservices_signin_presence/src/PresenceGame.cpp
@@ -86,7 +86,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # Task 15.9: cna_demo_achievement_showcase - Achievement/AchievementCollection,
     # SignedInGamer::AwardAchievement/GetAchievements. Needs CNA_GamerServices and windowing
     # (SpriteBatch/SpriteFont HUD) - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_achievement_showcase
             demo_achievement_showcase/src/Main.cpp
             demo_achievement_showcase/src/AchievementGame.cpp
@@ -116,7 +116,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # PageStart) over ratings written through LeaderboardWriter::GetLeaderboard. Needs
     # CNA_GamerServices and windowing (SpriteBatch/SpriteFont HUD) - same gating as
     # cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_leaderboard_viewer
             demo_leaderboard_viewer/src/Main.cpp
             demo_leaderboard_viewer/src/LeaderboardGame.cpp
@@ -145,7 +145,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # Task 15.11: cna_demo_guide_overlay_console - Guide static API calls via a
     # numbered console menu. Console-only, single process, no graphics/window needed - needs only
     # CNA_GamerServices.
-    if(CNA_ENABLE_NET)
+    if(CNA_ENABLE_GAMER_SERVICES)
         add_executable(cna_demo_guide_overlay_console
             demo_guide_overlay_console/src/Main.cpp
         )
@@ -185,7 +185,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # Task 15.13: cna_demo_gamer_profile_privileges - GamerProfile/GamerPrivileges via
     # Gamer::GetProfile()/SignedInGamer::getPrivilegesProperty(). Needs CNA_GamerServices and
     # windowing - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_gamer_profile_privileges
             demo_gamer_profile_privileges/src/Main.cpp
             demo_gamer_profile_privileges/src/ProfileGame.cpp
@@ -215,7 +215,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage service panes, which
     # refuse without a CNA account service. Needs CNA_GamerServices and windowing - same gating as
     # cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_friends_and_gamercard
             demo_friends_and_gamercard/src/Main.cpp
             demo_friends_and_gamercard/src/FriendsGame.cpp
@@ -243,7 +243,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
 
     # Task 15.15 / GS-009: cna_demo_avatar_animation_gallery - eight random avatars playing all 31
     # AvatarAnimationPreset values a page at a time - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_animation_gallery
             demo_avatar_animation_gallery/src/Main.cpp
             demo_avatar_animation_gallery/src/GalleryDemo.cpp
@@ -272,7 +272,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
 
     # Task 15.18 / GS-009: cna_demo_avatar_dual_compare - a random female and male avatar side by
     # side on the same preset - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_dual_compare
             demo_avatar_dual_compare/src/Main.cpp
             demo_avatar_dual_compare/src/DualCompareDemo.cpp
@@ -301,7 +301,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
 
     # Task 15.20 / GS-009: cna_demo_avatar_bone_state_boundary - AvatarRenderer state, ParentBones
     # and BindPose, then game-posed custom bones - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_bone_state_boundary
             demo_avatar_bone_state_boundary/src/Main.cpp
             demo_avatar_bone_state_boundary/src/BoundaryDemo.cpp
@@ -330,7 +330,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
 
     # GSP-A2: cna_avatar_review renders tools/avatar_builder/avatar_review.py job lists through the
     # standard avatar API, for deterministic before/after review sheets.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
         add_executable(cna_avatar_review avatar_review/AvatarReview.cpp)
         target_link_libraries(cna_avatar_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
         if(TARGET SDL3::SDL3main)

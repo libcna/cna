@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include "Internal/AudioLog.hpp"
 
 #include <algorithm>
@@ -19,6 +20,49 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
+
+    namespace
+    {
+        // FrameworkDispatcher::Update()'s stream step, installed by the first Play().
+        void UpdateFrameworkStreams()
+        {
+            using Microsoft::Xna::Framework::FrameworkDispatcher;
+            // P11-DISPATCH-001: instance->Update() below can synchronously fire BufferNeeded (a
+            // realistic XNA usage pattern is disposing the instance from inside that very handler
+            // once no more data will be provided), which reaches StopInternal() -- which itself
+            // locks StreamsMutex to remove itself from Streams. A std::mutex is not recursive, so
+            // calling instance->Update() while still holding StreamsMutex here would self-deadlock
+            // the very first time real game code disposed a stream from its own BufferNeeded
+            // handler. Snapshot the list under the lock, then run every instance's Update() with
+            // the lock released; a disposed instance already removes itself from Streams via
+            // StopInternal(), so the trailing cleanup pass is mostly defensive.
+            std::vector<DynamicSoundEffectInstance*> snapshot;
+            {
+                std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
+                snapshot = FrameworkDispatcher::Streams;
+            }
+
+            for (DynamicSoundEffectInstance* instance : snapshot)
+            {
+                if (instance != nullptr)
+                {
+                    instance->Update();
+                }
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
+                auto& streams = FrameworkDispatcher::Streams;
+                streams.erase(
+                    std::remove_if(streams.begin(), streams.end(),
+                        [](DynamicSoundEffectInstance* instance)
+                        {
+                            return instance == nullptr || instance->getIsDisposedProperty();
+                        }),
+                    streams.end());
+            }
+        }
+    }
 #ifdef SOUND_ENABLED
     namespace
     {
@@ -266,6 +310,8 @@ namespace Microsoft::Xna::Framework::Audio
         {
             streams.push_back(this);
         }
+        CNA::Internal::FrameworkUpdates::Install(CNA::Internal::FrameworkUpdates::Slot::DynamicSoundEffects,
+                                                 &UpdateFrameworkStreams);
     }
 
     void DynamicSoundEffectInstance::Stop(bool immediate)

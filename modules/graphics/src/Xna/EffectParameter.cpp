@@ -763,18 +763,6 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireTextureGetterParameter(EffectParameterType::Texture2D);
         return dynamic_cast<Texture2D*>(compiledStorage_->texture);
     }
-    Texture3D* EffectParameter::GetValueTexture3D() const
-    {
-        if (!compiledStorage_) return texture3DData_;
-        RequireTextureGetterParameter(EffectParameterType::Texture3D);
-        return dynamic_cast<Texture3D*>(compiledStorage_->texture);
-    }
-    TextureCube* EffectParameter::GetValueTextureCube() const
-    {
-        if (!compiledStorage_) return textureCubeData_;
-        RequireTextureGetterParameter(EffectParameterType::TextureCube);
-        return dynamic_cast<TextureCube*>(compiledStorage_->texture);
-    }
 
     // --- SetValue ---
     void EffectParameter::SetValue(bool value)

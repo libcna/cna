@@ -45,6 +45,7 @@
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
+#include "CNA/ShaderDialectEXT.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -87,10 +88,6 @@ namespace CNA::Internal::Renderers
     class IRendererThreadContextLease;
     class IStorageBufferRenderer;
 
-    // Mirrors the definition in CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp. Declared here
-    // rather than including that header, which this one deliberately does not pull into every
-    // consumer of the public GraphicsDevice API; the underlying type is fixed so the two agree.
-    enum class ShaderDialectEXT : int;
     struct GpuDrawParams;
 }
 
@@ -1544,7 +1541,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return The active renderer's dialect, or `ShaderDialectEXT::Unknown` where the renderer
          *         has not declared one -- which means "do not guess", not "no shaders".
          */
-        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT GetShaderDialectEXT() const;
+        CNAEXT [[nodiscard]] CNA::ShaderDialectEXT GetShaderDialectEXT() const;
 
         /**
          * @brief Returns whether the active renderer consumes an explicit shader payload pair.

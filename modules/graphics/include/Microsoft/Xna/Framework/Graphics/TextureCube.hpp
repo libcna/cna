@@ -688,6 +688,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer& GetRenderer() const { return *renderer_; }
 
+        /**
+         * @brief CNAEXT: this texture, which is a TextureCube.
+         * @return This texture.
+         */
+        CNAEXT [[nodiscard]] const TextureCube* AsTextureCubeEXT() const noexcept override { return this; }
+
     protected:
         /**
          * @brief Constructs a TextureCube from a pre-built renderer (used by RenderTargetCube).

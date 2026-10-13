@@ -262,6 +262,21 @@ target_compile_definitions(cna_build_config INTERFACE
         CNA_DIAGNOSTICS_LEVEL=${CNA_DIAGNOSTICS_LEVEL}
 )
 
+# Every linker extracts the same archive members (cmake/BuildPerformance.cmake).
+cna_add_cxx_runtime_first_link_option(cna_build_config)
+
+if(CNA_SIZE_GC_LINK_OPTION)
+    # CNA_OPTIMIZE_FOR_SIZE (cmake/BuildPerformance.cmake): every final link that consumes CNA
+    # collects the unreferenced sections of CNA's per-function objects.
+    target_link_options(cna_build_config INTERFACE "${CNA_SIZE_GC_LINK_OPTION}")
+    if(CNA_SHARED_LIBRARY)
+        message(STATUS
+            "CNA: CNA_OPTIMIZE_FOR_SIZE with CNA_SHARED_LIBRARY: libcna.so carries every runtime "
+            "subsystem by design; a size-oriented deployment links CNA statically "
+            "(-DCNA_SHARED_LIBRARY=OFF), so each program keeps only what it uses")
+    endif()
+endif()
+
 if(EMSCRIPTEN)
     # These are part of CNA's public WebAssembly ABI: consumers and every linked library must use
     # the same exception model. Asyncify is intentionally separate: final application targets use
@@ -377,8 +392,10 @@ add_subdirectory(devices)
 add_subdirectory(phone)
 add_subdirectory(devices-ext)
 add_subdirectory(graphics-ext)
-if(CNA_ENABLE_NET)
+if(CNA_ENABLE_GAMER_SERVICES)
     add_subdirectory(gamer-services)
+endif()
+if(CNA_ENABLE_NET)
     add_subdirectory(net)
 endif()
 add_subdirectory(renderers)

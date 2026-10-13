@@ -26,8 +26,8 @@ cmake -S . -B cmake-build-webgpu \
 ```
 
 The extracted root must contain `include/webgpu.h` (or `include/webgpu/webgpu.h`) and a
-`libwgpu_native` library below `lib/`. The existing CNA requirements still apply: the SDL3,
-SDL3_image and SDL3_mixer submodules, plus the sibling `../sharp-runtime` checkout, must be
+`libwgpu_native` library below `lib/`. The existing CNA requirements still apply: the SDL3
+and SDL3_mixer submodules, plus the sibling `../sharp-runtime` checkout, must be
 present.
 
 For the verified Linux x86_64 layout, an extracted package may be placed at

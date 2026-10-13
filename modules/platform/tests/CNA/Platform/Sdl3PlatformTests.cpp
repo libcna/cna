@@ -8,6 +8,8 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
+#include "../../../src/Sdl3/Sdl3ServiceSupport.hpp"
 
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
@@ -165,8 +167,9 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.inputDeviceEnumeration);
     EXPECT_TRUE(capabilities.messageBox);
     EXPECT_TRUE(capabilities.nativeFileDialog);
-    EXPECT_EQ(platform_->GetTray() != nullptr, capabilities.tray);
-    EXPECT_EQ(platform_->GetCamera() != nullptr, capabilities.camera);
+    // The capability is the platform's support; the first accessor call creates the service.
+    EXPECT_EQ(capabilities.tray, Sdl3::TraySupported());
+    EXPECT_EQ(capabilities.camera, Sdl3::CameraSupported());
 
     // Still unwired, so still false -- the pairing the conformance suite enforces.
     EXPECT_TRUE(capabilities.gamepadSensors);
@@ -178,6 +181,45 @@ TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
     // Vulkan on a machine with no loader would hand a caller a service that refuses every call.
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
+}
+
+TEST_F(Sdl3PlatformTest, ASupportedCameraAndTrayAreThereWhenAskedFor)
+{
+    // As when the platform owned both services: the capability is what the platform supports, and
+    // a supported platform hands the service to whoever asks, with no step before. Asking is what
+    // creates the service and links it (Sdl3CameraService.cpp, Sdl3TrayService.cpp), so a program
+    // that never asks contains neither.
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Camera), Sdl3::CameraSupported());
+    EXPECT_EQ(platform_->GetCamera() != nullptr, platform_->Supports(PlatformCapability::Camera));
+    EXPECT_EQ(platform_->Supports(PlatformCapability::Tray), Sdl3::TraySupported());
+    EXPECT_EQ(platform_->GetTray() != nullptr, platform_->Supports(PlatformCapability::Tray));
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
+    EXPECT_NE(platform_->GetTray(), nullptr);
+#endif
+    EXPECT_EQ(platform_->GetCamera(), platform_->GetCamera()) << "created once, then reused";
+    EXPECT_EQ(platform_->GetTray(), platform_->GetTray()) << "created once, then reused";
+
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_EQ(capabilities.camera, platform_->GetCamera() != nullptr);
+    EXPECT_EQ(capabilities.tray, platform_->GetTray() != nullptr);
+}
+
+TEST_F(Sdl3PlatformTest, AskingAboutAnythingButTheCameraDoesNotStartTheCameraSubsystem)
+{
+    // Whether cameras are supported starts SDL's camera subsystem (Sdl3ServiceSupport.cpp); a
+    // program that asks only about its window, as GraphicsDevice does, must not start it.
+    if (Sdl3::CameraSubsystemRunning())
+    {
+        GTEST_SKIP() << "an earlier test in this process asked about the camera";
+    }
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        if (capability != PlatformCapability::Camera)
+        {
+            (void)platform_->Supports(capability);
+        }
+    }
+    EXPECT_FALSE(Sdl3::CameraSubsystemRunning());
 }
 
 TEST_F(Sdl3PlatformTest, VulkanCapabilityProbePreservesTheHostsVideoSubsystemState)

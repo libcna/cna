@@ -176,9 +176,9 @@ namespace CNA::Platform::Testing {
         /** @brief Gets the inner dialog service. @return The service, or null. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override { return inner_->GetDialogs(); }
         /** @brief Gets the inner tray service. @return The service, or null. */
-        [[nodiscard]] IPlatformTray* GetTray() override { return inner_->GetTray(); }
+        [[nodiscard]] IPlatformTray* GetTrayService() override { return inner_->GetTray(); }
         /** @brief Gets the inner camera provider. @return The provider, or null. */
-        [[nodiscard]] IPlatformCameraProvider* GetCamera() override { return inner_->GetCamera(); }
+        [[nodiscard]] IPlatformCameraProvider* GetCameraService() override { return inner_->GetCamera(); }
         /** @brief Gets the inner filesystem service. @return The service. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override
         {

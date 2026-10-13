@@ -3,6 +3,7 @@
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/DirectX11/D3D11CompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
@@ -138,13 +139,13 @@ namespace CNA::Internal::Renderers::DirectX11
             ResolvedSamplerTexture result;
             if (texture == nullptr) return result;
             using namespace Microsoft::Xna::Framework::Graphics;
-            if (auto* cube = dynamic_cast<TextureCube*>(texture))
+            if (auto* cube = CNA::Internal::Graphics::AsTextureCube(texture))
             {
                 auto& native = cube->GetRenderer();
                 result.textureCube = native.shared_from_this();
                 result.kind = MOJOSHADER_SAMPLER_CUBE;
             }
-            else if (auto* volume = dynamic_cast<Texture3D*>(texture))
+            else if (auto* volume = CNA::Internal::Graphics::AsTexture3D(texture))
             {
                 auto& native = volume->GetRenderer();
                 result.texture3D = native.shared_from_this();

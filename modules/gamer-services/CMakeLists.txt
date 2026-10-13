@@ -47,11 +47,21 @@ endif()
 # GS-009/GSP-B1: every original avatar catalog version (tools/avatar_builder) is compiled in as
 # "v<N>/<file>", so standard avatars render offline and each description resolves against exactly
 # the catalog version it names.
+#
+# Link boundary (docs/link-size-architecture.md): the catalog is ~30 MB of GLB and PNG data, so it
+# is a library of its own whose one symbol, embeddedCatalogFiles(), only the avatar catalog code
+# (src/Internal/Avatars/AvatarCatalog.cpp) references. A program reaches it by drawing or editing
+# avatars -- AvatarDescription, AvatarRenderer, or the system Guide GamerServicesDispatcher installs
+# -- never through Guide.IsTrialMode, a message box or the service client.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/EmbedBinaryFiles.cmake")
 file(GLOB CNA_AVATAR_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v*/*")
-cna_embed_binary_files(CNA_GamerServices CNA::Internal::GamerServices::Avatars embeddedCatalogFiles
+add_library(cna_gamerservices_avatar_catalog STATIC)
+add_library(CNA::GamerServicesAvatarCatalog ALIAS cna_gamerservices_avatar_catalog)
+cna_embed_binary_files(cna_gamerservices_avatar_catalog CNA::Internal::GamerServices::Avatars embeddedCatalogFiles
     "${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars"
     FILES ${CNA_AVATAR_CATALOG_FILES})
+target_link_libraries(cna_gamerservices_avatar_catalog PRIVATE cna_build_config cna_core_headers)
+target_link_libraries(CNA_GamerServices PRIVATE cna_gamerservices_avatar_catalog)
 # The checked-in catalog must be exactly what the generator produces (tools/avatar_builder).
 if(CNA_BUILD_TESTS)
     find_package(Python3 QUIET COMPONENTS Interpreter)

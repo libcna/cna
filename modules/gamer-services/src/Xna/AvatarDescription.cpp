@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
@@ -163,7 +164,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                         {
                             if (auto service = origin.lock())
                             {
-                                *fetched = service->avatars({userId}).at(0);
+                                *fetched = service->avatars({userId},CNA::Internal::GamerServices::Avatars::clientCatalogs()).at(0);
                             }
                         }
                         catch (...)
@@ -347,7 +348,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin(
                 "avatar", nullptr,
                 [userId, playerIndex, identity](auto& executor) -> std::any {
-                    auto record = executor.avatars({userId}).at(0);
+                    auto record = executor.avatars({userId},CNA::Internal::GamerServices::Avatars::clientCatalogs()).at(0);
                     return ServiceAvatar{std::move(record.description), record.revision, playerIndex, identity};
                 },
                 std::move(callback), std::move(state), std::move(service));

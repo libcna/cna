@@ -3,7 +3,6 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include <chrono>
 #include <future>
-#include "System/Security/Cryptography/SHA256.hpp"
 #include <algorithm>
 #include <cmath>
 #include <mutex>
@@ -312,16 +311,6 @@ std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version)
 }
 
 const CatalogManifest& newestEmbeddedManifest(){return *embeddedCatalogs().back();}
-
-std::string sha256Hex(std::span<const std::uint8_t> bytes)
-{
-    System::Security::Cryptography::SHA256 hash;
-    const auto digest=hash.ComputeHash(std::vector<SharpRuntime::bytecs>(bytes.begin(),bytes.end()));
-    static constexpr char Hex[]="0123456789abcdef";
-    std::string text;
-    for(auto byte:digest){text+=Hex[byte>>4];text+=Hex[byte&15];}
-    return text;
-}
 
 std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset)
 {

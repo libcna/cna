@@ -495,6 +495,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::ITexture3DRenderer& GetRenderer() const { return *renderer_; }
 
+        /**
+         * @brief CNAEXT: this texture, which is a Texture3D.
+         * @return This texture.
+         */
+        CNAEXT [[nodiscard]] const Texture3D* AsTexture3DEXT() const noexcept override { return this; }
+
     protected:
         /** @brief Releases the renderer 3D texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;

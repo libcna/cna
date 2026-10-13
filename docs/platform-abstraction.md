@@ -103,6 +103,14 @@ An implementation opts into only behavior it actually provides.
   return an unavailable/unknown result.
 - `GetDialogs()` is non-null when either message boxes or native file dialogs are supported.
 - Capabilities do not change during an instance's lifetime.
+- `GetCamera()` and `GetTray()` are not virtual: the first call creates the service, and the call
+  is what links its implementation, so a program that never makes it contains neither
+  (docs/link-size-architecture.md). A platform implements `GetCameraService()` and
+  `GetTrayService()` (protected) instead.
+- `Supports(capability)` answers one capability. On SDL3, reading the whole set or asking about the
+  camera starts SDL's camera subsystem, because only a running subsystem knows whether cameras
+  work; no other question does. The runtime therefore asks `Supports()`, and
+  `Game::GetPlatformCapabilitiesEXT()` reads the set on its first call, not during construction.
 
 Unsupported behavior refuses deterministically with `PlatformNotSupportedException`, naming the
 missing capability. It must not silently succeed. Ordinary absence uses a status, empty value or

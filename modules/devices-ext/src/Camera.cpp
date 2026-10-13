@@ -28,10 +28,7 @@ namespace CNA::Devices
         }
     } // namespace
 
-    bool Camera::getIsSupportedProperty()
-    {
-        return CNA::Platform::GetCurrentPlatform().GetCapabilities().camera;
-    }
+    // Whether cameras are supported is CameraSupport.cpp, so that asking links no camera.
 
     std::vector<CameraDeviceInfo> Camera::getAvailableCamerasProperty()
     {

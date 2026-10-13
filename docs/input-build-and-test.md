@@ -13,7 +13,7 @@ CNA input depends on three kinds of external code:
 
 | Dependency | How it is obtained | Notes |
 |---|---|---|
-| `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_image/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
+| `third_party/SDL`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
 | `vendor/googletest` | **git submodule** | test framework |
 | `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna_input` |
 | `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `OPENGLES3` backend |
@@ -92,7 +92,7 @@ Vulkan / SDL_RENDERER.
 Ninja 1.12.1, Debian 13).
 
 The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`), pinned at commit
-**`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** (alongside `SDL_image`/`SDL_mixer`);
+**`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** (alongside `SDL_mixer`);
 `git submodule update --init --recursive` restores it. **Tag lookup:**
 `git -C third_party/SDL describe --tags` = **`release-3.4.0-685-gcbe3fbe9f`** — 685 commits past the
 `release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged

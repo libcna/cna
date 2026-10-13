@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
+// PlatformFactory::Create(name) and GetAvailable(): every implementation compiled into this
+// binary, by name -- what the platform conformance suite runs against.
+//
+// Link boundary: Create() (PlatformFactoryDefault.cpp) constructs the build's own implementation
+// directly. Selecting by name here names every implementation, so a game -- which only ever asks
+// for the default -- must not reach this file, or Headless and Terminal ride along with SDL3.
 #include "CNA/Platform/PlatformFactory.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
@@ -17,25 +23,6 @@
 #endif
 
 namespace CNA::Platform {
-
-    namespace {
-
-        // The build-time selection made by cmake/PlatformSelection.cmake. Resolved here rather
-        // than at each call site so exactly one file knows which implementations exist.
-#if defined(CNA_PLATFORM_HEADLESS)
-        const std::string kDefaultName = "Headless";
-#elif defined(CNA_PLATFORM_TERMINAL)
-        const std::string kDefaultName = "Terminal";
-#else
-        const std::string kDefaultName = "SDL3";
-#endif
-
-    } // namespace
-
-    std::unique_ptr<IPlatform> PlatformFactory::Create()
-    {
-        return Create(kDefaultName);
-    }
 
     std::unique_ptr<IPlatform> PlatformFactory::Create(const std::string& name)
     {
@@ -90,9 +77,5 @@ namespace CNA::Platform {
         return available;
     }
 
-    const std::string& PlatformFactory::GetDefaultName()
-    {
-        return kDefaultName;
-    }
 
 } // namespace CNA::Platform

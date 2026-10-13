@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -3280,11 +3281,11 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
-    CNA::Internal::Renderers::ShaderDialectEXT VulkanRenderer::GetShaderDialectEXT() const
+    CNA::ShaderDialectEXT VulkanRenderer::GetShaderDialectEXT() const
     {
         // VULKAN-250. Not device-dependent and not build-dependent: this renderer has exactly one
         // custom-effect intake, and CompileProgram rejects anything that is not SPIR-V words.
-        return CNA::Internal::Renderers::ShaderDialectEXT::SpirV;
+        return CNA::ShaderDialectEXT::SpirV;
     }
 
     bool VulkanRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
@@ -11817,8 +11818,8 @@ namespace CNA::Internal::Renderers::Vulkan
             }
 
             auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
-            auto* textureCube = dynamic_cast<TextureCube*>(boundTexture);
-            auto* texture3D = dynamic_cast<Texture3D*>(boundTexture);
+            auto* textureCube = CNA::Internal::Graphics::AsTextureCube(boundTexture);
+            auto* texture3D = CNA::Internal::Graphics::AsTexture3D(boundTexture);
             const MOJOSHADER_samplerType boundKind =
                 textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
                 : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME

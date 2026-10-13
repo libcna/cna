@@ -35,7 +35,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::Internal::Renderers::ShaderDialectEXT;
+using CNA::ShaderDialectEXT;
 
 namespace
 {

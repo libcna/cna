@@ -38,6 +38,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     set_tests_properties(CnaSdlRuntimeDeployment PROPERTIES
         TIMEOUT 30 LABELS "configuration;runtime-deployment")
 
+    # The runtime-first link option exists for native ELF GNU/Clang links only.
+    if(CMAKE_EXECUTABLE_FORMAT STREQUAL "ELF" AND NOT CMAKE_CROSSCOMPILING
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_test(NAME CnaCxxRuntimeLinkage
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                -DCNA_CXX_RUNTIME_PROBE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/CxxRuntimeLinkageProbe
+                -DCNA_CXX_RUNTIME_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/cxx-runtime-linkage-probe
+                -DCNA_CXX_RUNTIME_COMPILER=${CMAKE_CXX_COMPILER}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/CxxRuntimeLinkageCase.cmake)
+        set_tests_properties(CnaCxxRuntimeLinkage PROPERTIES TIMEOUT 120 LABELS "configuration")
+    endif()
+
     function(cna_add_module_probe name module)
         add_executable(${name} tests/modules/${name}.cpp)
         target_link_libraries(${name} PRIVATE ${module})

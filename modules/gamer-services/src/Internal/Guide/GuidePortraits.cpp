@@ -60,24 +60,36 @@ Shot shotFor(Framing framing,const std::vector<Xna::Vector3>& joints,float heigh
     return {};
 }
 
-struct Portraits::Entry {
-    std::vector<unsigned char> bytes;
-    Framing framing=Framing::Head;
-    int width=0,height=0;
-    bool live=false;
-    std::unique_ptr<GS::AvatarDescription> description;
-    std::unique_ptr<GS::AvatarRenderer> renderer;
-    std::unique_ptr<GS::AvatarAnimation> animation;
-    std::unique_ptr<Xna::Graphics::RenderTarget2D> target;
-    bool drawn=false;
-    int unused=0;
-    bool requested=false;
+namespace {
+class AvatarPortraits final : public PortraitSource {
+public:
+    Xna::Graphics::Texture2D* request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live) override;
+    void render(Xna::Graphics::GraphicsDevice& device,double seconds) override;
+    void clear() override {entries_.clear();waiting_=0;}
+    [[nodiscard]] int waiting() const override {return waiting_;}
+private:
+    // Complete here: the class's implicit virtual destructor destroys entries_ at the class's end.
+    struct Entry {
+        std::vector<unsigned char> bytes;
+        Framing framing=Framing::Head;
+        int width=0,height=0;
+        bool live=false;
+        std::unique_ptr<GS::AvatarDescription> description;
+        std::unique_ptr<GS::AvatarRenderer> renderer;
+        std::unique_ptr<GS::AvatarAnimation> animation;
+        std::unique_ptr<Xna::Graphics::RenderTarget2D> target;
+        bool drawn=false;
+        int unused=0;
+        bool requested=false;
+    };
+    std::vector<std::unique_ptr<Entry>> entries_;
+    int waiting_=0;
 };
+}
 
-Portraits::Portraits()=default;
-Portraits::~Portraits()=default;
+std::unique_ptr<PortraitSource> makeAvatarPortraits(){return std::make_unique<AvatarPortraits>();}
 
-Xna::Graphics::Texture2D* Portraits::request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live)
+Xna::Graphics::Texture2D* AvatarPortraits::request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live)
 {
     if(description.size()!=1021||description[0]==0||width<8||height<8)return nullptr;
     auto found=std::ranges::find_if(entries_,[&](const auto& entry) {
@@ -102,7 +114,7 @@ Xna::Graphics::Texture2D* Portraits::request(const std::vector<unsigned char>& d
     return entry.drawn?entry.target.get():nullptr;
 }
 
-void Portraits::render(Xna::Graphics::GraphicsDevice& device,double seconds)
+void AvatarPortraits::render(Xna::Graphics::GraphicsDevice& device,double seconds)
 {
     bool drew=false;
     waiting_=0;
@@ -149,5 +161,4 @@ void Portraits::render(Xna::Graphics::GraphicsDevice& device,double seconds)
     std::erase_if(entries_,[](const auto& entry){return entry->unused>KeepFrames;});
 }
 
-void Portraits::clear(){entries_.clear();waiting_=0;}
 }

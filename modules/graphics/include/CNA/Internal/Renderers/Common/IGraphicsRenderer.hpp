@@ -34,6 +34,7 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/ShaderDialectEXT.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
@@ -1216,42 +1217,6 @@ namespace CNA::Internal::Renderers
 
     /// Renderer handle for a compiled shader program (vertex + fragment).
     /// Created via IGraphicsRenderer::CreateEffectRenderer().
-    /**
-     * @brief The shader payload dialect a renderer's custom `ShaderEffect` must use.
-     * CNAEXT.
-     *
-     * A `ShaderEffect` has always been renderer-specific -- the framework hands its two string
-     * payloads to the renderer and the renderer's own compiler or bytecode loader decides. What
-     * was missing was any SUPPORTED way for an application to ask which payload dialect it should
-     * supply, so the only way to know was to infer it from the build's renderer identity. That is
-     * wrong twice over: in a multi-renderer build the identity is not the active renderer, and a
-     * renderer that is itself an abstraction over several native APIs (FNA3D) does
-     * not have one answer per build at all -- IGL's is chosen per process by `CNA_IGL_BACKEND`.
-     *
-     * `Unknown` is the honest default and what every renderer that has not declared one answers.
-     * It does not mean "no shaders"; it means this renderer has not stated a dialect, and an
-     * application should not guess.
-     */
-    enum class ShaderDialectEXT : int
-    {
-        /** @brief Not declared by this renderer. */
-        Unknown,
-        /** @brief Desktop OpenGL GLSL (`#version 3xx core` / `4xx core`). */
-        GlslDesktop,
-        /** @brief OpenGL ES / WebGL GLSL (`#version 100` / `300 es`). */
-        GlslEs,
-        /** @brief GLSL compiled to SPIR-V: explicit `location`/`set`/`binding` are mandatory. */
-        GlslVulkan,
-        /** @brief Direct3D High Level Shader Language. */
-        Hlsl,
-        /** @brief Metal Shading Language. */
-        Msl,
-        /** @brief WebGPU Shading Language. */
-        Wgsl,
-        /** @brief Already-compiled SPIR-V bytecode, not Vulkan GLSL source text. */
-        SpirV
-    };
-
     class IEffectRenderer
     {
     public:
@@ -1280,7 +1245,7 @@ namespace CNA::Internal::Renderers
          * (`vulkan::RenderPipelineState` constructs a default `RenderPipelineReflection` and its
          * `getIndexByName` is `IGL_DEBUG_ASSERT_NOT_IMPLEMENTED`), so there is no name-to-offset
          * information to be had from the API. An application already has to supply a separate
-         * Vulkan shader source (see @ref ShaderDialectEXT); declaring the block it wrote is a
+         * Vulkan shader source (see @ref CNA::ShaderDialectEXT); declaring the block it wrote is a
          * smaller, explicit step than having CNA parse that source to guess at it.
          *
          * Ignored by a renderer whose uniforms are loose, which is why it is a no-op by default:

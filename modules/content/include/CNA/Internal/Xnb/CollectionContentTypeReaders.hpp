@@ -62,7 +62,7 @@ namespace CNA::Internal::Xnb
 
         inline std::unique_ptr<ContentTypeReaderBase> RequireReader(const std::string& canonicalName)
         {
-            auto reader = ContentTypeReaderManager::CreateReader(canonicalName);
+            auto reader = Microsoft::Xna::Framework::Content::detail::CreateRegisteredReader(canonicalName);
             if (!reader)
             {
                 throw ContentLoadException(

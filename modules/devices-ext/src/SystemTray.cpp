@@ -11,12 +11,7 @@
 
 namespace CNA::Devices
 {
-    bool SystemTray::getIsSupportedProperty()
-    {
-        const CNA::Platform::PlatformCapabilities capabilities =
-            CNA::Platform::GetCurrentPlatform().GetCapabilities();
-        return capabilities.tray;
-    }
+    // Whether a tray is supported is SystemTraySupport.cpp, so that asking links no tray.
 
     SystemTray::SystemTray(const std::string& tooltip)
     {

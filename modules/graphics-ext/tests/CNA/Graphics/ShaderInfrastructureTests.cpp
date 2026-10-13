@@ -734,7 +734,7 @@ TEST(ShaderPackageOverloadTest, AnHlslDialectDeclaresItsExecutableGraphicsStages
 {
     CnaTest::RetroGraphics::HiDefDevice device;
     if (device.GetShaderDialectEXT() !=
-        CNA::Internal::Renderers::ShaderDialectEXT::Hlsl)
+        CNA::ShaderDialectEXT::Hlsl)
         GTEST_SKIP() << "this renderer does not compile HLSL shader sources";
 
     EXPECT_TRUE(device.SupportsShaderLanguageEXT(

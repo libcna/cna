@@ -46,7 +46,7 @@ sudo apt-get install -y build-essential gcc g++ cmake ninja-build git pkg-config
 - **`cmake`** — 3.20+ required (`cmake_minimum_required(VERSION 3.20)` in `CMakeLists.txt`).
   Verified working: 3.31.6.
 - **`ninja-build`** — optional but recommended; CMake defaults to Make otherwise, both work.
-- **`git`** — needed for `git submodule update --init --recursive` (vendored SDL3/SDL_image/
+- **`git`** — needed for `git submodule update --init --recursive` (vendored SDL3/
   SDL_mixer at `third_party/`) and to clone the sibling `../sharp-runtime` and `../easy-gl` repos.
 - **`pkg-config`** — `CMakeLists.txt` calls `find_package(PkgConfig REQUIRED)` directly for the
   FFmpeg libraries (§4).
@@ -61,7 +61,7 @@ sudo apt-get install -y \
   libasound2-dev libpulse-dev
 ```
 
-SDL3, SDL3_image, and SDL3_mixer are **built from vendored git submodules** (`third_party/SDL*`),
+SDL3 and SDL3_mixer are **built from vendored git submodules** (`third_party/SDL*`),
 not installed as system packages (`README.md` §9 already covers this) — but building *that vendored
 source* still needs the underlying platform dev headers SDL3 probes for at CMake-configure time.
 The window tests are registered with `SDL_VIDEODRIVER=x11`, so the X11 dev headers are the
@@ -300,7 +300,7 @@ and toolchain file), so it is not in the list above. CNA builds and runs on an x
 System packages alone aren't enough — this repo also needs:
 
 ```bash
-# Vendored SDL3/SDL_image/SDL_mixer submodules
+# Vendored SDL3/SDL_mixer submodules
 git submodule update --init --recursive
 
 # Sibling repos (separate git checkouts, NOT submodules — must live next to this repo's own directory)

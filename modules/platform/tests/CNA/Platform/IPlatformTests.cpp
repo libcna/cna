@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -123,8 +124,8 @@ public:
     [[nodiscard]] IPlatformClipboard* GetClipboard() override { return nullptr; }
     [[nodiscard]] IPlatformDisplays* GetDisplays() override { return nullptr; }
     [[nodiscard]] IPlatformDialogs* GetDialogs() override { return nullptr; }
-    [[nodiscard]] IPlatformTray* GetTray() override { return nullptr; }
-    [[nodiscard]] IPlatformCameraProvider* GetCamera() override { return nullptr; }
+    [[nodiscard]] IPlatformTray* GetTrayService() override { return nullptr; }
+    [[nodiscard]] IPlatformCameraProvider* GetCameraService() override { return nullptr; }
     [[nodiscard]] IPlatformFileSystem* GetFileSystem() override { return nullptr; }
     [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return nullptr; }
     [[nodiscard]] IPlatformGlContext* GetGlContext() override { return nullptr; }
@@ -151,6 +152,20 @@ TEST(IPlatformTests, IsImplementableWithNoWindowingSystem)
     const std::unique_ptr<IPlatform> platform = std::make_unique<FakePlatform>();
     EXPECT_EQ(platform->GetName(), "Fake");
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatform>);
+}
+
+TEST(IPlatformTests, SupportsAnswersFromTheCapabilitySetByDefault)
+{
+    // An implementation that does not override Supports() answers exactly as its capability set.
+    const FakePlatform platform;
+    const PlatformCapabilities capabilities = platform.GetCapabilities();
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        EXPECT_EQ(platform.Supports(capability), Supports(capabilities, capability))
+            << ToString(capability);
+    }
+    EXPECT_TRUE(platform.Supports(PlatformCapability::MultipleWindows));
+    EXPECT_FALSE(platform.Supports(PlatformCapability::Camera));
 }
 
 TEST(IPlatformTests, HasNoInitializeOrShutdownPair)

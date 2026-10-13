@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3Platform.hpp"
+#include "Sdl3ServiceSupport.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/TargetPlatform.hpp"
@@ -12,6 +13,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <atomic>
 #include <cstdio>
 #include <mutex>
 #include <optional>
@@ -26,6 +28,12 @@
 namespace CNA::Platform::Sdl3 {
 
     namespace {
+
+        // The optional services' factories, set by Install*() from IPlatform::GetCamera() and
+        // GetTray() (Sdl3CameraService.cpp, Sdl3TrayService.cpp), so that only a program that calls
+        // them links the implementations. Support is reported without them (Sdl3ServiceSupport.cpp).
+        std::atomic<std::unique_ptr<IPlatformTray> (*)()> createTray{nullptr};
+        std::atomic<std::unique_ptr<IPlatformCameraProvider> (*)()> createCamera{nullptr};
 
         /// Maps CNA's subsystem vocabulary onto SDL's init flags. Video implies SDL's events
         /// subsystem, and gamepad implies joystick; SDL handles both dependencies itself, which
@@ -288,6 +296,24 @@ namespace CNA::Platform::Sdl3 {
 
     PlatformCapabilities Sdl3Platform::GetCapabilities() const
     {
+        PlatformCapabilities capabilities = CapabilitiesExceptCamera();
+        capabilities.camera = CameraSupported();
+        return capabilities;
+    }
+
+    bool Sdl3Platform::Supports(const PlatformCapability capability) const
+    {
+        // One capability at a time: whether cameras are supported starts SDL's camera subsystem,
+        // and a program that asks only about its window must not start it.
+        if (capability == PlatformCapability::Camera)
+        {
+            return CameraSupported();
+        }
+        return CNA::Platform::Supports(CapabilitiesExceptCamera(), capability);
+    }
+
+    PlatformCapabilities Sdl3Platform::CapabilitiesExceptCamera() const
+    {
         PlatformCapabilities capabilities;
 
         // A capability is true only when the service behind it is actually wired up. SDL3 can do
@@ -340,8 +366,8 @@ namespace CNA::Platform::Sdl3 {
         capabilities.inputDeviceEnumeration = true;
         capabilities.messageBox = true;
         capabilities.nativeFileDialog = true;
-        capabilities.tray = Sdl3Tray::IsSupported();
-        capabilities.camera = Sdl3CameraProvider::IsSupported();
+        capabilities.tray = TraySupported();
+        // `camera` is CameraSupported(), which GetCapabilities() and Supports() add.
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
 
@@ -700,14 +726,48 @@ namespace CNA::Platform::Sdl3 {
 
     IPlatformClipboard* Sdl3Platform::GetPrimarySelection()
     {
-        return GetCapabilities().primarySelection ? &primarySelection_ : nullptr;
+        return CapabilitiesExceptCamera().primarySelection ? &primarySelection_ : nullptr;
     }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
-    IPlatformTray* Sdl3Platform::GetTray() { return Sdl3Tray::IsSupported() ? &tray_ : nullptr; }
-    IPlatformCameraProvider* Sdl3Platform::GetCamera()
+    IPlatformTray* Sdl3Platform::GetTrayService()
     {
-        return Sdl3CameraProvider::IsSupported() ? &camera_ : nullptr;
+        const auto create = createTray.load();
+        if (create == nullptr || !TraySupported())
+        {
+            return nullptr;
+        }
+        const std::lock_guard lock(optionalServicesMutex_);
+        if (tray_ == nullptr)
+        {
+            tray_ = create();
+        }
+        return tray_.get();
+    }
+
+    IPlatformCameraProvider* Sdl3Platform::GetCameraService()
+    {
+        const auto create = createCamera.load();
+        if (create == nullptr || !CameraSupported())
+        {
+            return nullptr;
+        }
+        const std::lock_guard lock(optionalServicesMutex_);
+        if (camera_ == nullptr)
+        {
+            camera_ = create();
+        }
+        return camera_.get();
+    }
+
+    void Sdl3Platform::InstallTray(std::unique_ptr<IPlatformTray> (*create)())
+    {
+        createTray.store(create);
+    }
+
+    void Sdl3Platform::InstallCamera(std::unique_ptr<IPlatformCameraProvider> (*create)())
+    {
+        createCamera.store(create);
     }
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }

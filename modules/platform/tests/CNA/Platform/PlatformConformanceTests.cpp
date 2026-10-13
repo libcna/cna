@@ -86,6 +86,17 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
         << "dialogs";
 }
 
+TEST_P(PlatformConformance, SupportsAgreesWithTheCapabilitySet)
+{
+    // Supports() is GetCapabilities() one capability at a time; an implementation may compute it
+    // more cheaply, never differently.
+    for (const PlatformCapability capability : AllCapabilities())
+    {
+        EXPECT_EQ(platform_->Supports(capability), Supports(capabilities_, capability))
+            << ToString(capability);
+    }
+}
+
 TEST_P(PlatformConformance, ServicesEveryPlatformMustHaveAreNeverNull)
 {
     // Path resolution and host information are answerable everywhere, including on a platform

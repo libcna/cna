@@ -495,9 +495,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_BoneDeformation COMMAND cna_test_skinned_integration
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # GS-009: the standard XNA avatar API renders original CNA avatars. Needs CNA_GamerServices,
-        # so it is only built when networking (and thus GamerServices) is enabled.
-        if(CNA_ENABLE_NET)
+        # GS-009: the standard XNA avatar API renders original CNA avatars. Needs CNA_GamerServices.
+        if(CNA_ENABLE_GAMER_SERVICES)
             cna_easygl_test(cna_test_avatar_standard_render
                             ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_standard_render_test.cpp)
             target_link_libraries(cna_test_avatar_standard_render PRIVATE CNA_GamerServices)

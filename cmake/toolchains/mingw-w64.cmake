@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 #   sudo apt install mingw-w64   # Debian/Ubuntu
-#   # SDL3 and SDL3_image/mixer pre-built for Windows must be available on CMAKE_PREFIX_PATH
+#   # SDL3 and SDL3_mixer pre-built for Windows must be available on CMAKE_PREFIX_PATH
 
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)

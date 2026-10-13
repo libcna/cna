@@ -62,9 +62,9 @@ namespace
         return v.known ? std::to_string(v.value) : "unknown";
     }
 
-    std::string ShowDialect(CNA::Internal::Renderers::ShaderDialectEXT d)
+    std::string ShowDialect(CNA::ShaderDialectEXT d)
     {
-        using D = CNA::Internal::Renderers::ShaderDialectEXT;
+        using D = CNA::ShaderDialectEXT;
         switch (d) {
             case D::Unknown:     return "Unknown";
             case D::GlslDesktop: return "GlslDesktop";

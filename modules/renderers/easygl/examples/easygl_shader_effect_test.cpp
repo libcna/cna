@@ -75,9 +75,9 @@ protected:
         // OPENGL33 -- and the language the renderer accepts must be that same one. Asserting GLSL ES outright failed every desktop
         // context, EasyGL's own OPENGL33 included.
         const auto dialect = device.GetShaderDialectEXT();
-        const bool desktop = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop;
+        const bool desktop = dialect == CNA::ShaderDialectEXT::GlslDesktop;
         const bool dialectOk =
-            desktop || dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
+            desktop || dialect == CNA::ShaderDialectEXT::GlslEs;
         const auto language =
             desktop ? CNA::ShaderLanguageEXT::GlslDesktop : CNA::ShaderLanguageEXT::GlslEs;
         const auto otherLanguage =
@@ -158,7 +158,7 @@ protected:
         ownedEffect = std::make_unique<ShaderEffect>(device, package);
         // The package carries both GLSL dialects; the context's own is the one selected.
         const bool desktop = device.GetShaderDialectEXT()
-            == CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop;
+            == CNA::ShaderDialectEXT::GlslDesktop;
         const auto language =
             desktop ? CNA::ShaderLanguageEXT::GlslDesktop : CNA::ShaderLanguageEXT::GlslEs;
         packageSelectionOk = selection.isUsable()

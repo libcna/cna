@@ -40,9 +40,39 @@ std::vector<Microsoft::Xna::Framework::Vector3> bindJoints(const Microsoft::Xna:
 Shot shotFor(Framing framing,const std::vector<Microsoft::Xna::Framework::Vector3>& joints,float height,float aspect);
 
 /**
- * @brief The system UI's avatar views. request() names what a frame wants; render() (once per
- * frame, outside any SpriteBatch) draws what changed; texture() hands back the latest picture.
- * Pictures not requested for a few seconds are released.
+ * @brief Draws avatar pictures for the system UI. request() names what a frame wants; render()
+ * (once per frame, outside any SpriteBatch) draws what changed; the latest picture comes back from
+ * request(). Implemented by the avatar views (makeAvatarPortraits).
+ */
+class PortraitSource {
+public:
+    /** @brief Releases every picture. */
+    virtual ~PortraitSource()=default;
+    /** @brief Asks for a picture this frame. @param description 1021 bytes (anything else: none).
+     * @param framing Framing. @param width Pixels. @param height Pixels. @param live Animate (idle)
+     * every frame rather than draw once. @return The picture drawn so far, or null while it loads. */
+    virtual Microsoft::Xna::Framework::Graphics::Texture2D* request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live)=0;
+    /** @brief Draws the pictures requested this frame that need it; restores the back buffer as the
+     * render target. @param device Device. @param seconds Time for live views. */
+    virtual void render(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,double seconds)=0;
+    /** @brief Releases every picture (device lost or changed). */
+    virtual void clear()=0;
+    /** @brief Pictures requested last frame that are not drawn yet. @return Count. */
+    [[nodiscard]] virtual int waiting() const=0;
+};
+
+/** @brief The avatar views, drawn through the standard AvatarRenderer (GuidePortraits.cpp).
+ * @return A new, empty cache. */
+std::unique_ptr<PortraitSource> makeAvatarPortraits();
+/** @brief Installs what the Guide's frame draws avatars with (installSystemGuide); until then a
+ * portrait tile shows its placeholder. @param factory Factory, or null. */
+void setPortraitSourceFactory(std::unique_ptr<PortraitSource>(*factory)());
+
+/**
+ * @brief The system UI's avatar views as the Guide's frame holds them.
+ *
+ * Link boundary: the frame (GuideScreens.cpp) reaches AvatarRenderer only through the installed
+ * factory, so a game that shows a message box does not link the avatar system and its catalog.
  */
 class Portraits {
 public:
@@ -52,22 +82,18 @@ public:
     ~Portraits();
     Portraits(const Portraits&)=delete;
     Portraits& operator=(const Portraits&)=delete;
-
-    /** @brief Asks for a picture this frame. @param description 1021 bytes (anything else: none).
-     * @param framing Framing. @param width Pixels. @param height Pixels. @param live Animate (idle)
-     * every frame rather than draw once. @return The picture drawn so far, or null while it loads. */
+    /** @brief Asks for a picture this frame (PortraitSource::request). @param description 1021 bytes.
+     * @param framing Framing. @param width Pixels. @param height Pixels. @param live Animate.
+     * @return The picture drawn so far, or null while it loads or without avatar views. */
     Microsoft::Xna::Framework::Graphics::Texture2D* request(const std::vector<unsigned char>& description,Framing framing,int width,int height,bool live);
-    /** @brief Draws the pictures requested this frame that need it; restores the back buffer as the
-     * render target. @param device Device. @param seconds Time for live views. */
+    /** @brief Draws what this frame asked for. @param device Device. @param seconds Time for live views. */
     void render(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,double seconds);
     /** @brief Releases every picture (device lost or changed). */
     void clear();
     /** @brief Pictures requested last frame that are not drawn yet. @return Count. */
-    [[nodiscard]] int waiting() const { return waiting_; }
-
+    [[nodiscard]] int waiting() const;
 private:
-    struct Entry;
-    std::vector<std::unique_ptr<Entry>> entries_;
-    int waiting_=0;
+    PortraitSource* source();
+    std::unique_ptr<PortraitSource> source_;
 };
 }

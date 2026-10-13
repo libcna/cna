@@ -3,7 +3,9 @@
 // boards through LeaderboardReader -- so this page is a CNA system feature: the boards the title
 // provisioned on the service, each shown as the top players, the players around you, or your
 // friends, with their avatars.
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "GuideScreen.hpp"
+#include "../GuideOverlay.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include <algorithm>
 #include <cctype>
@@ -121,7 +123,7 @@ private:
             for(const auto& entry:page.entries)if(!screen.avatars_.contains(entry.userId))ids.push_back(entry.userId);
             screen.page_=std::move(page);
             if(ids.empty())return;
-            load<std::vector<ServiceAvatarRecord>>(screen.self_.lock(),[ids](IGamerServicesBackend& s){return s.avatars(ids);},
+            load<std::vector<ServiceAvatarRecord>>(screen.self_.lock(),[ids](IGamerServicesBackend& s){return s.avatars(ids,Avatars::clientCatalogs());},
                 [ids](BoardScreen& owner,std::vector<ServiceAvatarRecord> records) {
                     for(std::size_t i=0;i<ids.size()&&i<records.size();++i)owner.avatars_[ids[i]]=std::move(records[i].description);
                 });
@@ -203,6 +205,7 @@ private:
 
 std::shared_ptr<Screen> leaderboardsScreen(Xna::PlayerIndex player)
 {
+    installSystemGuide();
     auto screen=std::make_shared<LeaderboardsScreen>();
     screen->player=player;
     screen->start(screen);

@@ -24,7 +24,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
-#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
@@ -677,15 +676,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const Texture* const target = currentRenderTargets_[0].getRenderTargetProperty();
-        if (const auto* const target2D = dynamic_cast<const RenderTarget2D*>(target))
+        if (const auto* const renderTarget = dynamic_cast<const IRenderTarget*>(target))
         {
-            width = target2D->getWidthProperty();
-            height = target2D->getHeightProperty();
-        }
-        else if (const auto* const targetCube = dynamic_cast<const RenderTargetCube*>(target))
-        {
-            width = targetCube->getWidthProperty();
-            height = targetCube->getHeightProperty();
+            width = renderTarget->getWidthProperty();
+            height = renderTarget->getHeightProperty();
         }
     }
 
@@ -697,31 +691,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentRenderTargets_.empty())
         {
             Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
-            const auto* target2D = dynamic_cast<RenderTarget2D*>(bound);
-            const auto* targetCube = target2D == nullptr
-                ? dynamic_cast<RenderTargetCube*>(bound)
-                : nullptr;
-            if (targetCube != nullptr)
+            // Link boundary: asked through the interface, so a 2D target does not link the cube one.
+            if (const auto* const target =
+                    dynamic_cast<const CNA::Internal::Graphics::IRenderTargetBindingSource*>(bound))
             {
-                const DepthFormat depthFormat = targetCube->getDepthStencilFormatProperty();
-                const auto* targetRenderer = targetCube->GetRenderTargetCubeRenderer();
-                hasRealDepthBuffer = targetRenderer != nullptr &&
-                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
-                hasRealStencilBuffer = targetRenderer != nullptr &&
-                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
-            }
-            else
-            {
-                const DepthFormat depthFormat = target2D != nullptr
-                    ? target2D->getDepthStencilFormatProperty()
-                    : DepthFormat::None;
-                const auto* targetRenderer = target2D != nullptr
-                    ? target2D->GetRenderTargetRenderer()
-                    : nullptr;
-                hasRealDepthBuffer = targetRenderer != nullptr &&
-                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
-                hasRealStencilBuffer = targetRenderer != nullptr &&
-                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
+                target->QueryRealDepthStencilEXT(hasRealDepthBuffer, hasRealStencilBuffer);
             }
         }
         else if (renderer_ != nullptr)
@@ -3425,13 +3399,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return *renderer_;
     }
 
-    CNA::Internal::Renderers::ShaderDialectEXT GraphicsDevice::GetShaderDialectEXT() const
+    CNA::ShaderDialectEXT GraphicsDevice::GetShaderDialectEXT() const
     {
         // Not a throw when there is no renderer: asking which dialect to write for is exactly the
         // question an application asks BEFORE it has committed to anything, and "unknown" is the
         // truthful answer in that state rather than an error.
         if (renderer_ == nullptr)
-            return CNA::Internal::Renderers::ShaderDialectEXT::Unknown;
+            return CNA::ShaderDialectEXT::Unknown;
         return renderer_->GetShaderDialectEXT();
     }
 
@@ -3623,22 +3597,22 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto dialect = renderer.GetShaderDialectEXT();
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslDesktop,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop));
+                               CNA::ShaderDialectEXT::GlslDesktop));
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslEs,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::GlslEs));
+                               CNA::ShaderDialectEXT::GlslEs));
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslVulkan,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan));
+                               CNA::ShaderDialectEXT::GlslVulkan));
         profile.SetFeature(CNA::RendererFeature::ShaderDialectHlsl,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::Hlsl));
+                               CNA::ShaderDialectEXT::Hlsl));
         profile.SetFeature(CNA::RendererFeature::ShaderDialectMsl,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::Msl));
+                               CNA::ShaderDialectEXT::Msl));
         profile.SetFeature(CNA::RendererFeature::ShaderDialectWgsl,
                            FeatureSupport(executesShaderEffectSource && dialect ==
-                               CNA::Internal::Renderers::ShaderDialectEXT::Wgsl));
+                               CNA::ShaderDialectEXT::Wgsl));
 
         const int maxTextureDimension = renderer.GetMaxTextureDimension();
         profile.SetLimit(CNA::RendererLimit::MaxTextureDimension,
@@ -3969,8 +3943,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (!descriptor.needsSurfacePresenter || platform_ == nullptr)
                 return false;
-            const auto capabilities = platform_->GetCapabilities();
-            return capabilities.surfacePresentation && !capabilities.nativeWindowHandle;
+            // One capability at a time: the whole set would also probe the camera.
+            return platform_->Supports(CNA::Platform::PlatformCapability::SurfacePresentation) &&
+                   !platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle);
         }();
 
         if (!descriptor.needsWindow && !presenterIsTheOnlyDisplay)
@@ -4089,7 +4064,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Strict XNA exposes a native window handle. Headless/terminal windows still have a
         // platform token for routing input and GameWindow identity, but must not masquerade as a
         // native handle in PresentationParameters.
-        if (platform_->GetCapabilities().nativeWindowHandle)
+        if (platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle))
             presentationParameters_.setDeviceWindowHandleProperty(windowHandle);
 
         // Publish the window to the text-input subsystem (mirrors FNA, which sets
@@ -5393,19 +5368,6 @@ namespace Microsoft::Xna::Framework::Graphics
         SetRenderTargets({RenderTargetBinding(renderTarget)});
     }
 
-    void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
-    {
-        // FNA/XNA parity: the singular cube overload is only a convenience wrapper around the
-        // normalized binding path. Keeping one path guarantees identical face selection,
-        // viewport/scissor reset, RenderTargetUsage handling, resolve, and public state.
-        if (renderTarget == nullptr)
-        {
-            SetRenderTargets({});
-            return;
-        }
-        SetRenderTargets({RenderTargetBinding(renderTarget, cubeMapFace)});
-    }
-
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
         ThrowIfDisposed();
@@ -5493,43 +5455,19 @@ namespace Microsoft::Xna::Framework::Graphics
                 throw System::InvalidOperationException(
                     "SetRenderTargets: the render target belongs to a different GraphicsDevice.");
 
-            if (auto* rt2D = dynamic_cast<RenderTarget2D*>(texture))
-            {
-                if (binding.getArraySliceProperty() != 0)
-                    throw System::NotSupportedException(
-                        "SetRenderTargets: RenderTarget2D array slices are not supported; "
-                        "arraySlice must be 0.");
-                auto* targetRenderer = rt2D->GetRenderTargetRenderer();
-                if (!targetRenderer)
-                    throw System::NotSupportedException(
-                        "SetRenderTargets: this renderer does not support RenderTarget2D.");
-                descriptors.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
-                    targetRenderer, 0, rt2D->getWidthProperty(), rt2D->getHeightProperty(),
-                    rt2D->getMultiSampleCountProperty()));
-                publicTargets.push_back(rt2D);
-            }
-            else if (auto* cube = dynamic_cast<RenderTargetCube*>(texture))
-            {
-                const int face = static_cast<int>(binding.getCubeMapFaceProperty());
-                if (face < static_cast<int>(CubeMapFace::PositiveX)
-                    || face > static_cast<int>(CubeMapFace::NegativeZ))
-                    throw System::ArgumentOutOfRangeException("cubeMapFace");
-                auto* targetRenderer = cube->GetRenderTargetCubeRenderer();
-                if (!targetRenderer)
-                    throw System::NotSupportedException(
-                        "SetRenderTargets: this renderer does not support RenderTargetCube.");
-                descriptors.push_back(
-                    RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
-                        targetRenderer, face, cube->getWidthProperty(),
-                        cube->getMultiSampleCountProperty()));
-                publicTargets.push_back(cube);
-            }
-            else
+            // Link boundary: RenderTarget2D and RenderTargetCube describe their own binding, so
+            // that binding a 2D target does not link the cube-map classes.
+            auto* const source =
+                dynamic_cast<CNA::Internal::Graphics::IRenderTargetBindingSource*>(texture);
+            auto* const publicTarget = dynamic_cast<IRenderTarget*>(texture);
+            if (source == nullptr || publicTarget == nullptr)
             {
                 throw std::invalid_argument(
                     "SetRenderTargets: binding " + std::to_string(i)
                     + " must contain a RenderTarget2D or RenderTargetCube.");
             }
+            descriptors.push_back(source->DescribeRenderTargetBindingEXT(binding));
+            publicTargets.push_back(publicTarget);
         }
 
         // SOFTWARE-220: Microsoft XNA compares the render-target resource identity, not the

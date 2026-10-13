@@ -2,7 +2,9 @@
 // The party pages: who is in the player's party and what they are doing, party invitations to
 // answer, inviting friends and leaving (Guide.ShowParty); and the games party members can be
 // joined in (Guide.ShowPartySessions, which XNA shows as the Friends page without a party).
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "GuideScreen.hpp"
+#include "../GuideOverlay.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include <algorithm>
@@ -62,7 +64,7 @@ protected:
         for(const auto& member:party_.members)if(!avatars_.contains(member.userId))ids.push_back(member.userId);
         for(const auto& invitation:party_.invitations)if(!avatars_.contains(invitation.senderId))ids.push_back(invitation.senderId);
         if(ids.empty())return;
-        load<std::vector<ServiceAvatarRecord>>(self_.lock(),[ids](IGamerServicesBackend& s){return s.avatars(ids);},
+        load<std::vector<ServiceAvatarRecord>>(self_.lock(),[ids](IGamerServicesBackend& s){return s.avatars(ids,Avatars::clientCatalogs());},
             [ids](PartyBase& screen,std::vector<ServiceAvatarRecord> records) {
                 for(std::size_t i=0;i<ids.size()&&i<records.size();++i)screen.avatars_[ids[i]]=std::move(records[i].description);
             });
@@ -328,6 +330,7 @@ private:
 
 std::shared_ptr<Screen> partyScreen(Xna::PlayerIndex player)
 {
+    installSystemGuide();
     auto screen=std::make_shared<PartyScreen>();
     screen->player=player;
     screen->start(screen);
@@ -336,6 +339,7 @@ std::shared_ptr<Screen> partyScreen(Xna::PlayerIndex player)
 
 std::shared_ptr<Screen> partySessionsScreen(Xna::PlayerIndex player)
 {
+    installSystemGuide();
     // XNA: without a party, ShowPartySessions shows the Friends page instead.
     if(access(player)==Access::Account) {
         const auto known=knownParty(userOf(player));

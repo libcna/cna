@@ -1204,7 +1204,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # GS-009: the renderer-neutral avatar and SkinnedModelEXT tests also registered for EasyGL
         # (public GraphicsDevice/SkinnedEffect/AvatarRenderer API only), drawn through Vulkan's
         # skinned pipeline.
-        if(CNA_ENABLE_NET)
+        if(CNA_ENABLE_GAMER_SERVICES)
             cna_vulkan_test(cna_test_vulkan_avatar_standard_render
                             ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_standard_render_test.cpp)
             target_link_libraries(cna_test_vulkan_avatar_standard_render PRIVATE CNA_GamerServices)

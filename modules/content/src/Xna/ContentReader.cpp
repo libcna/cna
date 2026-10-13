@@ -25,7 +25,7 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
-    namespace
+    namespace detail
     {
         // Mirrors FNA's MonoGame.Utilities.FileHelpers.ResolveRelativePath: resolves
         // relativeFile as a sibling of filePath (i.e. relative to filePath's containing
@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Content
         // logical asset names (forward-slash-separated, relative to ContentManager's root), not
         // filesystem paths -- std::filesystem::path is used purely for its segment-collapsing
         // logic, never touching the real filesystem.
-        std::string ResolveRelativeAssetPath(const std::string& filePath, const std::string& relativeFile)
+        std::string ResolveExternalReferencePath(const std::string& filePath, const std::string& relativeFile)
         {
             namespace fs = std::filesystem;
 
@@ -82,48 +82,6 @@ namespace Microsoft::Xna::Framework::Content
             }
             return resolved;
         }
-    }
-
-    template <typename T>
-    std::optional<T> ContentReader::ReadExternalReference()
-    {
-        const std::string externalReference = ReadString();
-        if (externalReference.empty())
-        {
-            return std::nullopt;
-        }
-        if (!contentManager_)
-        {
-            throw ContentLoadException(
-                "'" + assetName_ + "' references external asset '" + externalReference +
-                "', but this ContentReader has no owning ContentManager to load it through.");
-        }
-        const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
-        return contentManager_->Load<T>(resolved);
-    }
-
-    template std::optional<Graphics::Texture2D> ContentReader::ReadExternalReference<Graphics::Texture2D>();
-    template std::optional<Graphics::TextureCube> ContentReader::ReadExternalReference<Graphics::TextureCube>();
-    // An EffectMaterial names its compiled effect by external reference; the asset loads at
-    // the same erased shared_ptr<Effect> every effect reader targets.
-    template std::optional<std::shared_ptr<Graphics::Effect>>
-        ContentReader::ReadExternalReference<std::shared_ptr<Graphics::Effect>>();
-
-    std::any ContentReader::ReadExternalReference()
-    {
-        const std::string externalReference = ReadString();
-        if (externalReference.empty())
-        {
-            return {};
-        }
-        if (!contentManager_)
-        {
-            throw ContentLoadException(
-                "'" + assetName_ + "' references external asset '" + externalReference +
-                "', but this ContentReader has no owning ContentManager to load it through.");
-        }
-        const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
-        return contentManager_->LoadUntypedXnbReference(resolved);
     }
 
     ContentReader::ContentReader(
@@ -259,7 +217,7 @@ namespace Microsoft::Xna::Framework::Content
         typeReaders_.reserve(typeReaderTable_.size());
         for (const auto& entry : typeReaderTable_)
         {
-            auto reader = ContentTypeReaderManager::CreateReader(entry.normalizedName);
+            auto reader = detail::CreateRegisteredReader(entry.normalizedName);
             if (!reader)
             {
                 throw ContentLoadException(

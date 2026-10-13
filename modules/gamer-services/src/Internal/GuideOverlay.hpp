@@ -38,6 +38,22 @@ std::string guideSignInStatus();
 /** @brief Reports whether the Guide draws in a game (a graphics device service was found).
  * @return True when installed in a game with a graphics device service. */
 bool guideOverlayAttached();
+/** @brief Installs the system Guide: the rail's other panels (home, friends, party, messages,
+ * achievements, leaderboards, recent players, settings), the rail identity and the avatar views
+ * (GuideSystemShell.cpp). GamerServicesDispatcher::Initialize calls it, as does every factory of
+ * one of those panels. Idempotent and cheap.
+ *
+ * Link boundary: the Guide's frame (GuideScreens.cpp), its dialogs and the game content panel
+ * reach the rest of the system Guide only through what this installs, so a game that shows a
+ * message box or reads the license does not link the social panels or the avatar system. */
+void installSystemGuide();
+/** @brief Whether a Guide sign-in is in progress (it keeps the Guide visible). @return Active. */
+bool guideSignInActive();
+/** @brief Starts or ends a Guide sign-in. @param active Active. */
+void setGuideSignInActive(bool active);
+/** @brief Withholds touch input while the Guide is visible and hands the keyboard, pads and mouse
+ * to it; call after anything changes what the Guide shows. */
+void syncGuideTouchInput();
 /** @brief Opens the system Guide menu for a player unless the Guide is already visible.
  * @param player Player whose Guide button was pressed. */
 void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player);

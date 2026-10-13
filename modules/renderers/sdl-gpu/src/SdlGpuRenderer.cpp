@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
@@ -8614,8 +8615,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             using Microsoft::Xna::Framework::Graphics::Texture3D;
             using Microsoft::Xna::Framework::Graphics::TextureCube;
             auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
-            auto* textureCube = dynamic_cast<TextureCube*>(boundTexture);
-            auto* texture3D = dynamic_cast<Texture3D*>(boundTexture);
+            auto* textureCube = CNA::Internal::Graphics::AsTextureCube(boundTexture);
+            auto* texture3D = CNA::Internal::Graphics::AsTexture3D(boundTexture);
             const MOJOSHADER_samplerType boundKind =
                 textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
                 : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME

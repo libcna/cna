@@ -325,7 +325,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
-- **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
+- **Media integration:** `SDL3_mixer` (vendored via Git submodule)
 - **Graphics dependency:** `easy-gl` (for the `OPENGLES3`/`OPENGL33`/`WEBGL2` renderers),
   resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
@@ -346,7 +346,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
     - `../sharp-runtime`
     - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL2`
       renderers)
-- SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
+- SDL3 and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
   but building them needs the X11, OpenGL and audio development headers listed in
   [programs.md](programs.md) §2.
 - FFmpeg is optional. `CNA_ENABLE_VIDEO=AUTO` (the default) enables video decoding when
@@ -363,7 +363,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
     - **MinGW-w64** (either natively on Windows or cross-compiled from Linux)
 - Dependency directories:
     - `../sharp-runtime` (no external dependencies — builds cleanly on Windows)
-- SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` configuration required.
+- SDL3 and SDL3_mixer are built from vendored submodules by default — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` configuration required.
 
 ### Initialise Submodules
 
@@ -373,7 +373,7 @@ Before the first build, initialise the vendored SDL submodules:
 git submodule update --init --recursive
 ```
 
-This populates `third_party/SDL`, `third_party/SDL_image`, and `third_party/SDL_mixer`.
+This populates `third_party/SDL` and `third_party/SDL_mixer`.
 After that, no system SDL packages are required.
 
 > **Building from a source zip/tarball instead of a Git clone?** GitHub's "Download ZIP"
@@ -465,9 +465,8 @@ cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
 cmake --build build --target CnaTests
 ```
 
-This calls `find_package(SDL3 REQUIRED)`, `find_package(SDL3_image REQUIRED)`,
-and `find_package(SDL3_mixer REQUIRED)` and requires those packages to be present
-on the system (e.g. installed via your package manager).
+This calls `find_package(SDL3 REQUIRED)` and `find_package(SDL3_mixer REQUIRED)` and requires
+those packages to be present on the system (e.g. installed via your package manager).
 
 ### Other renderers
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
+#include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
@@ -52,11 +53,11 @@ namespace CNA::Internal::Renderers::Fna3d
             {
                 return dynamic_cast<const Fna3dSampledTexture*>(&texture2D->GetRenderer());
             }
-            if (auto* texture3D = dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture3D*>(texture))
+            if (auto* texture3D = CNA::Internal::Graphics::AsTexture3D(texture))
             {
                 return dynamic_cast<const Fna3dSampledTexture*>(&texture3D->GetRenderer());
             }
-            if (auto* textureCube = dynamic_cast<Microsoft::Xna::Framework::Graphics::TextureCube*>(texture))
+            if (auto* textureCube = CNA::Internal::Graphics::AsTextureCube(texture))
             {
                 return dynamic_cast<const Fna3dSampledTexture*>(&textureCube->GetRenderer());
             }
@@ -232,8 +233,8 @@ namespace CNA::Internal::Renderers::Fna3d
         if (texture != nullptr)
         {
             using namespace Microsoft::Xna::Framework::Graphics;
-            const bool isCube = dynamic_cast<TextureCube*>(texture) != nullptr;
-            const bool isVolume = !isCube && dynamic_cast<Texture3D*>(texture) != nullptr;
+            const bool isCube = CNA::Internal::Graphics::AsTextureCube(texture) != nullptr;
+            const bool isVolume = !isCube && CNA::Internal::Graphics::AsTexture3D(texture) != nullptr;
             const auto declared = static_cast<MOJOSHADER_symbolType>(parameterType);
             const bool declaredCube = declared == MOJOSHADER_SYMTYPE_TEXTURECUBE;
             const bool declaredVolume = declared == MOJOSHADER_SYMTYPE_TEXTURE3D;

@@ -30,7 +30,7 @@ The concrete evidence for the claims on this page is the green Apple workflow
 `be4ea08bc`: macOS 14 arm64, an arm64 iOS device build, and an arm64 iOS Simulator build/run.
 
 **iOS** support is experimental. What exists is: a toolchain file; an iOS-aware, static vendored
-SDL3/SDL3_image/SDL3_mixer build; `.app` bundle generation with a generated `Info.plist`; the SDL
+SDL3/SDL3_mixer build; `.app` bundle generation with a generated `Info.plist`; the SDL
 `main()` bridge UIKit requires; application lifecycle and orientation handling; a conservative
 renderer allow-list; and `cna_ios_smoke`, a real application that constructs `Game` and runs one
 frame. CI final-links that app for device and simulator, checks its Mach-O platform, entry-point
@@ -136,7 +136,7 @@ iOS-specific defaults:
 
 ### What the iOS build does differently
 
-- **SDL3, SDL3_image and SDL3_mixer are linked statically.** A dylib inside an `.app` needs to be embedded in `Frameworks/`,
+- **SDL3 and SDL3_mixer are linked statically.** A dylib inside an `.app` needs to be embedded in `Frameworks/`,
   given an `@rpath` install name, and signed separately. Static linking keeps the product a
   single Mach-O executable. The persistent SDL install root is keyed by sysroot
   (`.sdl-prebuilt-iOS-arm64` vs `.sdl-prebuilt-iOS-arm64-simulator`), because device and

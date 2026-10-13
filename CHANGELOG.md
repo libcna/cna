@@ -11,6 +11,60 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Changed
 
+- **A program links only the CNA subsystems it uses.** Mobile Eggbert (textures, sounds,
+  `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 62.4 MB as a Debug executable
+  and from 44.6 MB to 6.2 MB stripped (3.0 MB as a Release build with `CNA_OPTIMIZE_FOR_SIZE`): it
+  no longer contains the 30 MB embedded avatar catalog, the avatar system, the system Guide, the
+  Gamer Services service client, the Model reader, glTF, Draco, MediaPlayer, Video, Microphone,
+  networking, cube and volume textures, the camera, the tray, the `.cnb` writer or the Headless
+  and Terminal platforms. Nothing was removed or disabled; a program
+  that uses those features links them. See `docs/link-size-architecture.md`. A `Game` and every
+  `ContentManager` declare every built-in reader and `.cnb` loader registered, and
+  `ContentTypeReaderManager`, `CnbLoaderRegistry` and `GetXnbReaderUsageSummary()` answer queries,
+  removals and re-registrations as they did when everything was registered eagerly; each reader
+  or loader is installed when its type is first loaded, or when one of those registries is asked
+  for it by name, which is what keeps unused importers out of a game. The
+  system Guide's panels are installed by `GamerServicesDispatcher.Initialize`, as before
+  reachable only by signed-in players.
+- **C++ ABI: rebuild against this revision.** The link-boundary work adds virtual functions and
+  changes class layouts: `IPlatform::Supports()` and the protected
+  `GetCameraService()`/`GetTrayService()` (`GetCamera()`/`GetTray()` are no longer virtual),
+  `Effect::IsStockEffectEXT()`, `Texture::AsTextureCubeEXT()`/`AsTexture3DEXT()`,
+  `IRenderTargetBindingSource` on the render targets, and `Game`'s members. C++ programs and
+  libraries compiled against an earlier CNA are not binary-compatible with it; source that only
+  calls these APIs compiles unchanged, and an `IPlatform` implementation renames its two
+  overrides. The C API's headers are unchanged.
+- **`CNA_ENABLE_GAMER_SERVICES`** builds GamerServices independently of networking; it defaults to
+  `CNA_ENABLE_NET`'s value, and `CNA_ENABLE_NET=ON` requires it. **`CNA_OPTIMIZE_FOR_SIZE`**
+  compiles CNA into per-function sections and collects unreferenced ones in every program that
+  links it. SDL3_image is gone, its `third_party/SDL_image` submodule included: nothing in CNA
+  used it, and images are decoded by CNA's own loader as before.
+- **With a shared C++ runtime, mold links the same CNA objects as GNU ld and lld.** On ELF,
+  `CNA::BuildConfig` names the shared runtime ahead of CNA's archives, so mold no longer extracts
+  an unrelated CNA object for a standard-library symbol a shared library needs (a multi-renderer
+  2D game linked the avatar catalog through libshaderc). A program whose flags, or the usage
+  requirements of a target it links, link the runtime statically (`-static`, `-static-libstdc++`,
+  ...) keeps its static runtime, in the configurations in which they do; `-static-libgcc` alone
+  does not count. `CNA_CXX_RUNTIME_LINKAGE=STATIC|SHARED` declares a runtime CMake cannot show.
+  See `docs/link-size-architecture.md`, "Linker independence".
+- `Effect::IsStockEffectEXT()` (CNAEXT) reports XNA's five stock effects without RTTI.
+- `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
+  `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses
+  them, so a program that never makes a cube map or a volume links neither.
+- The platform's camera and tray are linked only into a program that asks for them:
+  `IPlatform::GetCamera()` and `GetTray()` are no longer virtual and create the service on their
+  first call, answering as before (the service when the platform supports it, otherwise null). A
+  platform implementation overrides the new protected `GetCameraService()`/`GetTrayService()`
+  instead. The new `IPlatform::Supports(PlatformCapability)` answers one capability; the runtime
+  asks it instead of reading the whole set, and `Game::GetPlatformCapabilitiesEXT()` reads the set
+  on its first call (once, thread-safely) rather than during construction, so an SDL3 game that
+  never asks about cameras no longer starts SDL's camera subsystem.
+- **`GraphicsDevice::GetShaderDialectEXT()` returns the public `CNA::ShaderDialectEXT`**
+  (`CNA/ShaderDialectEXT.hpp`) instead of the renderer-internal
+  `CNA::Internal::Renderers::ShaderDialectEXT`, which no longer exists; the enumerators and their
+  values (0-7) are unchanged, and the C API's `CNA_SHADER_DIALECT_*` identities still match them.
+  Code that spelled the internal name -- and included `IGraphicsRenderer.hpp` to get its values --
+  includes the public header and writes `CNA::ShaderDialectEXT` instead.
 - **The C API's route boundaries are generated.** 3,202 of the 3,210 `cna_*` routes are one spec
   line each in `modules/c-api/spec/*.toml`, generated into `modules/c-api/src/generated/` by
   `tools/c-api/generate_routes.py`. 2,252 of them -- property reads and writes, commands, text

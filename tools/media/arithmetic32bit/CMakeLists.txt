@@ -5,7 +5,7 @@
 # checks at a genuine 32-bit width.
 #
 # Kept entirely separate from the main project's CMakeLists.txt/CMakePresets.json on purpose:
-# the main build's CnaLibrary.cmake unconditionally requires SDL3/SDL3_image/SDL3_mixer and (on
+# the main build's CnaLibrary.cmake unconditionally requires SDL3/SDL3_mixer and (on
 # every non-MinGW/Emscripten/Android platform, which includes a plain `-m32` Linux build)
 # FFmpeg -- none of which this project vendors or has installed for a 32-bit target, and none of
 # which either checked subsystem needs. Reusing the main CMakeLists.txt here would mean

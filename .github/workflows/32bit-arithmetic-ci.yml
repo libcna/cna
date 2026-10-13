@@ -15,7 +15,7 @@ name: 32-bit Arithmetic Coverage
 # tools/media/arithmetic32bit/ (a small, standalone CMake project -- see that
 # directory's own CMakeLists.txt header comment for why it is not part of the
 # main build), not the full CNA library/CnaTests. The main build's SDL3/
-# SDL3_image/SDL3_mixer/FFmpeg dependencies are not available for a 32-bit
+# SDL3_mixer/FFmpeg dependencies are not available for a 32-bit
 # target in this project's toolchain. The standalone project compiles only the implementation
 # files and harnesses needed by these pure checks.
 #

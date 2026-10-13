@@ -24,7 +24,9 @@ namespace
     CNA::Platform::IPlatformDialogs* Dialogs()
     {
         CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
-        return platform.GetCapabilities().messageBox ? platform.GetDialogs() : nullptr;
+        return platform.Supports(CNA::Platform::PlatformCapability::MessageBox)
+                   ? platform.GetDialogs()
+                   : nullptr;
     }
 } // namespace
 
@@ -32,7 +34,7 @@ namespace CNA::Devices
 {
     bool MessageBox::getIsSupportedProperty()
     {
-        return Platform::GetCurrentPlatform().GetCapabilities().messageBox;
+        return Platform::GetCurrentPlatform().Supports(Platform::PlatformCapability::MessageBox);
     }
 
     void MessageBox::ShowSimple(const MessageBoxType type, const std::string& title,

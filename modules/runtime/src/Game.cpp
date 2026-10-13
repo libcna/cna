@@ -7,7 +7,7 @@
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
-#include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -379,7 +379,7 @@ namespace Microsoft::Xna::Framework
     Game::Game(std::unique_ptr<CNA::Platform::IPlatform> platform)
         : platform_(InstallPlatform(std::move(platform))),
           platformInstallation_(std::make_unique<PlatformInstallation>(platform_.get())),
-          platformCapabilities_(platform_->GetCapabilities()),
+          platformCapabilities_(),
           eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
           GraphicsDevice_(CreateGameGraphicsDevice()),
@@ -437,8 +437,10 @@ namespace Microsoft::Xna::Framework
 
         // A real Game instance is the framework startup boundary. Keep ContentManager neutral for
         // isolated use, but make every XNA game ready to load built-in XNB types before
-        // Initialize()/LoadContent() can run.
-        CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+        // Initialize()/LoadContent() can run: every built-in reader counts as registered from here,
+        // and each is installed when its type is first loaded or the registry is asked about it,
+        // so a game links the readers of the types it loads (docs/link-size-architecture.md).
+        Content::detail::DeclareBuiltinXnbReaders();
 
         FrameworkDispatcher::Update();
 
@@ -476,6 +478,8 @@ namespace Microsoft::Xna::Framework
 
     const CNA::Platform::PlatformCapabilities& Game::GetPlatformCapabilitiesEXT() const
     {
+        std::call_once(platformCapabilitiesRead_,
+                       [this] { platformCapabilities_ = platform_->GetCapabilities(); });
         return platformCapabilities_;
     }
 

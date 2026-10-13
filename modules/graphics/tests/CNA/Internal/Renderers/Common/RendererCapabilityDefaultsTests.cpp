@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderDialectEXT.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 
 #include <limits>
@@ -273,6 +274,25 @@ TEST(RendererCapabilityDefaultsTest, ModernGpuCapabilitySeamsDefaultToUnsupporte
     EXPECT_FALSE(renderer.SupportsComputeShadersEXT());
     EXPECT_FALSE(renderer.SupportsIndirectDrawEXT());
     EXPECT_FALSE(renderer.SupportsBaseInstanceDrawingEXT());
+}
+
+TEST(RendererCapabilityDefaultsTest, ShaderDialectOrdinalsArePublicAndStableAndDefaultToUnknown)
+{
+    // CNA::ShaderDialectEXT is what GraphicsDevice::GetShaderDialectEXT() hands applications and
+    // what the C API's CNA_SHADER_DIALECT_* identities mirror, so its values are append-only.
+    using CNA::ShaderDialectEXT;
+
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::Unknown), 0);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::GlslDesktop), 1);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::GlslEs), 2);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::GlslVulkan), 3);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::Hlsl), 4);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::Msl), 5);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::Wgsl), 6);
+    EXPECT_EQ(static_cast<int>(ShaderDialectEXT::SpirV), 7);
+
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.GetShaderDialectEXT(), ShaderDialectEXT::Unknown);
 }
 
 TEST(RendererCapabilityDefaultsTest, ShaderLanguageAndStageOrdinalsAreStableAndDefaultToUnsupported)

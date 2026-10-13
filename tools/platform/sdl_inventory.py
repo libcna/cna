@@ -79,8 +79,8 @@ from pathlib import Path
 
 SOURCE_SUFFIXES = {".cpp", ".hpp", ".h", ".cc", ".c", ".mm", ".m", ".inl"}
 
-# `SDL_Foo` covers the overwhelming majority; `SDL3_image`/`SDL3_mixer` appear in include paths
-# and would otherwise be missed, since they carry no `SDL_` prefix of their own.
+# `SDL_Foo` covers the overwhelming majority; `SDL3_mixer` appears in include paths and would
+# otherwise be missed, since it carries no `SDL_` prefix of its own.
 SDL_IDENTIFIER_RE = re.compile(r"\bSDL_[A-Za-z0-9_]+\b")
 SDL_ANY_RE = re.compile(r"\bSDL_[A-Za-z0-9_]+\b|\bSDL3(?:_[A-Za-z0-9_]+)?/")
 WINDOW_PROPERTY_RE = re.compile(r"\bSDL_PROP_WINDOW_[A-Z0-9_]+\b")

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
+#include "CnbCodecDetail.hpp"
 
 #include <algorithm>
 #include <limits>
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
-#include "CNA/Content/Cnb/CnbByteWriter.hpp"
-#include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
 using Microsoft::Xna::Framework::Rectangle;
@@ -19,13 +18,14 @@ namespace CNA::Content::Cnb
 {
     namespace
     {
-        constexpr const char* kCanonicalName = "Microsoft.Xna.Framework.Graphics.SpriteFont";
-        constexpr const char* kLabel = "SpriteFont";
-
         [[noreturn]] void Fail(const std::string& what)
         {
             throw ContentLoadException(std::string("CNB SpriteFont: ") + what);
         }
+    }
+
+    namespace SpriteFontCodecDetail
+    {
 
         /// The invariants SpriteFont's own constructor requires. Enforced on encode so no writer
         /// in the project can produce a file the reader then refuses, and again on decode because
@@ -72,17 +72,10 @@ namespace CNA::Content::Cnb
             }
         }
 
-        void WriteRectangles(CnbByteWriter& out, const std::vector<Rectangle>& rectangles)
-        {
-            for (const Rectangle& rectangle : rectangles)
-            {
-                out.WriteI32(rectangle.X);
-                out.WriteI32(rectangle.Y);
-                out.WriteI32(rectangle.Width);
-                out.WriteI32(rectangle.Height);
-            }
-        }
+    }
 
+    namespace
+    {
         std::vector<Rectangle> ReadRectangles(CnbByteReader& reader, std::uint32_t count,
                                               const char* which)
         {
@@ -107,57 +100,6 @@ namespace CNA::Content::Cnb
             reader.RequireExhausted();
             return out;
         }
-    }
-
-    std::vector<std::uint8_t> EncodeSpriteFontToCnb(const CnbSpriteFontData& data,
-                                                    const std::string& contentName)
-    {
-        ValidateFont(data);
-        const auto count = static_cast<std::uint32_t>(data.characters.size());
-
-        CnbByteWriter header;
-        header.WriteU32(count);
-        header.WriteI32(data.lineSpacing);
-        header.WriteF32(data.spacing);
-        header.WriteU32(data.defaultCharacter.has_value() ? 1u : 0u);
-        header.WriteU32(data.defaultCharacter.has_value()
-                            ? static_cast<std::uint32_t>(*data.defaultCharacter)
-                            : 0u);
-        header.WriteU32(0u); // flags: reserved, must be zero
-
-        CnbByteWriter glyphs;
-        WriteRectangles(glyphs, data.glyphBounds);
-        CnbByteWriter cropping;
-        WriteRectangles(cropping, data.cropping);
-
-        CnbByteWriter kerning;
-        for (const Vector3& entry : data.kerning)
-        {
-            kerning.WriteF32(entry.X);
-            kerning.WriteF32(entry.Y);
-            kerning.WriteF32(entry.Z);
-        }
-
-        CnbByteWriter characters;
-        for (const SharpRuntime::charcs character : data.characters)
-        {
-            characters.WriteU32(static_cast<std::uint32_t>(character));
-        }
-
-        CnbWriter writer(CnbAssetTypeId::SpriteFont, CnbSpriteFontSchemaVersion);
-        writer.SetMetadata(kCanonicalName, contentName);
-        writer.AddChunk(CnbSpriteFontChunk::Header, header.Take(), CnbChunkFlags::Mandatory, 4u);
-        writer.AddChunk(CnbSpriteFontChunk::GlyphBounds, glyphs.Take(), CnbChunkFlags::Mandatory,
-                        4u);
-        writer.AddChunk(CnbSpriteFontChunk::Cropping, cropping.Take(), CnbChunkFlags::Mandatory,
-                        4u);
-        writer.AddChunk(CnbSpriteFontChunk::Kerning, kerning.Take(), CnbChunkFlags::Mandatory, 4u);
-        writer.AddChunk(CnbSpriteFontChunk::Characters, characters.Take(),
-                        CnbChunkFlags::Mandatory, 4u);
-        // The atlas goes in with exactly the layout a standalone Texture2D would use, rather than
-        // a second encoding of the same thing (CNBF-102).
-        AppendEmbeddedTexture2DChunks(writer, data.atlas, kLabel);
-        return writer.Build();
     }
 
     CnbSpriteFontData DecodeSpriteFontFromCnb(const CnbDocument& document)
@@ -253,11 +195,11 @@ namespace CNA::Content::Cnb
         characters.RequireExhausted();
 
         if (hasDefault == 1u) { data.defaultCharacter = static_cast<SharpRuntime::charcs>(defaultCharacter); }
-        data.atlas = ReadEmbeddedTexture2DChunks(document, kLabel);
+        data.atlas = ReadEmbeddedTexture2DChunks(document, SpriteFontCodecDetail::kLabel);
 
         // The same invariants the encoder enforces, applied to a file that may not have come from
         // it. Ordering in particular is not something a length check can catch.
-        ValidateFont(data);
+        SpriteFontCodecDetail::ValidateFont(data);
         return data;
     }
 }

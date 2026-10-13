@@ -20,7 +20,7 @@ so its public display IDs stay valid; Software does not depend on that succeedin
 usable without a display server. The shared pin follows ambient-platform transitions atomically
 (`SOFTWARE-157`), acquiring the replacement before releasing the predecessor; it is never counted
 as ownership by the windowless Software device. The renderer only needs the same
-SDL3/SDL3_image/SDL3_mixer and
+SDL3/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
 The completed parity-plan verdict is **B — parity with documented language/platform boundaries**.

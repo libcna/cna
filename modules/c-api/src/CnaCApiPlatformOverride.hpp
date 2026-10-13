@@ -106,6 +106,11 @@ public:
         return inner_->GetCapabilities();
     }
 
+    [[nodiscard]] bool Supports(CNA::Platform::PlatformCapability capability) const override
+    {
+        return inner_->Supports(capability);
+    }
+
     [[nodiscard]] std::uint64_t GetPerformanceCounter() const override
     {
         return inner_->GetPerformanceCounter();
@@ -223,16 +228,6 @@ public:
         return dialogs_ != nullptr ? dialogs_ : inner_->GetDialogs();
     }
 
-    [[nodiscard]] CNA::Platform::IPlatformTray* GetTray() override
-    {
-        return tray_ != nullptr ? tray_ : inner_->GetTray();
-    }
-
-    [[nodiscard]] CNA::Platform::IPlatformCameraProvider* GetCamera() override
-    {
-        return camera_ != nullptr ? camera_ : inner_->GetCamera();
-    }
-
     [[nodiscard]] CNA::Platform::IPlatformFileSystem* GetFileSystem() override
     {
         return inner_->GetFileSystem();
@@ -241,6 +236,17 @@ public:
     [[nodiscard]] CNA::Platform::IPlatformSystemInfo* GetSystemInfo() override
     {
         return inner_->GetSystemInfo();
+    }
+
+protected:
+    [[nodiscard]] CNA::Platform::IPlatformTray* GetTrayService() override
+    {
+        return tray_ != nullptr ? tray_ : inner_->GetTray();
+    }
+
+    [[nodiscard]] CNA::Platform::IPlatformCameraProvider* GetCameraService() override
+    {
+        return camera_ != nullptr ? camera_ : inner_->GetCamera();
     }
 
 private:

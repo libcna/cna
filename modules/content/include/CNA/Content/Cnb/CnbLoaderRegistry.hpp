@@ -172,8 +172,8 @@ namespace CNA::Content
          * which this module can reach. A test that calls Clear() and wants the whole table back
          * must construct a `ContentManager`, not merely call this.
          *
-         * Idempotent, thread-safe, and called automatically by every `ContentManager` constructor,
-         * so games never need to call it.
+         * Idempotent and thread-safe. Every `ContentManager` constructor registers these and the
+         * other eight, so games never need to call it.
          */
         static void RegisterBuiltIns();
 
@@ -204,6 +204,33 @@ namespace CNA::Content
          */
         static void RegisterBuiltIn(std::uint32_t assetTypeId,
                                     const std::string& canonicalTypeName, LoaderFn loader);
+
+        // Declared built-in loaders (docs/link-size-architecture.md). A ContentManager declares
+        // every built-in loader registered, as its constructor used to register them all; each is
+        // installed when its type is first loaded, or when Find() or ResolveForDocument() needs
+        // it (CnbLoaderRegistryQueries.cpp). IsRegistered(), RegisteredTypeName() and Remove()
+        // answer for a declared loader without installing it. So the registry answers exactly as
+        // if every loader had been registered, while a program links only the loaders of the
+        // types it loads.
+
+        /// Every built-in loader counts as registered, including any removed since: the effect of
+        /// a ContentManager's construction or RegisterBuiltinLoaders().
+        static void DeclareBuiltIns();
+
+        /// A built-in family installing its loader: only while declared and not removed since,
+        /// checked and installed under one lock so that a concurrent Remove() holds.
+        static void RegisterDeclaredBuiltIn(std::uint32_t assetTypeId,
+                                            const std::string& canonicalTypeName, LoaderFn loader);
+
+        /// Whether @p assetTypeId is a declared built-in loader not installed yet.
+        [[nodiscard]] static bool DeclaredButNotInstalled(std::uint32_t assetTypeId);
+
+        /// Find() without installing a declared loader.
+        [[nodiscard]] static std::optional<LoaderFn> FindRegistered(std::uint32_t assetTypeId);
+
+        /// ResolveForDocument() without installing a declared loader: the load path's, which
+        /// installs the loader of the type it loads first.
+        [[nodiscard]] static LoaderFn ResolveRegisteredForDocument(const Cnb::CnbDocument& document);
 
         // The compile-time half of the CNA/game boundary (plans/plan_cnb.md `CNBF-122`).
         // ContentManager registers the eight built-in loaders that need a GraphicsDevice or the

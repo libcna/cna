@@ -9,12 +9,11 @@
 // SkeletonResult/ExtractedImage) instead of writing them to disk. tools/gltf_to_cnj.cpp itself
 // was refactored to call these same functions rather than duplicating them.
 //
-// This is the one and only translation unit that defines CGLTF_IMPLEMENTATION (cgltf.h's own
-// single-header convention) -- every other translation unit that needs cgltf symbols (this
-// library's own header, tools/gltf_to_cnj.cpp, ContentManager.cpp) links against this instead.
+// cgltf's implementation is compiled once, in CgltfImplementation.cpp, so that its other users
+// (the GamerServices avatar GLB reader) do not drag this importer and Draco into their link.
 
-#define CGLTF_IMPLEMENTATION
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/GltfImport/CgltfInternals.hpp"
 
 #include <functional>
 
@@ -31,6 +30,7 @@
 // h's own C-style code relies on unqualified.
 #include <math.h>
 #include <stdarg.h>
+#include <string.h>
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -194,7 +194,7 @@ namespace CNA::Internal::GltfImport
 
             for (cgltf_size i = 0; i < sparse.count; ++i)
             {
-                const cgltf_size writer = cgltf_component_read_index(
+                const cgltf_size writer = CgltfComponentReadIndex(
                     indices + i * indexStride, sparse.indices_component_type);
                 if (writer >= accessor->count)
                 {
@@ -205,7 +205,7 @@ namespace CNA::Internal::GltfImport
                 }
                 // The one difference from cgltf: `i * elementSize`, tightly packed, rather than
                 // `i * accessor->stride`.
-                if (!cgltf_element_read_float(
+                if (!CgltfElementReadFloat(
                         values + i * elementSize, accessor->type, accessor->component_type,
                         accessor->normalized, out + writer * componentsPerElement,
                         componentsPerElement))

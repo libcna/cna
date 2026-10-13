@@ -124,16 +124,15 @@ for plist in AppleInfo.iOS.plist.in AppleInfo.macOS.plist.in; do
 done
 
 # ---------------------------------------------------------------------------
-# 6. Static-only iOS means all three SDL projects must receive their own build-system switch.
-#    SDL3 uses SDL_SHARED/SDL_STATIC; SDL_image and SDL_mixer independently default
-#    BUILD_SHARED_LIBS to ON on Apple platforms, so merely changing SDL3 is insufficient.
+# 6. Static-only iOS means both SDL projects must receive their own build-system switch.
+#    SDL3 uses SDL_SHARED/SDL_STATIC; SDL_mixer independently defaults BUILD_SHARED_LIBS to ON
+#    on Apple platforms, so merely changing SDL3 is insufficient.
 # ---------------------------------------------------------------------------
 third_party_sdl="${repo_root}/cmake/ThirdPartySDL.cmake"
 for required in \
     '-DSDL_SHARED=${_sdl_shared}' \
     '-DSDL_STATIC=${_sdl_static}' \
     '-DBUILD_SHARED_LIBS=${_sdl_shared}' \
-    '-DSDLIMAGE_DEPS_SHARED=${_sdl_shared}' \
     '-DSDLMIXER_DEPS_SHARED=${_sdl_shared}'; do
     grep -Fq -- "${required}" "${third_party_sdl}" || {
         echo "FAIL: ThirdPartySDL.cmake does not propagate ${required}" >&2

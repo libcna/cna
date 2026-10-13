@@ -13,7 +13,12 @@
 // ContentTypeReaderManager::ClearTypeCreators() (in their own SetUp()) to exercise "reader not
 // registered" error paths with a ContentManager constructed afterward; auto-registering everything
 // on every ContentManager construction would silently repopulate the registry out from under that
-// isolation. Call RegisterAllBuiltInXnbReaders() explicitly, once, at real game startup instead.
+// isolation.
+//
+// A game does not call it either: ContentManager::Load<T>() registers the readers an asset of
+// type T can need on its first use (detail::BuiltinContent in ContentManager.hpp), so a program
+// links only the readers of the types it loads. This is the explicit everything-at-once entry
+// point, for a type whose content may hold any asset and for tools.
 
 namespace CNA::Internal::Xnb
 {
@@ -22,8 +27,9 @@ namespace CNA::Internal::Xnb
      *        Phase F/D3: primitives, math, `Decimal`/`DateTime`/`TimeSpan`, `Curve`, `Texture2D`,
      *        `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect`, `Song`, the 5 stock effects,
      *        and `Model`'s own supporting readers), plus the known-unsupported placeholder (the
-     *        general `EffectReader`, XNB-32A). A real game calls this once at startup, before
-     *        loading any `.xnb` asset.
+     *        general `EffectReader`, XNB-32A). A `Game` declares them instead and each is installed
+     *        when needed (ContentTypeReaderManager.hpp); this registers them all at once, a reader
+     *        removed since included.
      *
      * Idempotent and safe to call more than once: `ContentTypeReaderManager::AddTypeCreator()`
      * silently ignores a repeat registration of the same canonical name.

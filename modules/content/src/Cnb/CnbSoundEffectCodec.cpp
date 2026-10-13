@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
+#include "CnbCodecDetail.hpp"
 
 #include <string>
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
-#include "CNA/Content/Cnb/CnbByteWriter.hpp"
-#include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -16,17 +15,14 @@ namespace CNA::Content::Cnb
 {
     namespace
     {
-        constexpr const char* kCanonicalName = "Microsoft.Xna.Framework.Audio.SoundEffect";
-
-        // 16-byte payload alignment, matching the texture payloads: a future memory-mapped or
-        // streaming reader (CNBF-108) wants a sample buffer it can hand to a backend without
-        // copying to realign it.
-        constexpr std::uint32_t kPayloadAlignment = 16u;
-
         [[noreturn]] void Fail(const std::string& what)
         {
             throw ContentLoadException(std::string("CNB SoundEffect: ") + what);
         }
+    }
+
+    namespace SoundEffectCodecDetail
+    {
 
         /// The rules both directions share. A `reader` is supplied on the decode side so the
         /// diagnostic names the file rather than reading like a programming error.
@@ -162,31 +158,6 @@ namespace CNA::Content::Cnb
         return widened;
     }
 
-    std::vector<std::uint8_t> EncodeSoundEffectToCnb(const CnbSoundEffectData& data,
-                                                     const std::string& contentName)
-    {
-        // Every sound this build writes is schema 2, whatever its format: the writer declares one
-        // schema identity to the build graph and the manifest, and a version that varied per asset
-        // would make that declaration a guess. Schema 1 files stay readable; none are written.
-        ValidateSound(data, CnbSoundEffectSchemaVersion, nullptr);
-
-        CnbByteWriter header;
-        header.WriteU32(static_cast<std::uint32_t>(data.format));
-        header.WriteU32(data.sampleRate);
-        header.WriteU32(data.channels);
-        header.WriteU32(data.frameCount);
-        header.WriteU32(data.loopStart);
-        header.WriteU32(data.loopLength);
-        header.WriteU32(0u); // flags: reserved, must be zero
-
-        CnbWriter writer(CnbAssetTypeId::SoundEffect, CnbSoundEffectSchemaVersion);
-        writer.SetMetadata(kCanonicalName, contentName);
-        writer.AddChunk(CnbSoundEffectChunk::Header, header.Take(), CnbChunkFlags::Mandatory, 4u);
-        writer.AddChunk(CnbSoundEffectChunk::Data, data.samples, CnbChunkFlags::Mandatory,
-                        kPayloadAlignment);
-        return writer.Build();
-    }
-
     CnbSoundEffectData DecodeSoundEffectFromCnb(const CnbDocument& document)
     {
         document.RequireAsset(CnbAssetTypeId::SoundEffect, CnbSoundEffectSchemaVersion);
@@ -220,7 +191,7 @@ namespace CNA::Content::Cnb
             document.ChunkData(document.RequireSingle(CnbSoundEffectChunk::Data));
         data.samples.assign(samples.begin(), samples.end());
 
-        ValidateSound(data, document.AssetSchemaVersion(), &header);
+        SoundEffectCodecDetail::ValidateSound(data, document.AssetSchemaVersion(), &header);
         return data;
     }
 }

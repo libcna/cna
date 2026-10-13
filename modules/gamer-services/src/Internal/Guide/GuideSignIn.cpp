@@ -199,6 +199,7 @@ private:
 
 std::shared_ptr<Screen> signInScreen(Xna::PlayerIndex player,SignInRequest request,SignInHandlers handlers)
 {
+    installSystemGuide();
     auto screen=std::make_shared<SignInScreen>(std::move(request),std::move(handlers));
     screen->player=player;
     return screen;

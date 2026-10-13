@@ -129,6 +129,22 @@ private:
     std::uint64_t serial_=nextSerial();
 };
 
+/** @brief What the system Guide adds to the Guide's frame (installSystemGuide). Without it the
+ * frame still runs the game's dialogs and any panel opened directly, with a rail that does not
+ * switch categories and an identity of the signed-in gamertag only. */
+struct ShellHooks {
+    /** @brief The root panel of a rail category, or null. */
+    std::shared_ptr<Screen> (*root)(Category category,Xna::PlayerIndex player)=nullptr;
+    /** @brief Reads a player's rail identity again (avatar, gamerscore, unread messages). */
+    void (*refreshIdentity)(Xna::PlayerIndex player)=nullptr;
+    /** @brief The game content panel's avatar catalogs row: what this release carries and installed,
+     * then the update setting; empty for none. */
+    std::optional<std::pair<std::string,std::string>> (*avatarCatalogs)()=nullptr;
+};
+/** @brief Installs the system Guide into the frame. @param hooks Hooks. */
+void setShellHooks(const ShellHooks& hooks);
+/** @brief What is installed. @return Hooks, empty until installSystemGuide. */
+const ShellHooks& shellHooks();
 /** @brief Pushes a screen above the top one. @param screen Screen. */
 void push(std::shared_ptr<Screen> screen);
 /** @brief Removes a screen (and any above it); closing the root closes the Guide. @param screen Screen. */

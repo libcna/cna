@@ -9,6 +9,7 @@
 // candidate files on disk at once and removes them one at a time, so each assertion is about the
 // whole ordering rather than a single comparison.
 
+#include <barrier>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -712,4 +714,116 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
     }
     // Effect is the one built-in identifier with no schema, so it must have no loader either.
     EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Effect));
+}
+
+// docs/link-size-architecture.md: a manager declares every built-in loader registered, and each is
+// installed when its type is first loaded or when Find()/ResolveForDocument() needs it, so a
+// program links the loaders of the types it loads. These pin that the registry still answers as
+// the constructor's eager registration did.
+TEST_F(CnbContentManagerTest, TheDeclaredBuiltInNamesAreTheNamesTheLoadersInstallUnder)
+{
+    const std::uint32_t everyBuiltIn[] = {
+        CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
+        CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
+        CnbAssetTypeId::SpriteFont, CnbAssetTypeId::SoundEffect, CnbAssetTypeId::Song,
+        CnbAssetTypeId::Video};
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    std::vector<std::string> declared;
+    for (const std::uint32_t id : everyBuiltIn)
+    {
+        declared.push_back(CnbLoaderRegistry::RegisteredTypeName(id));
+    }
+
+    ASSERT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    for (std::size_t i = 0; i < std::size(everyBuiltIn); ++i)
+    {
+        EXPECT_FALSE(declared[i].empty());
+        EXPECT_TRUE(CnbLoaderRegistry::Find(everyBuiltIn[i]).has_value());
+        EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(everyBuiltIn[i]), declared[i]);
+    }
+}
+
+TEST_F(CnbContentManagerTest, RemovingABuiltInLoaderHoldsUntilTheNextContentManager)
+{
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager first(nullptr, root.path().string());
+    EXPECT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
+    EXPECT_FALSE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
+    // Installing the other declared loaders does not bring it back...
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Texture2D).has_value());
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
+
+    // ... a new manager does, as its constructor re-registered every built-in.
+    ContentManager second(nullptr, root.path().string());
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
+}
+
+TEST_F(CnbContentManagerTest, ARemovedBuiltInLoaderStaysRemovedWhenItsTypeIsLoaded)
+{
+    // Loading installs a declared loader, never one removed since: the constructor that once
+    // registered them all ran before the removal, and loading registered nothing.
+    CnbLoaderRegistry::Clear();
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+
+    EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+}
+
+TEST_F(CnbContentManagerTest, ALoaderRemovedWhileItsTypeLoadsStaysRemoved)
+{
+    // Removal racing the first load of its type: whichever comes first, the loader ends up removed.
+    // The load once checked "declared, not removed" and installed under separate locks, and a
+    // removal between the two was undone. The remover starts each round a little later than the
+    // last, so the rounds sweep the removal across the whole load.
+    ScratchContentRoot root;
+    constexpr int Rounds = 20000;
+    std::barrier sync(2);
+    std::thread remover(
+        [&sync]
+        {
+            for (int round = 0; round < Rounds; ++round)
+            {
+                sync.arrive_and_wait();
+                for (volatile int spin = (round * 7) % 4096; spin > 0; spin = spin - 1) {}
+                (void)CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve);
+                sync.arrive_and_wait();
+            }
+        });
+    int resurrected = 0;
+    for (int round = 0; round < Rounds; ++round)
+    {
+        ContentManager cm(nullptr, root.path().string()); // declares Curve's loader again
+        sync.arrive_and_wait();
+        EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
+        sync.arrive_and_wait();
+        if (CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve)) { ++resurrected; }
+    }
+    remover.join();
+    EXPECT_EQ(resurrected, 0) << "of " << Rounds << " rounds";
+
+    // An explicit registration still restores it.
+    ContentManager cm(nullptr, root.path().string());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+    cm.RegisterBuiltinLoaders();
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
+    CnbLoaderRegistry::RegisterBuiltIns();
+    EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+}
+
+TEST_F(CnbContentManagerTest, ClearForgetsTheDeclaredBuiltInLoaders)
+{
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    CnbLoaderRegistry::Clear();
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
+    EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve), "");
 }
