@@ -32,8 +32,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     }
 
     bool D3DProgramReflection::AddShader(
-        const void* bytecode, const std::size_t bytecodeSize, std::string& error,
-        const bool allowComputeUavs)
+        const void* bytecode, const std::size_t bytecodeSize, std::string& error)
     {
         if (bytecode == nullptr || bytecodeSize == 0)
         {
@@ -102,18 +101,6 @@ namespace CNA::Internal::Renderers::D3DCommon
                 continue;
             }
 
-            if (binding.Type == D3D_SIT_BYTEADDRESS)
-            {
-                if (binding.BindCount == 0 ||
-                    binding.BindCount > kMaxShaderResources ||
-                    binding.BindPoint > kMaxShaderResources - binding.BindCount)
-                {
-                    error = "Runtime HLSL byte-buffer register range exceeds 16 slots";
-                    return false;
-                }
-                continue;
-            }
-
             if (binding.Type == D3D_SIT_SAMPLER)
             {
                 if (binding.BindCount == 0 || binding.BindCount > kMaxSamplers ||
@@ -127,24 +114,6 @@ namespace CNA::Internal::Renderers::D3DCommon
                     samplers_[slot] = true;
                 samplerCount_ = std::max(
                     samplerCount_, static_cast<int>(binding.BindPoint + binding.BindCount));
-                continue;
-            }
-
-            if (allowComputeUavs &&
-                (binding.Type == D3D_SIT_UAV_RWTYPED ||
-                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED ||
-                 binding.Type == D3D_SIT_UAV_RWBYTEADDRESS ||
-                 binding.Type == D3D_SIT_UAV_APPEND_STRUCTURED ||
-                 binding.Type == D3D_SIT_UAV_CONSUME_STRUCTURED ||
-                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER))
-            {
-                if (binding.BindCount == 0 ||
-                    binding.BindCount > D3D11_PS_CS_UAV_REGISTER_COUNT ||
-                    binding.BindPoint > D3D11_PS_CS_UAV_REGISTER_COUNT - binding.BindCount)
-                {
-                    error = "Runtime HLSL compute UAV register range exceeds 8 slots";
-                    return false;
-                }
                 continue;
             }
 

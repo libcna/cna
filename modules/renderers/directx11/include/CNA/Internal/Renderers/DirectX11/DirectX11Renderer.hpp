@@ -16,7 +16,6 @@
 #include <wrl/client.h>
 
 #include <cstddef>
-#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -186,10 +185,10 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         /**
-         * @brief Reports the HLSL graphics and compute stages compiled from shader packages.
+         * @brief Reports the HLSL graphics stages compiled from shader packages.
          * @param language ShaderLanguageEXT ordinal.
          * @param stage ShaderStageEXT ordinal.
-         * @return True for vertex, fragment and supported compute stages.
+         * @return True for the vertex and fragment stages on a live device.
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
@@ -233,118 +232,21 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         /**
-         * @brief Reports native D3D11 disjoint timestamp-query support.
-         * @return True when this device can issue timestamp queries.
-         */
-        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
-        /**
-         * @brief Creates a native GPU elapsed-time query for this device.
-         * @return A timestamp query, or null when unsupported.
-         */
-        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
-        /**
          * @brief Inserts a UTF-8 label into the D3D11 immediate context's annotation stream.
          * @param marker Label to emit; null and empty labels are ignored.
          */
         void SetStringMarkerEXT(const char* marker) override;
 
         /**
-         * @brief Reports native GPU-fetched indirect draw support.
-         * @return True when indirect draw commands can be issued.
-         */
-        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
-        /**
          * @brief Reports native start-instance support for indexed instanced draws.
          * @return True when this D3D11 device supports instanced input.
          */
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
         /**
-         * @brief Reports how many raw storage-buffer registers a vertex shader can read.
-         * @return Sixteen on a live feature-level-11 device, otherwise zero.
-         */
-        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
-        /**
-         * @brief Retains a native raw buffer for a following custom graphics draw.
-         * @param binding Vertex or pixel shader t-register, zero through fifteen.
-         * @param buffer Storage buffer owned by this D3D11 device.
-         */
-        void BindStorageBufferForDrawEXT(
-            int binding, const IStorageBufferRenderer& buffer) override;
-        /**
-         * @brief Creates a buffer for indirect arguments and byte transfers.
-         * @param byteSize Logical allocation size in bytes.
-         * @param usage Declared portable usage bits.
-         * @param cpuAccess Declared portable CPU access bits.
-         * @return Native buffer, or null for unsupported roles or sizes.
-         */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
-            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
-
-        /**
-         * @brief Reports native shader-model-5 compute support.
-         * @return True for a live feature-level-11 device.
-         */
-        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
-        /**
-         * @brief Reports whether ordinary Color Texture2D resources can be bound as compute images.
-         * @return True when the selected device supports typed Color UAV reads and writes.
-         */
-        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
-        /**
-         * @brief Compiles one HLSL compute shader.
-         * @param computeSrc HLSL shader source with main entry point.
-         * @return Native compute program, or null when unsupported.
-         */
-        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
-            const std::string& computeSrc) override;
-        /**
-         * @brief Creates the legacy compatible storage/transfer/indirect buffer.
-         * @param byteSize Logical allocation size.
-         * @return Native buffer, or null when unsupported.
-         */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
-            std::size_t byteSize) override;
-        /**
-         * @brief Submits a native D3D11 compute dispatch.
-         * @param shader Bound native program.
-         * @param groupsX X work groups.
-         * @param groupsY Y work groups.
-         * @param groupsZ Z work groups.
-         */
-        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX,
-                             int groupsY, int groupsZ) override;
-        /**
-         * @brief Returns the feature-level-11 dispatch group count limit.
-         * @param axis Axis ordinal, zero to two.
-         * @return Limit, or zero for an invalid axis or unsupported device.
-         */
-        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
-        /**
-         * @brief Returns the feature-level-11 local work-group size limit.
-         * @param axis Axis ordinal, zero to two.
-         * @return Limit, or zero for an invalid axis or unsupported device.
-         */
-        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
-        /**
-         * @brief Returns the largest local compute invocation count.
-         * @return Native shader-model-5 limit, or zero when unsupported.
-         */
-        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
-        /**
-         * @brief Returns the guaranteed maximum single storage-buffer size.
-         * @return Maximum byte count, or zero when unsupported.
-         */
-        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
-        /**
          * @brief Returns the native D3D11 constant-buffer size limit.
          * @return Maximum byte count, or zero when unsupported.
          */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
-        /**
-         * @brief Returns the number of compute UAV buffer registers.
-         * @return Native register count, or zero when unsupported.
-         */
-        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
         /**
          * @brief Reports the vertex stream ceiling implemented by CNA's D3D11 draw paths.
          * @return Sixteen on a live device, otherwise zero.
@@ -369,11 +271,6 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             return device_ != nullptr ? 4 : 0;
         }
-        /**
-         * @brief Reports the required raw storage-view byte alignment.
-         * @return Four bytes for a live compute device, otherwise zero.
-         */
-        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
         /**
          * @brief Reports the D3D11 constant-buffer byte alignment.
          * @return Sixteen bytes for a live device, otherwise zero.
@@ -502,45 +399,10 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         /**
-         * @brief Creates a sampled D3D11 texture array with layer and mip transfers.
-         * @param width Level-zero width.
-         * @param height Level-zero height.
-         * @param layerCount Number of array slices.
-         * @param mipLevelCount Number of mip levels.
-         * @param surfaceFormat SurfaceFormat ordinal.
-         * @param usage Portable array usage bits.
-         * @return The native array, or null when the description is unsupported.
-         */
-        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
-            int width, int height, int layerCount, int mipLevelCount,
-            int surfaceFormat, std::uint32_t usage) override;
-        /**
-         * @brief Creates a typed D3D11 storage image in the supported Color format.
-         * @param width Level-zero width.
-         * @param height Level-zero height.
-         * @param mipLevelCount Allocated mip count.
-         * @param surfaceFormat SurfaceFormat ordinal.
-         * @param usage Portable storage-texture usage bits.
-         * @return Native storage image, or null for unsupported descriptions.
-         */
-        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
-            int width, int height, int mipLevelCount,
-            int surfaceFormat, std::uint32_t usage) override;
-        /**
-         * @brief Reports the D3D11 sampled-array slice limit.
-         * @return Array-layer count for the selected feature level.
-         */
-        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
-        /**
          * @brief Reports the implemented ShaderEffect sampling limit.
          * @return Sixteen sampled-texture slots on a live device.
          */
         [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
-        /**
-         * @brief Reports compute UAV registers shared by images and buffers.
-         * @return Eight when the Color storage-image path is available, otherwise zero.
-         */
-        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
         /**
          * @brief Reports native format usages implemented by this renderer.
          * @param surfaceFormat SurfaceFormat ordinal.
@@ -701,40 +563,6 @@ namespace CNA::Internal::Renderers::DirectX11
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        /**
-         * @brief Draws nonindexed primitives using GPU-fetched argument words.
-         * @param vb Bound vertex buffer.
-         * @param world World transform.
-         * @param view View transform.
-         * @param projection Projection transform.
-         * @param primitive Primitive topology.
-         * @param argumentBuffer Native indirect-argument buffer.
-         * @param argumentByteOffset Aligned byte offset of the command.
-         * @param params Effect and graphics-state parameters.
-         */
-        void DrawPrimitivesIndirectEXT(
-            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
-            const Matrix& projection, PrimitiveType primitive,
-            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
-            const GpuDrawParams& params) override;
-        /**
-         * @brief Draws indexed primitives using GPU-fetched argument words.
-         * @param vb Bound vertex buffer.
-         * @param ib Bound index buffer.
-         * @param world World transform.
-         * @param view View transform.
-         * @param projection Projection transform.
-         * @param primitive Primitive topology.
-         * @param argumentBuffer Native indirect-argument buffer.
-         * @param argumentByteOffset Aligned byte offset of the command.
-         * @param params Effect and graphics-state parameters.
-         */
-        void DrawIndexedPrimitivesIndirectEXT(
-            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
-            const Matrix& world, const Matrix& view, const Matrix& projection,
-            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
-            int argumentByteOffset, const GpuDrawParams& params) override;
-
         // ---- IGraphicsRenderer: real (Phase DX9, DX-70/DX-71/DX-72) ----
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
@@ -770,8 +598,6 @@ namespace CNA::Internal::Renderers::DirectX11
         /// Shader-model-5 input-layout limit; some MinGW SDKs omit the named D3D11 constant.
         static constexpr int kMaxVertexInputAttributesEXT = 32;
 
-        void BindStorageInputsForEffectEXT(const D3D11EffectRenderer& effect);
-        void ClearStorageInputsAfterEffectEXT(const D3D11EffectRenderer& effect);
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 
         void CreateDeviceResources();
@@ -799,9 +625,7 @@ namespace CNA::Internal::Renderers::DirectX11
         void DrawPrimitivesExImpl(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount,
-                                  const GpuDrawParams& params,
-                                  ID3D11Buffer* indirectArguments = nullptr,
-                                  UINT indirectByteOffset = 0);
+                                  const GpuDrawParams& params);
 
         [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
 
@@ -989,8 +813,6 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Buffer> perDrawConstantBuffer_;
         ComPtr<ID3D11Buffer> logicalInstanceIdBuffer_;
         UINT logicalInstanceIdCapacity_ = 0;
-        std::array<std::shared_ptr<const IStorageBufferRenderer>, 16>
-            drawStorageBuffers_{};
         ComPtr<ID3D11Buffer> fogConstantBuffer_;
         ID3D11Buffer* GetOrCreatePerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreateFogConstantBufferEXT();

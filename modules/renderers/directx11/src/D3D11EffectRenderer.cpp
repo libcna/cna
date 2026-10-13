@@ -3,8 +3,6 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderReflectionIid.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
-#include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
-#include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -23,8 +21,9 @@ namespace CNA::Internal::Renderers::DirectX11
             return buf;
         }
 
-        bool ReflectStageResources(ID3DBlob* bytecode, std::uint32_t& textures,
-                                   std::uint32_t& storage, std::string& error)
+        /// Collects the t-registers one stage samples as textures. The vertex stage binds its
+        /// own shader resources; the pixel stage's slots come from the merged program reflection.
+        bool ReflectStageTextures(ID3DBlob* bytecode, std::uint32_t& textures, std::string& error)
         {
             ComPtr<ID3D11ShaderReflection> shader;
             if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
@@ -46,19 +45,17 @@ namespace CNA::Internal::Renderers::DirectX11
                 D3D11_SHADER_INPUT_BIND_DESC binding{};
                 if (FAILED(shader->GetResourceBindingDesc(index, &binding)))
                     continue;
-                if (binding.Type != D3D_SIT_TEXTURE &&
-                    binding.Type != D3D_SIT_BYTEADDRESS)
+                if (binding.Type != D3D_SIT_TEXTURE)
                     continue;
                 if (binding.BindCount == 0 || binding.BindPoint >= 16 ||
                     binding.BindCount > 16 - binding.BindPoint)
                 {
-                    error = "DirectX11 ShaderEffect resource register exceeds 16 slots.";
+                    error = "DirectX11 ShaderEffect texture register exceeds 16 slots.";
                     return false;
                 }
-                auto& mask = binding.Type == D3D_SIT_TEXTURE ? textures : storage;
                 for (UINT slot = binding.BindPoint;
                      slot < binding.BindPoint + binding.BindCount; ++slot)
-                    mask |= UINT32_C(1) << slot;
+                    textures |= UINT32_C(1) << slot;
             }
             return true;
         }
@@ -87,8 +84,6 @@ namespace CNA::Internal::Renderers::DirectX11
         hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
         reflection_.Reset();
         vertexTextureSlots_ = 0;
-        vertexStorageSlots_ = 0;
-        pixelStorageSlots_ = 0;
         constantBuffers_ = {};
         textures_ = {};
 
@@ -123,11 +118,7 @@ namespace CNA::Internal::Renderers::DirectX11
             !reflection_.AddShader(
                 psBytecode_->GetBufferPointer(), psBytecode_->GetBufferSize(), compileError_))
             return false;
-        std::uint32_t unusedPixelTextures = 0;
-        if (!ReflectStageResources(vsBytecode_.Get(), vertexTextureSlots_,
-                                   vertexStorageSlots_, compileError_) ||
-            !ReflectStageResources(psBytecode_.Get(), unusedPixelTextures,
-                                   pixelStorageSlots_, compileError_))
+        if (!ReflectStageTextures(vsBytecode_.Get(), vertexTextureSlots_, compileError_))
             return false;
 
         hr = device_->CreateVertexShader(vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(),
@@ -331,43 +322,6 @@ namespace CNA::Internal::Renderers::DirectX11
              texture, true, std::move(retained)};
     }
 
-    bool D3D11EffectRenderer::BindTexture2DArrayEXT(
-        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
-    {
-        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
-            return false;
-        auto* native = texture ? dynamic_cast<D3D11Texture2DArray*>(texture.get()) : nullptr;
-        if (texture && (!native || native->GetDeviceEXT() != device_.Get()))
-            return false;
-        auto& binding = textures_[static_cast<std::size_t>(unit)];
-        binding.kind = texture ? TextureKind::Texture2DArray : TextureKind::None;
-        binding.texture = native;
-        binding.explicitlySet = true;
-        binding.retainedClassic.reset();
-        binding.retainedStorage.reset();
-        binding.retainedArray = std::move(texture);
-        return true;
-    }
-
-    bool D3D11EffectRenderer::BindStorageTexture2DEXT(
-        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
-    {
-        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
-            return false;
-        auto* native = texture ? dynamic_cast<D3D11StorageTexture2D*>(texture.get()) : nullptr;
-        if (texture && (!native || native->GetDeviceEXT() != device_.Get() ||
-                        !native->GetShaderResourceViewEXT()))
-            return false;
-        auto& binding = textures_[static_cast<std::size_t>(unit)];
-        binding.kind = texture ? TextureKind::StorageTexture2D : TextureKind::None;
-        binding.texture = native;
-        binding.explicitlySet = true;
-        binding.retainedClassic.reset();
-        binding.retainedArray.reset();
-        binding.retainedStorage = std::move(texture);
-        return true;
-    }
-
     void D3D11EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
@@ -506,16 +460,6 @@ namespace CNA::Internal::Renderers::DirectX11
             case TextureKind::Texture3D:
                 if (const auto* texture = dynamic_cast<const D3D11Texture3DRenderer*>(
                         static_cast<ITexture3DRenderer*>(binding.texture)))
-                    return texture->GetShaderResourceViewEXT();
-                break;
-            case TextureKind::Texture2DArray:
-                if (const auto* texture = dynamic_cast<const D3D11Texture2DArray*>(
-                        static_cast<ITexture2DArrayRenderer*>(binding.texture)))
-                    return texture->GetShaderResourceViewEXT();
-                break;
-            case TextureKind::StorageTexture2D:
-                if (const auto* texture = dynamic_cast<const D3D11StorageTexture2D*>(
-                        static_cast<IStorageTexture2DRenderer*>(binding.texture)))
                     return texture->GetShaderResourceViewEXT();
                 break;
             case TextureKind::None:
