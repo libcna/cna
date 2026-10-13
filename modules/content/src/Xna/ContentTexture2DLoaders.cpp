@@ -91,7 +91,10 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tga", ".tif", ".tiff", ".qoi"};
+                // Every extension here must be one ImageLoader can decode. TIFF is not (docs/texture-stream-formats.md:
+                // the decoder is deliberately dependency-free), so ".tif"/".tiff" are not offered: a .tif file is
+                // reported as a missing asset instead of being found and then failing with "unknown image type".
+                return {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tga", ".qoi"};
             }
 
             Graphics::Texture2D Read(const std::string& path, ContentManager& cm) override
