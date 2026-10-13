@@ -144,6 +144,23 @@ The single authoritative list. Every entry below was checked against the code on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
+8. **Shared-test failures with `VULKAN` and `WEBGPU` as the default renderer** (measured
+   2026-10-13 on RADV through the private runner, full `cmake-build-vulkan` and
+   `cmake-build-webgpu` runs; the code paths involved are unchanged by the `MRT` campaign):
+   - `VULKAN`'s `PackVulkanStreamsEXT` builds the combined multi-stream `VertexDeclaration` without
+     XNA's usage-index remap, so two streams with the same usage throw "duplicate usage and usage
+     index": `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
+     `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset`. A semantic
+     supplied only from binding slot 15 is refused as "does not supply every input"
+     (`OrdinaryDrawMultiStreamTest.SixteenBindingsCanSupplyAConsumedSemanticFromSlot15`).
+   - `VULKAN`'s `OcclusionQuery::IsComplete` does not flush, so the two `AM4-108` lifecycle tests
+     that poll before `Present` fail (`PollingIsCompleteAloneReachesTheResult`,
+     `ACountSpansAClearBetweenItsDraws`).
+   - `Vulkan_DrawRangeValidation` runs EasyGL's draw-range test, which expects EasyGL's native
+     range forwarding; Vulkan keeps managed range validation, so six forwarding checks fail.
+   - `WEBGPU` counts only the draws after a `Clear` inside one occlusion run
+     (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
+     `AM4-108` recorded it passing on 2026-10-08.
 
 ### 5.2 Limitations
 
