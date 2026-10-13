@@ -42,10 +42,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 - **With a shared C++ runtime, mold links the same CNA objects as GNU ld and lld.** On ELF,
   `CNA::BuildConfig` names the shared runtime ahead of CNA's archives, so mold no longer extracts
   an unrelated CNA object for a standard-library symbol a shared library needs (a multi-renderer
-  2D game linked the avatar catalog through libshaderc). A program whose flags link the runtime statically (`-static`,
-  `-static-libstdc++`, ...) keeps its static runtime; `-static-libgcc` alone does not count.
-  `CNA_CXX_RUNTIME_LINKAGE=STATIC|SHARED` declares a runtime CMake cannot see. See
-  `docs/link-size-architecture.md`, "Linker independence".
+  2D game linked the avatar catalog through libshaderc). A program whose flags, or the usage
+  requirements of a target it links, link the runtime statically (`-static`, `-static-libstdc++`,
+  ...) keeps its static runtime, in the configurations in which they do; `-static-libgcc` alone
+  does not count. `CNA_CXX_RUNTIME_LINKAGE=STATIC|SHARED` declares a runtime CMake cannot show.
+  See `docs/link-size-architecture.md`, "Linker independence".
 - `Effect::IsStockEffectEXT()` (CNAEXT) reports XNA's five stock effects without RTTI.
 - `Texture::AsTextureCubeEXT()` and `AsTexture3DEXT()` (CNAEXT) answer what a `dynamic_cast` to
   `TextureCube`/`Texture3D` would, without naming either class; the renderers' effect binding uses

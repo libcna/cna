@@ -119,7 +119,7 @@ of a program.
 | `CNA_OPTIMIZE_FOR_SIZE` | OFF | GCC/Clang: compiles CNA with `-ffunction-sections -fdata-sections` and gives every program that links CNA `--gc-sections` (`-dead_strip` on Apple). MSVC (`/Gy`, `/OPT:REF`) and wasm-ld already collect unreferenced code in Release. |
 | `CNA_ENABLE_IPO` | OFF | LTO for CNA's Release targets. |
 | `CNA_SHARED_LIBRARY` | ON on native Linux | Links the runtime into `libcna.so` with every subsystem in it -- the development trees' choice, to stop 800 test executables each carrying a copy. A size-oriented deployment links CNA statically (`OFF`); a program that links module targets (`CNA::Runtime`, `CNA::GamerServices`) is static either way. |
-| `CNA_CXX_RUNTIME_LINKAGE` | AUTO | How the programs that link CNA link the C++ runtime; AUTO reads each program's flags. `STATIC`/`SHARED` declare a runtime they do not show ("Linker independence"). |
+| `CNA_CXX_RUNTIME_LINKAGE` | AUTO | How the programs that link CNA link the C++ runtime. AUTO reads each program's flags and those of the targets it links, per configuration; `STATIC`/`SHARED` decide instead, for a runtime AUTO cannot read ("Linker independence"). |
 | `CNA_ENABLE_DRACO`, `CNA_ENABLE_VIDEO` | ON / AUTO | Whether the decoder is built at all; a program that does not load models or video does not link it regardless. |
 
 A size-oriented Release consumer: `-DCMAKE_BUILD_TYPE=MinSizeRel` (or Release)
@@ -187,17 +187,37 @@ program that names CNA's archives on a hand-written link line instead of linking
 not get it.
 
 The option is only for a shared runtime, as lld and mold would let a shared runtime named first
-replace a static one. At the end of the configure CMake reads each program's flags: its directory's
-`CMAKE_CXX_FLAGS` and `CMAKE_EXE_LINKER_FLAGS` (`_SHARED_`/`_MODULE_` for libraries) with their
-per-configuration variants, which include a toolchain file's and `LDFLAGS`' initial flags, and the
-program's `LINK_OPTIONS`, `LINK_FLAGS` and `LINK_LIBRARIES`. A program with `-static`,
-`-static-pie`, `-static-libstdc++`, `-nostdlib`, `-nostdlib++` or `-nodefaultlibs` among them --
-inside a generator expression too, which can only cost the option -- does not get it.
-`-static-libgcc` alone keeps it: libstdc++ stays shared. A runtime chosen where CMake cannot see it
-(a compiler wrapper or spec file, another library's link options) is declared with
-`-DCNA_CXX_RUNTIME_LINKAGE=STATIC`, or `SHARED`; the default is `AUTO`.
+replace a static one. It is decided for each program in each configuration, in this order:
+
+1. `-DCNA_CXX_RUNTIME_LINKAGE=SHARED` gives every program the option and `STATIC` gives none,
+   whatever their flags say. This is how a runtime that `AUTO` cannot read is declared.
+2. `AUTO`, the default, reads at the end of the configure: the program's directory's
+   `CMAKE_CXX_FLAGS` and `CMAKE_EXE_LINKER_FLAGS` (`_SHARED_`/`_MODULE_` for libraries) with
+   their per-configuration variants, which include a toolchain file's and `LDFLAGS`' initial
+   flags; the program's `LINK_OPTIONS`, `LINK_FLAGS` and `LINK_LIBRARIES`; and the
+   `INTERFACE_LINK_OPTIONS` and `INTERFACE_LINK_LIBRARIES` of every target those libraries reach,
+   through aliases and static libraries. Every item that names `-static`, `-static-pie`,
+   `-static-libstdc++`, `-nostdlib`, `-nostdlib++` or `-nodefaultlibs` is copied with generator
+   expressions kept, and CMake evaluates the copy for the program in each configuration: a program
+   with `$<$<CONFIG:Release>:-static-libstdc++>` has no option in Release and keeps it in Debug
+   (in the multi-renderer tree its Debug 2D probe stays at 11,740,248 bytes; reading the flag as
+   text took the option away there too, and mold linked the system Guide and the avatar catalog,
+   47,063,128). `-static-libgcc` alone keeps the option, in a generator expression too:
+   libstdc++ stays shared.
+3. Where `AUTO` reads only part of the answer, it errs towards static, which only costs the
+   option. A target linked in some configurations only is read in all of them. CMake shows an
+   imported target only in the directory that defines it and below, so one that a subdirectory
+   defines cannot be read: CNA's own (the system libraries it finds) choose no runtime, and a
+   program that links any other does not get the option, which configure reports with the
+   targets' names (declare `SHARED` if their runtime is shared).
+4. What no CMake setting shows -- a compiler wrapper or spec file, a flag that a generator
+   expression computes rather than names -- `AUTO` cannot see, and the program is taken to link
+   the shared runtime; declare `STATIC`.
+
 `CnaCxxRuntimeLinkage` (`cmake/Tests/CxxRuntimeLinkageCase.cmake`) configures programs that ask
-in these ways and checks their link lines.
+in the ways 1-3 list, with single- and multi-configuration generators, checks their link lines,
+links some with mold and lld in Debug and Release, and reads which C++ runtime each executable
+needs.
 
 With a static runtime CNA adds nothing, and where the runtime archive goes is the program's
 choice. The driver names it last, so lld and mold resolve a standard-library symbol to the first
